@@ -1,0 +1,53 @@
+<!doctype html>
+
+<html>
+
+<head>
+    <meta http-equiv="content-type" content="text/html; charset=ISO-8859-1">
+    <title>File transmute</title>
+
+    <script src="http://ajax.googleapis.com/ajax/libs/jquery/3.1.1/jquery.min.js"></script>
+
+    <!--<script src="https://rawgit.com/enyo/dropzone/master/dist/dropzone.js"></script> -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/dropzone/4.3.0/min/dropzone.min.js" />
+    <link rel="stylesheet" href="https://rawgit.com/enyo/dropzone/master/dist/dropzone.css">
+
+    <!-- Download -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery.fileDownload/1.4.2/jquery.fileDownload.min.js"></script>
+
+    <!-- Bootstrap 3 -->
+    <!--
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css" />
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js" />
+    -->
+
+    <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='css/main.css') }}" />
+    <link rel="stylesheet" href="{{ url_for('static', filename='magic-nis.css') }}">
+
+    <script src="{{ url_for('static', filename='magic-nis.js') }}"></script>
+    <script>
+        $.ready(function () {
+            Dropzone.options.uploadWidget = {
+              init: function() {
+                this.on('success', function( file, resp ){
+                });
+              }
+            };
+        })
+    </script>
+</head>
+
+<body>
+<p>Drag here >|<</p>
+<div id="dropzone">
+    <form id="upload-widget" method="post" action="/magic-nis/file-transmuter" class="dropzone"></form>
+    <div class="dz-message needsclick">
+        Drop files here or click to upload.<br/>
+        <span class="note needsclick">(This is just a demo dropzone. Selected files are <strong>not</strong> actually uploaded.)</span>
+    </div>
+</div>
+
+</body>
+
+
+</html>

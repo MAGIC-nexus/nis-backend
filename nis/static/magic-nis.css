@@ -1,0 +1,64 @@
+.observables_tree{
+    width:50%;
+    height:80%;
+    float:left;
+
+}
+
+.observables_box{
+/*float: left;*/
+    border: 1px dotted gray;
+    height:400px;
+    overflow:scroll;
+    overflow-y: scroll;
+}
+
+.observers_box {
+  height:100px;
+  overflow-y:scroll;
+}
+
+.grey_dotted_box {
+    border: 1px dotted gray;
+}
+
+.observers_form_div{
+    width:50%;
+    height:100%;
+    float:left;
+
+}
+.line{
+    height:50%;
+    width:100%;
+}
+
+.bottom_div{
+    /*height:50%;*/
+    width:100%;
+    clear:both;
+    display:block;
+}
+
+.tooltip {
+    font-size: 11px;
+}
+
+.equal, .equal > div[class*='col-'] {
+    display: -webkit-box;
+    display: -moz-box;
+    display: -ms-flexbox;
+    display: -webkit-flex;
+    display: flex;
+    flex:1 0 auto;
+}
+
+#load_spinner {
+    display: block;
+    margin: 0 auto;
+}
+
+.icon_in_button {
+    max-width: 16px;
+    max-height: 16px;
+}

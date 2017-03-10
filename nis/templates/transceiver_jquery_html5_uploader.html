@@ -1,0 +1,34 @@
+<!doctype html>
+
+<html>
+
+<head>
+    <meta http-equiv="content-type" content="text/html; charset=ISO-8859-1">
+    <title>Magic Box - NIS prototype</title>
+
+    <script type="text/javascript" src="http://ajax.googleapis.com/ajax/libs/jquery/1.5.2/jquery.min.js"></script>
+    <script type="text/javascript" src="js/jquery.html5uploader.min.js"></script>
+
+    <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='css/main.css') }}" />
+    <link rel="stylesheet" href="{{ url_for('static', filename='magic-nis.css') }}">
+
+</head>
+
+<body>
+    <p>Drag here!!!</p>
+
+    <div id="dropbox"></div>
+    <input id="multiple" type="file" multiple>
+
+    <script type="text/javascript">
+        $(function() {
+            $("#dropbox, #multiple").html5Uploader({
+                name: "foo",
+                postUrl: "/magic-nis/file-transceiver"
+            });
+        });
+    </script>
+</body>
+
+
+</html>
