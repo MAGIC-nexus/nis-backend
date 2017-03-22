@@ -45,7 +45,6 @@ from werkzeug.utils import secure_filename
 from nis.model import DBSession, ORMBase, Diagram
 import io
 import magic  # Detect file type or content type
-import xlrd
 from nis.file_processing import process_file
 from nis import app
 
@@ -127,10 +126,18 @@ def send_static_files(path):
 @app.route('/magic-nis/template_file/<id>')
 def send_template(id):
     base = get_root_path("nis")
-    if id == '1':
-        return send_from_directory(base, 'templates/empty_template.xlt', as_attachment=True)
-    elif id == '2':
-        return send_from_directory(base, 'templates/test_based_on_template.xlsx', as_attachment=True)
+    templates = {'1': 'templates/empty_template.xlt',
+                 '2': 'templates/test_based_on_template.xlsx',
+                 '3': 'templates/test_datasets_0.xlsx',
+                 '4': 'templates/test_datasets_1.xlsx',
+                 '5': 'templates/test_datasets_2.xlsx',
+                 '6': 'templates/test_datasets_3.xlsx',
+                 '7': 'templates/test_datasets_4.xlsx',
+                 '10': 'templates/test_musiasem_1.xlsx',
+                 '11': 'templates/test_musiasem_2.xlsx',
+                 }
+    if id in templates:
+        return send_from_directory(base, templates[id], as_attachment=True)
     else:
         return None
 
@@ -158,6 +165,7 @@ def file_transmuter():
         if file_type == "application/excel":
             extension = ".xlsx"
         elif file_type == "application/octet-stream":
+            import xlrd
             # Try opening as Excel
             try:
                 data = xlrd.open_workbook(file_contents=buffer)
@@ -173,7 +181,7 @@ def file_transmuter():
         buffer = process_file(buffer)
 
         # Write the resulting file
-        extension2 = ".xls"
+        extension2 = ".xlsx"
         with open(app.config['UPLOAD_FOLDER']+filename+extension2, "wb") as f:
             f.write(buffer)
         # Redirect to the resulting file
