@@ -126,13 +126,16 @@ def send_static_files(path):
 @app.route('/magic-nis/template_file/<id>')
 def send_template(id):
     base = get_root_path("nis")
-    templates = {'1': 'templates/empty_template.xlt',
+    templates = {'0': 'templates/MagicBox-Quickstartguide.pdf',
+                 '1': 'templates/empty_template.xlt',
                  '2': 'templates/test_based_on_template.xlsx',
                  '3': 'templates/test_datasets_0.xlsx',
                  '4': 'templates/test_datasets_1.xlsx',
                  '5': 'templates/test_datasets_2.xlsx',
                  '6': 'templates/test_datasets_3.xlsx',
                  '7': 'templates/test_datasets_4.xlsx',
+                 '8': 'templates/test_datasets_12.xlsx',
+                 '9': 'templates/test_datasets_14.xlsx',
                  '10': 'templates/test_musiasem_1.xlsx',
                  '11': 'templates/test_musiasem_2.xlsx',
                  }
@@ -172,7 +175,7 @@ def file_transmuter():
                 extension = ".xlsx"
             except Exception:
                 pass
-        elif file_type == "text/x-python":
+        elif file_type == "text/x-modules":
             extension = ".py"
         elif file_type == "image/png":
             extension = ".png"

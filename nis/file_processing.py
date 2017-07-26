@@ -4,6 +4,7 @@
 import json
 
 
+
 import sqlalchemy.orm
 import sqlalchemy.schema
 from nis.model import DBSession, ORMBase, Diagram
@@ -13,332 +14,24 @@ import openpyxl.utils
 from openpyxl.comments import Comment
 import pandas as pd
 import numpy as np
-import requests
-from multidict import MultiDict, CIMultiDict
 import pint  # Units management
 import re
 import collections
 import copy
-import pandasdmx
-from nis import app
-from nis.eurostat_bulk import get_eurostat_filtered_dataset_into_dataframe
+from nis import app, the_registry
 
+from nis.file_processing_auxiliary import (
+    create_dictionary, strcmp, create_after_worksheet, reset_worksheet, reset_cell_format, reset_cells_format, cell_content_to_str,
+    show_message, obtain_rectangular_submatrices, worksheet_to_numpy_array, binary_mask_from_worksheet,
+)
+
+from nis.file_processing_datasets import (
+    get_codes_all_statistical_datasets, get_statistical_dataset_structure, get_statistical_dataset, map_codelists,
+    obtain_reverse_codes
+)
 # GLOBAL VARIABLES
-case_sensitive = False
 ureg = pint.UnitRegistry()
 
-# ------------------------------------------------------------------------------------------------------------
-
-
-def create_estat_request():
-    # EuroStat datasets
-    if 'CACHE_FILE_LOCATION' in app.config:
-        cache_name = app.config['CACHE_FILE_LOCATION']
-    else:
-        cache_name = "/tmp/sdmx_datasets_cache"
-    r = pandasdmx.Request("ESTAT", cache={"backend": "sqlite", "include_get_headers": True,
-                                          "cache_name": cache_name})
-    r.timeout = 180
-    return r
-
-estat = create_estat_request()
-
-# #################################################################
-# CASE SeNsItIvE or INSENSITIVE names (flows, funds, processors, ...)
-#
-
-class CaseInsensitiveDict(collections.MutableMapping):
-    """
-    A dictionary with case insensitive Keys.
-    Prepared also to support TUPLES as keys, required because compound keys are required
-    """
-    def __init__(self, data=None, **kwargs):
-        from collections import OrderedDict
-        self._store = OrderedDict()
-        if data is None:
-            data = {}
-        self.update(data, **kwargs)
-
-    def __setitem__(self, key, value):
-        # Use the lowercased key for lookups, but store the actual
-        # key alongside the value.
-        if not isinstance(key, tuple):
-            self._store[key.lower()] = (key, value)
-        else:
-            self._store[tuple([k.lower() for k in key])] = (key, value)
-
-    def __getitem__(self, key):
-        if not isinstance(key, tuple):
-            return self._store[key.lower()][1]
-        else:
-            return self._store[tuple([k.lower() for k in key])][1]
-
-    def __delitem__(self, key):
-        if not isinstance(key, tuple):
-            del self._store[key.lower()]
-        else:
-            del self._store[tuple([k.lower() for k in key])]
-
-    def __iter__(self):
-        return (casedkey for casedkey, mappedvalue in self._store.values())
-
-    def __len__(self):
-        return len(self._store)
-
-    def lower_items(self):
-        """Like iteritems(), but with all lowercase keys."""
-        return (
-            (lowerkey, keyval[1])
-            for (lowerkey, keyval)
-            in self._store.items()
-        )
-
-    def __eq__(self, other):
-        if isinstance(other, collections.Mapping):
-            other = CaseInsensitiveDict(other)
-        else:
-            return NotImplemented
-        # Compare insensitively
-        return dict(self.lower_items()) == dict(other.lower_items())
-
-    # Copy is required
-    def copy(self):
-        return CaseInsensitiveDict(self._store.values())
-
-    def __repr__(self):
-        return str(dict(self.items()))
-
-
-def create_dictionary(multi_dict=False):
-    """
-    Factory to create dictionaries used by the prototype
-
-    It reads the "case_sensitive" global variable
-
-    :param multi_dict: True to create a "MultiDict", capable of storing several values
-    :return:
-    """
-
-    if not multi_dict:
-        if case_sensitive:
-            return {}
-        else:
-            return CaseInsensitiveDict()
-    else:
-        if case_sensitive:
-            return MultiDict()
-        else:
-            return CIMultiDict()
-
-
-def strcmp(s1, s2):
-    """
-    Compare two strings for equality or not, considering a flag for case sensitiveness or not
-
-    It also removes leading and trailing whitespace from both strings, so it is not sensitive to this possible
-    difference, which can be a source of problems
-
-    :param s1:
-    :param s2:
-    :return:
-    """
-    if case_sensitive:
-        return s1.strip() == s2.strip()
-    else:
-        return s1.strip().lower() == s2.strip().lower()
-#
-#
-# #################################################################
-
-
-def get_codes_all_statistical_datasets(source, sh_out):
-    """
-    Obtain a list of datasets available from a source
-    If no source is specified, all the sources are queried
-    For each dataset, the source, the name, the periods available, an example command and a description are obtained
-
-    :param source:
-    :param dataset_filter:
-    :return: A Dataframe with the list of datasets
-    """
-    if source.lower() == "eurostat":
-        import xmltodict
-        # Make a table of datasets, containing three columns: ID, description, URN
-        # List of datasets
-        xml = requests.get("http://ec.europa.eu/eurostat/SDMX/diss-web/rest/dataflow/ESTAT/all/latest")
-        t = xml.content.decode("utf-8")
-        j = xmltodict.parse(t)
-        sh_out.cell(row=0 + 1, column=0 + 1).value = "Dataset ID"
-        sh_out.cell(row=0 + 1, column=1 + 1).value = "Description"
-        sh_out.cell(row=0 + 1, column=2 + 1).value = "URN"
-        for r, k in enumerate(j["mes:Structure"]["mes:Structures"]["str:Dataflows"]["str:Dataflow"]):
-            for n in k["com:Name"]:
-                if n["@xml:lang"] == "en":
-                    desc = n["#text"]
-                    break
-            dsd_id = k["str:Structure"]["Ref"]["@id"]
-            sh_out.cell(row=r + 1 + 1, column=0 + 1).value = k["@id"]
-            sh_out.cell(row=r + 1 + 1, column=1 + 1).value = desc
-            sh_out.cell(row=r + 1 + 1, column=2 + 1).value = k["@urn"]
-            # print(dsd_id + "; " + desc + "; " + k["@id"] + "; " + k["@urn"])
-
-
-def get_statistical_dataset_structure(source, dataset, sh_out=None):
-    """
-    Obtain the DSD containing the dimensions, attributes, measures, code lists
-
-    :param source:
-    :param dataset:
-    :return: List of dimension names (for the header)
-    """
-    if source.lower() == "eurostat":
-        refs = dict(references='all')
-        dsd_response = estat.datastructure("DSD_" + dataset, params=refs)
-        dsd = dsd_response.datastructure["DSD_" + dataset]
-        metadata = dsd_response.write()
-        # Dimensions and Attributes
-        Concept = collections.namedtuple('Concept', 'name istime description code_list')
-        dims = create_dictionary()  # Each dimension has a name, a description and a code list
-        attrs = create_dictionary()
-        meas = create_dictionary()
-        for d in dsd.dimensions:
-            istime = str(dsd.dimensions.get(d)).split("|")[0].strip() == "TimeDimension"
-            dims[d] = Concept(d, istime, "", None)
-        for a in dsd.attributes:
-            attrs[a] = Concept(a, False, "", None)
-        for m in dsd.measures:
-            meas[m] = None
-        for l in metadata.codelist.index.levels[0]:
-            first = True
-            # Read code lists
-            cl = create_dictionary()
-            for m, v in list(zip(metadata.codelist.ix[l].index, metadata.codelist.ix[l]["name"])):
-                if not first:
-                    cl[m] = v
-                else:
-                    first = False
-
-            if metadata.codelist.ix[l]["dim_or_attr"][0] == "D":
-                istime = str(dsd.dimensions.get(l)).split("|")[0].strip() == "TimeDimension"
-                dims[l] = Concept(l, istime, "", cl)
-            else:
-                attrs[l] = Concept(l, False, "", cl)
-        # Make a table of dimensions and code lists, containing three columns: dimension name, code, code_description
-        if sh_out:
-            sh_out.cell(row=0 + 1, column=0 + 1, value="Dimension name")
-            sh_out.cell(row=0 + 1, column=1 + 1, value="Code")
-            sh_out.cell(row=0 + 1, column=2 + 1, value="Code description")
-        r = 1
-        lst_dim = []
-        time_dim = False
-        for l in dims:
-            lst_dim_codes = []
-            if dims[l].istime:
-                time_dim = True
-            else:
-                lst_dim.append((dims[l].name, lst_dim_codes))
-
-            if dims[l].code_list:
-                for c in dims[l].code_list:
-                    if sh_out:
-                        sh_out.cell(row=r + 1, column=0 + 1, value=l + (" (TimeDimension)" if dims[l].istime else ""))
-                        sh_out.cell(row=r + 1, column=1 + 1, value=c)
-                        sh_out.cell(row=r + 1, column=2 + 1, value=dims[l].code_list[c])
-
-                    lst_dim_codes.append((c, dims[l].code_list[c]))
-
-                    r += 1
-            else:
-                if sh_out:
-                    sh_out.cell(row=r + 1, column=0 + 1, value=l + (" (TimeDimension)" if dims[l].istime else ""))
-                r += 1
-        if time_dim:
-            lst_dim.append(("startPeriod", None))
-            lst_dim.append(("endPeriod", None))
-
-        return lst_dim
-
-
-def get_statistical_dataset(source, dataset, dataset_params):
-    """
-    Obtain a dataset given some parameters
-    :param source:
-    :param dataset: name of the dataset to retrieve. To obtain a list, call "obtain_datasets"
-    :param dataset_params: list of (key, value) pairs filtering the dataset to be obtained. The possible parameters depend
-    :return: pd.Dataframe containing the resulting dataset as a facts table, ready for OLAP analysis (like Pivot Table)
-    """
-    if source.lower() == "eurostat":
-        method = 1
-        if method == 1:
-            df = get_eurostat_filtered_dataset_into_dataframe(dataset, dataset_params, update=False)
-            return df
-        else:
-            params = {}
-            if "startPeriod" in dataset_params:
-                params["startPeriod"] = dataset_params["startPeriod"]
-                del dataset_params["startPeriod"]
-            if "endPeriod" in dataset_params:
-                params["endPeriod"] = dataset_params["endPeriod"]
-                del dataset_params["endPeriod"]
-
-            d = estat.get(resource_type="data", resource_id=dataset, key=dataset_params,
-                          params=params)
-            df = d.write(d.msg)
-            if isinstance(df, pd.DataFrame):
-                # Convert to a table of facts, which could be processed by a PivotTable
-                col_names = []
-                c = 0
-                if isinstance(df.columns, pd.MultiIndex):
-                    for c, d in enumerate(df.columns.names):
-                        col_names.append(d)
-                    c += 1
-                else:
-                    pass  # What to do in this case?
-
-                if isinstance(df.index, pd.MultiIndex):
-                    for d in df.index.names:
-                        col_names.append(d)
-                        c += 1
-                else:
-                    col_names.append(df.index.name)
-                    c += 1
-
-                col_names.append("VALUE")
-
-                data = np.zeros((df.shape[0]*df.shape[1], len(col_names))).astype(object)
-                r = 0
-                for row in range(df.shape[0]):
-                    for col in range(df.shape[1]):
-                        # Get values for the columns
-                        c = 0
-                        if isinstance(df.columns, pd.MultiIndex):
-                            for c, l in enumerate(df.columns.values[col]):
-                                data[r, c] = str(l)
-                            c += 1
-                        else:
-                            pass  # What to do in this case?
-
-                        if isinstance(df.index, pd.MultiIndex):
-                            for l in df.index.values[row]:
-                                data[r, c] = str(l)
-                                c += 1
-                        else:
-                            data[r, c] = str(df.index[row])
-                            c += 1
-                        # Value
-                        data[r, c] = df.iloc[row, col]
-                        r += 1
-                # Create a Dataframe
-                df = pd.DataFrame(data, columns=col_names)
-                cn = df.columns[-1]
-                # Convert "Value" column (the last column) to numeric
-                df[cn] = df[cn].apply(lambda x: pd.to_numeric(x, errors='coerce'))
-                return df
-            else:
-                # ERROR: it did not return a Dataset
-                return None
-    else:
-        return None
 
 # ------------------------------------------------------------------------
 
@@ -498,62 +191,7 @@ def adimensionally_scale_processor(p, number):
             adimensionally_scale_processor(ch, number)
 
 
-def create_after_worksheet(sh, title):
-    """
-    Create a new worksheet after the worksheet passed as parameter
-
-    :param sh:
-    :param title:
-    :return: The new worksheet
-    """
-    def get_worksheet_index():
-        for i, sh_name in enumerate(wb.get_sheet_names()):
-            if sh_name == sh.title:
-                break
-        return i
-
-    wb = sh.parent
-    i = get_worksheet_index()
-    return wb.create_sheet(title, i+1)
-
-
-def reset_worksheet(sh):
-    """
-    Reset a worksheet by deleting and creating it from scratch
-
-    :param sh:
-    :return: The new worksheet
-    """
-    def get_worksheet_index():
-        for i, sh_name in enumerate(wb.get_sheet_names()):
-            if sh_name == sh.title:
-                break
-        return i
-
-    wb = sh.parent
-    i = get_worksheet_index()
-    tmp = sh.title
-    wb.remove_sheet(sh)
-    return wb.create_sheet(tmp, i)
-
-
-def id_str(v):
-    """
-    Auxiliary function
-
-    :param v:
-    :return:
-    """
-    if v:
-        if isinstance(v, float) or isinstance(v, int):
-            return str(int(v))
-        else:
-            return str(v)
-    else:
-        return None
-
-
-def read_processors(sh_in, sh_out, registry):
+def read_processors(sh_in, sh_out, registry, dfs):
     """
     Read a set of processors
     They will come with flows and funds (with value, unit, date, source, comment), types and name
@@ -561,9 +199,117 @@ def read_processors(sh_in, sh_out, registry):
 
     :param sh_in:
     :param sh_out:
-    :param registry:
+    :param registry: Processors
+    :params dfs: Dictionary of datasets (including PivotTable's)
     :return: String with the name of the entry added to the registry
     """
+    def process_row(curr, rr):
+        error = False
+        # Copy value to output
+        for c in range(sh_in.max_column):
+            if curr[c] is not None:  # If empty, assume the last one
+                sh_out.cell(row=rr + 1, column=c + 1, value=str(curr[c]))  # Copy to out worksheet
+
+        # Full taxon
+        taxon = tuple([first_taxonomic_rank] + [cell_content_to_str(curr[c]) for c in type_cols if curr[c] != ""])
+        # TODO Check: there cannot exist an empty type value followed by a type to its right
+        if taxon not in proc_taxonomy:
+            proc_taxonomy[taxon] = None
+        # Add subtypes to their corresponding taxonomic ranks
+        for i, c in enumerate(type_cols):
+            # Store a new entry (curr[c]) in the taxonomic rank (type_cols_names[i])
+            if cell_content_to_str(curr[c]) not in taxonomic_ranks[type_cols_names[i]]:
+                taxonomic_ranks[type_cols_names[i]][cell_content_to_str(curr[c])] = None
+
+        # Second, the processor, which includes the types and the name
+        if taxon in procs:
+            p = procs[taxon]
+        else:
+            p = {"intensive": intensive_processors_specified,
+                 "relative_to_unit": intensive_processors_unit,
+                 "full_name": taxon,
+                 "name": taxon[-1]  # Last level MAY BE defining the processor
+                 }
+            procs[taxon] = p
+        # Third, the fund or flow columns
+        # Flows in the registry of flows for this type of processor
+        ff_name = curr[cols["FF_Name"]]
+        if ff_name in ffs:
+            ff_type = ffs[ff_name]
+        else:
+            ff_type = create_dictionary()
+            ffs[ff_name] = ff_type
+
+        # Flows and funds in a processor
+        if "ff" in p:
+            ff = p["ff"]
+        else:
+            ff = create_dictionary()
+            p["ff"] = ff
+
+        # Prepare the FF type
+
+        # If the columns VAR_L1, VAR_L2, VAR_L3 were defined, convert to FF_Type
+        if "FF_Type" not in cols and "Var_L1" in cols and "Var_L2" in cols and "Var_L3" in cols:
+            v = [sh_in.cell(row=0 + 1, column=cols["Var_L" + str(i)] + 1).value for i in range(1, 4)]
+            int_ext = None
+            if strcmp(v[0][:3], "Int"):
+                int_ext = "Int_"
+            elif strcmp(v[0][:3], "Ext"):
+                int_ext = "Ext_"
+            in_out = None
+            if strcmp(v[1][:3], "Inp"):
+                int_ext = "In_"
+            elif strcmp(v[1][:3], "Out"):
+                int_ext = "Out_"
+            flow_fund = None
+            if strcmp(v[2][:3], "Flow"):
+                int_ext = "Flow"
+            elif strcmp(v[2][:3], "Fund"):
+                int_ext = "Fund"
+            if int_ext and in_out and flow_fund:
+                ff_type = int_ext + in_out + flow_fund
+            else:
+                # TODO Improve
+                sh_out.cell(row=rr + 1, column=len(sh_in.max_column) + 1,
+                            value="Variables defining a flow or fund type must be all defined correctly")
+                error = True
+        else:
+            ff_type = curr[cols["FF_Type"]]
+
+        if ff_type.lower() not in ["int_in_flow", "int_in_fund", "int_out_flow", "ext_in_flow", "ext_out_flow"]:
+            # TODO Improve
+            sh_out.cell(row=rr + 1, column=len(sh_in.max_column) + error_count + 1,
+                        value="FF type not allowed ('Int_Out_Fund', 'Ext_In_Fund', 'Ext_Out_Fund' combinations do not apply)")
+            error = True
+
+        # Add the flow or fund
+        if ff_name not in p["ff"]:
+            if curr[cols[unit_col_name]] and curr[cols[unit_col_name]].strip() != "-":
+                unit = curr[cols[unit_col_name]]
+                if strcmp(unit, "m3"):
+                    unit = "m**3"
+                elif strcmp(unit, "m2"):
+                    unit = "m**2"
+
+                unit = unit if not intensive_processors_specified else unit + "/" + intensive_processors_unit
+            else:
+                unit = ""
+            ff[ff_name] = {"name": ff_name,
+                           "type": ff_type,
+                           "value": curr[cols["FF_Value"]],
+                           "unit": unit,
+                           "scale": curr[cols["Scale"]] if "Scale" in cols else None,
+                           "source": curr[cols["FF_Source"]] if "FF_Source" in cols else None,
+                           "comment": curr[cols["FF_Comment"]] if "FF_Comment" in cols else None
+                           }
+        else:
+            sh_out.cell(row=rr + 1, column=len(sh_in.max_column) + 1,
+                        value="'" + ff_name + "' in processor '"+str(taxon)+"' is repeated. Row skipped.")
+            error = True
+
+        return error
+
     # Analyze column names, to know what property is in each
     first_taxonomic_rank = sh_in.title[11:]
     cols = create_dictionary()  # Name to Index map
@@ -669,121 +415,212 @@ def read_processors(sh_in, sh_out, registry):
 
     some_error = False
     # Read each line, which will be both a processor and a flow/fund
+    rr = 1
     for r in range(1, sh_in.max_row):
         error_count = 0 + 1  # 1 is for an offset, errors are located in columns AFTER the information
         # Read values of current line
         for c in range(sh_in.max_column):
             cell = sh_in.cell(row=r + 1, column=c + 1)
             v = cell.value
-            if (isinstance(v, str) and v.strip() == "") or not v:  # If empty, assume the last one
-                if c in previous_line:
-                    v = previous_line[c]
-                    sh_out.cell(row=r + 1, column=c + 1, value=v)  # Copy to out worksheet
-
             current_line[c] = v
             previous_line[c] = v  # Overwrite last value for the column "c"
 
         # PROCESS ROW
-        # Full taxon
-        # TODO Check: there cannot exist an empty type value followed by a type to its right
-        taxon = tuple([first_taxonomic_rank]+[id_str(current_line[c]) for c in type_cols if current_line[c] != ""])
-        if taxon not in proc_taxonomy:
-            proc_taxonomy[taxon] = None
-        # Add subtypes to their corresponding taxonomic ranks
-        for i, c in enumerate(type_cols):
-            # Store a new entry (current_line[c]) in the taxonomic rank (type_cols_names[i])
-            if id_str(current_line[c]) not in taxonomic_ranks[type_cols_names[i]]:
-                taxonomic_ranks[type_cols_names[i]][id_str(current_line[c])] = None
-
-        # Second, the processor, which includes the types and the name
-        if taxon in procs:
-            p = procs[taxon]
-        else:
-            p = {"intensive": intensive_processors_specified,
-                 "relative_to_unit": intensive_processors_unit,
-                 "full_name": taxon,
-                 "name": taxon[-1]  # Last level MAY BE defining the processor
-                 }
-            procs[taxon] = p
-        # Third, the fund or flow columns
-        # Flows in the registry of flows for this type of processor
-        ff_name = current_line[cols["FF_Name"]]
-        if ff_name in ffs:
-            ff_type = ffs[ff_name]
-        else:
-            ff_type = create_dictionary()
-            ffs[ff_name] = ff_type
-
-        # Flows and funds in a processor
-        if "ff" in p:
-            ff = p["ff"]
-        else:
-            ff = create_dictionary()
-            p["ff"] = ff
-
-        # Prepare the FF type
-
-        # If the columns VAR_L1, VAR_L2, VAR_L3 were defined, convert to FF_Type
-        if "FF_Type" not in cols and "Var_L1" in cols and "Var_L2" in cols and "Var_L3" in cols:
-            v = [sh_in.cell(row=0 + 1, column=cols["Var_L" + str(i)] + 1).value for i in range(1, 4)]
-            int_ext = None
-            if strcmp(v[0][:3], "Int"):
-                int_ext = "Int_"
-            elif strcmp(v[0][:3], "Ext"):
-                int_ext = "Ext_"
-            in_out = None
-            if strcmp(v[1][:3], "Inp"):
-                int_ext = "In_"
-            elif strcmp(v[1][:3], "Out"):
-                int_ext = "Out_"
-            flow_fund = None
-            if strcmp(v[2][:3], "Flow"):
-                int_ext = "Flow"
-            elif strcmp(v[2][:3], "Fund"):
-                int_ext = "Fund"
-            if int_ext and in_out and flow_fund:
-                ff_type = int_ext + in_out + flow_fund
+        # If it is a special "#" row, expand, looping through the origin
+        # Else, just pass the value
+        first_hash = True
+        source_ds = None
+        col2dim = dict()
+        for c in range(len(current_line)):
+            if isinstance(current_line[c], str) and current_line[c].startswith("#"):
+                if first_hash:
+                    first_hash = False
+                    source_ds, dim = current_line[c][1:].lower().split(".")
+                else:
+                    dim = current_line[c][1:].lower()
+                col2dim[dim] = c
+        if not first_hash and source_ds:  # Process a dataset
+            if "value" not in col2dim:
+                # TODO Show error because no VALUE column was specified
+                pass
             else:
-                # TODO Improve
-                sh_out.cell(row=r + 1, column=len(sh_in.ncols) + error_count + 1,
-                            value="Variables defining a flow or fund type must be all defined correctly")
-                error_count += 1
+                # Find dataset
+                if source_ds in dfs:
+                    df = dfs[source_ds]
+                    # TODO Find type: flat dataset or PivotTable
+                    pivot_table = True
+                    # Find all the dimensions
+                    dims = []
+                    not_found_dims = set([k.lower() for k in col2dim])
+                    for i, c in enumerate(df.columns.names):
+                        if c and c.lower() in not_found_dims:
+                            not_found_dims.remove(c.lower())
+                            dims.append((c.lower(), "col", i))
+                    if isinstance(df.index, pd.MultiIndex):
+                        for i, c in enumerate(df.index.names):
+                            if c and c.lower() in not_found_dims:
+                                not_found_dims.remove(c.lower())
+                                dims.append((c.lower(), "row", i))
+                    else:
+                        if df.index.name.lower() in not_found_dims:
+                            not_found_dims.remove(df.index.name.lower())
+                            dims.append((df.index.name.lower(), "row", 0))
+
+                    # Value
+                    if "value" in not_found_dims:
+                        dims.append(("value", "", 0))
+                        not_found_dims.remove("value")
+
+                    if len(not_found_dims) > 0:
+                        # TODO Error. One or more dimensions were not found
+                        pass
+                    else:
+                        # TODO Find value. If it is organized in facts form, find value column. If not, all cells are "value"
+                        # TODO in this case, only one aggregator is allowed.
+                        if pivot_table:
+                            # Copy curr vector
+                            c_line = current_line.copy()
+                            # iterate through all rows then columns
+                            for r in range(df.shape[0]):
+                                for c in range(df.shape[1]):
+                                    # Modify the original at dimension indices, with the
+                                    # dimension realizations for each cell (to process uniformly,
+                                    # "value" is considered another item inside the dims vector)
+                                    for d in dims:
+                                        if d[1] == "col":
+                                             v = df.columns.values[c][d[2]]
+                                        elif d[1] == "row":
+                                            if isinstance(df.index, pd.MultiIndex):
+                                                v = df.index.values[r][d[2]]
+                                            else:
+                                                v = df.index[d[2]]
+                                        else:
+                                            # Get the value
+                                            v = df.iloc[r, c]
+                                        # Prepare the curr vector. Modify the original at dimension indices
+                                        c_line[col2dim[d[0]]] = v
+
+                                    # Issue a new row ------------
+                                    error = process_row(c_line, rr)
+                                    if error:
+                                        some_error = True
+                                        error_count += 1
+                                    rr += 1
+
+                        else:
+                            # TODO iterate through rows
+                            # TODO Find dimension realizations
+                            # TODO Get the value
+                            # TODO prepare the curr vector. Modify the original at dimension indices
+                            pass
+                else:
+                    # TODO Show error in the row where the
+                    pass
+        else:
+            error = process_row(current_line, rr)
+            if error:
                 some_error = True
-        else:
-            ff_type = current_line[cols["FF_Type"]]
+                error_count += 1
 
-        if ff_type not in ["Int_In_Flow", "Int_In_Fund", "Int_Out_Flow", "Ext_In_Flow", "Ext_Out_Flow"]:
-            # TODO Improve
-            sh_out.cell(row=r + 1, column=len(sh_in.ncols) + error_count + 1,
-                        value="FF type not allowed ('Int_Out_Fund', 'Ext_In_Fund', 'Ext_Out_Fund' combinations do not apply)")
-            error_count += 1
-            some_error = True
-
-        # Add the flow or fund
-        if ff_name not in p["ff"]:
-            if current_line[cols[unit_col_name]] and current_line[cols[unit_col_name]].strip() != "-":
-                unit = current_line[cols[unit_col_name]]
-                if strcmp(unit, "m3"):
-                    unit = "m**3"
-                elif strcmp(unit, "m2"):
-                    unit = "m**2"
-
-                unit = unit if not intensive_processors_specified else unit + "/" + intensive_processors_unit
-            else:
-                unit = ""
-            ff[ff_name] = {"name": ff_name,
-                           "type": ff_type,
-                           "value": current_line[cols["FF_Value"]],
-                           "unit": unit,
-                           "scale": current_line[cols["Scale"]],
-                           "source": current_line[cols["FF_Source"]],
-                           "comment": current_line[cols["FF_Comment"]]
-                           }
-        else:
-            sh_out.cell(row=r + 1, column=len(sh_in.ncols) + error_count + 1,
-                        value="'" + ff_name + "' in processor '"+str(taxon)+"' is repeated. Row skipped.")
-            error_count += 1
-            some_error = True
+        rr += 1
+        # taxon = tuple([first_taxonomic_rank] + [cell_content_to_str(current_line[c]) for c in type_cols if current_line[c] != ""])
+        # if taxon not in proc_taxonomy:
+        #     proc_taxonomy[taxon] = None
+        # # Add subtypes to their corresponding taxonomic ranks
+        # for i, c in enumerate(type_cols):
+        #     # Store a new entry (current_line[c]) in the taxonomic rank (type_cols_names[i])
+        #     if cell_content_to_str(current_line[c]) not in taxonomic_ranks[type_cols_names[i]]:
+        #         taxonomic_ranks[type_cols_names[i]][cell_content_to_str(current_line[c])] = None
+        #
+        # # Second, the processor, which includes the types and the name
+        # if taxon in procs:
+        #     p = procs[taxon]
+        # else:
+        #     p = {"intensive": intensive_processors_specified,
+        #          "relative_to_unit": intensive_processors_unit,
+        #          "full_name": taxon,
+        #          "name": taxon[-1]  # Last level MAY BE defining the processor
+        #          }
+        #     procs[taxon] = p
+        # # Third, the fund or flow columns
+        # # Flows in the registry of flows for this type of processor
+        # ff_name = current_line[cols["FF_Name"]]
+        # if ff_name in ffs:
+        #     ff_type = ffs[ff_name]
+        # else:
+        #     ff_type = create_dictionary()
+        #     ffs[ff_name] = ff_type
+        #
+        # # Flows and funds in a processor
+        # if "ff" in p:
+        #     ff = p["ff"]
+        # else:
+        #     ff = create_dictionary()
+        #     p["ff"] = ff
+        #
+        # # Prepare the FF type
+        #
+        # # If the columns VAR_L1, VAR_L2, VAR_L3 were defined, convert to FF_Type
+        # if "FF_Type" not in cols and "Var_L1" in cols and "Var_L2" in cols and "Var_L3" in cols:
+        #     v = [sh_in.cell(row=0 + 1, column=cols["Var_L" + str(i)] + 1).value for i in range(1, 4)]
+        #     int_ext = None
+        #     if strcmp(v[0][:3], "Int"):
+        #         int_ext = "Int_"
+        #     elif strcmp(v[0][:3], "Ext"):
+        #         int_ext = "Ext_"
+        #     in_out = None
+        #     if strcmp(v[1][:3], "Inp"):
+        #         int_ext = "In_"
+        #     elif strcmp(v[1][:3], "Out"):
+        #         int_ext = "Out_"
+        #     flow_fund = None
+        #     if strcmp(v[2][:3], "Flow"):
+        #         int_ext = "Flow"
+        #     elif strcmp(v[2][:3], "Fund"):
+        #         int_ext = "Fund"
+        #     if int_ext and in_out and flow_fund:
+        #         ff_type = int_ext + in_out + flow_fund
+        #     else:
+        #         # TODO Improve
+        #         sh_out.cell(row=r + 1, column=len(sh_in.max_column) + error_count + 1,
+        #                     value="Variables defining a flow or fund type must be all defined correctly")
+        #         error_count += 1
+        #         some_error = True
+        # else:
+        #     ff_type = current_line[cols["FF_Type"]]
+        #
+        # if ff_type not in ["Int_In_Flow", "Int_In_Fund", "Int_Out_Flow", "Ext_In_Flow", "Ext_Out_Flow"]:
+        #     # TODO Improve
+        #     sh_out.cell(row=r + 1, column=len(sh_in.ncols) + error_count + 1,
+        #                 value="FF type not allowed ('Int_Out_Fund', 'Ext_In_Fund', 'Ext_Out_Fund' combinations do not apply)")
+        #     error_count += 1
+        #     some_error = True
+        #
+        # # Add the flow or fund
+        # if ff_name not in p["ff"]:
+        #     if current_line[cols[unit_col_name]] and current_line[cols[unit_col_name]].strip() != "-":
+        #         unit = current_line[cols[unit_col_name]]
+        #         if strcmp(unit, "m3"):
+        #             unit = "m**3"
+        #         elif strcmp(unit, "m2"):
+        #             unit = "m**2"
+        #
+        #         unit = unit if not intensive_processors_specified else unit + "/" + intensive_processors_unit
+        #     else:
+        #         unit = ""
+        #     ff[ff_name] = {"name": ff_name,
+        #                    "type": ff_type,
+        #                    "value": current_line[cols["FF_Value"]],
+        #                    "unit": unit,
+        #                    "scale": current_line[cols["Scale"]],
+        #                    "source": current_line[cols["FF_Source"]],
+        #                    "comment": current_line[cols["FF_Comment"]]
+        #                    }
+        # else:
+        #     sh_out.cell(row=r + 1, column=len(sh_in.ncols) + error_count + 1,
+        #                 value="'" + ff_name + "' in processor '"+str(taxon)+"' is repeated. Row skipped.")
+        #     error_count += 1
+        #     some_error = True
 
     # Loop finished!
 
@@ -801,98 +638,6 @@ def read_processors(sh_in, sh_out, registry):
 # -----------------------------------------------
 # COMBINE
 # -----------------------------------------------
-
-
-def obtain_rectangular_submatrices(mask, region=None):
-    """
-    Obtain rectangular submatrices of mask
-    IMPORTANT: currently it only obtains ONE region
-
-    :param mask: The original matrix, numpy.NDArray, containing only 0/1 (1 is "some content")
-    :param region: A tuple (top, bottom, left, right) with indices to search. bottom and right are not included
-    :return: The list of rectangular regions as tuples (top, bottom, left, right)
-    """
-
-    def nonzero_sequences(a):
-        # Create an array that is 1 where a is non-zero, and pad each end with an extra 0.
-        isnonzero = np.concatenate(([0], a != 0, [0]))
-        absdiff = np.abs(np.diff(isnonzero))
-        # Runs start and end where absdiff is 1.
-        ranges = np.where(absdiff == 1)[0].reshape(-1, 2)
-        return ranges
-
-    lst = []
-    if not region:
-        region = (0, mask.shape[0], 0, mask.shape[1])  # All the mask
-    submask = mask[region[0]:region[1], region[2]:region[3]]
-    offset_col, offset_row = (region[2], region[0])
-    # Accumulation of elements by row (resulting in a column vector)
-    row_sum = np.sum(submask, axis=1)
-    # Accumulation of elements by column (resulting in a row vector)
-    col_sum = np.sum(submask, axis=0)
-
-    # Ranges
-    rs = nonzero_sequences(row_sum.flatten())
-    cs = nonzero_sequences(col_sum.flatten())
-    lst.append((rs[0][0], rs[0][1], cs[0][0], cs[0][1]))
-
-    return lst
-
-
-def worksheet_to_numpy_array(sh_in):
-    """
-    Obtain a replica of the worksheet into a Numpy NDArray, with combined cells (combined cells are repeated)
-
-    :param sh_in:
-    :return: The numpy array with the values of the worksheet
-    """
-    m = np.zeros((sh_in.max_row, sh_in.max_column)).astype(object)
-    for r in range(sh_in.max_row):
-        for c in range(sh_in.max_column):
-            v = sh_in.cell(row=r + 1, column=c + 1).value
-            if v:
-                m[r, c] = v
-            else:
-                m[r, c] = 0.0
-
-    # Merged cells
-    for ra in sh_in.merged_cell_ranges:
-        t = openpyxl.utils.range_boundaries(ra)  # min col, min row, max col, max row (max's included)
-        mc = (t[1]-1, t[3]-1, t[0]-1, t[2]-1)  # Rearrange and subtract one
-        v = m[mc[0], mc[2]]
-        m[mc[0]:mc[1]+1, mc[2]:mc[3]+1] = v
-
-    return m
-
-
-def binary_mask_from_worksheet(sh_in, only_numbers=True):
-    """
-    Sweep the worksheet, considering merged cells, elaborate a mask for those cells which
-    are not empty or contain a number
-
-    :param sh_in:
-    :param only_numbers:
-    :return:
-    """
-    m = np.zeros((sh_in.max_row, sh_in.max_column), dtype=bool)
-    for r in range(sh_in.max_row):
-        for c in range(sh_in.max_column):
-            v = sh_in.cell(row=r + 1, column=c + 1).value
-            if v:
-                if only_numbers:
-                    if isinstance(v, int) or isinstance(v, float):
-                        m[r, c] = 1
-                else:
-                    m[r, c] = 1
-
-    # Merged cells
-    for ra in sh_in.merged_cell_ranges:
-        t = openpyxl.utils.range_boundaries(ra)  # min col, min row, max col, max row (max's included)
-        mc = (t[1]-1, t[3]-1, t[0]-1, t[2]-1)  # Rearrange and subtract one
-        v = m[mc[0], mc[2]]
-        m[mc[0]:mc[1]+1, mc[2]:mc[3]+1] = v
-
-    return m
 
 
 def convert_intensive_processor_to_extensive(p, fund):
@@ -1115,7 +860,9 @@ def combine_two_layers_of_processors(sh_in, sh_out, registry):
         if container_situation:
             break
     if not container_situation:
-        show_message(sh_out, t[0] - 1, t[1] - 1, "ERROR: neither the sum of rows nor of columns is summing to ones")
+        show_message(sh_out, t[0] - 1, t[1] - 1,
+                     "Warning: neither the sum of rows nor of columns is summing to ones",
+                     type="warning")
 
     # Read cell containing the specification of the processors.
     # The FIRST is the CONTAINED, the SECOND the CONTAINER.
@@ -1151,7 +898,7 @@ def combine_two_layers_of_processors(sh_in, sh_out, registry):
         found = False
         for e in l[0]:
             for t_rank in t_ranks:
-                if e and id_str(e) in t_rank[1]:
+                if e and cell_content_to_str(e) in t_rank[1]:
                     found = True
                     break
             if found:
@@ -1175,10 +922,10 @@ def combine_two_layers_of_processors(sh_in, sh_out, registry):
             taxa1 = {}
             # Find the taxa, for each processor type involved
             for rup in row_idx:
-                e = id_str(v[rup, c])
+                e = cell_content_to_str(v[rup, c])
                 found = False
                 for i, t_rank in enumerate(t_ranks):
-                    if e and id_str(e) in t_rank[1]:
+                    if e and cell_content_to_str(e) in t_rank[1]:
                         if i < n_ranks_first_processor:
                             idx = i
                             taxa = taxa0
@@ -1199,7 +946,7 @@ def combine_two_layers_of_processors(sh_in, sh_out, registry):
                             show_message(sh_out, cell_pos[0], cell_pos[1], "WARNING: subtype '"+e+"' not found. Processors to be combined cannot be identified properly.", "warning")
 
             for cleft in col_idx:
-                e = id_str(v[r, cleft])
+                e = cell_content_to_str(v[r, cleft])
                 found = False
                 for i, t_rank in enumerate(t_ranks):
                     if e and e in t_rank[1]:
@@ -1243,7 +990,7 @@ def combine_two_layers_of_processors(sh_in, sh_out, registry):
                 T2 = clone_processor(T)  # Clone processor and its children
                 new_procs[T["full_name"]] = T2
             S2 = clone_processor(S)  # Clone processor and its children
-            add_child_to(S2, T2, v[r, c])
+            add_child_to(contained=S2, container=T2, factor=v[r, c])
 
     container = registry_entries[1]
     registry["Upscaled_"+container.name] = \
@@ -1252,52 +999,6 @@ def combine_two_layers_of_processors(sh_in, sh_out, registry):
          "taxonomic_rank_levels": container.registry_entry["taxonomic_rank_levels"],  # Names of the taxonomic ranks
          "taxonomic_ranks": container.registry_entry["taxonomic_ranks"]  # Names contained in each of the taxonomic ranks
          }
-
-
-def show_message(sh, r, c, message, type="error", accumulate=True):
-    """
-    It serves to show a cell with some type of error (warning or error)
-    A message is shown in the comment
-    The name of the sheet is changed with a prefix indicating there is at least an issue to be solved
-
-    :param sh:
-    :param r:
-    :param c:
-    :param type:
-    :param message:
-    :return:
-    """
-    from openpyxl.styles import PatternFill
-    cell = sh.cell(row=r, column=c)
-    fill = cell.fill
-    if type == "error":
-        fill = PatternFill("solid", fgColor="CC0000")
-    elif type == "warning":
-        fill = PatternFill("solid", fgColor="FFFF33")
-    elif type == "info":
-        fill = PatternFill("solid", fgColor="87CEEB")
-    cell.fill = fill
-    if accumulate:
-        comment = cell.comment
-        if comment:
-            comment.text += "\n" + message
-        else:
-            comment = Comment(message, "NIS")
-    else:
-        comment = Comment(message, "NIS")
-    cell.comment = comment
-    # if type == "error":
-    #     sh.title = "!" + sh.title
-
-
-def cleanup_messages(sh):
-    """
-    Sweep a worksheet
-
-    :param sh:
-    :return:
-    """
-    pass
 
 
 def pivot_table(sh_writable, df, rows, cols, aggs, values, show_totals):
@@ -1311,49 +1012,58 @@ def pivot_table(sh_writable, df, rows, cols, aggs, values, show_totals):
     :param aggs:
     :param values:
     :param show_totals:
-    :return:
+    :return: Nothing. Results are written into the worksheet "sh_writable"
     """
+    df2 = None
     if len(rows) > 0 and len(cols) > 0 and values:
-        df2 = pd.pivot_table(df,
-                             values=values,
-                             index=rows,
-                             columns=cols,
-                             aggfunc=aggs, fill_value=np.NaN, margins=show_totals,
-                             dropna=True, margins_name="Total")
-        if df2.shape[0] * df2.shape[1] > 40000:
-            show_message(sh_writable, 1, 1, "ERROR: the resulting pivot table cannot be shown because there are "
-                                            "too many cells (" + str(df2.shape[0]*df2.shape[1]) +
-                                            "). Please, reconsider the parameters.")
+        if df.shape[0] == 0:
+            show_message(sh_writable, 1, 1, "Warning: no data from the specified query", type="warning")
         else:
-            # df2 = df2.swaplevel(0, len(df2.columns.names)-1, axis=1)
-            i = 0
-            # Number of levels of the columns Index
-            nidx_rows = len(df2.columns.names)
-            # Count the number of levels of the rows Index
-            if isinstance(df2.index, pd.MultiIndex):
-                nidx_cols = len(df2.index.names)
+            df2 = pd.pivot_table(df,
+                                 values=values,
+                                 index=rows,
+                                 columns=cols,
+                                 aggfunc=aggs, fill_value=np.NaN, margins=show_totals,
+                                 dropna=True, margins_name="Total")
+
+            if df2.shape[0] * df2.shape[1] > 40000:
+                df2 = None
+                show_message(sh_writable, 1, 1, "ERROR: the resulting pivot table cannot be shown because there are "
+                                                "too many cells (" + str(df2.shape[0]*df2.shape[1]) +
+                                                "). Please, reconsider the parameters.")
             else:
-                nidx_cols = 1
-            # Reference point
-            start = (nidx_rows, nidx_cols)
-            # Reset worksheet
-            sh_out = reset_worksheet(sh_writable)
-            # Put the values at (nr+1, nc+1)
-            for r in range(df2.shape[0]):
-                for c in range(df2.shape[1]):
-                    sh_out.cell(row=r + start[0] + 1, column=c + start[1] + 1, value=df2.iloc[r, c])
-            # Put the columns Index from (:, nc+1) on
-            for c in range(df2.shape[1]):
-                for r, l in enumerate(df2.columns.values[c]):
-                    sh_out.cell(row=r + 1, column=c + start[1] + 1, value=str(l))
-            # Put the rows Index from (nr+1, :) on
-            for r in range(df2.shape[0]):
+                # df2 = df2.swaplevel(0, len(df2.columns.names)-1, axis=1)
+                i = 0
+                # Number of levels of the columns Index
+                nidx_rows = len(df2.columns.names)
+                # Count the number of levels of the rows Index
                 if isinstance(df2.index, pd.MultiIndex):
-                    for c, l in enumerate(df2.index.values[r]):
-                        sh_out.cell(row=r + start[0] + 1, column=c + 1, value=str(l))
+                    nidx_cols = len(df2.index.names)
                 else:
-                    sh_out.cell(row=r + start[0] + 1, column=0 + 1, value=str(df2.index[r]))
-                    # TODO Check consecutive values, to merge, in horizontal or in vertical
+                    nidx_cols = 1
+                # Reference point
+                start = (nidx_rows, nidx_cols)
+                # Reset worksheet
+                sh_out = reset_worksheet(sh_writable)
+                # Put the values at (nr+1, nc+1)
+                for r in range(df2.shape[0]):
+                    for c in range(df2.shape[1]):
+                        sh_out.cell(row=r + start[0] + 1, column=c + start[1] + 1, value=df2.iloc[r, c])
+                # Put the columns Index from (:, nc+1) on
+                for c in range(df2.shape[1]):
+                    for r, l in enumerate(df2.columns.values[c]):
+                        sh_out.cell(row=r + 1, column=c + start[1] + 1, value=str(l))
+                # Put the rows Index from (nr+1, :) on
+                for r in range(df2.shape[0]):
+                    if isinstance(df2.index, pd.MultiIndex):
+                        for c, l in enumerate(df2.index.values[r]):
+                            sh_out.cell(row=r + start[0] + 1, column=c + 1, value=str(l))
+                    else:
+                        sh_out.cell(row=r + start[0] + 1, column=0 + 1, value=str(df2.index[r]))
+                        # TODO Check consecutive values, to merge, in horizontal or in vertical
+                # Mark the Pivot Table
+                sh_out.cell(row=1, column=1, value="Pivot table")
+    return df2
 
 
 def read_and_calculate_pivot_table(sh, sh_writable, registry, dfs, df=None):
@@ -1362,7 +1072,10 @@ def read_and_calculate_pivot_table(sh, sh_writable, registry, dfs, df=None):
     col_c = None
     agg_c = None
     sh_c = None
+    rows = []
+    cols = []
     sh_name = None
+    some_error = False
     for c in range(sh.max_column):
         cname = sh.cell(row=0 + 1, column=c + 1).value
         if not cname:
@@ -1376,44 +1089,43 @@ def read_and_calculate_pivot_table(sh, sh_writable, registry, dfs, df=None):
             else:
                 df = list_processors(sh_name[5:], sh_writable.cell(row=1 + 1, column=sh_c + 1), registry, dfs)
                 if df is None:
+                    some_error = True
                     show_message(sh_writable, 1 + 1, sh_c + 1,
                                 "ERROR: could not find or elaborate '" + sh_name + "'")
                 # TODO Check if "cname" corresponds to a worksheet (read sh.sheets)
                 # If it exists, it may be a worksheet not generating
-        elif strcmp(cname, "Rows"):
-            row_c = c
-            rows = []
+        elif strcmp(cname, "Rows") or strcmp(cname, "Columns"):
+            if strcmp(cname, "Rows"):
+                row_c = c
+                lst = rows
+            else:
+                col_c = c
+                lst = cols
             r = 1
             while r < sh.max_row and sh.cell(row=r + 1, column=c + 1).value:
-                # TODO Check that the row exists in the input data
+                # Check that the row exists in the input data
                 v = sh.cell(row=r + 1, column=c + 1).value
+                if v.lower() in ("time", "period", "date", "dates", "time_interval", "year"):  # For datasets (not for processors, which do not time)
+                    v = "TIME_PERIOD"
                 if not strcmp(v, "value"):
                     if df is not None:
+                        found = False
                         for d in df.columns:
                             if d.lower() == v.lower():
+                                found = True
                                 v = d
-                    rows.append(v)
-                r += 1
-        elif strcmp(cname, "Columns"):
-            col_c = c
-            cols = []
-            r = 1
-            while r < sh.max_row and sh.cell(row=r + 1, column=c + 1).value:
-                # TODO Check that the column exists in the input data
-                v = sh.cell(row=r + 1, column=c + 1).value
-                if not strcmp(v, "value"):
-                    if df is not None:
-                        for d in df.columns:
-                            if d.lower() == v.lower():
-                                v = d
-                    cols.append(v)
+                                lst.append(v)
+                                break
+                        if not found:
+                            some_error = True
+                            show_message(sh_writable, r + 1, c + 1, "ERROR: dimension not found")
                 r += 1
         elif strcmp(cname, "AggFunc"):
             agg_c = c
             aggs = []
             r = 1
             while r < sh.max_row and sh.cell(row=r + 1, column=c + 1).value:
-                # TODO Check that the aggregator function exists
+                # Check that the aggregator function exists
                 fname = sh.cell(row=r + 1, column=c + 1).value
                 if strcmp(fname, "sum"):
                     aggs.append(np.sum)
@@ -1425,6 +1137,9 @@ def read_and_calculate_pivot_table(sh, sh_writable, registry, dfs, df=None):
                     aggs.append(np.amax)
                 elif strcmp(fname, "min") or strcmp(fname, "minimum"):
                     aggs.append(np.amin)
+                else:
+                    some_error = True
+                    show_message(sh_writable, r + 1, c + 1, "ERROR: aggregation function not found. Please specify one or more of 'sum', 'mean' (or 'average', 'avg'), 'std' (or 'stddev'), 'max' (or 'maximum'), 'min' (or 'minimum')")
                 r += 1
         elif strcmp(cname, "ShowTotals"):
             show_totals = False
@@ -1440,8 +1155,12 @@ def read_and_calculate_pivot_table(sh, sh_writable, registry, dfs, df=None):
                 elif isinstance(v, bool):
                     show_totals = True if v else False
                 else:
-                    print("ERROR: value not recognized as boolean")
+                    some_error = True
+                    show_message(sh_writable, r + 1, c + 1, "ERROR: value not recognized as boolean")
                 r += 1
+
+    if df is None:
+        show_message(sh_writable, 1, 1, "ERROR: no valid input data for Pivot Table")
 
     # Values
     for cn in df.columns:
@@ -1457,15 +1176,14 @@ def read_and_calculate_pivot_table(sh, sh_writable, registry, dfs, df=None):
         show_message(sh_writable, 0 + 1, row_c + 1, "ERROR: at least one row is needed")
     elif len(cols) == 0:
         show_message(sh_writable, 0 + 1, col_c + 1, "ERROR: at least one column is needed")
-    elif df is not None:
-        pivot_table(sh_writable, df, rows, cols, aggs, values, show_totals)
-
-
-def reset_comments(sh_writable):
-    for r in range(4):
-        for c in range(4):
-            cell = sh_writable.cell(row=r + 1, column=c + 1)
-            cell.comment = None
+    elif len(aggs) == 0:
+        show_message(sh_writable, 0 + 1, agg_c + 1, "ERROR: at least one aggregation function is needed")
+    elif not some_error:
+        df2 = pivot_table(sh_writable, df, rows, cols, aggs, values, show_totals)
+        if sh_writable.title.lower().startswith("dataset_eurostat_"):
+            dfs["PivotTable_"+sh_writable.title[17:]] = df2
+        elif sh_writable.title.lower().startswith("dataset_ssp_"):
+            dfs["PivotTable_"+sh_writable.title[8:]] = df2
 
 
 def list_processors(name, cell, registry, dfs):
@@ -1485,8 +1203,7 @@ def list_processors(name, cell, registry, dfs):
             if s.lower() == k.lower():
                 bottom_level = k
                 break
-            elif s.endswith("s") and s[
-                                     :-1].lower() == k.lower():  # Allow plural termination in "s" ("es" is not considered...)
+            elif s.endswith("s") and s[:-1].lower() == k.lower():  # Allow plural termination in "s" ("es" is not considered...)
                 bottom_level = k
                 break
 
@@ -1513,6 +1230,98 @@ def list_processors(name, cell, registry, dfs):
     return dfs[name]
 
 
+def read_mapping_and_join(sh, sh_writable, metadatasets, dfs, maps):
+    """
+    Read a mapping from a dataset dimension into a MuSIASEM taxonomy
+    The mapping has to be MANY to ONE
+    The mapping has to be complete (all elements from left side must be covered)
+    The codes are intrinsically hierarchic 
+    
+    :param sh: 
+    :param sh_writable: 
+    :param metadatasets: Registry of Metadata on Datasets 
+    :param dfs: Registry of Datasets
+    :param maps: Registry of mappings
+    :return: 
+    """
+    """
+* Comprobar mapeo. Si quedan categorías sin mapear, avisar. El mapa debería cubrir el lado izquierdo. SI no, error. Si quedan categorías del lado derecho sin cubrir, avisar (no error)
+* Ver si los nodos superiores del dataset contienen valores
+    """
+    # TODO Read elements below these two columns, with the constraint
+    # TODO that values in the left side must be present, and values to the right should be
+    v = cell_content_to_str(sh.cell(row=1, column=1).value)
+    if v:
+        # TODO Split, two parts: dataset name, dimension name
+        try:
+            dset_name, dim_name = v.split(".")
+        except ValueError:
+            show_message(sh_writable, 1, 1, "Error: the source code list must be <dataset_name>.<dimension_name>")
+    taxon_name = cell_content_to_str(sh.cell(row=1, column=2).value)
+
+    # Do we have the metadata for dset_name?
+    if dset_name not in metadatasets:
+        if dset_name.startswith("ssp_"):
+            # Obtain SSP
+            source = "SSP"
+        else:
+            source = "Eurostat"
+        _, metadata = get_statistical_dataset_structure(source, dset_name)
+        metadatasets[dset_name] = metadata
+    else:
+        metadata = metadatasets[dset_name]
+
+    if not metadata:
+        show_message(sh_writable, 1, 1, "Error: could not find metadata for dataset '" + dset_name + "'")
+    else:
+        # Obtain the source code list
+        if dim_name not in metadata[0]:
+            show_message(sh_writable, 1, 1, "Error: could not find dimension '"+dim_name+"' in dataset '"+dset_name+"'")
+        else:
+            # Obtain the source code list
+            src_code_list = [c for c in metadata[0][dim_name].code_list]
+            # Read the pairs and the destination code list
+            # TODO the destination code list is currently declared in the table itself. In the future it could be declared outside
+            dst_code_list = set()
+            lst = []
+            prev_dest = None
+            for r in range(1, sh.max_row):
+                orig = cell_content_to_str(sh.cell(row=r + 1, column=1).value)
+                dest = cell_content_to_str(sh.cell(row=r + 1, column=2).value)
+                if not dest:
+                    dest = prev_dest
+                else:
+                    prev_dest = dest
+                if orig and dest:
+                    lst.append((orig, dest))
+                    dst_code_list.add(dest)
+                else:
+                    show_message(sh_writable, r + 1, 1, "Warning: origin, destination or both codes are missing. Ignored", type="warning")
+
+            # Parse
+            mapped, unmapped = map_codelists(src_code_list, list(dst_code_list), lst)
+            # TODO Complain if there are unmapped entries from the source
+            # Store the map (it is a multidict: the same source dataset + dimension could be mapped several times)
+            if dset_name+"."+dim_name in maps:
+                d = maps[dset_name+"."+dim_name]
+            else:
+                d = create_dictionary()
+                maps[dset_name+"."+dim_name] = d
+            d[taxon_name] = (list(dst_code_list), mapped)
+
+            # Try the join with existing dataset
+            if dset_name in dfs:
+
+                # Create a Dataframe with the mapping
+                df_dst = pd.DataFrame(mapped, columns=['sou_rce', taxon_name])
+                for di in dfs[dset_name].columns:
+                    if strcmp(dim_name, di):
+                        dim_name = di
+                        break
+                dfs[dset_name] = pd.merge(dfs[dset_name], df_dst, how='left', left_on=dim_name, right_on='sou_rce')
+                del dfs[dset_name]['sou_rce']
+
+
 def process_file(input_file):
     """
     Receives a binary with an Excel file, processes it and returns a new Excel file containing the results of the
@@ -1523,9 +1332,13 @@ def process_file(input_file):
     :param input_file: Input Excel file as byte array ("bytes")
     :return: Output Excel file as byte array ("bytes")
     """
+    the_registry.processors = create_dictionary()
+    the_registry.datasets = create_dictionary()  # Dictionary of Dataframes, for PivotTable generation
+    the_registry.metadatasets = create_dictionary()
+    the_registry.maps = create_dictionary()
 
-    registry = create_dictionary()
-    dfs = create_dictionary()  # Dictionary of Dataframes, for PivotTable generation
+    registry = None
+    dfs = None
     n_combinations = 0  # Count number of combinations
 
     # Instance for reading, ignoring formulas reading numbers!
@@ -1533,7 +1346,7 @@ def process_file(input_file):
     # This is also for reading, but does not read numbers when there are formulas
     xl_out = openpyxl.load_workbook(io.BytesIO(input_file))
 
-    # Is it a case study to be stored or just tests? If there is a "Metadata" worksheet -> store
+    # Is it a case study to be stored or just backend_tests? If there is a "Metadata" worksheet -> store
     persist = False
     in_sheets = []
     for sh_name in xl_in.get_sheet_names():
@@ -1569,25 +1382,26 @@ def process_file(input_file):
                 # Process the metadata. Fill the new sheet. Prepare and return a CaseStudy object
                 cs = process_metadata(sh)
                 metadata_processed = True
+        # MUSIASEM COMMANDS
         elif strcmp(sh.title[:11], "Processors_"):
             # TODO Read a set of Processors of the same type
             # There will be a list of Processor types (given by the sheet name)
             # Processors of a type can be totally instantiated or partially instantiated
             # Processors will be qualified by a tuple of types, hierarchically organized
             # Processors will not have
-            name = read_processors(sh, sh_writable, registry)
+            name = read_processors(sh, sh_writable, the_registry.processors, the_registry.datasets)
             # Generate and Store the Dataframe for Pivot Tables
-            df = list_processors_set(registry, registry[name], name)
-            dfs["Processors_"+name] = df  # Register with two names
-            dfs["List_"+name+"_"+name] = df
+            df = list_processors_set(the_registry.processors, the_registry.processors[name], name)
+            the_registry.datasets["Processors_"+name] = df  # Register with two names
+            the_registry.datasets["List_"+name+"_"+name] = df
         elif strcmp(sh.title[:8], "Upscale_"):
             # TODO Look for a table linking two lists of Processors of different types
             # Doing this, each processor of the parent level will contain all the children processors, recursively
             # And the flows and funds are passed into the parent level also, combining or aggregating
-            combine_two_layers_of_processors(sh, sh_writable, registry)
+            combine_two_layers_of_processors(sh, sh_writable, the_registry.processors)
             n_combinations += 1
         elif strcmp(sh.title[:5], "List_"):
-            df = list_processors(sh.title[5:], sh_writable.cell(row=1, column=1), registry, dfs)
+            df = list_processors(sh.title[5:], sh_writable.cell(row=1, column=1), the_registry.processors, the_registry.datasets)
             if df is not None:
                 # Reset worksheet
                 sh_out = reset_worksheet(sh_writable)
@@ -1597,20 +1411,31 @@ def process_file(input_file):
                 for r in range(df.shape[0]):
                     for c in range(df.shape[1]):
                         sh_out.cell(row=r+1+1, column=c+1, value=str(df.iloc[r, c]))
-
-        elif strcmp(sh.title, "Dataset_Eurostat_Enumerate"):
+        # EXTERNAL DATASET COMMANDS
+        elif strcmp(sh.title, "Dataset_Eurostat_Enumerate") or strcmp(sh.title, "Dataset_SSP_Enumerate"):
             # If the worksheet contains something at cell (1,1) assume
             if not sh_writable.cell(row=1, column=1).value:
-                reset_comments(sh_writable)
-                get_codes_all_statistical_datasets("EuroStat", sh_writable)
+                reset_cells_format(sh_writable)
+                if strcmp(sh.title, "Dataset_Eurostat_Enumerate"):
+                    get_codes_all_statistical_datasets("EuroStat", sh_writable)
+                else:
+                    get_codes_all_statistical_datasets("SSP", sh_writable)
                 # TODO Automatic width (DOES NOT WORK)
                 # for v in sh_writable.column_dimensions.values():
                 #     v.bestFit = True
-        elif strcmp(sh.title[:len("Metadata_Eurostat_")], "Metadata_Eurostat_"):
-            dataset_name = sh.title[len("Metadata_Eurostat_"):]
-            wks_name = "Dataset_Eurostat_" + dataset_name
-            reset_comments(sh_writable)
-            dims = get_statistical_dataset_structure("EuroStat", dataset_name, sh_writable)
+        elif strcmp(sh.title[:len("Metadata_Eurostat_")], "Metadata_Eurostat_") or \
+                strcmp(sh.title[:len("Metadata_SSP_")], "Metadata_SSP_"):
+            if strcmp(sh.title[:len("Metadata_Eurostat_")], "Metadata_Eurostat_"):
+                source = "Eurostat"
+                dataset_name = sh.title[len("Metadata_Eurostat_"):]
+                wks_name = "Dataset_Eurostat_" + dataset_name
+            else:
+                source = "SSP"
+                dataset_name = sh.title[len("Metadata_SSP_"):]
+                wks_name = "Dataset_SSP_" + dataset_name
+            reset_cells_format(sh_writable)
+            dims, metadata = get_statistical_dataset_structure(source, dataset_name, sh_writable)
+            the_registry.metadatasets[dataset_name] = metadata  # Store the metadata
             if wks_name not in sh.parent.get_sheet_names():
                 sh_writable = create_after_worksheet(sh_writable, wks_name)
                 # Add default header
@@ -1627,14 +1452,20 @@ def process_file(input_file):
                 sh_writable.cell(row=1, column=2 * i + 5, value="AggFunc")
                 sh_writable.cell(row=1, column=2 * i + 6, value="ShowTotals")
 
-        elif strcmp(sh.title[:len("Dataset_Eurostat_")], "Dataset_Eurostat_"):
+        elif strcmp(sh.title[:len("Dataset_Eurostat_")], "Dataset_Eurostat_") or strcmp(sh.title[:len("Dataset_SSP_")], "Dataset_SSP_"):
             # Get metadata
-            dataset_name = sh.title[len("Dataset_Eurostat_"):]
-            dims = get_statistical_dataset_structure("EuroStat", dataset_name)
-            reset_comments(sh_writable)
+            if strcmp(sh.title[:len("Dataset_Eurostat_")], "Dataset_Eurostat_"):
+                source = "Eurostat"
+                dataset_name = sh.title[len("Dataset_Eurostat_"):]
+            else:
+                source = "SSP"
+                dataset_name = sh.title[len("Dataset_SSP_"):]
+            dims, metadata = get_statistical_dataset_structure(source, dataset_name)
+            the_registry.metadatasets[dataset_name] = metadata  # Store the metadata
             # Different behavior if the header of the worksheet is empty (fill it with all the metadata) or
             # not (request a dataset slice)
             first_row_empty = True
+            some_error = False
             for c in range(sh.max_column):
                 v = sh.cell(row=1, column=c + 1).value
                 if v and v.strip() != "":
@@ -1648,55 +1479,152 @@ def process_file(input_file):
                         request_solved = True
 
                 if not request_solved:
+                    reset_cells_format(sh_writable)
+                    # Find additional columns
+                    columns_from_maps = create_dictionary()
+                    for d in metadata[0]:  # Dimensions
+                        if dataset_name + "." + d in the_registry.maps:
+                            for t in the_registry.maps[dataset_name + "." + d]:
+                                columns_from_maps[t] = d
+
                     # Gather parameters. A parameter per column
                     params = create_dictionary()
                     dim_cols = []
+                    dim_names = [d[0].lower() for d in dims]
+                    dim_names_upper = ["'" + d.upper() + "'" for d in dim_names]
+                    dims_codes = create_dictionary()
+                    for d in dims:
+                        if d[1]:
+                            dims_codes[d[0]] = set([c[0] for c in d[1]])
                     pivot_cols = []
                     for c in range(sh.max_column):
                         p = sh.cell(row=0 + 1, column=c + 1).value
-                        if p and p.lower() in [d[0].lower() for d in dims]:
+                        if p and (p.lower().strip() in dim_names or p.lower().strip() in columns_from_maps):
                             dim_cols.append(p.lower())
                             r = 1
                             lst = []
+                            is_mapped = False
+                            if p in dims_codes:
+                                cl = [n.lower() for n in dims_codes[p]]
+                            elif p in columns_from_maps:
+                                cl = [n.lower() for n in the_registry.maps[dataset_name+"."+columns_from_maps[p]][p][0]]
+                                is_mapped = True
+                            else:
+                                cl = None
                             while r < sh.max_row and sh.cell(row=r + 1, column=c + 1).value != "":
                                 v = sh.cell(row=r + 1, column=c + 1).value
                                 if v:
-                                    if isinstance(v, str):
-                                        lst.append(v)
+                                    val = cell_content_to_str(v)
+                                    if cl:
+                                        if val.lower() in cl:
+                                            lst.append(val)
+                                        else:
+                                            some_error = True
+                                            show_message(sh_writable, r + 1, c + 1, "Error: unrecognized code from dimension '"+p+"'")
                                     else:
-                                        lst.append(str(int(v)))  # Integer numbers
+                                        lst.append(val)
                                 r += 1
                             if len(lst) > 0:
-                                params[p] = lst if len(lst) > 1 else lst[0]
-                        else:
-                            if p and p.lower().strip() in ("rows", "columns", "aggfunc", "showtotals"):
-                                pivot_cols.append(p.lower().strip())
+                                lst = lst if len(lst) > 1 else lst[0]
+                                if is_mapped:
+                                    d = columns_from_maps[p]
+                                    mapped = the_registry.maps[dataset_name+"."+d][p][1]
+                                    p = d  # Change the mapped dimension to the dimension name in the dataset
+                                    lst = obtain_reverse_codes(mapped, lst)
+#                                 else:
+#                                     # TODO If the param is organized as a tree, prioritize: latest wins
+# """
+# * taxonomy
+# * additive upscaling
+# * transform dataset to processor facts
+#
+# * trees
+#   - It cannot be assumed that the hierarchy of codes result in aggregations
+#   - So the mapping cannot benefit from this
+# * sequences
+#   - need some Excel
+#   - connect two ends. If one of them has a value, provide the value to the other side. Accumulate if several are specified
+#     - source
+#     - end
+#     - factor
+#     - ¿use expressions? because some will have values (constraints) the others need to compute
+#
+# * user's guide
+# * análisis:
+#   - modelo MuSIASEM. Modelar la elaboración
+#   - gestión de casos de estudio
+#
+# * gis data. Inspire. Local IDEs: spain, canarias, other regions
+# * gis data processing
+# * other data sources:
+#   - local, sectoral
+#
+# * salvador: considerations on economic
+#
+# * ANGULAR2. User interface in general. ¿VAADIN?
+# """
+
+                                if p in params:
+                                    lst = list(set(params[p]).intersection(lst))
+
+                                params[p] = lst
+                        elif p and p.lower().strip() in ("rows", "columns", "aggfunc", "showtotals"):
+                            pivot_cols.append(p.lower().strip())
+                        elif p and p.strip() != "":
+                            some_error = True
+                            show_message(sh_writable, 0 + 1, c + 1, "Error: unrecognized column name. It must be a dimension name from dataset '" + dataset_name + "' (" + ', '.join(dim_names_upper) + ") or a parameter for the Pivot Table ('Rows', 'Columns', 'AggFunc', 'ShowTotal')")
                     is_dataset_requested = len(dim_cols) > 0
                     is_pivot_requested = "rows" in pivot_cols and "columns" in pivot_cols and "aggfunc" in pivot_cols
-                    if is_dataset_requested:
-                        # Elaborate the dataset
-                        df = get_statistical_dataset("EuroStat", sh.title[len("Dataset_Eurostat_"):], params)
-                        if df is not None:
-                            # Store the Dataframe for Pivot Tables
-                            dfs[sh.title] = df
-                            # Check if PivotTable or enumeration
-                            if not is_pivot_requested:
-                                if df.shape[0] > 30000:
-                                    show_message(sh_writable, 1, 1, "ERROR: the resulting dataset '"+sh.title +
-                                                 "' cannot be enumerated because there are too many rows (" + str(df.shape[0]) +
-                                                 "). Anyway, PivotTable operations on the dataset can be performed.")
+                    if not some_error:
+                        if is_dataset_requested:
+                            # TODO Consider trees
+                            # TODO Reverse map for filter: if elements of a MuSIASEM map are specified, generate the linked "native" codes, for the query to the external dataset
+                            # Elaborate the dataset
+                            df = get_statistical_dataset(source, dataset_name, params)
+                            if df is not None and df.shape[0] > 0:
+                                # Try to find a map for each of the dimensions
+                                for d in metadata[0]:  # Dimensions
+                                    if dataset_name+"."+d in the_registry.maps:
+                                        for t in the_registry.maps[dataset_name + "." + d]:
+                                            mapped = the_registry.maps[dataset_name + "." + d][t][1]
+                                            df_dst = pd.DataFrame(mapped, columns=['sou_rce', t])
+                                            for di in df.columns:
+                                                if strcmp(d, di):
+                                                    d = di
+                                                    break
+                                            # Upper case column before merging
+                                            df[d] = df[d].str.upper()
+                                            df = pd.merge(df, df_dst, how='left', left_on=d, right_on='sou_rce')
+                                            del df['sou_rce']
+
+                                # TODO If the dataset is filtered by one of the maps, do it now
+
+                                # Store the resulting Dataframe
+                                the_registry.datasets[sh.title] = df
+
+                                # Check if PivotTable or enumeration
+                                if not is_pivot_requested:
+                                    if df.shape[0] > 30000:
+                                        show_message(sh_writable, 1, 1, "ERROR: the resulting dataset '"+sh.title +
+                                                     "' cannot be enumerated because there are too many rows (" + str(df.shape[0]) +
+                                                     "). Anyway, PivotTable operations on the dataset can be performed.")
+                                    else:
+                                        # Reset worksheet
+                                        sh_out = reset_worksheet(sh_writable)
+                                        # Put the dataframe in a new worksheet
+                                        for c, t in enumerate(df.columns):
+                                            sh_out.cell(row=0 + 1, column=c + 1, value=t)
+                                        for r in range(df.shape[0]):
+                                            for c in range(df.shape[1]):
+                                                sh_out.cell(row=r+1+1, column=c+1, value=str(df.iloc[r, c]))
                                 else:
-                                    # Reset worksheet
-                                    sh_out = reset_worksheet(sh_writable)
-                                    # Put the dataframe in a new worksheet
-                                    for c, t in enumerate(df.columns):
-                                        sh_out.cell(row=0 + 1, column=c + 1, value=t)
-                                    for r in range(df.shape[0]):
-                                        for c in range(df.shape[1]):
-                                            sh_out.cell(row=r+1+1, column=c+1, value=str(df.iloc[r, c]))
+                                    read_and_calculate_pivot_table(sh, sh_writable, the_registry.processors, the_registry.datasets, df)
                             else:
-                                read_and_calculate_pivot_table(sh, sh_writable, registry, dfs, df)
-                                sh_writable.cell(row=1, column=1, value="Pivot table")
+                                show_message(sh_writable, 1, 1, "ERROR: the request did not return data. "
+                                                                "The dataset is off, the query was too restrictive or "
+                                                                "it was not possible to connect to "+source)
+                        else:
+                            show_message(sh_writable, 1, 1, "Error: no dimension names where recognized")
             else:
                 # Add default header
                 for i, d in enumerate(dims):
@@ -1706,18 +1634,41 @@ def process_file(input_file):
                         for r, c in enumerate(d[1]):
                             sh_writable.cell(row=r + 2, column=2*i + 1, value=c[0])
                             sh_writable.cell(row=r + 2, column=2*i + 2, value=c[1])
-                # Add columns for PIVOT
-                sh_writable.cell(row=1, column=2 * i + 3, value="Rows")
-                sh_writable.cell(row=1, column=2 * i + 4, value="Columns")
-                sh_writable.cell(row=1, column=2 * i + 5, value="AggFunc")
-                sh_writable.cell(row=1, column=2 * i + 6, value="ShowTotals")
+                i = 2 * i + 1
+                # Add columns for maps, if found
+                for d in metadata[0]:  # Dimensions
+                    if dataset_name + "." + d in the_registry.maps:
+                        mps = the_registry.maps[dataset_name + "." + d]
+                        for t in mps:
+                            codes = sorted(mps[t][0])
+                            sh_writable.cell(row=1, column=i + 1, value=t)
+                            # Add map code list
+                            for r, c in enumerate(codes):
+                                sh_writable.cell(row=r + 2, column=i + 1, value=c)
+                            i += 1
 
+                # Add columns for PIVOT
+                sh_writable.cell(row=1, column=i + 3, value="Rows")
+                sh_writable.cell(row=1, column=i + 4, value="Columns")
+                sh_writable.cell(row=1, column=i + 5, value="AggFunc")
+                sh_writable.cell(row=1, column=i + 6, value="ShowTotals")
         elif strcmp(sh.title[:len("NameMapping_")], "NameMapping_"):
             # Read the header. It identifies two taxonomic ranks to be mapped
-            pass
+            read_mapping_and_join(sh, sh_writable, the_registry.metadatasets, the_registry.datasets, the_registry.maps)
         elif strcmp(sh.title[:len("PivotTable_")], "PivotTable_"):
-            read_and_calculate_pivot_table(sh, sh_writable, registry, dfs)
-            sh_writable.cell(row=1, column=1, value="Pivot table")
+            read_and_calculate_pivot_table(sh, sh_writable, the_registry.processors, the_registry.datasets)
+        elif strcmp(sh.title[:len("Sequence_")], "Sequence_"):
+            # TODO Mail to Michele: diagrams, slides, what I have done (angular, analysis and new commands), help needed (user's guide, ideas for the presentation)
+            # TODO sequence declaration using existing processors
+            # Three columns: source, destination and factor
+            # At least the source or the destination must be factors, already existing
+            # If one of the factors does not exist, it is automatically created
+            # Instead of the literal value accompanying the "ff", a list of outgoing or incoming links will be attached
+            # The link will appear in the source and in the destination
+            # There will be also a central registry of links, containing the list of links, and the list of facts with the corresponding processor or fact inside the processor (should be capable of recovering the processor)
+            # A command "update values" will sweep all the facts involved in sequences (in the registry of links)
+            # calculating the value using the opposite value and applying the factor, the accumulating until all associated links are processed (for all the links of a fact, the role -source or destination- should be the same)
+            pass
 
     names = {}  # Dictionary with all the names, and what they are (flow, fund, processor, taxonomic rank, taxon)
     msm = None  # Structured view
@@ -1754,12 +1705,24 @@ row height: ws.row_dimensions
 
 """
 if __name__ == '__main__':
+    import collections
+    # SDMX Concept can be: dimension, attribute or measure. Stored in "metadatasets" associated to a dataset by its name
+    app_cfg = collections.namedtuple('App', 'config')
+    app = app_cfg({})
+    app.config["SSP_FILES_DIR"] = "/home/rnebot/GoogleDrive/AA_MAGIC/Data/SSP/"
+
     import sys
     import io
     # fn = "/home/rnebot/GoogleDrive/AA_MAGIC/DataRepository_Milestone/test_based_on_template.xlsx"
     fn = "/home/rnebot/GoogleDrive/AA_MAGIC/DataRepository_Milestone/test_based_on_template_MR_2.xlsx"
     fn = "/home/rnebot/GoogleDrive/AA_MAGIC/DataRepository_Milestone/test_based_on_template_MR_2_v2.xlsx"
-    fn = "/home/rnebot/GoogleDrive/AA_MAGIC/DataRepository_Milestone/test_musiasem_2.xlsx"
+    fn = "/home/rnebot/GoogleDrive/AA_MAGIC/DataRepository_Milestone/test_datasets_5a.xlsx"
+    fn = "/home/rnebot/Downloads/3rdstep_test_dataset_0.xlsx"
+    fn = "/home/rnebot/GoogleDrive/AA_MAGIC/DataRepository_Milestone/2ndstep_test_datasets_4.xlsx"
+    fn = "/home/rnebot/GoogleDrive/AA_MAGIC/DataRepository_Milestone/backend_tests/test_datasets_7.xlsx"
+    fn = "/home/rnebot/GoogleDrive/AA_MAGIC/DataRepository_Milestone/backend_tests/test_datasets_12.xlsx"
+    fn = "/home/rnebot/GoogleDrive/AA_MAGIC/DataRepository_Milestone/test_datasets_6.xlsx"
+    # fn = "/home/rnebot/GoogleDrive/AA_MAGIC/DataRepository_Milestone/backend_tests/test_datasets_14.xlsx"
     with open(fn, "rb") as f:
         b = f.read()
 
@@ -1767,7 +1730,5 @@ if __name__ == '__main__':
 
     # b.save("/home/rnebot/GoogleDrive/AA_MAGIC/DataRepository_Milestone/test_based_on_template_output.xlsx")
 
-    with open("/home/rnebot/GoogleDrive/AA_MAGIC/DataRepository_Milestone/test_based_on_template_output.xlsx", "wb") as f:
+    with open("/home/rnebot/GoogleDrive/AA_MAGIC/DataRepository_Milestone/backend_tests/test_based_on_template_output.xlsx", "wb") as f:
         f.write(b)
-
-# OpenPyXL

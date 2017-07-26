@@ -47,7 +47,7 @@ def get_eurostat_dataset_into_dataframe(dataset, update=False):
             # Read file
             # Remove flags (documented at http://ec.europa.eu/eurostat/data/database/information)
             st = multi_replace(gz.read().decode("utf-8"),
-                               {":": "NaN", " p": "", " e": "", " f": "", " n": "", " c": "", " u": "", " z": "", " r": "", " b": ""})
+                               {":": "NaN", " p": "", " e": "", " f": "", " n": "", " c": "", " u": "", " z": "", " r": "", " b": "", " d": ""})
             fc = StringIO(st)
             #fc = StringIO(gz.read().decode("utf-8").replace(" p\t", "\t").replace(":", "NaN"))
         os.remove(zip_name)
@@ -86,80 +86,18 @@ def multi_replace(text, rep):
     return pattern.sub(lambda m: rep[re.escape(m.group(0))], text)
 
 
-def get_eurostat_filtered_dataset_into_dataframe(dataset, filter_dict, update=False):
+def get_eurostat_filtered_dataset_into_dataframe(dataset, update=False):
     """
-    Main function of this module, it allows obtaining a Eurostat dataset, and filter it
-    using the information from "filter_dict", containing the dimension names and the list
-    of codes that should pass the filter. If several dimensions are specified an AND combination
-    is done
+    Main function of this module, it allows obtaining a Eurostat dataset
 
     :param dataset:
-    :param filter_dict:
     :param update:
     :return:
     """
 
-    df = get_eurostat_dataset_into_dataframe(dataset, update)
-    # TODO If a join is requested, do it now. Add a new element to the INDEX
-    # TODO The filter params can contain a filter related to the new joins
+    df1 = get_eurostat_dataset_into_dataframe(dataset, update)
 
-    start = None
-    if "startPeriod" in filter_dict:
-        start = filter_dict["startPeriod"]
-    if "endPeriod" in filter_dict:
-        endd = filter_dict["endPeriod"]
-    else:
-        if start:
-            endd = start
-    if not start:
-        columns = df.columns  # All columns
-    else:
-        # Assume year, convert to integer, generate range, then back to string
-        start = int(start)
-        endd = int(endd)
-        columns = [str(a) for a in range(start, endd+1)]
-
-    # Rows (dimensions)
-    cond_acum = None
-    for i, k in enumerate(df.index.names):
-        if k in filter_dict:
-            lst = filter_dict[k]
-            if not isinstance(lst, list):
-                lst = [lst]
-            if len(lst) > 0:
-                if cond_acum is not None:
-                    cond_acum &= df.index.isin([l.lower() for l in lst], i)
-                else:
-                    cond_acum = df.index.isin([l.lower() for l in lst], i)
-            else:
-                if cond_acum is not None:
-                    cond_acum &= df[df.columns[0]] == df[df.columns[0]]
-                else:
-                    cond_acum = df[df.columns[0]] == df[df.columns[0]]
-    if cond_acum is not None:
-        tmp = df[columns][cond_acum]
-    else:
-        tmp = df[columns]
-    # Convert columns to a single column "TIME_PERIOD"
-    if len(tmp.columns) > 0:
-        lst = []
-        for i, cn in enumerate(tmp.columns):
-            df2 = tmp[[cn]].copy(deep=True)
-            df2.columns = ["value"]
-            df2["time_period"] = cn
-            lst.append(df2)
-        df = pd.concat(lst)
-        df.reset_index(inplace=True)
-        # Value column should be last column
-        lst = [l for l in df.columns]
-        for i, l in enumerate(lst):
-            if l == "value":
-                lst[-1], lst[i] = lst[i], lst[-1]
-                break
-        df = df.reindex_axis(lst, axis=1)
-        return df
-    else:
-        return None
+    return df1
 
 
 if __name__ == "__main__":
