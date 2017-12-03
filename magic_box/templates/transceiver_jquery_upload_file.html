@@ -1,0 +1,250 @@
+<!doctype html>
+
+<html>
+
+<head>
+    <meta http-equiv="content-type" content="text/html; charset=ISO-8859-1">
+    <title>Magic Box - NIS prototype</title>
+
+    <!-- Drag and drop and Upload -->
+    <link href="http://hayageek.github.io/jQuery-Upload-File/4.0.10/uploadfile.css" rel="stylesheet">
+    <script src="http://ajax.googleapis.com/ajax/libs/jquery/3.1.1/jquery.min.js"></script>
+    <script src="http://hayageek.github.io/jQuery-Upload-File/4.0.10/jquery.uploadfile.min.js"></script>
+
+    <!-- Download -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jquery.fileDownload/1.4.2/jquery.fileDownload.min.js"></script>
+
+    <script src="{{ url_for('static', filename='js/FileSaver.min.js') }}"></script>
+
+    <script type="text/javascript" src="{{ url_for('static', filename='js/Chart.bundle.js') }}"></script>
+
+    <script type="text/javascript">
+        mxBasePath = '/static/js';
+        mxLoadResources = false;
+        mxLoadStylesheets = false;
+    </script>
+    <script src="{{ url_for('static', filename='js/mxClient.js') }}" ></script>
+
+    <!-- Bootstrap 3 -->
+    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/css/bootstrap.min.css" />
+    <script src="https://maxcdn.bootstrapcdn.com/bootstrap/3.3.7/js/bootstrap.min.js" />
+    <!--<script src="/static/js/mxClient.js"></script>-->
+
+    <!-- Specific -->
+    <link rel="stylesheet" type="text/css" href="{{ url_for('static', filename='css/main.css') }}" />
+    <link rel="stylesheet" href="{{ url_for('static', filename='magic-nis.css') }}" />
+    <script src="{{ url_for('static', filename='magic-nis.js') }}"></script>
+
+
+    <script>
+        function initializeGraph()
+        {
+            if (!mxClient.isBrowserSupported())
+            {
+                // Displays an error message if the browser is not supported.
+                mxUtils.error('Browser is not supported!', 200, false);
+            }
+            else
+            {
+                var container = document.getElementById('the_graph');
+                // Fixes possible clipping issues in Chrome
+                mxClient.NO_FO = true;
+
+                // Disables the built-in context menu
+                mxEvent.disableContextMenu(container);
+                // Creates the graph inside the given container
+                var model = new mxGraphModel();
+                var graph = new mxGraph(container, model);
+                var parent = graph.getDefaultParent();
+                graph.setEnabled(true);
+
+                // Adds custom HTML labels
+				graph.setHtmlLabels(true);
+
+				var data = {
+					labels : ['January','February','March','April','May','June','July'],
+					datasets : [
+						{
+							fillColor : 'rgba(220,220,220,0.5)',
+							strokeColor : 'rgba(220,220,220,1)',
+							pointColor : 'rgba(220,220,220,1)',
+							pointStrokeColor : '#fff',
+							data : [65,59,90,81,56,55,40]
+						},
+						{
+							fillColor : 'rgba(151,187,205,0.5)',
+							strokeColor : 'rgba(151,187,205,1)',
+							pointColor : 'rgba(151,187,205,1)',
+							pointStrokeColor : '#fff',
+							data : [28,48,40,19,96,27,100]
+						}
+					]
+				};
+
+				// Returns canvas with dynamic chart for vertex labels
+				var graphConvertValueToString = graph.convertValueToString;
+				graph.convertValueToString = function(cell)
+				{
+					if (this.model.isVertex(cell))
+					{
+						var node = document.createElement('canvas');
+						node.setAttribute('width', cell.geometry.width);
+						node.setAttribute('height', cell.geometry.height);
+
+						// Document for empty output if not in DOM
+						document.body.appendChild(node);
+
+						var ctx = node.getContext("2d");
+						new Chart(ctx, {type:"line", data: data});
+						//new Chart(ctx).Line(data);
+
+						return node;
+					}
+
+					return graphConvertValueToString.apply(this, arguments);
+				};
+
+
+                // Modify the graph
+                model.beginUpdate();
+                try
+                {
+                    var v1 = graph.insertVertex(parent, null, 'Hello,', 20, 20, 80, 30, 'overflow=fill;fillColor=none;fontColor=#000000;');
+                    var v2 = graph.insertVertex(parent, null, 'World!', 200, 150, 80, 30, 'overflow=fill;fillColor=none;fontColor=#000000;');
+                    var e1 = graph.insertEdge(parent, null, '', v1, v2);
+                }
+                finally
+                {
+                  // Updates the display
+                  model.endUpdate();
+                }
+                document.body.appendChild(mxUtils.button('+', function()
+				{
+					graph.zoomIn();
+				}));
+				document.body.appendChild(mxUtils.button('-', function()
+				{
+					graph.zoomOut();
+				}));
+            }
+        }
+        function initializeFileUploader()
+        {
+            $(".ajax-file-upload-container").remove();
+            $("#fileuploader").uploadFile({
+                url:"/magic_box/file-transmuter",
+                multiple:false,
+                //dragDropStr: "Drop an Excel file here",
+                onSubmit:function(files)
+                {
+                    var img_url = "{{ url_for('static', filename='images/loading_spinner.gif') }}";
+                    $('#myDiv').html("<img id='load_spinner' align=\"center\" src=\""+ img_url +"\">");
+                },
+                onSuccess:function(files,data,xhr,pd)
+                {
+                    var alternativa = 1;
+                    if (alternativa==0)
+                    {
+                        var res = data.split("/");
+                        window.file_name = res[res.length-1];
+
+                        var oReq = new XMLHttpRequest();
+                        oReq.addEventListener("load", function(oEvent) {
+                            var arrayBuffer = oReq.response;
+                            var blob = new Blob([arrayBuffer]);
+                            if (arrayBuffer)
+                            {
+                                var byteArray = new Uint8Array(arrayBuffer);
+                                saveAs(blob, window.file_name);
+                                $('#myDiv').html("");
+                                initializeFileUploader();
+                            }
+                        }
+                        );
+                        oReq.addEventListener("error", function(oEvent){
+                            $('#myDiv').html("");
+                            initializeFileUploader();
+                        }
+                        );
+                        oReq.open("GET", data, true);
+                        oReq.responseType = "arraybuffer";
+                        oReq.send(null);
+                    }
+                    else
+                    {
+                        $.fileDownload(data)
+                            .done(function() {
+                                $('#myDiv').html("");
+                                initializeFileUploader();
+                            }
+                            )
+                            .fail(function() {
+                                $('#myDiv').html("");
+                                initializeFileUploader();
+                            }
+                            );
+                    }
+                    // $("#eventsmessage").html($("#eventsmessage").html()+"<br/>Success for: "+JSON.stringify(data));
+
+                },
+                fileName:"test"
+            });
+        }
+        $(function()
+        {
+            initializeFileUploader();
+            initializeGraph();
+        });
+    </script>
+
+</head>
+
+<body>
+<div class="container-full">
+    <div class="row">
+        <img src="{{ url_for('static', filename='images/4_logo_magic_fondo trasparente_rgb.png') }}" class="col-lg-1 img-rounded">
+        <div class="row col-lg-11">
+            <div class="col-lg-10 v-center">
+                <h1>Magic Box</h1>
+                <p class="lead">Drop an Excel file to be processed</p>
+                <div class="col-lg-6" id="fileuploader"></div>
+                <div id="myDiv"></div>
+
+            </div>
+            <div class="row col-lg-10">
+                <div class="col-lg-8">
+                    <br>
+                    <p class="lead">
+                        <!--<a href="/magic_box/template_file/1">Template</a> -->
+                        <!-- Magic logo in "ASCII art" -->
+                        <p /> <!-- Subparagraph -->
+                        <b style="color:#CAC812">&gt;</b><b style="color:#1E4081">|</b><b style="color:#F2991C">&lt;</b>
+                        <a href="/magic_box/template_file/0"><b>Quick guide</b><br></a>
+                        <b>Dataset operations (using Eurostat and SSP)</b><br>
+                        <a href="/magic_box/template_file/3">Step #0</a><br>
+                        <a href="/magic_box/template_file/4">Step #1</a><br>
+                        <a href="/magic_box/template_file/5">Step #2</a><br>
+                        <a href="/magic_box/template_file/6">Step #3</a><br>
+                        <a href="/magic_box/template_file/7">Step #4</a><br>
+                        <a href="/magic_box/template_file/8">Step #5</a><br>
+                        <a href="/magic_box/template_file/9">SSP example</a><br>
+                        <p />
+                        <b style="color:#CAC812">&gt;</b><b style="color:#1E4081">|</b><b style="color:#F2991C">&lt;</b>
+                        <b>Building MuSIASEM model</b><br>
+                        <a href="/magic_box/template_file/10">Example #1</a><br>
+                        <a href="/magic_box/template_file/11">Example #2</a>
+                    </p>
+                </div>
+            </div>
+        </div>
+
+    </div> <!-- /row -->
+
+</div> <!-- /container full -->
+
+<!--<div id="the_graph" />-->
+
+</body>
+
+
+</html>

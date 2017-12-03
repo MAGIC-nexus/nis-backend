@@ -1,10 +1,11 @@
 import unittest
 
-from backend.model.memory_core import *
-from backend.model.memory_helper import build_hierarchy
-from backend.model.expressions import ExpressionsEngine
+from backend.model.memory.expressions import ExpressionsEngine
+from backend.common.helper_2 import build_hierarchy
+from backend.model.memory.musiasem_concepts import *
 
 """ Integration tests for in memory model structures """
+
 
 def setUpModule():
     print('In setUpModule()')
@@ -37,7 +38,7 @@ class ModelBuildingHierarchies(unittest.TestCase):
     # ###########################################################
 
     def test_hierarchy(self):
-        h = Hierarchy("Test")
+        h = Heterarchy("Test")
         t1 = Taxon("T1", None, h)
         t2 = Taxon("T2", t1, h)
         t3 = Taxon("T3", None, h)
@@ -55,7 +56,7 @@ class ModelBuildingHierarchies(unittest.TestCase):
         self.assertEqual(len(h.roots), 2)
 
     def test_hierarchy_of_factors(self):
-        h = Hierarchy("Test2")
+        h = Heterarchy("Test2")
         f1 = FactorTaxon("F1", None, h)
         f2 = FactorTaxon("F2", f1, h)
         t1 = Taxon("T1")
@@ -72,7 +73,7 @@ class ModelBuildingHierarchies(unittest.TestCase):
         self.assertEqual(f3.get_parent(h), None)
 
     def test_hierarchy_of_processors(self):
-        h = Hierarchy("Test3")
+        h = Heterarchy("Test3")
         p1 = Processor("P1", None, h)
         p2 = Processor("P2", p1, h)
         p3 = Processor("P3", None, h)

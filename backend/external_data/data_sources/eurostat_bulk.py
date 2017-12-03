@@ -1,0 +1,261 @@
+import gzip
+import os
+import tempfile
+from io import StringIO
+from typing import List
+
+import numpy as np
+import pandas as pd
+import pandasdmx
+import requests
+import requests_cache
+
+from backend.common.helper import create_dictionary
+from backend.external_data.data_source_manager import IDataSourceManager, filter_dataset_into_dataframe
+from backend.external_data.rdb_model import DataSource, Database, Dataset, Dimension, CodeList, CodeImmutable
+from magic_box import app  # APP is this now. Adapt to the current app object!
+
+
+def create_estat_request():
+    # EuroStat datasets
+    if 'CACHE_FILE_LOCATION' in app.config:
+        cache_name = app.config['CACHE_FILE_LOCATION']
+    else:
+        cache_name = tempfile.gettempdir() + "/sdmx_datasets_cache"
+    r = pandasdmx.Request("ESTAT", cache={"backend": "sqlite", "include_get_headers": True, "cache_name": cache_name})
+    r.timeout = 180
+    return r
+
+estat = create_estat_request()
+
+
+class Eurostat(IDataSourceManager):
+    def __init__(self):
+        d = {"backend": "sqlite", "include_get_headers": True, "cache_name": tempfile.gettempdir() + "/eurostat_bulk_datasets"}
+        requests_cache.install_cache(**d)
+
+    def get_name(self) -> str:
+        """ Source name """
+        return self.get_datasource().name
+
+    def get_datasource(self) -> DataSource:
+        """ Data source """
+        src = DataSource()
+        src.name = "Eurostat"
+        src.description = "Eurostat is the statistical office of the European Union"
+        return src
+
+    def get_databases(self) -> List[Database]:
+        """ List of databases in the data source """
+        db = Database()
+        db.code = ""
+        db.description = "Eurostat provides all Datasets in a single database"
+        return [db]
+
+    def get_datasets(self, database=None) -> list:
+        """ List of datasets in a database, or in all the datasource (if database==None)
+            Return a list of tuples (database, dataset)
+        """
+        import xmltodict
+        lst = []
+        # Make a table of datasets, containing three columns: ID, description, URN
+        # List of datasets
+        xml = requests.get("http://ec.europa.eu/eurostat/SDMX/diss-web/rest/dataflow/ESTAT/all/latest")
+        t = xml.content.decode("utf-8")
+        j = xmltodict.parse(t)
+        for k in j["mes:Structure"]["mes:Structures"]["str:Dataflows"]["str:Dataflow"]:
+            for n in k["com:Name"]:
+                if n["@xml:lang"] == "en":
+                    desc = n["#text"]
+                    break
+            if k["@id"][:3] != "DS-":
+                # dsd_id = k["str:Structure"]["Ref"]["@id"]
+                lst.append((k["@id"], desc, k["@urn"]))
+
+            # print(dsd_id + "; " + desc + "; " + k["@id"] + "; " + k["@urn"])
+        return lst
+
+    def get_dataset_structure(self, database, dataset) -> Dataset:
+        """ Obtain the structure of a dataset: concepts, dimensions, attributes and measures """
+        refs = dict(references='all')
+        dsd_response = estat.datastructure("DSD_" + dataset, params=refs)
+        dsd = dsd_response.datastructure["DSD_" + dataset]
+        metadata = dsd_response.write()
+        # SDMXConcept = collections.namedtuple('Concept', 'type name istime description code_list')
+        # DataSource <- Database <- DATASET <- Dimension(s) (including Measures) <- CodeList
+        #                                      |
+        #                                      v
+        #                                      Concept <- CodeList  (NOT CONSIDERED NOW)
+        ds = Dataset()
+        ds.code = dataset
+        ds.description = None  # How to get description?
+        ds.attributes = {}  # Dataset level attributes? (encode them using a dictionary)
+        ds.metadata = None  # Metadata for the dataset SDMX (flow, date of production, etc.)
+        ds.database = database  # Reference to containing database
+
+        dims = {}
+
+        for d in dsd.dimensions:
+            istime = str(dsd.dimensions.get(d)).split("|")[0].strip() == "TimeDimension"
+            dd = Dimension()
+            dd.code = d
+            dd.description = None
+            dd.attributes = None
+            dd.is_time = istime
+            dd.is_measure = False
+            dd.dataset = ds
+            dims[d] = dd
+        for m in dsd.measures:
+            dd = Dimension()
+            dd.code = m
+            dd.description = None
+            dd.attributes = None
+            dd.is_time = False
+            dd.is_measure = True
+            dd.dataset = ds
+            dims[m] = dd
+        for a in dsd.attributes:
+            ds.attributes[a] = None  # TODO Get the value
+        for l in metadata.codelist.index.levels[0]:
+            first = True
+            # Read code lists
+            cl = create_dictionary()
+            for m, v in list(zip(metadata.codelist.ix[l].index, metadata.codelist.ix[l]["name"])):
+                if not first:
+                    cl[m] = v
+                else:
+                    first = False
+            # Attach it to the Dimension or Measure
+            if metadata.codelist.ix[l]["dim_or_attr"][0] == "D":
+                # Build Code List from dictionary
+                dims[l].code_list = CodeList.construct(l, None, [""], [CodeImmutable(k, cl[k], "", []) for k in cl])
+
+        return ds
+
+        # Dimensions and Attributes
+        # dims = create_dictionary()  # Each dimension has a name, a description and a code list
+        # attrs = create_dictionary()
+        # meas = create_dictionary()
+        # for d in dsd.dimensions:
+        #     istime = str(dsd.dimensions.get(d)).split("|")[0].strip() == "TimeDimension"
+        #     dims[d] = SDMXConcept("dimension", d, istime, "", None)
+        # for a in dsd.attributes:
+        #     attrs[a] = SDMXConcept("attribute", a, False, "", None)
+        # for m in dsd.measures:
+        #     meas[m] = None
+        # for l in metadata.codelist.index.levels[0]:
+        #     first = True
+        #     # Read code lists
+        #     cl = create_dictionary()
+        #     for m, v in list(zip(metadata.codelist.ix[l].index, metadata.codelist.ix[l]["name"])):
+        #         if not first:
+        #             cl[m] = v
+        #         else:
+        #             first = False
+        #
+        #     if metadata.codelist.ix[l]["dim_or_attr"][0] == "D":
+        #         istime = str(dsd.dimensions.get(l)).split("|")[0].strip() == "TimeDimension"
+        #         dims[l] = SDMXConcept("dimension", l, istime, "", cl)
+        #     else:
+        #         attrs[l] = SDMXConcept("attribute", l, False, "", cl)
+        #
+
+    def etl_full_database(self, database=None, update=False):
+        """ If bulk download is supported, refresh full database """
+        pass
+
+    def etl_dataset(self, dataset, update=False) -> str:
+        """
+        Download a file (general purpose, not only for Eurostat datasets)
+
+        :param url:
+        :param local_filename:
+        :param update:
+        :return: String with full file name
+        """
+        url = "http://ec.europa.eu/eurostat/estat-navtree-portlet-prod/BulkDownloadListing?downfile=data%2F" + dataset + ".tsv.gz"
+        zip_name = tempfile.gettempdir() + "/" + dataset + '.tsv.gz'
+
+        if os.path.isfile(zip_name):
+            if not update:
+                return
+            else:
+                os.remove(zip_name)
+
+        r = requests.get(url, stream=True)
+        # http://stackoverflow.com/questions/15352668/download-and-decompress-gzipped-file-in-memory
+        with open(zip_name, 'wb') as f:
+            for chunk in r.iter_content(chunk_size=1024):
+                if chunk:  # filter out keep-alive new chunks
+                    f.write(chunk)
+
+        return zip_name
+
+    def get_dataset_filtered(self, dataset, dataset_params: List[tuple]) -> Dataset:
+        """ This method has to consider the last dataset download, to re"""
+
+        def multi_replace(text, rep):
+            import re
+            rep = dict((re.escape(k), v) for k, v in rep.items())
+            pattern = re.compile("|".join(rep.keys()))
+            return pattern.sub(lambda m: rep[re.escape(m.group(0))], text)
+
+        # Read Eurostat dataset structure
+        ds = self.get_dataset_structure(None, dataset)
+
+        # Read full Eurostat dataset into a Dataframe
+        dataframe_fn = tempfile.gettempdir() + "/" + dataset + ".bin"
+        df = None
+        if os.path.isfile(dataframe_fn):
+            df = pd.read_msgpack(dataframe_fn)
+
+        if df is None:
+            zip_name = self.etl_dataset(dataset, update=False)
+            with gzip.open(zip_name, "rb") as gz:
+                # Read file and
+                # Remove status flags (documented at http://ec.europa.eu/eurostat/data/database/information)
+                st = multi_replace(gz.read().decode("utf-8"),
+                                   {":": "NaN", " p": "", " e": "", " f": "", " n": "", " c": "", " u": "",
+                                    " z": "", " r": "", " b": "", " d": ""})
+                fc = StringIO(st)
+                # fc = StringIO(gz.read().decode("utf-8").replace(" p\t", "\t").replace(":", "NaN"))
+            os.remove(zip_name)
+            # Remove ":" -> NaN
+            # Remove " p" -> ""
+            df = pd.read_csv(fc, sep="\t")
+
+            def split_codes(all_codes):  # Split, strip and lower
+                return [s.strip().lower() for s in all_codes.split(",")]
+
+            original_column = df.columns[0]
+            new_cols = [s.strip() for s in original_column.split(",")]
+            new_cols[-1] = new_cols[-1][:new_cols[-1].find("\\")]
+            temp = list(zip(*df[original_column].map(split_codes)))
+            del df[original_column]
+            df.columns = [c.strip() for c in df.columns]
+            # Convert to numeric
+            for cn in df.columns:
+                df[cn] = df[cn].astype(np.float)
+                # df[cn] = df[cn].apply(lambda x: pd.to_numeric(x, errors='coerce'))
+            # Add index columns
+            for i, c in enumerate(new_cols):
+                df[c] = temp[i]
+            # set index on the dimension columns
+            df.set_index(new_cols, inplace=True)
+            # Save df
+            df.to_msgpack(dataframe_fn)
+
+        # Filter it using generic Pandas filtering capabilities
+        ds.data = filter_dataset_into_dataframe(df, dataset_params, eurostat_postprocessing=True)
+
+        return ds
+
+    def get_refresh_policy(self):  # Refresh frequency for list of databases, list of datasets, and dataset
+        pass
+
+
+def multi_replace(text, rep):
+    import re
+    rep = dict((re.escape(k), v) for k, v in rep.items())
+    pattern = re.compile("|".join(rep.keys()))
+    return pattern.sub(lambda m: rep[re.escape(m.group(0))], text)
