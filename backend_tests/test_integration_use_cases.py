@@ -61,7 +61,7 @@ def tearDownModule():
 # --- Functions containing pieces of code used in several unit tests ----------------
 
 def get_metadata_command():  # UTILITY FUNCTION
-    # Fields: ("<field label in excel file>", "<field name in Dublin Core>", Mandatory?, Controlled?)
+    # Fields: ("<field label in Spreadsheet file>", "<field name in Dublin Core>", Mandatory?, Controlled?)
     # [("Case study name", "title", True, False),  # DEPRECATED
     #   ("Case study code", "title", True, False),
     #   ("Title", "title", True, False),
@@ -378,7 +378,7 @@ class TestHighLevelUseCases(unittest.TestCase):
     #     isess = InteractiveSession()
     #     isess.identify({"user": "rnebot"}) # Pass just user name.
     #     isess.open_reproducible_session(None, SessionCreationAction.NewCaseStudy)
-    #     issues, output = isess.execute_command_generator("worksheet", "application/excel", "<whatever>")
+    #     issues, output = isess.execute_command_generator("worksheet", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "<whatever>")
     #     isess.close_reproducible_session(issues, output, save=True)  # It has to create a case study, a case study version, and a work session
     #     isess.quit()
     #

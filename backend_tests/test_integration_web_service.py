@@ -205,7 +205,7 @@ class TestHighLevelUseCases(unittest.TestCase):
         # Create reproducible session, prepared to create a new case study
         r = a.post(nis_api_base + "/isession/rsession", data={"create_new": "case_study", "allow_saving": "True"})
         self.assertEqual(r.status_code, 204)
-        # Send Excel file: store and execute it.
+        # Send Spreadsheet file: store and execute it.
         with open("/home/rnebot/input_file.xlsx", "rb") as f:
             b = f.read()
         r = a.post(nis_api_base + "/isession/rsession/generator?execute=True&register=True",
@@ -221,7 +221,7 @@ class TestHighLevelUseCases(unittest.TestCase):
         # Logout
         a.delete(nis_api_base + "/isession")
 
-        # Login, download the Excel file, compare it with "b"
+        # Login, download the Spreadsheet file, compare it with "b"
         # An interactive session
         r = a.post(nis_api_base + "/isession")
         self.assertEqual(r.status_code, 204)
@@ -233,7 +233,7 @@ class TestHighLevelUseCases(unittest.TestCase):
         r = a.get(nis_api_base + "/case_studies/dummy/versions/dummy/sessions/" + uuid2 + "/0")
         self.assertEqual(r.data, b)
 
-        # TODO Same isession, open "uuid2", get some variable from state modified by the Excel file
+        # TODO Same isession, open "uuid2", get some variable from state modified by the Spreadsheet file
         # Open previous reproducible session for reading
         r = a.post(nis_api_base + "/isession/rsession", data={"uuid": uuid2, "read_version_state": "True"})
         self.assertEqual(r.status_code, 204)

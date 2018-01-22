@@ -1,8 +1,6 @@
 import openpyxl
 import numpy as np
 
-from backend.command_generators.excel import obtain_rectangular_submatrices, worksheet_to_numpy_array
-
 
 def parse_upscale_command(sh, area):
     """

@@ -551,37 +551,6 @@ class Processor(Nameable, Taggable, Qualifiable, Automatable, Observable):
         return ".".join(lst)
 
 
-class ProcessorsRelationObservation(Taggable, Qualifiable, Automatable):
-    """ An expression or quantity assigned to an Observable (Factor) """
-    def __init__(self, processor: Processor=None, observer: Observer=None, tags=None, attributes=None):
-        Taggable.__init__(self, tags)
-        Qualifiable.__init__(self, attributes)
-        Automatable.__init__(self)
-        self._processor = processor
-        self._observer = observer
-
-    @staticmethod
-    def create_and_append(processor: Processor, observer: Observer, parent=None, hierarchy=None, tags=None, attributes=None):
-        o = ProcessorsRelationObservation(processor, observer, tags, attributes)
-        if processor:
-            processor.observations_append(o)
-        if observer:
-            observer.observables_append(processor)
-        return o
-
-    @property
-    def processor(self):
-        return self._processor
-
-    @property
-    def observer(self):
-        return self._observer
-
-    @property
-    def value(self):
-        return self._value
-
-
 class Factor(Nameable, Taggable, Qualifiable, Observable, Automatable):
     """ A Flow or Fund, when attached to a Processor
         It is automatable because an algorithm emulating an expert could inject Factor into Processors (as well as
@@ -619,69 +588,6 @@ class Factor(Nameable, Taggable, Qualifiable, Observable, Automatable):
     @property
     def roegen_type(self):
         return self._taxon.roegen_type
-
-
-class FactorQuantitativeObservation(Taggable, Qualifiable, Automatable):
-    """ An expression or quantity assigned to an Observable (Factor) """
-    def __init__(self, v: QualifiedQuantityExpression, factor: Factor=None, observer: Observer=None, tags=None, attributes=None):
-        Taggable.__init__(self, tags)
-        Qualifiable.__init__(self, attributes)
-        Automatable.__init__(self)
-        self._value = v
-        self._factor = factor
-        self._observer = observer
-
-    @staticmethod
-    def create_and_append(v: QualifiedQuantityExpression, factor: Factor, observer: Observer, tags=None, attributes=None):
-        o = FactorQuantitativeObservation(v, factor, observer, tags, attributes)
-        if factor:
-            factor.observations_append(o)
-        if observer:
-            observer.observables_append(factor)
-        return o
-
-    @property
-    def factor(self):
-        return self._factor
-
-    @property
-    def observer(self):
-        return self._observer
-
-    @property
-    def value(self):
-        return self._value
-
-
-class FactorFlowRelationObservation(Taggable, Qualifiable, Automatable):
-    """ The observation of a binary relation between factors of type FLOW (F1 --> F2) """
-    def __init__(self, factor: Factor=None, observer: Observer=None, tags=None, attributes=None):
-        Taggable.__init__(self, tags)
-        Qualifiable.__init__(self, attributes)
-        Automatable.__init__(self)
-        self._factor = factor
-        self._observer = observer
-
-    @staticmethod
-    def create_and_append(v: QualifiedQuantityExpression, factor: Factor, observer: Observer, tags=None, attributes=None):
-        o = FactorQuantitativeObservation(v, factor, observer, tags, attributes)
-        if factor:
-            factor.observations_append(o)
-        if observer:
-            observer.observables_append(factor)
-        return o
-
-    @property
-    def factor(self):
-        return self._factor
-
-    @property
-    def observer(self):
-        return self._observer
-
-    @property
-    def value(self):
-        return self._value
 
 
 class HierarchiesSet(Nameable):
@@ -852,6 +758,150 @@ def connect_processors(source_p: Processor, dest_p: Processor, h: "Heterarchy", 
 
     return c, f1, f2
 
+# #################################################################################################################### #
+
+
+class RelationObservation(Taggable, Qualifiable, Automatable):  # All relation kinds
+    pass
+
+
+class ProcessorsRelationObservation(RelationObservation):  # Just base of ProcessorRelations
+    pass
+
+
+class FactorsRelationObservation(RelationObservation):  # Just base of FactorRelations
+    pass
+
+
+class ProcessorsRelationPartOfObservation(ProcessorsRelationObservation):
+    def __init__(self, parent: Processor, child: Processor, observer: Observer=None, tags=None, attributes=None):
+        Taggable.__init__(self, tags)
+        Qualifiable.__init__(self, attributes)
+        Automatable.__init__(self)
+        self._parent = parent
+        self._child = child
+        self._observer = observer
+
+    @staticmethod
+    def create_and_append(parent: Processor, child: Processor, observer: Observer, tags=None, attributes=None):
+        o = ProcessorsRelationPartOfObservation(parent, child, observer, tags, attributes)
+        if parent:
+            parent.observations_append(o)
+        if child:
+            child.observations_append(o)
+        if observer:
+            observer.observables_append(parent)
+            observer.observables_append(child)
+        return o
+
+    @property
+    def parent_processor(self):
+        return self._parent
+
+    @property
+    def child_processor(self):
+        return self._child
+
+    @property
+    def observer(self):
+        return self._observer
+
+
+class ProcessorsRelationFlowObservation(ProcessorsRelationObservation):
+    def __init__(self, source: Processor, target: Processor, observer: Observer=None, tags=None, attributes=None):
+        Taggable.__init__(self, tags)
+        Qualifiable.__init__(self, attributes)
+        Automatable.__init__(self)
+        self._source = source
+        self._target = target
+        self._observer = observer
+
+    @staticmethod
+    def create_and_append(source: Processor, target: Processor, observer: Observer, tags=None, attributes=None):
+        o = ProcessorsRelationFlowObservation(source, target, observer, tags, attributes)
+        if source:
+            source.observations_append(o)
+        if target:
+            target.observations_append(o)
+        if observer:
+            observer.observables_append(source)
+            observer.observables_append(target)
+        return o
+
+    @property
+    def source_processor(self):
+        return self._source
+
+    @property
+    def target_processor(self):
+        return self._target
+
+    @property
+    def observer(self):
+        return self._observer
+
+
+class FactorQuantitativeObservation(Taggable, Qualifiable, Automatable):
+    """ An expression or quantity assigned to an Observable (Factor) """
+    def __init__(self, v: QualifiedQuantityExpression, factor: Factor=None, observer: Observer=None, tags=None, attributes=None):
+        Taggable.__init__(self, tags)
+        Qualifiable.__init__(self, attributes)
+        Automatable.__init__(self)
+        self._value = v
+        self._factor = factor
+        self._observer = observer
+
+    @staticmethod
+    def create_and_append(v: QualifiedQuantityExpression, factor: Factor, observer: Observer, tags=None, attributes=None):
+        o = FactorQuantitativeObservation(v, factor, observer, tags, attributes)
+        if factor:
+            factor.observations_append(o)
+        if observer:
+            observer.observables_append(factor)
+        return o
+
+    @property
+    def factor(self):
+        return self._factor
+
+    @property
+    def observer(self):
+        return self._observer
+
+    @property
+    def value(self):
+        return self._value
+
+
+class FactorBinaryRelationObservation(Taggable, Qualifiable, Automatable):
+    """ The observation of a binary relation between factors of type FLOW (F1 --> F2) """
+    def __init__(self, factor: Factor=None, observer: Observer=None, tags=None, attributes=None):
+        Taggable.__init__(self, tags)
+        Qualifiable.__init__(self, attributes)
+        Automatable.__init__(self)
+        self._factor = factor
+        self._observer = observer
+
+    @staticmethod
+    def create_and_append(v: QualifiedQuantityExpression, factor: Factor, observer: Observer, tags=None, attributes=None):
+        o = FactorQuantitativeObservation(v, factor, observer, tags, attributes)
+        if factor:
+            factor.observations_append(o)
+        if observer:
+            observer.observables_append(factor)
+        return o
+
+    @property
+    def factor(self):
+        return self._factor
+
+    @property
+    def observer(self):
+        return self._observer
+
+    @property
+    def value(self):
+        return self._value
 
 # #################################################################################################################### #
 

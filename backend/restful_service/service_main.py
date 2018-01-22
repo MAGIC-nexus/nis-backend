@@ -1,5 +1,4 @@
 import io
-
 import os
 import sys
 import redis
@@ -822,7 +821,7 @@ def receive_file_submission(req):
 
 
 @app.route(nis_api_base + "/isession/rsession/generator", methods=["POST"])
-def reproducible_session_append_command_generator():  # Receive a command_executors generator, like an Excel file, an R script, or a full JSON command_executors list (or other)
+def reproducible_session_append_command_generator():  # Receive a command_executors generator, like a Spreadsheet file, an R script, or a full JSON command_executors list (or other)
     # Recover InteractiveSession
     isess = deserialize_isession_and_prepare_db_session()
     if isess and isinstance(isess, Response):

@@ -70,11 +70,10 @@ class UpscaleCommand(IExecutableCommand):
         # Build a DataFrame
         df = pd.DataFrame(data=np.array(scales).reshape((len(row_headers), len(column_headers))))
 
-
         # From each key identify taxa containing, then which processor type uses the taxa
 
         lst_taxa = []
-        for
+        #for
         # columns = [('c', 'a'), ('c', 'b')]
         # df.columns = pd.MultiIndex.from_tuples(columns)
 
@@ -85,7 +84,7 @@ class UpscaleCommand(IExecutableCommand):
             oer = Observer(source)
             glb_idx.put(oer_key, oer)
 
-        #
+
         parent = state.get
 
         state.set(self._var_name, self._description)

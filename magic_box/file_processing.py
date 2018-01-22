@@ -102,9 +102,9 @@ def process_metadata(sh_in):
         # XML Dublin Core: http://www.dublincore.org/documents/dc-xml-guidelines/
         # Exhaustive list: http://dublincore.org/documents/dcmi-type-vocabulary/
 
-        # Fields: ("<field label in excel file>", "<field name in Dublin Core>", Mandatory?, Controlled?)
-        # TODO For Excel fields going to the same DC field AND with no controlled vocabulary, it is not possible to
-        #      do the reverse transformation, from DC to Excel, immediately. Only if some kind of syntax is enforced
+        # Fields: ("<field label in Spreadsheet file>", "<field name in Dublin Core>", Mandatory?, Controlled?)
+        # TODO For Spreadsheet fields going to the same DC field AND with no controlled vocabulary, it is not possible to
+        #      do the reverse transformation, from DC to Spreadsheet file, immediately. Only if some kind of syntax is enforced
         #      for each of these fields
         k_list = [("Case study name", "title", True, False),  # DEPRECATED
                   ("Case study code", "title", True, False),
@@ -1361,13 +1361,13 @@ def read_mapping_and_join(sh, sh_writable, metadatasets, dfs, maps, source_manag
 
 def process_file(input_file):
     """
-    Receives a binary with an Excel file, processes it and returns a new Excel file containing the results of the
+    Receives a binary with a Spreadsheet file, processes it and returns a new Spreadsheet file containing the results of the
     processing
 
     Command and variables are case insensitive
 
-    :param input_file: Input Excel file as byte array ("bytes")
-    :return: Output Excel file as byte array ("bytes")
+    :param input_file: Input Spreadsheet file as byte array ("bytes")
+    :return: Output Spreadsheet file as byte array ("bytes")
     """
     the_registry.processors = create_dictionary()
     the_registry.datasets = create_dictionary()  # Dictionary of Dataframes, for PivotTable generation

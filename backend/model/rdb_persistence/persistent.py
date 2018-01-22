@@ -438,8 +438,8 @@ class CommandGenerator(ORMBase):
         It is not the executable command
         For a primitive command, the content is the serialized JSON content elaborated by the command itself.
         In this case, generator_type is "primitive", content_type "application/json"
-        For command generators, the content may be an Excel file or an R script. The generator_type could be "Excel", "Rscript"
-        The content type for the first would be "application/excel", 
+        For command generators, the content may be a Spreadsheet file or an R script. The generator_type could be "Spreadsheet", "Rscript"
+        The content type for the first would be "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
     """
     __tablename__ = "cs_versions_sessions_cmd_gens"
 
@@ -451,9 +451,9 @@ class CommandGenerator(ORMBase):
                            collection_class=ordering_list('order'), cascade="all, delete-orphan"))
 
     order = Column(Integer)
-    generator_type = Column(String(48))  # "Primitive", "Excel", "Rscript"
-    content_type = Column(String(48))  # "application/json", "application/excel", "application/text"
-    content = Column(LargeBinary, nullable=True)  # A JSON string, an Excel file, an R script, ...
+    generator_type = Column(String(48))  # "Primitive", "Spreadsheet", "Rscript"
+    content_type = Column(String(48))  # "application/json", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "application/text"
+    content = Column(LargeBinary, nullable=True)  # A JSON string, a Worksheet file, an R script, ...
 
     parent_command_id = Column(Integer, ForeignKey("cs_versions_sessions_cmd_gens.id"))
     parent_command = relationship("CommandGenerator", backref=backref("children_commands", remote_side=[id], order_by="CommandGenerator.order",

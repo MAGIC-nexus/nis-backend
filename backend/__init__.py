@@ -43,7 +43,7 @@ SDMXConcept = namedtuple('Concept', 'type name istime description code_list')
 # XML Dublin Core: http://www.dublincore.org/documents/dc-xml-guidelines/
 # Exhaustive list: http://dublincore.org/documents/dcmi-type-vocabulary/
 
-# Fields: ("<field label in excel file>", "<field name in Dublin Core>", Mandatory?, Controlled?, NameInJSON)
+# Fields: ("<field label in Spreadsheet file>", "<field name in Dublin Core>", Mandatory?, Controlled?, NameInJSON)
 metadata_fields = [("Case study name", "title", False, False, "case_study_name"),
                    ("Case study code", "title", True, False, "case_study_code"),
                    ("Title", "title", True, False, "title"),
