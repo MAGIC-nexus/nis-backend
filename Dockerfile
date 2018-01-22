@@ -21,6 +21,13 @@ FROM grahamdumpleton/mod-wsgi-docker:python-3.5
 #               -v /home/rnebot/DATOS/docker/nis-local:/srv
 #               -e MAGIC_NIS_SERVICE_CONFIG_FILE="nis_docker_local_sqlite.conf" magic-nis:latest
 #
+# Production server:
+# docker create --name nis-local -l magic-postgis -l magic-redis -v /srv/docker/magic/data/nis:/srv
+#   -e VIRTUAL_HOST=one.nis.magic-nexus-eu -e VIRTUAL_PORT=80 -e LETSENCRYPT_HOST=one.nis.magic-nexus-eu
+#   -e LETSENCRYPT_EMAIL=rnebot@itccanarias.org -e MAGIC_NIS_SERVICE_CONFIG_FILE="nis_docker_naples.conf"
+#   magic-nis:latest
+#
+#
 # NOTE: in this last example, the host directory (/home/rnebot/DATOS/docker/nis-local) must have RWX permissions
 #       for all users: chmod rwx+o ...
 #       If not, it may not be possible to create
@@ -48,6 +55,7 @@ RUN pip3 install -r requirements.txt
 WORKDIR /app
 COPY backend /app/backend
 COPY frontend /app/frontend
+RUN mkdir -p /srv
 
 EXPOSE 80
 VOLUME /srv

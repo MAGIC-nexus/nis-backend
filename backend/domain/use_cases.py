@@ -56,7 +56,7 @@ def start_anonymous_case_study():
     Do not allow saving, only during session
     ¿What's the difference with start case study and not save it?
     Maybe when opening a case study WARN that, if the user is not identified, nothing can be persisted
-    Also, think about limiting commands regarding resources consumption (memory AND CPU)
+    Also, think about limiting command_executors regarding resources consumption (memory AND CPU)
 
     :return:
     """

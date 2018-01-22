@@ -3,6 +3,7 @@ import os
 import tempfile
 from io import StringIO
 from typing import List
+import getpass
 
 import numpy as np
 import pandas as pd
@@ -10,21 +11,28 @@ import pandasdmx
 import requests
 import requests_cache
 
-from backend.common.helper import create_dictionary
+from backend.common.helper import create_dictionary, import_names
 from backend.external_data.data_source_manager import IDataSourceManager, filter_dataset_into_dataframe
 from backend.external_data.rdb_model import DataSource, Database, Dataset, Dimension, CodeList, CodeImmutable
-from magic_box import app  # APP is this now. Adapt to the current app object!
 
 
 def create_estat_request():
+    # from magic_box import app  # APP is this now. Adapt to the current app object!
+    app = import_names("magic_box", "app")
+    if not app:
+        app = import_names("backend.restful_service", "app")
     # EuroStat datasets
     if 'CACHE_FILE_LOCATION' in app.config:
         cache_name = app.config['CACHE_FILE_LOCATION']
+        print("USER: "+getpass.getuser())
+        if not os.path.isdir(cache_name):
+            os.makedirs(cache_name)
     else:
         cache_name = tempfile.gettempdir() + "/sdmx_datasets_cache"
     r = pandasdmx.Request("ESTAT", cache={"backend": "sqlite", "include_get_headers": True, "cache_name": cache_name})
     r.timeout = 180
     return r
+
 
 estat = create_estat_request()
 
@@ -132,34 +140,6 @@ class Eurostat(IDataSourceManager):
 
         return ds
 
-        # Dimensions and Attributes
-        # dims = create_dictionary()  # Each dimension has a name, a description and a code list
-        # attrs = create_dictionary()
-        # meas = create_dictionary()
-        # for d in dsd.dimensions:
-        #     istime = str(dsd.dimensions.get(d)).split("|")[0].strip() == "TimeDimension"
-        #     dims[d] = SDMXConcept("dimension", d, istime, "", None)
-        # for a in dsd.attributes:
-        #     attrs[a] = SDMXConcept("attribute", a, False, "", None)
-        # for m in dsd.measures:
-        #     meas[m] = None
-        # for l in metadata.codelist.index.levels[0]:
-        #     first = True
-        #     # Read code lists
-        #     cl = create_dictionary()
-        #     for m, v in list(zip(metadata.codelist.ix[l].index, metadata.codelist.ix[l]["name"])):
-        #         if not first:
-        #             cl[m] = v
-        #         else:
-        #             first = False
-        #
-        #     if metadata.codelist.ix[l]["dim_or_attr"][0] == "D":
-        #         istime = str(dsd.dimensions.get(l)).split("|")[0].strip() == "TimeDimension"
-        #         dims[l] = SDMXConcept("dimension", l, istime, "", cl)
-        #     else:
-        #         attrs[l] = SDMXConcept("attribute", l, False, "", cl)
-        #
-
     def etl_full_database(self, database=None, update=False):
         """ If bulk download is supported, refresh full database """
         pass
@@ -191,7 +171,7 @@ class Eurostat(IDataSourceManager):
 
         return zip_name
 
-    def get_dataset_filtered(self, dataset, dataset_params: List[tuple]) -> Dataset:
+    def get_dataset_filtered(self, dataset, dataset_params: dict) -> Dataset:
         """ This method has to consider the last dataset download, to re"""
 
         def multi_replace(text, rep):

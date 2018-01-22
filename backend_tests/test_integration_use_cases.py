@@ -3,7 +3,7 @@ import sqlalchemy
 
 # Memory
 from backend.domain.workspace import InteractiveSession, CreateNew
-from backend.commands.factory import create_command
+from backend.command_generators.json import create_command
 from backend.restful_service import tm_default_users, \
     tm_authenticators, \
     tm_object_types, \
@@ -54,7 +54,6 @@ def tearDownModule():
     print('In tearDownModule()')
     backend.data_engine.dispose()
     backend.engine.dispose()
-    del backend.restful_service
     print(str(len(tm_authenticators)))
     print("a")
 
@@ -94,18 +93,19 @@ def get_metadata_command():  # UTILITY FUNCTION
                 "Language": "English"
                 }
 
-    return create_command("metadata", None, metadata)
+    cmd, issues = create_command("metadata", None, metadata)
+    return cmd
 
 
 def new_case_study(with_metadata_command=0):
     """
     * Prepare an InteractiveSession,
-    * Open a WorkSession,
+    * Open a ReproducibleSession,
     * (optionally) Add a metadata command,
-    * Close the WorkSession
+    * Close the ReproducibleSession
 
     :param with_metadata_command: 1 -> execute, 2 -> register, 3 -> execute and register
-    :return: UUID of the WorkSession, InteractiveSession
+    :return: UUID of the CaseStudyVersionSession, InteractiveSession
     """
     isess = InteractiveSession(DBSession)
     isess.identify({"user": "test_user"}, testing=True)  # Pass just user name.
@@ -148,7 +148,7 @@ def reset_database():
     DBSession.remove()
 
 
-class HighLevelUseCases(unittest.TestCase):
+class TestHighLevelUseCases(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         pass  # Executed BEFORE test methods of the class
@@ -192,30 +192,30 @@ class HighLevelUseCases(unittest.TestCase):
 
     def test_004_new_case_study_with_only_metadata_command(self):
         reset_database()
-        uuid2, isess = new_case_study(with_metadata_command=1)
+        uuid2, isess = new_case_study(with_metadata_command=1)  # 1 means "execute" (do not register)
         # Check State
-        md = isess._state.get("metadata")
+        md = isess._state.get("_metadata")
         isess.quit()
         self.assertIsNotNone(md)
         self.assertEqual(md["Title"], "Case study for test only")
-        # Check Session should not have PersistableCommands
+        # Check Session should not have CommandGenerator
         session = DBSession()
         self.assertEqual(len(session.query(CaseStudy).all()), 1)
         self.assertEqual(len(session.query(CaseStudyVersion).all()), 1)
         self.assertEqual(len(session.query(CaseStudyVersionSession).all()), 1)
-        self.assertEqual(len(session.query(PersistableCommand).all()), 0)
+        self.assertEqual(len(session.query(CommandGenerator).all()), 0)
         session.close()
 
-    def test_005_new_case_study_with_only_metadata_command(self):
+    def test_005_new_case_study_with_metadata_plus_dummy_command(self):
         reset_database()
         # ----------------------------------------------------------------------
-        # Create case study, with one PersistableCommand
+        # Create case study, with one CommandGenerator
         uuid_, isess = new_case_study(with_metadata_command=3)
         session = DBSession()
         self.assertEqual(len(session.query(CaseStudy).all()), 1)
         self.assertEqual(len(session.query(CaseStudyVersion).all()), 1)
         self.assertEqual(len(session.query(CaseStudyVersionSession).all()), 1)
-        self.assertEqual(len(session.query(PersistableCommand).all()), 1)
+        self.assertEqual(len(session.query(CommandGenerator).all()), 1)
         session.close()
 
         # Reset State
@@ -228,8 +228,8 @@ class HighLevelUseCases(unittest.TestCase):
                                         recover_previous_state=True,
                                         cr_new=CreateNew.NO,
                                         allow_saving=True)
-        self.assertIsNotNone(isess._state.get("metadata"))
-        d_cmd = create_command("dummy", None, {"name": "var_a", "description": "Content"})
+        self.assertIsNotNone(isess._state.get("_metadata"))
+        d_cmd, _ = create_command("dummy", None, {"name": "var_a", "description": "Content"})
         self.assertIsNone(isess._state.get("var_a"))
         issues, output = isess.execute_executable_command(d_cmd)
         self.assertIsNotNone(isess._state.get("var_a"))
@@ -237,7 +237,7 @@ class HighLevelUseCases(unittest.TestCase):
         uuid2, _, _ = isess.close_reproducible_session(issues, output, save=True)
         # Check Database objects
         session = DBSession()
-        self.assertEqual(len(session.query(PersistableCommand).all()), 2)
+        self.assertEqual(len(session.query(CommandGenerator).all()), 2)
         self.assertEqual(len(session.query(CaseStudy).all()), 1)
         self.assertEqual(len(session.query(CaseStudyVersion).all()), 1)
         self.assertEqual(len(session.query(CaseStudyVersionSession).all()), 2)
@@ -250,9 +250,9 @@ class HighLevelUseCases(unittest.TestCase):
                                         recover_previous_state=True,
                                         cr_new=CreateNew.NO,
                                         allow_saving=True)
-        self.assertIsNotNone(isess._state.get("metadata"))
+        self.assertIsNotNone(isess._state.get("_metadata"))
         self.assertIsNotNone(isess._state.get("var_a"))
-        isess.close_reproducible_session()  # Dismiss WorkSession
+        isess.close_reproducible_session()  # Dismiss ReproducibleSession
 
         # ----------------------------------------------------------------------
         # Now create a new version, COPYING the previous, add TWO commands
@@ -261,16 +261,16 @@ class HighLevelUseCases(unittest.TestCase):
                                         recover_previous_state=True,
                                         cr_new=CreateNew.VERSION,
                                         allow_saving=True)
-        d_cmd = create_command("dummy", None, {"name": "var_b", "description": "To test var storage and retrieval"})
+        d_cmd, _ = create_command("dummy", None, {"name": "var_b", "description": "To test var storage and retrieval"})
         issues, output = isess.execute_executable_command(d_cmd)
         isess.register_executable_command(d_cmd)
-        d_cmd = create_command("dummy", None, {"name": "var_a", "description": "Overwritten"})
+        d_cmd, _ = create_command("dummy", None, {"name": "var_a", "description": "Overwritten"})
         issues, output = isess.execute_executable_command(d_cmd)
         isess.register_executable_command(d_cmd)
         uuid2, _, _ = isess.close_reproducible_session(issues, output, save=True)
         # Database objects
         session = DBSession()
-        self.assertEqual(len(session.query(PersistableCommand).all()), 6)
+        self.assertEqual(len(session.query(CommandGenerator).all()), 6)
         self.assertEqual(len(session.query(CaseStudy).all()), 1)
         self.assertEqual(len(session.query(CaseStudyVersion).all()), 2)
         self.assertEqual(len(session.query(CaseStudyVersionSession).all()), 5)
@@ -282,13 +282,13 @@ class HighLevelUseCases(unittest.TestCase):
                                         recover_previous_state=True,
                                         cr_new=CreateNew.CASE_STUDY,
                                         allow_saving=True)
-        d_cmd = create_command("dummy", None, {"name": "var_b", "description": "Another value"})
+        d_cmd, _ = create_command("dummy", None, {"name": "var_b", "description": "Another value"})
         issues, output = isess.execute_executable_command(d_cmd)
         isess.register_executable_command(d_cmd)
         uuid3, _, _ = isess.close_reproducible_session(issues, output, save=True)
         # Database objects
         session = DBSession()
-        self.assertEqual(len(session.query(PersistableCommand).all()), 11)
+        self.assertEqual(len(session.query(CommandGenerator).all()), 11)
         self.assertEqual(len(session.query(CaseStudy).all()), 2)
         self.assertEqual(len(session.query(CaseStudyVersion).all()), 3)
         self.assertEqual(len(session.query(CaseStudyVersionSession).all()), 9)
@@ -300,7 +300,7 @@ class HighLevelUseCases(unittest.TestCase):
                                         recover_previous_state=False,
                                         cr_new=CreateNew.VERSION,
                                         allow_saving=True)
-        d_cmd = create_command("dummy", None, {"name": "var_b", "description": "Another value"})
+        d_cmd, _ = create_command("dummy", None, {"name": "var_b", "description": "Another value"})
         issues, output = isess.execute_executable_command(d_cmd)
         isess.register_executable_command(d_cmd)
         uuid4, _, _ = isess.close_reproducible_session(issues, output, save=True)
@@ -315,7 +315,7 @@ class HighLevelUseCases(unittest.TestCase):
 
         # Database objects
         session = DBSession()
-        self.assertEqual(len(session.query(PersistableCommand).all()), 12)
+        self.assertEqual(len(session.query(CommandGenerator).all()), 12)
         self.assertEqual(len(session.query(CaseStudy).all()), 2)
         self.assertEqual(len(session.query(CaseStudyVersion).all()), 4)
         self.assertEqual(len(session.query(CaseStudyVersionSession).all()), 10)
@@ -330,7 +330,7 @@ class HighLevelUseCases(unittest.TestCase):
                                         allow_saving=True)
         self.assertEqual(isess._state.get("var_a"), "Content")
         self.assertIsNone(isess._state.get("var_b"))
-        isess.close_reproducible_session()  # Dismiss WorkSession
+        isess.close_reproducible_session()  # Dismiss ReproducibleSession
 
         # SECOND VERSION same case study
         isess.open_reproducible_session(case_study_version_uuid=uuid2,
@@ -339,7 +339,7 @@ class HighLevelUseCases(unittest.TestCase):
                                         allow_saving=True)
         self.assertEqual(isess._state.get("var_a"), "Overwritten")
         self.assertIsNotNone(isess._state.get("var_b"))
-        isess.close_reproducible_session()  # Dismiss WorkSession
+        isess.close_reproducible_session()  # Dismiss ReproducibleSession
 
         # FIRST VERSION new CASE STUDY, from second VERSION first CASE STUDY
         isess.open_reproducible_session(case_study_version_uuid=uuid3,
@@ -348,7 +348,7 @@ class HighLevelUseCases(unittest.TestCase):
                                         allow_saving=True)
         self.assertEqual(isess._state.get("var_b"), "Another value")
         self.assertIsNotNone(isess._state.get("var_a"))
-        isess.close_reproducible_session()  # Dismiss WorkSession
+        isess.close_reproducible_session()  # Dismiss ReproducibleSession
 
         # TODO Test clone BUT without RESTART --> ALL sessions should be dismissed, in this case it makes no sense cloning State, Sessions and Commands
 

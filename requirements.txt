@@ -2,6 +2,7 @@ pandas==0.21.0
 typing==3.6.2
 chardet==3.0.4
 Pint==0.8.1
+uncertainties==3.0.1
 regex==2017.9.23
 Werkzeug==0.12.2
 multidict==3.3.2
@@ -11,6 +12,7 @@ xlrd==1.1.0
 matplotlib==2.1.0rc1
 xmltodict==0.11.0
 openpyxl==2.5.0b1
+koala2==0.0.17
 requests==2.18.4
 pyparsing==2.2.0
 pandaSDMX==0.7.0
@@ -27,3 +29,37 @@ python_magic==0.4.13
 SQLAlchemy==1.2.0b3
 redis
 jsonpickle==0.9.5
+xmltodict==0.11.0
+cachier==1.2.2
+#tablib <- dictmapper (convert nested dict's to CSV)
+
+# ############################### CANDIDATE LIBRARIES #################################
+
+# Mondrian cubes generator
+#PyMondrian <- https://github.com/gabitoju/pymondrian
+#XMondrian : NOT a Python package, a self-contained Mondrian WAR <- https://github.com/rpbouman/xmondrian, http://rpbouman.blogspot.com.es/2016/03/need-mondrian-war-checkout-xmondrian.html
+
+# Dotted notation
+#j = {"a": [{"b": 5, "c": "hola"},{"b": 2, "c": "adios"}], "g": {"t": "hello", "r": "bye"}}
+#dotted 0.1.8 <- !!Fantastic!!
+#python-box <- INTERESTING, MATURE
+#mo-dots
+#dpath <- ~ Could be, there are some quirks for cases with a bit more complexity
+#mydict <- does not support list indices inside the dot notation
+
+#objdict (substitute namedtuple, namedlists, OrderedDict, with LESS performance) Supports DOT notation
+#JsonWeb (overlaps "objdict")
+#DataModelDict (maybe interesting for Backend - Frontend communication)
+
+# JSONPath, ObjectPath, JMESPath
+#dpath
+#jpath (2013... but seems interesting, it was mature at that time)
+#jsonpath-ng
+
+# Dublin Core XML generation
+#dcxml 0.1.0
+
+# NetworkX
+# RDFLib
+# JSONPath
+# Cubes (https://github.com/DataBrewery/cubes) Warning!: It is not very active

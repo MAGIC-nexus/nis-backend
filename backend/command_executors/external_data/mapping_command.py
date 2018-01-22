@@ -1,0 +1,38 @@
+import json
+
+from backend.domain import IExecutableCommand
+
+
+class MappingCommand(IExecutableCommand):
+    def __init__(self, name: str):
+        self._name = name
+        self._content = None
+
+    def execute(self, state: "State"):
+        # TODO Read mapping
+        # TODO Obtain the origin dataset Metadata
+        # TODO If the categories to the left are not totally covered, what to do?
+
+        # Store it in State
+        # If there are datasets matching the origin, JOIN
+
+        return None, None
+
+    def estimate_execution_time(self):
+        return 0
+
+    def json_serialize(self):
+        # Directly return the metadata dictionary
+        return self._content
+
+    def json_deserialize(self, json_input):
+        # TODO Check validity
+        issues = []
+        if isinstance(json_input, dict):
+            self._content = json_input
+        else:
+            self._content = json.loads(json_input)
+
+        if "description" in json_input:
+            self._description = json_input["description"]
+        return issues

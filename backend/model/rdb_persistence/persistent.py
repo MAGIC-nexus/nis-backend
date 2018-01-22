@@ -15,7 +15,7 @@ Persistent store, in database
 
 """
 import datetime
-from sqlalchemy import Column, Boolean, Integer, String, Text, Unicode, DateTime, LargeBinary, ForeignKey
+from sqlalchemy import Column, Boolean, Integer, String, Unicode, DateTime, LargeBinary, ForeignKey
 from copy import deepcopy
 import psycopg2  # Only for automatic detection of dependencies
 from sqlalchemy.dialects import postgresql
@@ -124,7 +124,7 @@ class BaseMixin(object):
     #     elif isinstance(self, CaseStudyVersionSession):
     #         if 'commands' in state:
     #             del state['commands']
-    #     elif isinstance(self, PersistableCommand):
+    #     elif isinstance(self, CommandGenerator):
     #         if 'children_commands' in state:
     #             del state['children_commands']
     #     elif isinstance(self, User):
@@ -319,7 +319,10 @@ class CaseStudy(ORMBase):
     oid = Column(String(128), nullable=True)
     internal_code = Column(String(20), nullable=True)
     description = Column(String(1024), default=None)
-    areas = Column(String(10), default=None)  # W(ater), E(nergy), F(ood), L(and), C(limate change), ...
+    areas = Column(String(10), default=None)  # W(ater), E(nergy), F(ood), L(and), C(limate -change-), ...
+    geographic_level = Column(String(4), nullable=True)  # R(egional), C(ountry), E(urope), S(ectoral)
+    restriction_level = Column(String(3), nullable=True)  # I(nternal), C(onfidential), P(ublic)
+    version = Column(String(10), nullable=True)
 
     def __copy__(self):
         cs = CaseStudy()
@@ -331,6 +334,10 @@ class CaseStudy(ORMBase):
         cs.name = self.name
         cs.description = self.description
         cs.areas = self.areas
+        cs.restriction_level = self.restriction_level
+        cs.geographic_level = self.geographic_level
+        cs.version = self.version
+
         return cs
 
     def __init__(self):
@@ -426,21 +433,21 @@ class CaseStudyVersionSession(ORMBase):
         return s
 
 
-class PersistableCommand(ORMBase):
-    """ The PersistableCommand object is either the representation of a primitive command or of a generator of commands.
+class CommandGenerator(ORMBase):
+    """ The CommandGenerator object is either the representation of a primitive command or of a generator of command_executors.
         It is not the executable command
         For a primitive command, the content is the serialized JSON content elaborated by the command itself.
         In this case, generator_type is "primitive", content_type "application/json"
         For command generators, the content may be an Excel file or an R script. The generator_type could be "Excel", "Rscript"
         The content type for the first would be "application/excel", 
     """
-    __tablename__ = "cs_versions_sessions_commands"
+    __tablename__ = "cs_versions_sessions_cmd_gens"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     name = Column(String(80))
 
     session_id = Column(Integer, ForeignKey(CaseStudyVersionSession.id))
-    session = relationship(CaseStudyVersionSession, backref=backref("commands", order_by="PersistableCommand.order",
+    session = relationship(CaseStudyVersionSession, backref=backref("commands", order_by="CommandGenerator.order",
                            collection_class=ordering_list('order'), cascade="all, delete-orphan"))
 
     order = Column(Integer)
@@ -448,8 +455,8 @@ class PersistableCommand(ORMBase):
     content_type = Column(String(48))  # "application/json", "application/excel", "application/text"
     content = Column(LargeBinary, nullable=True)  # A JSON string, an Excel file, an R script, ...
 
-    parent_command_id = Column(Integer, ForeignKey("cs_versions_sessions_commands.id"))
-    parent_command = relationship("PersistableCommand", backref=backref("children_commands", remote_side=[id], order_by="PersistableCommand.order",
+    parent_command_id = Column(Integer, ForeignKey("cs_versions_sessions_cmd_gens.id"))
+    parent_command = relationship("CommandGenerator", backref=backref("children_commands", remote_side=[id], order_by="CommandGenerator.order",
                                   collection_class=ordering_list('order')), cascade="all, delete-orphan")
     # Role of the command regarding its parent command (to make child commands independent of the order,
     # like "named parameters", or "iterated command")
@@ -458,13 +465,13 @@ class PersistableCommand(ORMBase):
     @staticmethod
     def create(generator_type, file_type, file):
         """
-        Generates commands from an input stream (string or file)
+        Generates command_executors from an input stream (string or file)
         There must be a factory to parse stream 
         :param generator_type: 
         :param file_type: 
         :param file: It can be a stream or a URL or a file name
         """
-        c = PersistableCommand()
+        c = CommandGenerator()
         c.name = None
         c.generator_type = generator_type
         c.content_type = file_type
@@ -474,7 +481,7 @@ class PersistableCommand(ORMBase):
         return c
 
     def __copy__(self):
-        c = PersistableCommand()
+        c = CommandGenerator()
         c.name = self.name
         # c.session NOT COPIED, assign it directly !!!!
         c.order = self.order

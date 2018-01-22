@@ -4,6 +4,8 @@
 * Support for high level operations: directly create and/or modify objects, calling the specification API. Create connections
 """
 import logging
+
+
 import datetime
 from enum import Enum
 from typing import List
@@ -11,22 +13,19 @@ import uuid
 import json
 import copy
 
-from backend.common.helper import create_dictionary
+from backend.domain import State
 from backend.domain import IExecutableCommand
 from backend.model.rdb_persistence.persistent import (User,
                                                       CaseStudy,
-                                                      CaseStudyStatus,
                                                       CaseStudyVersion,
                                                       CaseStudyVersionSession,
-                                                      PersistableCommand,
+                                                      CommandGenerator,
                                                       force_load,
                                                       serialize_from_object,
                                                       deserialize_to_object
                                                       )
-from backend.commands.factory import (execute_command,
-                                      execute_command_generator,
-                                      execute_command_generator_file
-                                      )
+from backend.command_generators.factory import command_generator_parser_factory
+from backend.common.helper import PartialRetrievalDictionary, generate_json
 
 logger = logging.getLogger(__name__)
 
@@ -57,238 +56,24 @@ class Identity:
 #         pass
 
 
-class Scope:
-    """ The scope allows to assign names to entities using a registry """
-    def __init__(self, name=None):
-        self._name = name  # A name for the scope itself
-        self._registry = create_dictionary()
-
-    @property
-    def name(self):
-        return self._name
-
-    @name.setter
-    def name(self, name):
-        self._name = name
-
-    def __contains__(self, key):  # "in" operator to check if the key is present in the dictionary
-        return key in self._registry
-
-    def __getitem__(self, name):
-        if name in self._registry:
-            return self._registry[name]
-        else:
-            return None
-
-    def __setitem__(self, name: str, entity):
-        if name not in self._registry:
-            existing = True
-        else:
-            existing = False
-
-        self._registry[name] = entity
-        return existing
-
-    def __delitem__(self, name):
-        del self._registry[name]
-
-    def list(self):
-        """ List just the names of variables """
-        return self._registry.keys()
-
-    def list_pairs(self):
-        """ List tuples of variable name and value object """
-        return [(k, v2) for k, v2 in self._registry.items()]
-
-
-class Namespace:
-    def __init__(self):
-        self.__scope = []  # List of scopes
-        self.__current_scope = None  # type: Scope
-        self.__current_scope_idx = -1
-        self.new_scope()
-
-    # The registry will have "nested" scopes (names in the current scope take precedence on "higher" scopes)
-    # When searching for names, the search will go from the most recent scope to the oldest
-    def new_scope(self, name=None):
-        """ Create a new scope """
-        self.__current_scope = Scope()
-        self.__scope.append(self.__current_scope)
-        self.__current_scope_idx = len(self.__scope) - 1
-        if not name:
-            name = "Scope" + str(self.__current_scope_idx)
-        self.__current_scope.name = name
-
-    def close_scope(self):
-        if self.__current_scope:
-            del self.__scope[-1]
-        if self.__current_scope_idx >= 0:
-            self.__current_scope_idx -= 1
-            if self.__current_scope_idx >= 0:
-                self.__current_scope = self.__scope[-1]
-            else:
-                self.__current_scope = None
-
-    def list_names(self, scope=None):
-        """ Returns a list of the names of the registered entities of the "scope" or if None, of the CURRENT scope """
-        if not scope:
-            scope = self.__current_scope
-
-        return scope.list()
-
-    def list(self, scope=None):
-        """
-            Returns a list of the names and values of the registered entities of
-            the "scope" or if None, of the CURRENT scope
-        """
-        if not scope:
-            scope = self.__current_scope
-
-        return scope.list_pairs()
-
-    def list_all_names(self):
-        """
-            Returns a list of the names of registered entities considering the scopes
-            Start from top level, end in bottom level (the current one, which takes precedence)
-            :return:
-        """
-        t = create_dictionary()
-        for scope in self.__scope:
-            t.update(scope._registry)
-
-        return t.keys()
-
-    def list_all(self):
-        """
-            Returns a list of the names and variables of registered entities considering the scopes
-            Start from top level, end in bottom level (the current one, which takes precedence)
-
-        :return:
-        """
-        t = create_dictionary()
-        for scope in self.__scope:
-            t.update(scope._registry)
-
-        return [(k, v2) for k, v2 in t.items()]
-
-    def set(self, name: str, entity):
-        """ Set a named entity in the current scope. Previous scopes are not writable. """
-        if self.__current_scope:
-            var_exists = name in self.__current_scope
-            self.__current_scope[name] = entity
-            if var_exists:
-                logger.warning("'"+name+"' overwritten.")
-
-    def get(self, name: str, scope=None, return_scope=False):
-        """ Return the entity named "name". Return also the Scope in which it was found """
-        if not scope:
-            for scope_idx in range(len(self.__scope)-1, -1, -1):
-                if name in self.__scope[scope_idx]:
-                    if return_scope:
-                        return self.__scope[scope_idx][name], self.__scope[scope_idx]
-                    else:
-                        return self.__scope[scope_idx][name]
-            else:
-                logger.warning("The name '"+name+"' was not found in the stack of scopes ("+str(len(self.__scope))+")")
-                if return_scope:
-                    return None, None
-                else:
-                    return None
-        else:
-            # TODO Needs proper implementation !!!! (when scope is a string, not a Scope instance, to be searched in the list of scopes "self.__scope")
-            if name in scope:
-                if return_scope:
-                    return scope[name], scope
-                else:
-                    return scope[name]
-            else:
-                logger.error("The name '" + name + "' was not found in scope '"+scope.name+"'")
-                if return_scope:
-                    return None, None
-                else:
-                    return None
-
-
-class State:
-    """
-    -- "State" in memory --
-
-    Commands may alter State or may just read it
-    It uses a dictionary of named Namespaces (and Namespaces can have several scopes)
-    Keeps a registry of variable names and the objects behind them.
-    
-        It is basically a list of Namespaces. One is active by default.
-        The others have a name. Variables inside these other Namespaces may be accessed using that 
-        name then "::", same as C++
-    """
-    def __init__(self):
-        self._default_namespace = ""
-        self._namespaces = create_dictionary()  # type:
-
-    def new_namespace(self, name):
-        self._namespaces[name] = Namespace()
-        if self._default_namespace is None:
-            self._default_namespace = name
-
-    @property
-    def default_namespace(self):
-        return self._default_namespace
-
-    @default_namespace.setter
-    def default_namespace(self, name):
-        if name is not None:  # Name has to have some value
-            self._default_namespace = name
-
-    def del_namespace(self, name):
-        if name in self._namespaces:
-            del self._namespaces
-
-    def list_namespaces(self):
-        return self._namespaces.keys()
-
-    def list_namespace_variables(self, namespace_name=None):
-        if namespace_name is None:
-            namespace_name = self._default_namespace
-
-        return self._namespaces[namespace_name].list_all()
-
-    def set(self, name, entity, namespace_name=None):
-        if namespace_name is None:
-            namespace_name = self._default_namespace
-
-        if namespace_name not in self._namespaces:
-            self.new_namespace(namespace_name)
-
-        self._namespaces[namespace_name].set(name, entity)
-
-    def get(self, name, namespace_name=None, scope=None):
-        if not namespace_name:
-            namespace_name = self._default_namespace
-
-        if namespace_name not in self._namespaces:
-            self.new_namespace(namespace_name)
-
-        return self._namespaces[namespace_name].get(name, scope)
-
-
 class CommandResult:
     pass
 
 # class SessionCreationAction(Enum):  # Used in FlowFund
 #     """
 #
-#         +--------+--------+---------+-------------------------+
-#         | branch | clone  | restart |        Behavior         |
-#         +--------+--------+---------+-------------------------+
-#         | True   | True   | True    | Branch & New WorkSession|
-#         | True   | True   | False   | Branch & Clone          |
-#         | True   | False  | True    | Branch & New WorkSession|
-#         | True   | False  | False   | Branch & New WorkSession|
-#         | False  | True   | True    | New CS (not CS version) |
-#         | False  | True   | False   | New CS & Clone          |
-#         | False  | False  | True    | Restart                 |
-#         | False  | False  | False   | Continue                |
-#         +--------+--------+---------+-------------------------+
+#         +--------+--------+---------+---------------------------------+
+#         | branch | clone  | restart |        Behavior                 |
+#         +--------+--------+---------+---------------------------------+
+#         | True   | True   | True    | Branch & New ReproducibleSession|
+#         | True   | True   | False   | Branch & Clone                  |
+#         | True   | False  | True    | Branch & New ReproducibleSession|
+#         | True   | False  | False   | Branch & New ReproducibleSession|
+#         | False  | True   | True    | New CS (not CS version)         |
+#         | False  | True   | False   | New CS & Clone                  |
+#         | False  | False  | True    | Restart                         |
+#         | False  | False  | False   | Continue                        |
+#         +--------+--------+---------+---------------------------------+
 #     """
 #     BranchAndNewWS = 7
 #     BranchAndCloneWS = 6
@@ -296,6 +81,151 @@ class CommandResult:
 #     NewCaseStudyCopyFrom = 2
 #     Restart = 1
 #     Continue = 0
+# ---------------------------------------------------------------------------------------------------------------------
+
+# #####################################################################################################################
+# >>>> PRIMITIVE COMMAND & COMMAND GENERATOR PROCESSING FUNCTIONS <<<<
+# #####################################################################################################################
+
+
+def executable_command_to_command_generator(e_cmd: IExecutableCommand):
+    """
+    IExecutableCommand -> CommandGenerator
+
+    The resulting CommandGenerator will be always in native (JSON) format, because the specification
+    to construct an IExecutableCommand has been translated to this native format.
+
+    :param command:
+    :return:
+    """
+    d = {"command": e_cmd._serialization_type,
+         "label": e_cmd._serialization_label,
+         "content": e_cmd.json_serialize()}
+
+    return CommandGenerator.create("native", "application/json", json.dumps(d).encode("utf-8"))
+
+
+def persistable_to_executable_command(p_cmd: CommandGenerator, limit=1000):
+    """
+    A persistable command can be either a single command or a sequence of commands (like a spreadsheet). In the future
+    it could even be a full script.
+
+    Because the executable command is DIRECTLY executable, it is not possible to convert from persistable to a single
+    executable command. But it is possible to obtain a list of executable commands, and this is the aim of this function
+
+    The size of the list can be limited by the parameter "limit". "0" is for unlimited
+
+    :param p_cmd:
+    :return: A list of IExecutableCommand
+    """
+    # Generator factory (from generator_type and file_type)
+    # Generator has to call "yield" whenever an ICommand is generated
+    issues_aggreg = []
+    outputs = []
+    state = State()
+    count = 0
+    for cmd, issues in command_generator_parser_factory(p_cmd.generator_type, p_cmd.file_type, p_cmd.file, state):
+        # If there are syntax ERRORS, STOP!!!
+        stop = False
+        if issues and len(issues) > 0:
+            for t in issues:
+                if t[0] == 3:  # Error
+                    stop = True
+        if stop:
+            break
+
+        issues_aggreg.extend(issues)
+
+        count += 1
+        if count >= limit:
+            break
+
+
+def execute_command(state, e_cmd: "IExecutableCommand"):
+    return e_cmd.execute(state)
+
+
+def execute_command_generator(state, p_cmd: CommandGenerator):
+    return execute_command_generator_file(state, p_cmd.generator_type, p_cmd.content_type, p_cmd.content)
+
+
+def execute_command_generator_file(state, generator_type, file_type: str, file):
+    """
+    Creates a generator parser, then it feeds the file type and the file
+    The generator parser has to parse the file and to generate command_executors as a Python generator
+
+    :param generator_type:
+    :param file_type:
+    :param file:
+    :return: Issues and outputs (still not defined) -TODO-
+    """
+    # Generator factory (from generator_type and file_type)
+    # Generator has to call "yield" whenever an ICommand is generated
+    issues_aggreg = []
+    outputs = []
+    for cmd, issues in command_generator_parser_factory(generator_type, file_type, file, state):
+        # If there are syntax ERRORS, STOP!!!
+        stop = False
+        if issues and len(issues) > 0:
+            for t in issues:
+                if isinstance(t, dict):
+                    if t["type"] == 3:
+                        stop = True
+                elif isinstance(t, tuple):
+                    if t[0] == 3:  # Error
+                        stop = True
+        if stop:
+            break
+
+        issues_aggreg.extend(issues)
+        i, output = execute_command(state, cmd)
+        if i:
+            issues_aggreg.extend(i)
+        if output:
+            outputs.append(output)
+
+    return issues_aggreg, outputs
+
+
+def convert_generator_to_native(generator_type, file_type: str, file):
+    """
+    Converts a generator
+    Creates a generator parser, then it feeds the file type and the file
+    The generator parser has to parse the file and to elaborate a native generator (JSON)
+
+    :param generator_type:
+    :param file_type:
+    :param file:
+    :return: Issues and output file
+    """
+    # Generator factory (from generator_type and file_type)
+    # Generator has to call "yield" whenever an ICommand is generated
+    output = []
+    if generator_type.lower() not in ["json", "native", "primitive"]:
+        state = State()
+        for cmd, issues in command_generator_parser_factory(generator_type, file_type, file, state):
+            # If there are syntax ERRORS, STOP!!!
+            stop = False
+            if issues and len(issues) > 0:
+                for t in issues:
+                    if t["type"] == 3:  # Error
+                        stop = True
+                        break
+
+            output.append({"command": cmd._serialization_type,
+                           "label": cmd._serialization_label,
+                           "content": cmd.json_serialize(),
+                           "issues": issues
+                           }
+                          )
+            if stop:
+                break
+
+    return output
+
+# #####################################################################################################################
+# >>>> INTERACTIVE SESSION <<<<
+# #####################################################################################################################
 
 
 class CreateNew(Enum):
@@ -310,7 +240,7 @@ class InteractiveSession:
     The first thing would be to identify the user and create a GUID for the session which can be used by the web server
     to store and retrieve the interactive session state.
     
-    It receives commands, modifying state accordingly
+    It receives command_executors, modifying state accordingly
     If a reproducible session is opened, 
     """
     def __init__(self, session_factory):
@@ -323,7 +253,7 @@ class InteractiveSession:
         # User identity, if given (can be an anonymous session)
         self._identity = None  # type: Identity
         self._state = State()  # To keep the state
-        self._work_session = None  # type: WorkSession
+        self._reproducible_session = None  # type: ReproducibleSession
 
     def reset_state(self):
         """ Restart state """
@@ -335,8 +265,8 @@ class InteractiveSession:
 
     def set_sf(self, session_factory):
         self._session_factory = session_factory
-        if self._work_session:
-            self._work_session.set_sf(session_factory)
+        if self._reproducible_session:
+            self._reproducible_session.set_sf(session_factory)
 
     def open_db_session(self):
         return self._session_factory()
@@ -379,6 +309,9 @@ class InteractiveSession:
                 self._session_factory.remove()
                 if src:
                     self._identity = src.name
+                    if self._state:
+                        self._state.set("_identity", self._identity)
+
                 return src is not None
             elif "token" in identity_information:
                 # TODO Validate against some Authentication service
@@ -388,8 +321,10 @@ class InteractiveSession:
         return self._identity
 
     def unidentify(self):
-        # TODO The un-identification cannot do in the following circumstances: any?
+        # TODO The un-identification cannot be done in the following circumstances: any?
         self._identity = None
+        if self._state:
+            self._state.set("_identity", self._identity)
 
     # --------------------------------------------------------------------------------------------
     # Reproducible sessions and commands INSIDE them
@@ -399,48 +334,51 @@ class InteractiveSession:
                                   recover_previous_state=True,
                                   cr_new: CreateNew = CreateNew.NO,
                                   allow_saving=True):
-        self._work_session = WorkSession(self)
-        self._work_session.open(self._session_factory, case_study_version_uuid, recover_previous_state, cr_new, allow_saving)
+        self._reproducible_session = ReproducibleSession(self)
+        self._reproducible_session.open(self._session_factory, case_study_version_uuid, recover_previous_state, cr_new, allow_saving)
 
     def close_reproducible_session(self, issues=None, output=None, save=False, from_web_service=False):
         if save:
-            self._work_session.save(from_web_service)
-        uuid_, v_uuid, cs_uuid = self._work_session.close()
-        self._work_session = None
+            self._reproducible_session.save(from_web_service)
+        uuid_, v_uuid, cs_uuid = self._reproducible_session.close()
+        self._reproducible_session = None
         return uuid_, v_uuid, cs_uuid
 
     def reproducible_session_opened(self):
-        return self._work_session is not None
+        return self._reproducible_session is not None
+
+    # --------------------------------------------------------------
 
     def execute_executable_command(self, cmd: IExecutableCommand):
         return execute_command(self._state, cmd)
 
     def register_executable_command(self, cmd: IExecutableCommand):
-        self._work_session.register_executable_command(cmd)
+        self._reproducible_session.register_executable_command(cmd)
 
     def register_andor_execute_command_generator(self, generator_type, file_type: str, file, register=True, execute=False):
         """
         Creates a generator parser, then it feeds the file type and the file
-        The generator parser has to parse the file and to generate commands as a Python generator 
+        The generator parser has to parse the file and to generate command_executors as a Python generator
 
         :param generator_type: 
         :param file_type: 
         :param file: 
-        :param register: If True, register the command in the WorkSession
-        :param execute: If True, execute the command in the WorkSession
+        :param register: If True, register the command in the ReproducibleSession
+        :param execute: If True, execute the command in the ReproducibleSession
         :return: 
         """
-        if not self._work_session:
+        if not self._reproducible_session:
             raise Exception("In order to execute a command generator, a work session is needed")
         if not register and not execute:
             raise Exception("More than zero of the parameters 'register' and 'execute' must be True")
 
         # Prepare persistable command
-        c = WorkSession.create_persistable_command(generator_type, file_type, file)
+        c = CommandGenerator.create(generator_type, file_type, file)
         if register:
-            self._work_session.register_persistable_command(c)
+            self._reproducible_session.register_persistable_command(c)
         if execute:
-            return self._work_session.execute_persistable_command(c)
+            pass_case_study = self._reproducible_session._session.version.case_study is not None
+            return self._reproducible_session.execute_command_generator(c, pass_case_study)
             # Or
             # return execute_command_generator(self._state, c)
         else:
@@ -480,21 +418,15 @@ class InteractiveSession:
     def import_case_study(self, file):
         pass
 
-# class Store(ABCMeta):
-#     def define(self, definition):
-#         pass
-#
-#     def load(self, uuid):
-#         pass
-#
-#     def save(self, uuid, session: WorkSession):
-#         pass
+# #####################################################################################################################
+# >>>> REPRODUCIBLE SESSION <<<<
+# #####################################################################################################################
 
 
-class WorkSession:
+class ReproducibleSession:
     def __init__(self, isess):
-        # Containing InteractiveSession. Used to set State when a WorkSession is opened and it overwrites State
-        self._isess = isess
+        # Containing InteractiveSession. Used to set State when a ReproducibleSession is opened and it overwrites State
+        self._isess = isess  # type: InteractiveSession
         self._identity = isess._identity
         self._sess_factory = None
         self._allow_saving = None
@@ -524,15 +456,16 @@ class WorkSession:
     * Can be a Transient session
 
         :param uuid_: UUID of the case study or case study version. Can be None, for new case studies or for testing purposes.
-        :param recover_previous_state: If an existing version is specified, it will recover its state after execution of all commands
+        :param recover_previous_state: If an existing version is specified, it will recover its state after execution of all command_executors
         :param cr_new: If != CreateNew.NO, create either a case study or a new version. If == CreateNew.NO, append session to "uuid"
         :param allow_saving: If True, it will allow saving at the end (it will be optional). If False, trying to save will generate an Exception
         :return UUID of the case study version in use. If it is a new case study and it has not been saved, the value will be "None"
         """
-        # TODO Just register for now. But in the future it should control that there is no other "allow_saving" WorkSession opened
+
+        # TODO Just register for now. But in the future it should control that there is no other "allow_saving" ReproducibleSession opened
         # TODO for the same Case Study Version. So it implies modifying some state in CaseStudyVersion to have the UUID
-        # TODO of the active WorkSession, even if it is not in the database. Register also the date of "lock", so the
-        # TODO lock can be removed in case of "hang" of the locker WorkSession
+        # TODO of the active ReproducibleSession, even if it is not in the database. Register also the date of "lock", so the
+        # TODO lock can be removed in case of "hang" of the locker ReproducibleSession
         self._allow_saving = allow_saving
         self._sess_factory = session_factory
         session = self._sess_factory()
@@ -546,13 +479,13 @@ class WorkSession:
                 if not vs:
                     ss = session.query(CaseStudyVersionSession).filter(CaseStudyVersionSession.uuid == uuid_).first()
                     if not ss:
-                        raise Exception("Object '"+uuid_+"' not found, when opening a WorkSession")
+                        raise Exception("Object '"+uuid_+"' not found, when opening a ReproducibleSession")
                     else:
                         vs = ss.version
                         cs = vs.case_study
                 else:
                     cs = vs.case_study
-            else:  # A case study, find the latest version (the version modified latest -by activity, newest WorkSession-)
+            else:  # A case study, find the latest version (the version modified latest -by activity, newest ReproducibleSession-)
                 max_date = None
                 max_version = None
                 for v in cs.versions:
@@ -577,14 +510,14 @@ class WorkSession:
 
             if cr_new != CreateNew.NO:  # Create either a case study or a case study version
                 if cr_new == CreateNew.CASE_STUDY:
-                    cs = copy.copy(cs)  # COPY CaseStudy
+                    cs = copy.copy(cs)  # New Case Study: COPY CaseStudy
                 else:
-                    force_load(cs)
+                    force_load(cs)  # New Case Study Version: LOAD CaseStudy (then version it)
                 vs2 = copy.copy(vs)  # COPY CaseStudyVersion
                 vs2.case_study = cs  # Assign case study to the new version
                 if recover_previous_state:  # If the new version keeps previous state, copy it also
                     vs2.state = vs.state  # Copy state
-                    for ws in lst:  # COPY active WorkSessions
+                    for ws in lst:  # COPY active ReproducibleSessions
                         ws2 = copy.copy(ws)
                         ws2.version = vs2
                         for c in ws.commands:  # COPY commands
@@ -600,7 +533,7 @@ class WorkSession:
                 # Load state if it is persisted
                 if vs.state:
                     # Deserialize
-                    self._isess._state = deserialize_to_object(vs.state)
+                    self._isess._state = State.deserialize(vs.state)
                 else:
                     self._isess._state = State()  # Zero State, execute all commands in sequence
                     for ws in lst:
@@ -619,7 +552,7 @@ class WorkSession:
             session.expunge(cs)
         if vs in session:
             session.expunge(vs)
-        # Create the WorkSession
+        # Create the Case Study Version Session
         usr = session.query(User).filter(User.name == self._identity).first()
         force_load(usr)
         self._session = CaseStudyVersionSession()
@@ -634,12 +567,10 @@ class WorkSession:
         self._sess_factory.remove()
 
     def save(self, from_web_service=False):
-        # if len(self._session.commands) == 0:
-        #     raise Exception("The WorkSession will not be saved because it does not contain commands")
         if not self._allow_saving:
-            raise Exception("The WorkSession was opened disallowing saving. Please close it and reopen it with the proper value")
+            raise Exception("The ReproducibleSession was opened disallowing saving. Please close it and reopen it with the proper value")
         # Serialize state
-        st = serialize_from_object(self._isess._state)
+        st = self._isess._state.serialize()
         self._session.version.state = st
         self._session.state = st
         # Open DB session
@@ -671,37 +602,35 @@ class WorkSession:
         force_load(self._session)
         self._sess_factory.remove()
 
-    @staticmethod
-    def create_persistable_command(generator_type, file_type, file):
-        return PersistableCommand.create(generator_type, file_type, file)
-
-    def register_persistable_command(self, cmd: PersistableCommand):
+    def register_persistable_command(self, cmd: CommandGenerator):
         cmd.session = self._session
-        return cmd
 
     def create_and_register_persistable_command(self, generator_type, file_type, file):
         """
-        Generates commands from an input stream (string or file)
+        Generates command_executors from an input stream (string or file)
         There must be a factory to parse stream 
         :param generator_type: 
         :param file_type: 
         :param file: It can be a stream or a URL or a file name
         """
-        c = PersistableCommand.create(generator_type, file_type, file)
-        c.session = self._session
+        c = CommandGenerator.create(generator_type, file_type, file)
+        self.register_persistable_command(c)
         return c
 
-    def execute_persistable_command(self, cmd: PersistableCommand):
-        execute_command_generator(self._isess._state, cmd)
+    def execute_command_generator(self, cmd: CommandGenerator, pass_case_study=False):
+        if pass_case_study:  # CaseStudy can be modified by Metadata command, pass a reference to it
+            self._isess._state.set("_case_study", self._session.version.case_study)
+
+        ret = execute_command_generator(self._isess._state, cmd)
+
+        if pass_case_study:
+            self._isess._state.set("_case_study", None)
+
+        return ret
 
     def register_executable_command(self, command: IExecutableCommand):
-        d = {"command": command._serialization_type,
-             "label": command._serialization_label,
-             "content": command.json_serialize()}
-
-        self.create_and_register_persistable_command(generator_type="primitive",
-                                                     file_type="application/json",
-                                                     file=json.dumps(d).encode("utf-8"))
+        c = executable_command_to_command_generator(command)
+        c.session = self._session
 
     def set_sf(self, session_factory):
         self._sess_factory = session_factory
@@ -712,7 +641,7 @@ class WorkSession:
 
     def close(self) -> tuple:
         if not self._session:
-            raise Exception("The WorkSession is not opened")
+            raise Exception("The CaseStudyVersionSession is not opened")
         id3 = self._session.uuid, self._session.version.uuid, self._session.version.case_study.uuid
         self._session = None
         self._allow_saving = None

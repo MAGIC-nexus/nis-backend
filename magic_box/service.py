@@ -123,7 +123,7 @@ List case studies
 List detail case study
 Graphical view of case study
 
-Read Excel, interpret all the commands, produce internal data structures and generate new Excel
+Read Excel, interpret all the command_executors, produce internal data structures and generate new Excel
 """
 
 

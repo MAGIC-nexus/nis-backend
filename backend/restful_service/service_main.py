@@ -1,27 +1,23 @@
 import io
 
-import json
 import os
 import sys
 import redis
 import logging
 from pathlib import Path
-from datetime import timedelta
-from functools import update_wrapper
 import sqlalchemy.schema
 from sqlalchemy.pool import StaticPool
 # from flask import (jsonify, abort, redirect, url_for,
 #
 #                    )
-from flask import (Response, request, session as flask_session, make_response,
-                   current_app, send_file, send_from_directory, render_template
+from flask import (Response, request, session as flask_session, send_from_directory
                    )
-from flask.helpers import get_root_path, safe_join
+from flask.helpers import get_root_path
 from flask_session import Session as FlaskSessionServerSide
 from flask_cors import CORS
-# from werkzeug.utils import secure_filename
+from werkzeug.exceptions import NotFound
 import json
-import jsonpickle
+
 
 # >>>>>>>>>> IMPORTANT <<<<<<<<<
 # For debugging in local mode, prepare an environment variable "MAGIC_NIS_SERVICE_CONFIG_FILE", with value "./nis_local.conf"
@@ -30,12 +26,16 @@ if __name__ == '__main__':
     print("Executing locally!")
     os.environ["MAGIC_NIS_SERVICE_CONFIG_FILE"] = "./nis_local.conf"
 
+from backend.common.helper import generate_json
 from backend.model.rdb_persistence.persistent import *
 from backend.common.create_database import create_pg_database_engine, create_monet_database_engine
 from backend.restful_service import app
 import backend
-from backend.commands.factory import create_command
-from backend.domain.workspace import InteractiveSession, CreateNew, WorkSession
+from backend.command_generators.json import create_command
+from backend.command_executors.specification.metadata_command import generate_dublin_core_xml
+from backend.domain import State
+from backend.domain.workspace import InteractiveSession, CreateNew, ReproducibleSession, \
+    execute_command_generator, convert_generator_to_native
 from backend.restful_service import nis_api_base, nis_client_base, nis_external_client_base, log_level, \
     tm_default_users, \
     tm_authenticators, \
@@ -43,9 +43,17 @@ from backend.restful_service import nis_api_base, nis_client_base, nis_external_
     tm_permissions, \
     tm_case_study_version_statuses
 from backend.restful_service.serialization import serialize, deserialize
+from backend.external_data.data_source_manager import DataSourceManager
+
+from backend.external_data.data_sources.eurostat_bulk import Eurostat
+from backend.external_data.data_sources.faostat import FAOSTAT
+
+# #####################################################################################################################
+# >>>> BOOT TIME. FUNCTIONS AND CODE <<<<
+# #####################################################################################################################
 
 
-def initialize_database():
+def initialize_database_data():
     # Load base tables
     load_table(DBSession, User, tm_default_users)
     load_table(DBSession, Authenticator, tm_authenticators)
@@ -64,80 +72,120 @@ def initialize_database():
         session.commit()
     DBSession.remove()
 
-# Initialize DATABASE
+# Initialize DATABASEs
 
 
-recreate_db = False
-if 'DB_CONNECTION_STRING' in app.config:
-    db_connection_string = app.config['DB_CONNECTION_STRING']
-    print("Connecting to metadata server")
-    print(db_connection_string)
-    print("-----------------------------")
-    if db_connection_string.startswith("sqlite://"):
-        backend.engine = sqlalchemy.create_engine(db_connection_string,
-                                                  echo=True,
-                                                  connect_args={'check_same_thread': False},
-                                                  poolclass=StaticPool)
+def initialize_databases():
+    recreate_db = False
+    if 'DB_CONNECTION_STRING' in app.config:
+        db_connection_string = app.config['DB_CONNECTION_STRING']
+        print("Connecting to metadata server")
+        print(db_connection_string)
+        print("-----------------------------")
+        if db_connection_string.startswith("sqlite://"):
+            backend.engine = sqlalchemy.create_engine(db_connection_string,
+                                                      echo=True,
+                                                      connect_args={'check_same_thread': False},
+                                                      poolclass=StaticPool)
+        else:
+            backend.engine = create_pg_database_engine(db_connection_string, "magic_nis", recreate_db=recreate_db)
+
+        # global DBSession # global DBSession registry to get the scoped_session
+        DBSession.configure(bind=backend.engine)  # reconfigure the sessionmaker used by this scoped_session
+        tables = ORMBase.metadata.tables
+        connection = backend.engine.connect()
+        table_existence = [backend.engine.dialect.has_table(connection, tables[t].name) for t in tables]
+        connection.close()
+        if False in table_existence:
+            ORMBase.metadata.bind = backend.engine
+            ORMBase.metadata.create_all()
+        # connection = backend.engine.connect()
+        # table_existence = [backend.engine.dialect.has_table(connection, tables[t].name) for t in tables]
+        # connection.close()
+        # Load base tables
+        initialize_database_data()
     else:
-        backend.engine = create_pg_database_engine(db_connection_string, "magic_nis", recreate_db=recreate_db)
-
-    # global DBSession # global DBSession registry to get the scoped_session
-    DBSession.configure(bind=backend.engine)  # reconfigure the sessionmaker used by this scoped_session
-    tables = ORMBase.metadata.tables
-    connection = backend.engine.connect()
-    table_existence = [backend.engine.dialect.has_table(connection, tables[t].name) for t in tables]
-    connection.close()
-    if False in table_existence:
-        ORMBase.metadata.bind = backend.engine
-        ORMBase.metadata.create_all()
-    # Load base tables
-    initialize_database()
-else:
-    print("No database connection defined (DB_CONNECTION_STRING), exiting now!")
-    sys.exit(1)
-
-if 'DATA_CONNECTION_STRING' in app.config:
-    data_connection_string = app.config['DB_CONNECTION_STRING']
-    print("Connecting to data server")
-    if data_connection_string.startswith("monetdb"):
-        backend.data_engine = create_monet_database_engine(data_connection_string, "magic_data")
-    elif data_connection_string.startswith("sqlite://"):
-        backend.data_engine = sqlalchemy.create_engine(data_connection_string,
-                                                       echo=True,
-                                                       connect_args={'check_same_thread': False},
-                                                       poolclass=StaticPool)
-    else:
-        backend.data_engine = create_pg_database_engine(data_connection_string, "magic_data", recreate_db=recreate_db)
-else:
-    print("No data connection defined (DATA_CONNECTION_STRING), exiting now!")
-    sys.exit(1)
-
-# A REDIS instance needs to be available. Check it
-# A local REDIS could be as simple as:
-#
-# docker run --rm -p 6379:6379 redis:alpine
-#
-if 'REDIS_HOST' in app.config:
-    rs = redis.Redis(app.config['REDIS_HOST'])
-    try:
-        rs.ping()
-    except:
-        print("Redis instance not reachable, exiting now!")
+        print("No database connection defined (DB_CONNECTION_STRING), exiting now!")
         sys.exit(1)
-else:
-    print("No Redis instance configured, exiting now!")
-    sys.exit(1)
 
+    if 'DATA_CONNECTION_STRING' in app.config:
+        data_connection_string = app.config['DB_CONNECTION_STRING']
+        print("Connecting to data server")
+        if data_connection_string.startswith("monetdb"):
+            backend.data_engine = create_monet_database_engine(data_connection_string, "magic_data")
+        elif data_connection_string.startswith("sqlite://"):
+            backend.data_engine = sqlalchemy.create_engine(data_connection_string,
+                                                           echo=True,
+                                                           connect_args={'check_same_thread': False},
+                                                           poolclass=StaticPool)
+        else:
+            backend.data_engine = create_pg_database_engine(data_connection_string, "magic_data", recreate_db=recreate_db)
+    else:
+        print("No data connection defined (DATA_CONNECTION_STRING), exiting now!")
+        sys.exit(1)
+
+
+def register_external_datasources(cfg):
+    dsm2 = DataSourceManager(session_factory=DBSession)
+    dsm2.register_datasource_manager(Eurostat())
+    if 'FAO_DATASETS_DIR' in cfg:
+        fao_dir = cfg['FAO_DATASETS_DIR']
+    else:
+        fao_dir = "/home/rnebot/DATOS/FAOSTAT/"
+    dsm2.register_datasource_manager(FAOSTAT(datasets_directory=fao_dir,
+                                           metadata_session_factory=DBSession,
+                                           data_engine=backend.data_engine))
+
+    sources = dsm2.get_supported_sources()
+    return dsm2
+
+
+def connect_redis():
+    # A REDIS instance needs to be available. Check it
+    # A local REDIS could be as simple as:
+    #
+    # docker run --rm -p 6379:6379 redis:alpine
+    #
+    if 'REDIS_HOST' in app.config:
+        r_host = app.config['REDIS_HOST']
+        if r_host == "redis_lite":
+            import redislite
+            rs2 = redislite.Redis(serverconfig={'port': '6379'})
+        else:
+            rs2 = redis.Redis(r_host)
+        try:
+            print("Trying connection to REDIS '"+r_host+"'")
+            rs2.ping()
+            print("Connected to REDIS instance '"+r_host+"'")
+        except:
+            print("REDIS instance '"+r_host+"' not reachable, exiting now!")
+            sys.exit(1)
+    else:
+        print("No REDIS instance configured, exiting now!")
+        sys.exit(1)
+    return rs2
+
+# #####################################################################################################################
+# >>>> THE INITIALIZATION CODE <<<<
+#
+
+
+initialize_databases()
+backend.data_source_manager = register_external_datasources(app.config)
+backend.redis = connect_redis()
 
 # Now initialize Flask-Session, using the REDIS instance
 app.config["SESSION_TYPE"] = "redis"
 app.config["SESSION_KEY_PREFIX"] = "nis:"
 app.config["SESSION_PERMANENT"] = False
 #app.config["PERMANENT_SESSION_LIFETIME"] = 3600
-app.config["SESSION_REDIS"] = rs
+app.config["SESSION_REDIS"] = backend.redis
 
 FlaskSessionServerSide(app)
-CORS(app, resources={r"/nis_api/*": {"origins": "http://localhost:4200"}}, supports_credentials=True)
+CORS(app,
+     resources={r"/nis_api/*": {"origins": "http://localhost:4200"}},
+     supports_credentials=True
+     )
 
 logger = logging.getLogger(__name__)
 logging.getLogger('flask_cors').level = logging.DEBUG
@@ -157,52 +205,42 @@ def reset_database():
 
     :return:
     """
+    if is_testing_enabled():
+        connection2 = backend.engine.connect()
+        tables = ORMBase.metadata.tables
+        table_existence = [backend.engine.dialect.has_table(connection2, tables[t].name) for t in tables]
+        connection2.close()
+        if False in table_existence:
+            ORMBase.metadata.bind = backend.engine
+            ORMBase.metadata.create_all()
+
     for tbl in reversed(ORMBase.metadata.sorted_tables):
         backend.engine.execute(tbl.delete())
 
 
-def json_serial(obj):
-    """JSON serializer for objects not serializable by default json code"""
-    from datetime import datetime
-    if isinstance(obj, datetime):
-        serial = obj.isoformat()
-        return serial
-    raise TypeError("Type not serializable")
-
-
-JSON_INDENT = 4
-ENSURE_ASCII = False
-
-
 def build_json_response(obj, status=200):
-    return Response(json.dumps(obj,
-                               default=json_serial,
-                               sort_keys=True,
-                               indent=JSON_INDENT,
-                               ensure_ascii=ENSURE_ASCII,
-                               separators=(',', ': ')
-                               ) if obj else None,
+    return Response(generate_json(obj),
                     mimetype="text/json",
                     status=status)
 
 
 def serialize_isession_and_close_db_session(sess: InteractiveSession):
     # Serialize WorkSession apart, if it exists
-    if sess._work_session:
-        csvs = sess._work_session._session
+    if sess._reproducible_session:
+        csvs = sess._reproducible_session._session
         o_list = [csvs.version.case_study, csvs.version, csvs]
         o_list.extend(csvs.commands)
         d_list = serialize(o_list)
-        s = jsonpickle.encode({"allow_saving": sess._work_session._allow_saving, "pers": d_list})
-        flask_session["wsession"] = s
-        sess._work_session = None
+        s = jsonpickle.encode({"allow_saving": sess._reproducible_session._allow_saving, "pers": d_list})
+        flask_session["rsession"] = s
+        sess._reproducible_session = None
     else:
-        if "wsession" in flask_session:
-            del flask_session["wsession"]
+        if "rsession" in flask_session:
+            del flask_session["rsession"]
 
     tmp = sess.get_sf()
     sess.set_sf(None)
-    sess._work_session = None
+    sess._reproducible_session = None
     # Serialize sess._state and sess._identity
     s = jsonpickle.encode(sess)
     flask_session["isession"] = s
@@ -215,14 +253,14 @@ def deserialize_isession_and_prepare_db_session(return_error_response_if_none=Tr
         s = flask_session["isession"]
         sess = jsonpickle.decode(s)
         sess.set_sf(DBSession)
-        if "wsession" in flask_session:
-            ws = WorkSession(sess)
-            ws.set_sf(sess.get_sf())
-            d = jsonpickle.decode(flask_session["wsession"])
-            ws._allow_saving = d["allow_saving"]
+        if "rsession" in flask_session:
+            rs = ReproducibleSession(sess)
+            rs.set_sf(sess.get_sf())
+            d = jsonpickle.decode(flask_session["rsession"])
+            rs._allow_saving = d["allow_saving"]
             o_list = deserialize(d["pers"])
-            ws._session = o_list[2]  # type: CaseStudyVersionSession
-            sess._work_session = ws
+            rs._session = o_list[2]  # type: CaseStudyVersionSession
+            sess._reproducible_session = rs
     else:
         sess = None
 
@@ -243,9 +281,21 @@ def is_testing_enabled():
     return testing
 
 
-NO_ISESS_RESPONSE = build_json_response({"error": "No interactive session active. Please open one first ('POST /isession'"}, 400)
+NO_ISESS_RESPONSE = build_json_response({"error": "No interactive session active. Please, open one first ('POST /isession')"}, 400)
 
 # >>>> SPECIAL FUNCTIONS <<<<
+
+
+# @app.before_request
+# def print_headers():
+#     print("HEADER Authorization")
+#     found = False
+#     for h in request.headers:
+#         if h[0] in ["Authorization", "Autorizacion"]:
+#             print(h[0] + ": " + str(h[1]))
+#             found = True
+#     if not found:
+#         print("-- not sent --")
 
 
 @app.after_request
@@ -275,6 +325,7 @@ def send_web_client_file(path):
 
     :param path:
     :return:
+
     """
     base = Path(get_root_path("backend.restful_service"))
     base = str(base.parent.parent)+"/frontend"
@@ -294,7 +345,34 @@ def send_web_client_file(path):
         # From inside
         new_name = path
 
-    return send_from_directory(base, new_name)
+    try:
+        return send_from_directory(base, new_name)
+    except NotFound:
+        return send_from_directory(base, "index.html")
+
+
+# #####################################################################################################################
+# >>>> SERVE STATIC FILES <<<<
+# #####################################################################################################################
+
+
+@app.route(nis_api_base + "/static/<path:path>", methods=["GET"])
+def send_static_file(path):
+    """
+    Serve files from the Angular2 client
+    To generate these files (ON EACH UPDATE TO THE CLIENT:
+    * CD to the Angular2 project directory
+    * ng build --prod --aot --base-href /nis_client/
+    * CP * <FRONTEND directory>
+
+    :param path:
+    :return:
+    """
+    base = Path(get_root_path("backend.restful_service"))
+    base = str(base)+"/static"
+    # logger.debug("BASE DIRECTORY: "+base)
+
+    return send_from_directory(base, path)
 
 # #####################################################################################################################
 # >>>> RESTFUL INTERFACE <<<<
@@ -308,8 +386,8 @@ def reset_db():
     testing = is_testing_enabled()
     if testing:
         reset_database()
-        initialize_database()
-        end_session()  # Leave session if already in
+        initialize_database_data()
+        interactive_session_close()  # Leave session if already in
         r = build_json_response({}, 204)
     else:
         r = build_json_response({"error": "Illegal operation!!"}, 400)
@@ -318,7 +396,7 @@ def reset_db():
 
 
 @app.route(nis_api_base + "/isession", methods=["POST"])
-def new_session():
+def interactive_session_open():
     isess = deserialize_isession_and_prepare_db_session(False)
     if isess:
         r = build_json_response({"error": "Close existing interactive session ('DELETE /isession'"}, 400)
@@ -331,7 +409,7 @@ def new_session():
 
 # Set identity at this moment for the interactive session
 @app.route(nis_api_base + "/isession/identity", methods=["PUT"])
-def session_set_identity():
+def interactive_session_set_identity():
     # Recover InteractiveSession
     # if request.method=="OPTIONS":
     #     r = build_json_response({}, 200)
@@ -349,6 +427,7 @@ def session_set_identity():
 
     # If there is a current identity, issue an error. First "unidentify"
     if isess.get_identity_id():
+
         testing = is_testing_enabled()
         if testing and request.args.get("user") and isess.get_identity_id() == request.args.get("user"):
             result = True
@@ -380,7 +459,7 @@ def session_set_identity():
 
 
 @app.route(nis_api_base + "/isession/identity", methods=["GET"])
-def session_get_identity():
+def interactive_session_get_identity():
     # Recover InteractiveSession
     isess = deserialize_isession_and_prepare_db_session()
     if isess and isinstance(isess, Response):
@@ -391,7 +470,7 @@ def session_get_identity():
 
 # Set to anonymous user again (or "logout")
 @app.route(nis_api_base + "/isession/identity", methods=["DELETE"])
-def session_remove_identity():
+def interactive_session_remove_identity():
     # Recover InteractiveSession
     isess = deserialize_isession_and_prepare_db_session()
     if isess and isinstance(isess, Response):
@@ -408,7 +487,7 @@ def session_remove_identity():
 
 # Close interactive session (has to log out if some identity is active)
 @app.route(nis_api_base + "/isession", methods=["DELETE"])
-def end_session():
+def interactive_session_close():
     isess = deserialize_isession_and_prepare_db_session(False)
 
     if isess:
@@ -418,11 +497,83 @@ def end_session():
     flask_session["__invalidate__"] = True
     return build_json_response({})
 
+
+@app.route(nis_api_base + '/isession/generator.json', methods=['POST'])
+def convert_generator_to_json_generator():
+    """
+    Send the file to the service
+    Convert to native
+    Return it in JSON format
+
+    :return:
+    """
+    # Check Interactive Session is Open. If not, open it
+    isess = deserialize_isession_and_prepare_db_session(False)
+    if not isess:
+        isess = InteractiveSession(DBSession)
+
+    testing = is_testing_enabled()
+    if testing:
+        result = isess.identify({"user": "test_user", "password": None}, testing=True)
+
+    # Receive file
+    generator_type, content_type, buffer, _, _ = receive_file_submission(request)
+
+    output = convert_generator_to_native(generator_type, content_type, buffer)
+
+    # Return the conversion
+    r = build_json_response(output, 200)
+
+    serialize_isession_and_close_db_session(isess)
+
+    return r
+
+
+@app.route(nis_api_base + '/isession/generator.to_dc.xml', methods=['POST'])
+def convert_generator_to_dublin_core():
+    """
+    Send the file to the service
+    Convert to native
+    Return the Dublin Core XML record
+
+    :return:
+    """
+    # Check Interactive Session is Open. If not, open it
+    isess = deserialize_isession_and_prepare_db_session(False)
+    if not isess:
+        isess = InteractiveSession(DBSession)
+
+    testing = is_testing_enabled()
+    if testing:
+        result = isess.identify({"user": "test_user", "password": None}, testing=True)
+
+    # Receive file
+    generator_type, content_type, buffer, _, _ = receive_file_submission(request)
+
+    output = convert_generator_to_native(generator_type, content_type, buffer)
+    xml = None
+    for c in output:
+        if "command" in c and c["command"] == "metadata" and "content" in c:
+            xml = generate_dublin_core_xml(c["content"])
+            break
+
+    # Return the conversion
+    if xml:
+        r = Response(xml,
+                     mimetype="text/xml",
+                     status=200)
+    else:
+        r = build_json_response({"message": "Could not elaborate Dublin Core XML record from the input generator"}, 401)
+
+    serialize_isession_and_close_db_session(isess)
+
+    return r
+
 # -- Reproducible Sessions --
 
 
 @app.route(nis_api_base + "/isession/rsession", methods=["POST"])
-def session_open():
+def reproducible_session_open():
     def read_parameters(dd):
         nonlocal uuid2, read_uuid_state, create_new, allow_saving
         # Read query parameters
@@ -440,7 +591,7 @@ def session_open():
                 create_new = CreateNew.NO
         if "allow_saving" in dd:
             allow_saving = dd["allow_saving"]
-            allow_saving = bool(allow_saving)
+            allow_saving = allow_saving.lower() == "true"
 
     # Recover InteractiveSession
     isess = deserialize_isession_and_prepare_db_session()
@@ -452,9 +603,21 @@ def session_open():
     create_new = None
     allow_saving = None
 
-    read_parameters(request.form)
+    # First, read uploaded JSON
+    if len(request.files) > 0:
+        for k in request.files:
+            buffer = bytes(request.files[k].stream.getbuffer())
+            content_type = request.files[k].content_type
+            break
+    else:
+        buffer = bytes(io.BytesIO(request.get_data()).getbuffer())
+        content_type = request.headers["Content-Type"]
+
+    read_parameters(json.loads(buffer))
     if not uuid2 and not read_uuid_state and not create_new and not allow_saving:
-        read_parameters(request.args)
+        read_parameters(request.form)
+        if not uuid2 and not read_uuid_state and not create_new and not allow_saving:
+            read_parameters(request.args)
 
     if not read_uuid_state:
         read_uuid_state = True
@@ -485,7 +648,7 @@ def session_open():
 
 
 @app.route(nis_api_base + "/isession/rsession", methods=["DELETE"])
-def session_save_close():  # Close the WorkSession, with the option of saving it
+def reproducible_session_save_close():  # Close the ReproducibleSession, with the option of saving it
     # Recover InteractiveSession
     isess = deserialize_isession_and_prepare_db_session()
     if isess and isinstance(isess, Response):
@@ -517,7 +680,7 @@ def session_save_close():  # Close the WorkSession, with the option of saving it
 
 
 @app.route(nis_api_base + "/isession/rsession", methods=["GET"])
-def session_get():  # Return current status of WorkSession
+def reproducible_session_get_status():  # Return current status of ReproducibleSession
     # Recover InteractiveSession
     isess = deserialize_isession_and_prepare_db_session()
     if isess and isinstance(isess, Response):
@@ -533,7 +696,7 @@ def session_get():  # Return current status of WorkSession
 
 
 @app.route(nis_api_base + "/isession/rsession/pyckled_state", methods=["GET"])
-def session_get_state():  # Return current status of WorkSession
+def reproducible_session_get_state():  # Return current status of ReproducibleSession
     # Recover InteractiveSession
     isess = deserialize_isession_and_prepare_db_session()
     if isess and isinstance(isess, Response):
@@ -552,7 +715,8 @@ def session_get_state():  # Return current status of WorkSession
 
 
 @app.route(nis_api_base + "/isession/rsession/command", methods=["POST"])
-def command():  # Receive a JSON or CSV command from some externally executed generator
+def reproducible_session_append_single_command():  # Receive a JSON or CSV command from some externally executed generator
+
     # Recover InteractiveSession
     isess = deserialize_isession_and_prepare_db_session()
     if isess and isinstance(isess, Response):
@@ -591,12 +755,12 @@ def command():  # Receive a JSON or CSV command from some externally executed ge
                 n = d["label"]
             else:
                 n = None
-            cmd = create_command(d["command"], n, d["content"])
+            cmd, syntax_issues = create_command(d["command"], n, d["content"])
 
         if register:
             isess.register_executable_command(cmd)
         if execute:
-            ret = isess.execute_executable_command(cmd)
+            issues, output = isess.execute_executable_command(cmd)
             # TODO Process "ret". Add issues to an issues list. Add output to an outputs list.
 
         r = build_json_response({}, 204)
@@ -607,8 +771,58 @@ def command():  # Receive a JSON or CSV command from some externally executed ge
     return r
 
 
+def receive_file_submission(req):
+    """
+    Receive file submitted using multipart/form-data
+    Return variables for the processing of the file as a command_executors generator
+
+    :param req: The "request" object
+    :return: A tuple (generator_type -str-, content_type -str-, buffer -bytes-, execute -bool-, register -bool-)
+    """
+    # Read binary content
+    if len(req.files) > 0:
+        for k in req.files:
+            buffer = bytes(req.files[k].stream.getbuffer())
+            content_type = req.files[k].content_type
+            break
+    else:
+        buffer = bytes(io.BytesIO(req.get_data()).getbuffer())
+        content_type = req.headers["Content-Type"]
+
+    # Infer "generator_type" from content type
+    if content_type.lower() in ["application/json", "text/csv"]:
+        generator_type = "primitive"
+    elif content_type.lower() in ["application/excel",
+                                  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"]:
+        generator_type = "spreadsheet"
+    elif content_type.lower() in ["text/x-r-source"]:
+        generator_type = "R-script"
+    elif content_type.lower() in ["text/x-python", "text/x-python3", "application/x-python3"]:
+        generator_type = "python-script"
+
+    # # Write to file
+    # with open("/home/rnebot/output_file.xlsx", "wb") as f:
+    #     f.write(buffer)
+
+    # Read Register and Execute parameters
+    register = req.form.get("register")
+    if not register:
+        register = req.args.get("register")
+        if not register:
+            register = False
+    execute = req.form.get("execute")
+    if not execute:
+        execute = req.args.get("execute")
+        if not execute:
+            execute = False
+    execute = bool(execute)
+    register = bool(register)
+
+    return generator_type, content_type, buffer, execute, register
+
+
 @app.route(nis_api_base + "/isession/rsession/generator", methods=["POST"])
-def command_generator():  # Receive a commands generator, like an Excel file, an R script, or a full JSON commands list (or other)
+def reproducible_session_append_command_generator():  # Receive a command_executors generator, like an Excel file, an R script, or a full JSON command_executors list (or other)
     # Recover InteractiveSession
     isess = deserialize_isession_and_prepare_db_session()
     if isess and isinstance(isess, Response):
@@ -616,45 +830,9 @@ def command_generator():  # Receive a commands generator, like an Excel file, an
 
     # A reproducible session must be open
     if isess.reproducible_session_opened():
-        # Read binary content
-        if len(request.files) > 0:
-            for k in request.files:
-                buffer = bytes(request.files[k].stream.getbuffer())
-                content_type = request.files[k].content_type
-                break
-        else:
-            buffer = bytes(io.BytesIO(request.get_data()).getbuffer())
-            content_type = request.headers["Content-Type"]
+        generator_type, content_type, buffer, execute, register = receive_file_submission(request)
 
-        # Infer "generator_type" from content type
-        if content_type.lower() in ["application/json", "text/csv"]:
-            generator_type = "primitive"
-        elif content_type.lower() in ["application/excel", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"]:
-            generator_type = "spreadsheet"
-        elif content_type.lower() in ["text/x-r-source"]:
-            generator_type = "R-script"
-        elif content_type.lower() in ["text/x-python", "text/x-python3", "application/x-python3"]:
-            generator_type = "python-script"
-
-        # # Write to file
-        # with open("/home/rnebot/output_file.xlsx", "wb") as f:
-        #     f.write(buffer)
-
-        # Read Execute and Register parameters
-        execute = request.form.get("execute")
-        if not execute:
-            execute = request.args.get("execute")
-            if not execute:
-                execute = False
-        execute = bool(execute)
-        register = request.form.get("register")
-        if not register:
-            register = request.args.get("register")
-            if not register:
-                register = False
-        register = bool(register)
-
-        # TODO DO IT!!!
+        # EXECUTE IT!!!
         ret = isess.register_andor_execute_command_generator(generator_type, content_type, buffer, register, execute)
         # TODO Return the issues if there were any. Return outputs (could be a list of binary files)
         r = build_json_response({}, 204)
@@ -671,6 +849,57 @@ def command_generator():  # Receive a commands generator, like an Excel file, an
 # -- Case studies --
 
 
+@app.route(nis_api_base + '/case_studies/', methods=['POST'])
+def new_case_study_from_file():
+    """
+    Check that the user is authorized to submit a new case study
+    Open a reproducible session
+    Send the file to the service
+    Close the reproducible session
+
+    :return:
+    """
+    # Check Interactive Session is Open. If not, open it
+    isess = deserialize_isession_and_prepare_db_session(False)
+    if not isess:
+        isess = InteractiveSession(DBSession)
+
+    # TODO Check User Credentials (from Token)
+    testing = is_testing_enabled()
+    if testing:
+        result = isess.identify({"user": "test_user", "password": None}, testing=True)
+
+    # TODO Check User has Create New Case Study permissions
+
+    # Receive file
+    generator_type, content_type, buffer, execute, register = receive_file_submission(request)
+
+    # Open Reproducible Session, NEW case study
+    try:
+        isess.open_reproducible_session(case_study_version_uuid=None,
+                                        recover_previous_state=False,
+                                        cr_new=CreateNew.CASE_STUDY,
+                                        allow_saving=register
+                                        )
+    except Exception as e:
+        s = "Exception trying to open reproducible session: "+str(e)
+        logger.error(s)
+        return build_json_response({"error": s}, 401)
+
+    # Submit file to the Interactive Session (which has the open reproducible session)
+    issues, output = isess.register_andor_execute_command_generator(generator_type, content_type, buffer, register, execute)
+
+    # Close Reproducible Session
+    isess.close_reproducible_session(issues=issues, output=output, save=register, from_web_service=False)
+
+    # TODO Return the issues if there were any. Return outputs (could be a list of binary files)
+    r = build_json_response({}, 204)
+
+    serialize_isession_and_close_db_session(isess)
+
+    return r
+
+
 @app.route(nis_api_base + "/case_studies/", methods=["GET"])
 def case_studies():  # List case studies
     """
@@ -685,7 +914,7 @@ Example:
  "stats":
   {
    "n_versions": "<# of versions>",
-   "n_commands": "<# of commands latest version>",
+   "n_commands": "<# of command_executors latest version>",
    "n_hierarchies": <# of hierarchies latest version>",
   }
  "versions": "/case_studies/<uuid>/short.json"
@@ -696,10 +925,28 @@ Example:
 
     :return:
     """
-    # Recover InteractiveSession
-    user = None
-    isess = None
 
+    def get_avatar_path(cstudy):
+        """
+        From the areas of a case study, obtain the file name representing these areas
+
+        :param cstudy: CaseStudy object
+        :return: String with the URL subpath to the file name
+        """
+        areas = cstudy.areas
+        if areas:
+            name = ""
+            if "W" in areas:
+                name += "Water"
+            if "E" in areas:
+                name += "Energy"
+            if "F" in areas:
+                name += "Food"
+            return "/static/images/" + name + "Nexus.png"
+        else:
+            return "/static/images/NoNexusAreas.png"  # TODO create this image
+
+    # Recover InteractiveSession
     isess = deserialize_isession_and_prepare_db_session()
     if isess and isinstance(isess, Response):
         return isess
@@ -722,22 +969,34 @@ Example:
     lst2 = []
     for cs in lst:
         uuid2 = str(cs.uuid)
-        d = {"resource": "/case_studies/"+uuid2,
+        d = {"resource": nis_api_base + "/case_studies/"+uuid2,
              "uuid": uuid2,
-             "name": cs.name,
-             "oid": cs.oid, # TODO
-             "internal_code": cs.internal_code,  # TODO
-             "description": cs.description,  # TODO
+             "name": cs.name if cs.name else "<empty>",
+             "oid": cs.oid if cs.oid else "<empty>",  # TODO
+             "internal_code": cs.internal_code if cs.internal_code else "",  # TODO
+             "description": cs.description if cs.description else "",  # TODO
              "stats": {
-                 "n_versions": len(cs.versions),
-                 "n_commands": len([]),  # TODO
-                 "n_hierarchies": len([]),  # TODO
+                 "n_versions": str(len(cs.versions)),
+                 "n_commands": str(len([])),  # TODO
+                 "n_hierarchies": str(len([])),  # TODO
              },
-             "versions": "/case_studies/" + uuid2 + "/versions/",
+             "versions": nis_api_base + "/case_studies/" + uuid2 + "/versions/",
+             "thumbnail": nis_api_base + "/case_studies/" + uuid2 + "/default_view.png",
              "thumbnail_png": nis_api_base + "/case_studies/" + uuid2 + "/default_view.png",
-             "thumbnail_svg": nis_api_base + "/case_studies/" + uuid2 + "/default_view.svg"
+             "thumbnail_svg": nis_api_base + "/case_studies/" + uuid2 + "/default_view.svg",
+             "avatar": nis_api_base + get_avatar_path(cs),  # Icon representing the type of Nexus study
+             "case_study_permissions":
+                 {
+                     "read": True,
+                     "annotate": True,
+                     "contribute": True,
+                     "share": False,
+                     "delete": False
+                 }
              }
         lst2.append(d)
+        # print(json.dumps(lst2, default=json_serial, sort_keys=True, indent=JSON_INDENT, ensure_ascii=ENSURE_ASCII, separators=(',', ': '))
+        #       )
     r = build_json_response(lst2)  # TODO Improve it, it must return the number of versions. See document !!!
     if isess:
         isess.close_db_session()
@@ -748,6 +1007,7 @@ Example:
 
 
 @app.route(nis_api_base + "/case_studies/<cs_uuid>", methods=["GET"])
+@app.route(nis_api_base + "/case_studies/<cs_uuid>/versions/", methods=["GET"])
 def case_study(cs_uuid):  # Information about case study
     """
 
@@ -782,7 +1042,6 @@ def case_study(cs_uuid):  # Information about case study
  ]
 }
 
-
     :param cs_uuid:
     :return:
     """
@@ -807,21 +1066,34 @@ def case_study(cs_uuid):  # Information about case study
         # ],
         def get_session_dict(ss):
             uuid4 = str(ss.uuid)
-            return {"uuid": uuid4,
-                    "open_date": str(ss.open_instant),
-                    "close_date": str(ss.close_instant),
-                    "client": "spreadsheet",
-                    "restart": ss.restarts,
-                    "author": ss.who.name
-                    }
+            v_session = {"uuid": uuid4,
+                         "open_date": str(ss.open_instant),
+                         "close_date": str(ss.close_instant),
+                         "client": "spreadsheet",  # TODO Spreadsheet, R script, Python script, <Direct?>
+                         "restart": ss.restarts,
+                         "author": ss.who.name
+                         }
+            if mode == "tree":
+                v_session = {"data": v_session}
+            else:
+                pass
+            return v_session
+
         uuid3 = str(vs.uuid)
-        return {"uuid": uuid3,
-                "resource": "/case_studies/"+uuid2+"/versions/"+uuid3,
-                "tag": "v0.1",
-                "detail": "/case_studies/"+uuid2+"/versions/"+uuid3,
-                "generator": "/case_studies/"+uuid2+"/versions/"+uuid3+"/generator.xlsx",
-                "sessions": [get_session_dict(s) for s in vs.sessions]
-                }
+        version = {"uuid": uuid3,
+                   "resource": nis_api_base + "/case_studies/"+uuid2+"/versions/"+uuid3,
+                   "tag": "v0.1",
+                   "detail": nis_api_base + "/case_studies/"+uuid2+"/versions/"+uuid3,
+                   "state": nis_api_base + "/case_studies/" + uuid2 + "/versions/"+uuid3+"/state.xlsx",
+                   "issues": None,  # [{"type": "error", "description": "syntax error in command ..."}],
+                   "generator": nis_api_base + "/case_studies/"+uuid2+"/versions/"+uuid3+"/generator.xlsx",
+                   }
+        if mode == "tree":
+            version = {"data": version, "children": [get_session_dict(s) for s in vs.sessions]}
+        else:
+            version["sessions"] = [get_session_dict(s) for s in vs.sessions]
+        return version
+
     # Recover InteractiveSession
     isess = deserialize_isession_and_prepare_db_session()
     if isess and isinstance(isess, Response):
@@ -830,6 +1102,9 @@ def case_study(cs_uuid):  # Information about case study
     user = isess.get_identity_id()
     if not user:
         user = "_anonymous"
+
+    mode = "tree"
+
     # Recover case studies READABLE by current user (or "anonymous")
     session = isess.open_db_session()
     # TODO Obtain case study, filtered by current user permissions
@@ -840,16 +1115,23 @@ def case_study(cs_uuid):  # Information about case study
     if cs:
         uuid2 = str(cs.uuid)
         d = {"uuid": uuid2,
-             "name": cs.name,
-             "oid": "zenodo.org/2098235",
-             "internal_code": "CS1_F_E",
-             "resource": "/case_studies/"+uuid2,
-             "description": cs.description,
+             "name": cs.name if cs.name else "<empty>",
+             "oid": cs.oid if cs.oid else "<empty>",
+             "internal_code": cs.internal_code if cs.internal_code else "",  # TODO
+             "description": cs.description if cs.description else "",  # TODO
+             "resource": nis_api_base + "/case_studies/"+uuid2,
              "versions": [get_version_dict(v) for v in cs.versions],
-             "state": "/case_studies/"+uuid2+"/<version uuid>/state.xlsx",
-             "issues": [{"type": "error", "description": "syntax error in command ..."}
-                        ]
+             "case_study_permissions":
+                 {
+                     "read": True,
+                     "annotate": True,
+                     "contribute": True,
+                     "share": False,
+                     "delete": False
+                 },
+
              }
+        # print(json.dumps(d, default=json_serial, sort_keys=True, indent=JSON_INDENT, ensure_ascii=ENSURE_ASCII, separators=(',', ': ')))
         r = build_json_response(d)
     else:
         r = build_json_response({"error": "The case study '"+cs_uuid+"' does not exist."}, 404)
@@ -857,6 +1139,59 @@ def case_study(cs_uuid):  # Information about case study
 
     return r
 
+
+@app.route(nis_api_base + "/case_studies/<cs_uuid>", methods=["POST"])
+@app.route(nis_api_base + "/case_studies/<cs_uuid>/versions/", methods=["POST"])
+def new_case_study_version_from_file(cs_uuid):
+    """
+    Check that the user is authorized to submit a new case study version
+    Open a reproducible session
+    Send the file to the service
+    Close the reproducible session
+
+    :param cs_uuid: UUID of case study
+    :return:
+    """
+    # Check Interactive Session is Open. If not, open it
+    isess = deserialize_isession_and_prepare_db_session(False)
+    if not isess:
+        isess = InteractiveSession(DBSession)
+
+    # TODO Check User Credentials (from Token)
+    testing = is_testing_enabled()
+    if testing:
+        result = isess.identify({"user": "test_user", "password": None}, testing=True)
+
+    # TODO Check User has Write Case Study permissions
+
+    # Receive file
+    generator_type, content_type, buffer, execute, register = receive_file_submission(request)
+
+    # Open Reproducible Session, NEW case study
+    try:
+        isess.open_reproducible_session(case_study_version_uuid=cs_uuid,
+                                        recover_previous_state=False,
+                                        cr_new=CreateNew.VERSION,
+                                        allow_saving=register
+                                        )
+    except Exception as e:
+        s = "Exception trying to open reproducible session: "+str(e)
+        logger.error(s)
+        return build_json_response({"error": s}, 401)
+
+
+    # Submit file to the Interactive Session (which has the open reproducible session)
+    issues, output = isess.register_andor_execute_command_generator(generator_type, content_type, buffer, register, execute)
+
+    # Close Reproducible Session
+    isess.close_reproducible_session(issues=issues, output=output, save=register, from_web_service=False)
+
+    # TODO Return the issues if there were any. Return outputs (could be a list of binary files)
+    r = build_json_response({}, 204)
+
+    serialize_isession_and_close_db_session(isess)
+
+    return r
 
 # @app.route(nis_api_base + "/case_studies/<cs_uuid>", methods=["DELETE"])
 # def case_study_delete(cs_uuid):  # DELETE a case study
@@ -879,18 +1214,21 @@ def case_study_default_view_png(cs_uuid):  # Return a view of the case study in 
     user = isess.get_identity_id()
     if not user:
         user = "_anonymous"
-    # Recover case studies READABLE by current user (or "anonymous")
-    session = isess.open_db_session()
-    # TODO Obtain case study, filtered by current user permissions
-    # Access Control
-    # CS in acl and user in acl.detail and acl.detail is READ, WRITE,
-    # CS in acl and group acl.detail and user in group
-    cs = session.query(CaseStudy).filter(CaseStudy.uuid == cs_uuid).first()
-    # TODO Scan variables. Look for the ones most interesting: grammar, data. Maybe cut processors.
-    # TODO Scan also for hints to the elaboration of this thumbnail
-    # TODO Elaborate View in PNG format
-    isess.close_db_session()
-    # TODO Return PNG image
+
+    return send_static_file("images/case_study_preview_placeholder.png")
+
+    # # Recover case studies READABLE by current user (or "anonymous")
+    # session = isess.open_db_session()
+    # # TODO Obtain case study, filtered by current user permissions
+    # # Access Control
+    # # CS in acl and user in acl.detail and acl.detail is READ, WRITE,
+    # # CS in acl and group acl.detail and user in group
+    # cs = session.query(CaseStudy).filter(CaseStudy.uuid == cs_uuid).first()
+    # # TODO Scan variables. Look for the ones most interesting: grammar, data. Maybe cut processors.
+    # # TODO Scan also for hints to the elaboration of this thumbnail
+    # # TODO Elaborate View in PNG format
+    # isess.close_db_session()
+    # # TODO Return PNG image
 
 
 @app.route(nis_api_base + "/case_studies/<cs_uuid>/default_view.svg", methods=["GET"])
@@ -917,17 +1255,6 @@ def case_study_default_view_svg(cs_uuid):  # Return a view of the case study in 
     # TODO Return SVG image
 
 
-@app.route(nis_api_base + "/case_studies/<cs_uuid>/versions/", methods=["GET"])
-def case_study_versions(cs_uuid):  # Information about a case study versions
-    """
-    Returns the same JSON elaborated by the function "case_study"
-
-    :param cs_uuid:
-    :return:
-    """
-    return case_study(cs_uuid)
-
-
 @app.route(nis_api_base + "/case_studies/<cs_uuid>/versions/<v_uuid>", methods=["GET"])
 def case_study_version(cs_uuid, v_uuid):  # Information about a case study version
     """
@@ -950,7 +1277,7 @@ def case_study_version(cs_uuid, v_uuid):  # Information about a case study versi
     },
     ...
    ]
- "commands":
+ "command_executors":
  [
   {"type": "...",
    "label": "...",
@@ -967,6 +1294,107 @@ def case_study_version(cs_uuid, v_uuid):  # Information about a case study versi
     :param v_uuid:
     :return:
     """
+
+    def get_version_dict(vs):
+        # [
+        #     {"uuid": "<uuid>",
+        #      "resource": "/case_studies/<case study uuid>/<version uuid>",
+        #      "tag": "v0.1",
+        #      "sessions":
+        #          [
+        #              {"uuid": "<uuid>",
+        #               "open_date": "2017-09-20T10:00:00Z",
+        #               "close_date": "2017-09-20T10:00:10Z",
+        #               "client": "spreadsheet",
+        #               "restart": True,
+        #               "author": "<uuid>",
+        #               },
+        #          ],
+        #      "detail": "/case_studies/<case study uuid>/<version uuid>/long.json",
+        #      "generator": "/case_studies/<case study uuid>/<version uuid>/generator.xlsx",
+        #      },
+        # ],
+        def get_session_dict(ss):
+            uuid4 = str(ss.uuid)
+            v_session = {"uuid": uuid4,
+                         "open_date": str(ss.open_instant),
+                         "close_date": str(ss.close_instant),
+                         "client": "spreadsheet",  # TODO Spreadsheet, R script, Python script, <Direct?>
+                         "restart": ss.restarts,
+                         "author": ss.who.name
+                         }
+            if mode == "tree":
+                v_session = {"data": v_session}
+            else:
+                pass
+            return v_session
+
+        # Case Study UUID, Case Study Version UUID
+        uuid2 = str(vs.case_study.uuid)
+        uuid3 = str(vs.uuid)
+
+        # Get active sessions
+        act_sess = []
+        for s in vs.sessions:
+            if s.restarts:
+                act_sess = []
+            act_sess.append(s)
+
+        # Load state
+        if vs.state:
+            # Deserialize
+            st = deserialize_to_object(vs.state)
+        else:
+            st = State()  # Zero State, execute all commands in sequence
+            for ws in act_sess:
+                for c in ws.commands:
+                    execute_command_generator(st, c)
+
+        # List command_executors lista -> diccionario ("data": {}, "children": [ ... ])
+        lst_cmds = []
+        for ws in act_sess:
+            for c in ws.commands:
+                d = {"type": c.generator_type,
+                     "label": c.name if c.name else "<empty>",
+                     "definition": nis_api_base + "/case_studies/" + uuid2 + "/versions/"+uuid3+"/sessions/"+str(ws.uuid)+"/command/"+str(c.order)
+                     }
+                if mode == "tree":
+                    d = {"data": d}
+                lst_cmds.append(d)
+
+        # List of variables
+        lst_vars = []
+        for n in st.list_namespaces():
+            for t in st.list_namespace_variables(n):
+                d = {"name": t[0],
+                     "type": str(type(t[1])),
+                     "view": nis_api_base + "/case_studies/" + uuid2 + "/versions/"+uuid3+"/variables/"+str(t[0]),
+                     "namespace": n
+                     }
+                if mode == "tree":
+                    d = {"data": d}
+                lst_vars.append(d)
+
+        version = {"case_study": uuid2,
+                   "version": uuid3,
+                   "resource": nis_api_base + "/case_studies/"+uuid2+"/versions/"+uuid3,
+                   "tag": "v0.1",
+                   "generator": nis_api_base + "/case_studies/"+uuid2+"/versions/"+uuid3+"/generator.xlsx",
+                   "state": nis_api_base + "/case_studies/" + uuid2 + "/versions/"+uuid3+"/state.xlsx",
+                   "issues": [{"type": "error", "description": "syntax error in command ..."}
+                              ],
+                   "sessions": [get_session_dict(s) for s in vs.sessions],
+                   "command_executors": lst_cmds,
+                   "variables": lst_vars
+                   }
+        # if mode == "tree":
+        #     version = {"data": version, "children": [get_session_dict(s) for s in vs.sessions]}
+        # else:
+        #     version["sessions"] = [get_session_dict(s) for s in vs.sessions]
+        return version
+
+    mode = "tree"
+
     # Recover InteractiveSession
     isess = deserialize_isession_and_prepare_db_session()
     if isess and isinstance(isess, Response):
@@ -985,10 +1413,10 @@ def case_study_version(cs_uuid, v_uuid):  # Information about a case study versi
     if not vs:
         r = build_json_response({"error": "The case study version '"+v_uuid+"' does not exist."}, 404)
     else:
-        if vs.case_study.uuid != cs_uuid:
+        if str(vs.case_study.uuid) != cs_uuid:
             r = build_json_response({"error": "The case study '" + cs_uuid + "' does not exist."}, 404)
         else:
-            r = build_json_response(vs)  # TODO Improve it, it must return the number of versions. See document !!!
+            r = build_json_response(get_version_dict(vs))
     isess.close_db_session()
 
     return r
@@ -1021,7 +1449,7 @@ def case_study_version_session(cs_uuid, v_uuid, s_uuid):  # Information about a 
  "generator": "/case_studies/<case study uuid>/<version uuid>/<session uuid>/generator.xlsx",
  "state": "/case_studies/<case study uuid>/<version uuid>/<session uuid>/state.xlsx",
  "issues": [{"type": "error", "description": "syntax error in command ..."}, ...],
- "commands":
+ "command_executors":
  [
   {"type": "...",
    "label": "...",
@@ -1081,7 +1509,7 @@ def case_study_version_session_delete(cs_uuid, v_uuid, s_uuid):  # DELETE a sess
 @app.route(nis_api_base + "/case_studies/<cs_uuid>/versions/<v_uuid>/sessions/<s_uuid>/<command_order>", methods=["GET"])
 def case_study_version_session_command(cs_uuid, v_uuid, s_uuid, command_order):
     """
-        DOWNLOAD a command or generator, using the order, from 0 to number of commands - 1
+        DOWNLOAD a command or generator, using the order, from 0 to number of command_executors - 1
         Commands are enumerated using "case_study_version_session()"
             (URL: "/case_studies/<cs_uuid>/versions/<v_uuid>/sessions/<s_uuid>")
 
@@ -1116,7 +1544,7 @@ def case_study_version_session_command(cs_uuid, v_uuid, s_uuid, command_order):
         order = int(command_order)
         c = ss.commands[order]
         r = Response(c.content, mimetype=c.content_type)
-        r.headers['Access-Control-Allow-Origin'] = "*"
+        #r.headers['Access-Control-Allow-Origin'] = "*"
 
     isess.close_db_session()
 
@@ -1526,12 +1954,14 @@ def mappings():
 
 
 def heterarchies():
+    a= 6
     pass
 
 # -- Test --
 
 
 @app.route('/test', methods=['GET'])
+@app.route(nis_api_base + '/test', methods=['GET'])
 def hello():
     return build_json_response({"hello": "world"})
 

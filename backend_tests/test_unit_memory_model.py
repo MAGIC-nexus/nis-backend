@@ -281,7 +281,7 @@ class ModelBuildingFactors(unittest.TestCase):
         # Observer of the Value
         oer = Observer("oer1")
         # Create an Observation with its value
-        fo = FactorObservation(QualifiedQuantityExpression.nu(5, "m²"), oer, f1)
+        fo = FactorQuantitativeObservation(QualifiedQuantityExpression.nu(5, "m²"), oer, f1)
         # Assign to the factor
         f1.observations_append(fo)
         # Check
@@ -298,8 +298,8 @@ class ModelBuildingFactors(unittest.TestCase):
         oer1 = Observer("oer1")
         oer2 = Observer("oer2")
         # Create a Value
-        fo1 = FactorObservation.create(QualifiedQuantityExpression.nu(5, "m²"), f1, oer1)
-        fo2 = FactorObservation.create(QualifiedQuantityExpression.nu(5, "m²"), f1, oer2)
+        fo1 = FactorQuantitativeObservation.create_and_append(QualifiedQuantityExpression.nu(5, "m²"), f1, oer1)
+        fo2 = FactorQuantitativeObservation.create_and_append(QualifiedQuantityExpression.nu(5, "m²"), f1, oer2)
         f1.observations_append(fo1)
         f1.observations_append(fo2)
         # Check

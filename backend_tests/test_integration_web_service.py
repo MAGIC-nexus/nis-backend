@@ -1,8 +1,10 @@
 import os
+import sys
 import io
 import unittest
 import requests
 import json
+import importlib
 
 """
 * CORS. Probar a hacer las dos primeras llamadas (/isession y /isession/identify?user=test_user)
@@ -23,11 +25,13 @@ import json
  
 """
 
+import backend  # Just to remove error in the "importlib.reload" sentence below
 os.environ["MAGIC_NIS_SERVICE_CONFIG_FILE"] = "./nis_unittests.conf"
-import backend.restful_service
+if "backend.restful_service" in sys.modules:
+    importlib.reload(backend.restful_service)
 backend.restful_service.app.config["TESTING"] = "True"
 import backend.restful_service.service_main
-
+from backend.restful_service import app, nis_api_base
 
 def to_str(resp_data):
     import flask.wrappers
@@ -85,10 +89,9 @@ def setUpModule():
 
 def tearDownModule():
     print('In tearDownModule()')
-    del backend.restful_service
 
 
-class HighLevelUseCases(unittest.TestCase):
+class TestHighLevelUseCases(unittest.TestCase):
 
     # ## Called before and after methods in the class are to be executed ###
     @classmethod
@@ -96,7 +99,7 @@ class HighLevelUseCases(unittest.TestCase):
         print('In setUpClass()')
         # Alternative:
         # HighLevelUseCases.app = RequestsClient("http://localhost:5000")
-        HighLevelUseCases.app = backend.restful_service.app.test_client()
+        TestHighLevelUseCases.app = app.test_client()
 
     @classmethod
     def tearDownClass(cls):
@@ -115,30 +118,30 @@ class HighLevelUseCases(unittest.TestCase):
     # ###########################################################
 
     def test_001_new_case_study_with_only_metadata_command(self):
-        a = HighLevelUseCases.app
+        a = TestHighLevelUseCases.app
         # Reset DB
-        r = a.post("/resetdb")
+        r = a.post(nis_api_base + "/resetdb")
         self.assertEqual(r.status_code, 204)
 
         # An interactive session
-        r = a.post("/isession")
+        r = a.post(nis_api_base + "/isession")
         self.assertEqual(r.status_code, 204)
-        r = a.put("/isession/identity?user=test_user")
+        r = a.put(nis_api_base + "/isession/identity?user=test_user")
         self.assertEqual(r.status_code, 200)
 
         # Create reproducible session, prepared to create a new case study
-        r = a.post("/isession/rsession", data={"create_new": "case_study", "allow_saving": "True"})
+        r = a.post(nis_api_base + "/isession/rsession", data={"create_new": "case_study", "allow_saving": "True"})
         self.assertEqual(r.status_code, 204)
         var_name = "a_var"
         var_value = "the_value"
         # Add a command to the session
-        r = a.post("/isession/rsession/command?execute=True&register=True",
+        r = a.post(nis_api_base + "/isession/rsession/command?execute=True&register=True",
                    data=json.dumps({"command": "dummy", "content": {"name": var_name, "description": var_value}}),
                    headers={"Content-Type": "text/json"})
         self.assertEqual(r.status_code, 204)
 
         # Close the reproducible session
-        r = a.delete("/isession/rsession?save_before_close=True")
+        r = a.delete(nis_api_base + "/isession/rsession?save_before_close=True")
         self.assertEqual(r.status_code, 200)
         d = json.loads(r.data)
         uuid2 = d.get("session_uuid")
@@ -150,23 +153,23 @@ class HighLevelUseCases(unittest.TestCase):
 
         # TODO Change permissions. Automatically the creator has access (no need to be in the ACL). Add another user
         # Logout
-        a.delete("/isession")
+        a.delete(nis_api_base + "/isession")
 
         # List case studies (error, logged out)
-        r = a.get("/case_studies/")
+        r = a.get(nis_api_base + "/case_studies/")
         self.assertEqual(r.status_code, 400)
 
         # Start interactive session AGAIN
-        a.post("/isession")
+        a.post(nis_api_base + "/isession")
 
         # List case studies of ANONYMOUS user
-        r = a.get("/case_studies/")
+        r = a.get(nis_api_base + "/case_studies/")
         lst = json.loads(r.data)
         self.assertEqual(len(lst), 1)
 
         # List case studies of TEST_USER
-        a.put("/isession/identity?user=test_user")
-        r = a.get("/case_studies/")
+        a.put(nis_api_base + "/isession/identity?user=test_user")
+        r = a.get(nis_api_base + "/case_studies/")
         lst = json.loads(r.data)
         self.assertEqual(len(lst), 1)
         # List case study versions
@@ -178,61 +181,61 @@ class HighLevelUseCases(unittest.TestCase):
         # Open a reproducible session, add another command
 
         # Get a listing of all variables
-        r = a.get("/case_studies/"+cs_uuid+"/versions/"+v_uuid+"/variables/")
+        r = a.get(nis_api_base + "/case_studies/"+cs_uuid+"/versions/"+v_uuid+"/variables/")
         d = json.loads(r.data)
         self.assertEqual(len(d), 1)
         self.assertEqual(d[0]["name"], var_name)
 
         # Get some variable from version
-        r = a.get("/case_studies/"+cs_uuid+"/versions/"+v_uuid+"/variables/"+var_name)
+        r = a.get(nis_api_base + "/case_studies/"+cs_uuid+"/versions/"+v_uuid+"/variables/"+var_name)
         d = json.loads(r.data)
         self.assertEqual(d[var_name], var_value)
 
     def test_002_new_case_study_send_xlsx_file(self):
-        a = HighLevelUseCases.app
+        a = TestHighLevelUseCases.app
         # Reset DB
-        r = a.post("/resetdb")
+        r = a.post(nis_api_base + "/resetdb")
         self.assertEqual(r.status_code, 204)
         # An interactive session
-        r = a.post("/isession")
+        r = a.post(nis_api_base + "/isession")
         self.assertEqual(r.status_code, 204)
-        r = a.put("/isession/identity?user=test_user")
+        r = a.put(nis_api_base + "/isession/identity?user=test_user")
         self.assertEqual(r.status_code, 200)
 
         # Create reproducible session, prepared to create a new case study
-        r = a.post("/isession/rsession", data={"create_new": "case_study", "allow_saving": "True"})
+        r = a.post(nis_api_base + "/isession/rsession", data={"create_new": "case_study", "allow_saving": "True"})
         self.assertEqual(r.status_code, 204)
         # Send Excel file: store and execute it.
         with open("/home/rnebot/input_file.xlsx", "rb") as f:
             b = f.read()
-        r = a.post("/isession/rsession/generator?execute=True&register=True",
+        r = a.post(nis_api_base + "/isession/rsession/generator?execute=True&register=True",
                    data={'file': (io.BytesIO(b), "input_file.xlsx")},
                    headers={"Content-Type": "multipart/form-data"})  # application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
         self.assertEqual(r.status_code, 204)
         # Close the reproducible session
-        r = a.delete("/isession/rsession?save_before_close=True")
+        r = a.delete(nis_api_base + "/isession/rsession?save_before_close=True")
         self.assertEqual(r.status_code, 200)
         d = json.loads(r.data)
         uuid2 = d.get("session_uuid")
         self.assertIsNotNone(uuid2)
         # Logout
-        a.delete("/isession")
+        a.delete(nis_api_base + "/isession")
 
         # Login, download the Excel file, compare it with "b"
         # An interactive session
-        r = a.post("/isession")
+        r = a.post(nis_api_base + "/isession")
         self.assertEqual(r.status_code, 204)
-        r = a.put("/isession/identity?user=test_user")
+        r = a.put(nis_api_base + "/isession/identity?user=test_user")
         self.assertEqual(r.status_code, 200)
         # List session commands
-        # r = a.get("/case_studies/dummy/versions/dummy/sessions/"+uuid2)
+        # r = a.get(nis_api_base + "/case_studies/dummy/versions/dummy/sessions/"+uuid2)
         # Get the content of some command
-        r = a.get("/case_studies/dummy/versions/dummy/sessions/" + uuid2 + "/0")
+        r = a.get(nis_api_base + "/case_studies/dummy/versions/dummy/sessions/" + uuid2 + "/0")
         self.assertEqual(r.data, b)
 
         # TODO Same isession, open "uuid2", get some variable from state modified by the Excel file
         # Open previous reproducible session for reading
-        r = a.post("/isession/rsession", data={"uuid": uuid2, "read_version_state": "True"})
+        r = a.post(nis_api_base + "/isession/rsession", data={"uuid": uuid2, "read_version_state": "True"})
         self.assertEqual(r.status_code, 204)
 
     def test_003_manage_users(self):

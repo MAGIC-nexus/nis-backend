@@ -1,7 +1,8 @@
 from collections import namedtuple
+
 from typing import List
 
-from sqlalchemy import Column, Integer, String, Boolean, ForeignKey
+from sqlalchemy import Column, Integer, String, Unicode, Boolean, ForeignKey
 from sqlalchemy import orm
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.orm import relationship, backref
@@ -165,8 +166,8 @@ class Code(ORMBase): # A single value and its description for a Dimension
     level_id = Column(Integer, ForeignKey(CodeListLevel.id))
     level = relationship(CodeListLevel, backref=backref("codes", cascade="all, delete-orphan"))
 
-    children = Column(postgresql.JSONB)  # List of codes totalling this code
-    parents = Column(postgresql.JSONB)  # List of codes aggregating this code
+    children = Column(Unicode) # postgresql.JSONB)  # List of codes totalling this code
+    parents = Column(Unicode) # postgresql.JSONB)  # List of codes aggregating this code
 
 
 class Concept(ORMBase):  # Concepts are independent of datasets
@@ -177,12 +178,12 @@ class Concept(ORMBase):  # Concepts are independent of datasets
     description = Column(String(1024))
     is_time = Column(Boolean, default=False)  # A concept having time nature
 
-    attributes = Column(postgresql.JSONB)
+    attributes = Column(Unicode) # postgresql.JSONB)
 
     parent_id = Column(Integer, ForeignKey("dc_concepts.id"))
     parent = relationship("Concept", backref=backref("children", remote_side=[id]), cascade="all, delete-orphan")
 
-    code_list_emb = Column(postgresql.JSONB)
+    code_list_emb = Column(Unicode) # postgresql.JSONB)
 
     # Zero or one Code List
     code_list_id = Column(Integer, ForeignKey(CodeList.id))
@@ -197,7 +198,7 @@ class DataSource(ORMBase):  # Eurostat, OECD, FAO, ...
     id = Column(Integer, primary_key=True, autoincrement=True)
     name = Column(String(32))
     description = Column(String(1024))
-    data_dictionary = Column(postgresql.JSONB)  # "Metadata"
+    data_dictionary = Column(Unicode) # postgresql.JSONB)  # "Metadata"
 
 
 class Database(ORMBase): # A data source can have one or more databases
@@ -206,7 +207,7 @@ class Database(ORMBase): # A data source can have one or more databases
     id = Column(Integer, primary_key=True, autoincrement=True)
     code = Column(String(32))
     description = Column(String(1024))
-    data_dictionary = Column(postgresql.JSONB)  # "Metadata"
+    data_dictionary = Column(Unicode) # postgresql.JSONB)  # "Metadata"
 
     data_source_id = Column(Integer, ForeignKey(DataSource.id))
     data_source = relationship(DataSource)
@@ -218,9 +219,9 @@ class Dataset(ORMBase): # A database has many datasets
     id = Column(Integer, primary_key=True, autoincrement=True)
     code = Column(String(128))
     description = Column(String(1024))
-    data_dictionary = Column(postgresql.JSONB)  # "Metadata"
+    data_dictionary = Column(Unicode) # postgresql.JSONB)  # "Metadata"
 
-    attributes = Column(postgresql.JSONB)
+    attributes = Column(Unicode) # postgresql.JSONB)
 
     database_id = Column(Integer, ForeignKey(Database.id))
     database = relationship(Database)
@@ -244,7 +245,7 @@ class Dimension(ORMBase):  # A dimension is a concept linked to a dataset. It ca
     description = Column(String(1024))
     is_time = Column(Boolean, default=False)
     is_measure = Column(Boolean, default=False)
-    attributes = Column(postgresql.JSONB)
+    attributes = Column(Unicode) # postgresql.JSONB)
 
     dataset_id = Column(Integer, ForeignKey(Dataset.id))
     dataset = relationship(Dataset, lazy='subquery', backref=backref("dimensions", cascade="all, delete-orphan"))
@@ -253,7 +254,7 @@ class Dimension(ORMBase):  # A dimension is a concept linked to a dataset. It ca
     concept_id = Column(Integer, ForeignKey(Concept.id))  # The concept will contain the full code list
     concept = relationship(Concept)
 
-    code_list_emb = Column(postgresql.JSONB)  # A reduced code list of the concept, if it exists
+    code_list_emb = Column(Unicode) # postgresql.JSONB)  # A reduced code list of the concept, if it exists
     # Zero or one Code List, this contains the reduced Code List
     code_list_id = Column(Integer, ForeignKey(CodeList.id))
     code_list = relationship(CodeList, backref=backref("dimension", cascade="all, delete-orphan"))
@@ -263,7 +264,7 @@ class Store(ORMBase): # Location for one or more datasets. Datasets point to Sto
     __tablename__ = "dc_ds_stores"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    parameters = Column(postgresql.JSONB)
+    parameters = Column(Unicode) # postgresql.JSONB)
 
     dataset_id = Column(Integer, ForeignKey(Dataset.id))
     dataset = relationship(Dataset)

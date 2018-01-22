@@ -85,7 +85,7 @@ class Expression:
             return []
 
         lst = []
-        if isinstance(entity, FactorObservation):
+        if isinstance(entity, FactorQuantitativeObservation):
             lst.append( get_factor_name(entity.factor) + "=" + entity.expression )
         elif isinstance(entity, Heterarchy):
             # TODO Find connections from and connections to

@@ -49,19 +49,24 @@ def get_codes_all_statistical_datasets(source, sh_out, dataset_manager):
     """
     if dataset_manager:
         lst = dataset_manager.get_datasets(source)
-        sh_out.cell(row=0 + 1, column=0 + 1).value = "Dataset ID"
-        sh_out.cell(row=0 + 1, column=1 + 1).value = "Description"
-        sh_out.cell(row=0 + 1, column=2 + 1).value = "URN"
-        sh_out.cell(row=0 + 1, column=3 + 1).value = "Data Source"
+        if sh_out:
+            sh_out.cell(row=0 + 1, column=0 + 1).value = "Dataset ID"
+            sh_out.cell(row=0 + 1, column=1 + 1).value = "Description"
+            sh_out.cell(row=0 + 1, column=2 + 1).value = "URN"
+            sh_out.cell(row=0 + 1, column=3 + 1).value = "Data Source"
+        lst2 = []
         for r, k in enumerate(lst):
-            sh_out.cell(row=r + 1 + 1, column=0 + 1).value = k[0]
-            sh_out.cell(row=r + 1 + 1, column=1 + 1).value = k[1]
-            sh_out.cell(row=r + 1 + 1, column=2 + 1).value = k[2]
             if len(k) == 4:
                 source = k[3]
             else:
                 source = ""
-            sh_out.cell(row=r + 1 + 1, column=3 + 1).value = source
+            lst2.append((k[0], k[1], k[2], source))
+            if sh_out:
+                sh_out.cell(row=r + 1 + 1, column=0 + 1).value = k[0]
+                sh_out.cell(row=r + 1 + 1, column=1 + 1).value = k[1]
+                sh_out.cell(row=r + 1 + 1, column=2 + 1).value = k[2]
+                sh_out.cell(row=r + 1 + 1, column=3 + 1).value = source
+        return pd.DataFrame(data=lst2, columns=["Dataset ID", "Description", "URN", "Data Source"])
     else:
         if source.lower() == "eurostat":
             import xmltodict

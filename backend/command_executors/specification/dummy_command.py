@@ -24,6 +24,7 @@ class DummyCommand(IExecutableCommand):
 
     def json_deserialize(self, json_input):
         # TODO Read and check keys validity
+        issues = []
         if isinstance(json_input, dict):
             pass
         else:
@@ -33,3 +34,5 @@ class DummyCommand(IExecutableCommand):
             self._var_name = json_input["name"]
         if "description" in json_input:
             self._description = json_input["description"]
+
+        return issues

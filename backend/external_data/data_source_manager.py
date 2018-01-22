@@ -1,9 +1,10 @@
 from abc import ABCMeta, abstractmethod
 from typing import List
-
 import pandas as pd
+import datetime
+from cachier import cachier
 
-from backend.common.helper import create_dictionary
+from backend.common.helper import create_dictionary, memoize
 from backend.external_data.rdb_model import DataSource, Database, Dataset
 from backend.model.rdb_persistence.persistent import force_load
 
@@ -100,6 +101,8 @@ class DataSourceManager:
         # Direct access to database
         return source.get_databases()
 
+    #@cachier(stale_after=datetime.timedelta(days=1))
+    @memoize
     def get_datasets(self, source: IDataSourceManager=None, database=None):
         if source:
             source = self._get_source_manager(source)
@@ -183,8 +186,10 @@ def filter_dataset_into_dataframe(in_df, filter_dict, eurostat_postprocessing=Fa
     start = None
     if "startPeriod" in filter_dict:
         start = filter_dict["startPeriod"]
+        if isinstance(start, list): start = start[0]
     if "endPeriod" in filter_dict:
         endd = filter_dict["endPeriod"]
+        if isinstance(endd, list): endd = endd[0]
     else:
         if start:
             endd = start

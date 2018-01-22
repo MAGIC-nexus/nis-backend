@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 import copy
 
+
 import re
 
 import numpy as np
@@ -894,7 +895,7 @@ def combine_two_layers_of_processors(sh_in, sh_out, registry):
                      type="warning")
 
     # Read cell containing the specification of the processors.
-    # The FIRST is the CONTAINED, the SECOND the CONTAINER.
+    # The FIRST is the CONTAINED (child), the SECOND the CONTAINER (parent).
     # They are specified separated by "/" or "-".
     # Iterate to find both in the registry, obtain "registry_entries"
     RegistryEntry = collections.namedtuple('RegistryEntry', 'name registry_name registry_entry')
@@ -1584,7 +1585,7 @@ def process_file(input_file):
 
                 if not request_solved:
                     reset_cells_format(sh_writable)
-                    # Find additional columns
+                    # Find possible additional columns
                     columns_from_maps = create_dictionary()
                     for d in metadata[0]:  # Dimensions
                         if dataset_name + "." + d in the_registry.maps:

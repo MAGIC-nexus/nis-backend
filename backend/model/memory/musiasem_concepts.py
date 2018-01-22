@@ -7,12 +7,6 @@ In-memory model
 * Data structures
 * Commands
 
-Store <<<
-CaseStudy <<<
-Submission <<<
-Transaction <<<
-Command <<<
-User <<<
 
 Hierarchy / list
 Graph (which can be a DAG)
@@ -34,16 +28,24 @@ TimeExtent
 ObservationProcess (Observer)
 Source
 
+
+=======
+= RDF =
+=======
+The most flexible approach involves using RDF, RDFlib.
+An interesting paper: "A survey of RDB to RDF translation approaches and tools"
+
+
 """
 
 import collections
 import json
 from enum import Enum
 from typing import *  # Type hints
-
 import pint  # Physical Units management
+import pandas as pd
 
-from backend.common.helper import create_dictionary
+from backend.common.helper import create_dictionary, strcmp
 from backend.model import ureg
 
 
@@ -54,7 +56,10 @@ class FlowFundRoegenType(Enum):  # Used in FlowFund
     flow = 1
     fund = 0
 
+
 FactorInProcessorType = collections.namedtuple("FactorInProcessorType", "external incoming")
+
+allowed_ff_types = ["int_in_flow", "int_in_fund", "int_out_flow", "ext_in_flow", "ext_out_flow"]
 
 # #################################################################################################################### #
 # BASE CLASSES
@@ -108,12 +113,13 @@ class HeterarchyNode:
     def hierarchically_related(p1: "HeterarchyNode", p2: "HeterarchyNode", h: "Heterarchy" =None):
         return p1.get_parent(h) == p2 or p2.get_parent(h) == p1
 
+
 Connection = collections.namedtuple("Connection", "source destination hierarchical weight")
 
 
 class Connectable:
     """ Connect entities of the same type
-        For Processor and Factor (a FactorTaxon in a Processor)
+        For Processor and Factor (Factor=a FactorTaxon in a Processor)
         Two types of connection: hierarchy (parent-child) and side
         (direct connection, no matter which hierarchical connection there exists)
     """
@@ -122,7 +128,7 @@ class Connectable:
     # TODO In this case, there would be a base ConnectionSet (None), then additional ones would be
     # TODO for options. A ConnectionSet could have tags and attributes, so it would be possible to filter
     def __init__(self):
-        self._connections = []  # Connection (namedtuple)
+        self._connections = []  # type: Connection
 
     @property
     def connections(self):
@@ -235,6 +241,29 @@ class Qualifiable:
     def attributes_append(self, name, value):
         self._attributes[name] = value
 
+
+class Observable:
+    """ An entity which can be structurally or quantitatively observed.
+        It can have none to infinite possible observations
+    """
+    def __init__(self, location: "Geolocation"):
+        self._location = location  # Definition of where the observable is
+        self._physical_nature = None
+        self._observations = []  # type: List[Union[FactorQuantitativeObservation, ProcessorObservation]]
+
+    # Methods to manage the properties
+    @property
+    def observations(self):
+        return self._observations
+
+    def observations_append(self, observation):
+        if isinstance(observation, (list, set)):
+            lst = observation
+        else:
+            lst = [observation]
+
+        self._observations.extend(lst)
+
 # #################################################################################################################### #
 # Entities
 
@@ -256,10 +285,12 @@ class QualifiedQuantityExpression:
 
     @staticmethod
     def n(n: float):
+        """ "N" of NUSAP """
         return QualifiedQuantityExpression(json.dumps({'n': n}))
 
     @staticmethod
     def nu(n: float, u: str):
+        """ "NU" of NUSAP """
         # Check that "u" is a recognized unit type
         try:
             ureg(u)
@@ -277,7 +308,7 @@ class Source(Nameable, Qualifiable):
         self._description = None  # What is the content of the source
         self._location = None  # Where is the source accessible
         self._address = None  # Address to have direct access to the source
-        Qualifiable.__init__(attributes2)
+        Qualifiable.__init__(self, attributes2)
 
 
 class Observer(Nameable):
@@ -318,60 +349,7 @@ class Observer(Nameable):
         self._sources.extend(lst)
 
 
-class Observable:
-    """ An entity representing a measurable aspect, something which can be observed, accounted. 
-       It can have none to infinite possible observations
-    """
-    def __init__(self, location: "Geolocation"):
-        self._location = location  # Definition of where the observable is
-        self._physical_nature = None
-        self._observations = []  # type: List[FactorObservation]
-
-    # Methods to manage the properties
-    @property
-    def observations(self):
-        return self._observations
-
-    def observations_append(self, observation):
-        if isinstance(observation, (list, set)):
-            lst = observation
-        else:
-            lst = [observation]
-
-        self._observations.extend(lst)
-
-
 # #################################################################################################################### #
-
-
-class ConnectionsSet(Nameable):
-    """ A set of connections. It allows having different connection schemes for the processors+factors network """
-    def __init__(self, name):
-        self._name = name
-        self._connections = None
-
-    @property
-    def connections(self):
-        return self._connections
-
-    @connections.setter
-    def connections_append(self, connection):
-        if isinstance(connection, (list, set)):
-            lst = connection
-        else:
-            lst = [connection]
-
-        self._connections.extend(lst)
-
-
-class ProcessorsSet(Nameable):
-    """ A set of Processors """
-    def __init__(self, name):
-        Nameable.__init__(name)
-
-    def clone(self):
-        pass
-    # TODO Manage the set
 
 
 class Heterarchy(Nameable):
@@ -450,64 +428,8 @@ class Taxon(Nameable, HeterarchyNode, HierarchyExpression):
         HierarchyExpression.__init__(self, expression)
 
 
-class Processor(Nameable, HeterarchyNode, Taggable, Qualifiable, Connectable, Automatable):
-    def __init__(self, name, parent=None, hierarchy=None, external: bool=False, tags=None, attributes=None):
-        Nameable.__init__(self, name)
-        HeterarchyNode.__init__(self, parent, hierarchy)
-        Taggable.__init__(self, tags)
-        Qualifiable.__init__(self, attributes)
-        Connectable.__init__(self)
-        Automatable.__init__(self)
-        self._factors = []  # type: List[Factor]
-        self._type = None
-        self._external = external  # Either external (True) or internal (False)
-
-    @property
-    def factors(self):
-        return self._factors
-
-    def factors_append(self, factor: "Factor"):
-        self._factors.append(factor)
-
-    @property
-    def extensive(self):
-        # TODO True if of all values defined for all factors no value depends on another factor
-        return False
-
-    @property
-    def intensive(self):
-        return not self.extensive
-
-    @property
-    def external(self):
-        return self._external
-
-    @property
-    def internal(self):
-        return not self._internal
-
-    @property
-    def type_processor(self):
-        # TODO True if the processor is a type. The alternative is the processor being a real. The type abstract a function
-        # TODO "type" and functional is similar. But it depends on the analyst, who can also define the processor as
-        # TODO structural and "type" at the same time
-        return False
-
-    @type_processor.setter
-    def type_processor(self, v: bool):
-        self._type = v
-
-    @property
-    def real_processor(self):
-        return not self.type_processor
-
-    @real_processor.setter
-    def real_processor(self, v: bool):
-        self.type_processor = not v
-
-
 class FactorTaxon(Nameable, HeterarchyNode, HierarchyExpression, Taggable, Qualifiable):  # Flow or fund type (not attached to a Processor)
-    """ A Taxon in a hierarchy, a Taxonomy """
+    """ A Factor as type, in a hierarchy, a Taxonomy """
     def __init__(self, name, parent=None, hierarchy=None,
                  tipe: FlowFundRoegenType=FlowFundRoegenType.flow,
                  tags=None, attributes=None, expression=None):
@@ -534,8 +456,134 @@ class FactorTaxon(Nameable, HeterarchyNode, HierarchyExpression, Taggable, Quali
         return self._roegen_type
 
 
-class Factor(Nameable, Taggable, Qualifiable, Connectable, Observable, Automatable):
-    """ A Flow or Fund when attached to a Processor
+class Processor(Nameable, Taggable, Qualifiable, Automatable, Observable):
+    def __init__(self, name, external: bool=False,
+                 location: "Geolocation"=None, tags=None, attributes=None,
+                 referenced_processor: "Processor"=None):
+        Nameable.__init__(self, name)
+        Taggable.__init__(self, tags)
+        Qualifiable.__init__(self, attributes)
+        Automatable.__init__(self)
+        Observable.__init__(self, location)
+        self._factors = []  # type: List[Factor]
+        self._type = None
+        self._external = external  # Either external (True) or internal (False)
+
+        # The processor references a previously defined processor
+        # * If a factor is defined, do not look in the referenced
+        # * If a factor is not defined here, look in the referenced
+        # * Other properties can also be referenced (if defined locally it is not searched in the referenced)
+        # * FactorObservations are also assimilated
+        #   (although expressions evaluated in the context of the local processor, not the referenced one)
+        # * Relations are NOT assimilated, at least by default. THIS HAS TO BE STUDIED IN DEPTH
+        self._referenced_processor = referenced_processor
+
+    @property
+    def factors(self):
+        tmp = self._factors.copy()
+        s = set([f.name.lower() for f in tmp])
+        if self._referenced_processor:
+            for f in self._referenced_processor.factors:
+                if f.name.lower() not in s:
+                    tmp.append(f)
+                    s.add(f.name().lower())
+        return tmp
+
+    def factors_append(self, factor: "Factor"):
+        self._factors.append(factor)
+
+    @property
+    def extensive(self):
+        # TODO True if of all values defined for all factors no value depends on another factor
+        return False
+
+    @property
+    def intensive(self):
+        return not self.extensive
+
+    @property
+    def external(self):
+        tmp = self._external
+        if tmp is None and self._referenced_processor:
+            tmp = self._referenced_processor.external
+
+        return tmp
+
+    @property
+    def internal(self):
+        return not self._external
+
+    @property
+    def type_processor(self):
+        # True if the processor is a type. The alternative is the processor being real. Type abstracts a function
+        # "type" and function are similar. But it depends on the analyst, who can also define the processor as
+        # structural and "type" at the same time
+        tmp = self._type
+        if tmp is None and self._referenced_processor:
+            tmp = self._referenced_processor.type_processor
+
+        return tmp
+
+    @type_processor.setter
+    def type_processor(self, v: bool):
+        self._type = v
+
+    @property
+    def real_processor(self):
+        return not self.type_processor
+
+    @real_processor.setter
+    def real_processor(self, v: bool):
+        self.type_processor = not v
+
+    def full_hierarchy_name(self, hierarchy=None):
+        p = self
+        lst = []
+        while p:
+            lst.insert(0, p.name)
+            # TODO Currently PROCESSORS DO NOT have intrinsic relationships between them
+            # TODO Relationships are stated in ProcessorObservations. They link processors and factors
+            par = getattr(p, "get_parent", None)
+            if par:
+                p = p.get_parent(hierarchy)
+            else:
+                p = None
+        return ".".join(lst)
+
+
+class ProcessorsRelationObservation(Taggable, Qualifiable, Automatable):
+    """ An expression or quantity assigned to an Observable (Factor) """
+    def __init__(self, processor: Processor=None, observer: Observer=None, tags=None, attributes=None):
+        Taggable.__init__(self, tags)
+        Qualifiable.__init__(self, attributes)
+        Automatable.__init__(self)
+        self._processor = processor
+        self._observer = observer
+
+    @staticmethod
+    def create_and_append(processor: Processor, observer: Observer, parent=None, hierarchy=None, tags=None, attributes=None):
+        o = ProcessorsRelationObservation(processor, observer, tags, attributes)
+        if processor:
+            processor.observations_append(o)
+        if observer:
+            observer.observables_append(processor)
+        return o
+
+    @property
+    def processor(self):
+        return self._processor
+
+    @property
+    def observer(self):
+        return self._observer
+
+    @property
+    def value(self):
+        return self._value
+
+
+class Factor(Nameable, Taggable, Qualifiable, Observable, Automatable):
+    """ A Flow or Fund, when attached to a Processor
         It is automatable because an algorithm emulating an expert could inject Factor into Processors (as well as
         associated FactorObservations)
     """
@@ -544,7 +592,6 @@ class Factor(Nameable, Taggable, Qualifiable, Connectable, Observable, Automatab
         Nameable.__init__(self, name)
         Taggable.__init__(self, tags)
         Qualifiable.__init__(self, attributes)
-        Connectable.__init__(self)
         Observable.__init__(self, location)
         Automatable.__init__(self)
         self._processor = processor
@@ -572,6 +619,181 @@ class Factor(Nameable, Taggable, Qualifiable, Connectable, Observable, Automatab
     @property
     def roegen_type(self):
         return self._taxon.roegen_type
+
+
+class FactorQuantitativeObservation(Taggable, Qualifiable, Automatable):
+    """ An expression or quantity assigned to an Observable (Factor) """
+    def __init__(self, v: QualifiedQuantityExpression, factor: Factor=None, observer: Observer=None, tags=None, attributes=None):
+        Taggable.__init__(self, tags)
+        Qualifiable.__init__(self, attributes)
+        Automatable.__init__(self)
+        self._value = v
+        self._factor = factor
+        self._observer = observer
+
+    @staticmethod
+    def create_and_append(v: QualifiedQuantityExpression, factor: Factor, observer: Observer, tags=None, attributes=None):
+        o = FactorQuantitativeObservation(v, factor, observer, tags, attributes)
+        if factor:
+            factor.observations_append(o)
+        if observer:
+            observer.observables_append(factor)
+        return o
+
+    @property
+    def factor(self):
+        return self._factor
+
+    @property
+    def observer(self):
+        return self._observer
+
+    @property
+    def value(self):
+        return self._value
+
+
+class FactorFlowRelationObservation(Taggable, Qualifiable, Automatable):
+    """ The observation of a binary relation between factors of type FLOW (F1 --> F2) """
+    def __init__(self, factor: Factor=None, observer: Observer=None, tags=None, attributes=None):
+        Taggable.__init__(self, tags)
+        Qualifiable.__init__(self, attributes)
+        Automatable.__init__(self)
+        self._factor = factor
+        self._observer = observer
+
+    @staticmethod
+    def create_and_append(v: QualifiedQuantityExpression, factor: Factor, observer: Observer, tags=None, attributes=None):
+        o = FactorQuantitativeObservation(v, factor, observer, tags, attributes)
+        if factor:
+            factor.observations_append(o)
+        if observer:
+            observer.observables_append(factor)
+        return o
+
+    @property
+    def factor(self):
+        return self._factor
+
+    @property
+    def observer(self):
+        return self._observer
+
+    @property
+    def value(self):
+        return self._value
+
+
+class HierarchiesSet(Nameable):
+    """ A set of Hierachies """
+    def __init__(self, name):
+        Nameable.__init__(name)
+        self._hs = create_dictionary()
+
+    def append(self, h: str, member: Union[str, List[str]]):
+        # Look for hierarchy "h"
+        if h not in self._hs:
+            self._hs[h] = Heterarchy(h)
+        # Insert "member" in hierarchy "h"
+        self._hs[h].roots_append(member)
+
+    def search(self, h: str, member: str):
+        """ Returns the hierarchy/ies containing "member" """
+        lst = []
+        if not h and member:  # Hierarchy "h" not specified, look for "member" in ALL hierarchies
+            for h2 in self._hs:
+                if self._hs[h2].get_node(member):
+                    lst.append(h2)
+        elif h and not member:  # Only hierarchy "h" specified, return "h" if it exists
+            if h in self._hs:
+                lst.append(h)
+        else:
+            if h in self._hs and self._hs[h].get_node(member):
+                lst.append(h)
+
+        return lst
+
+
+class ProcessorsSet(Nameable):
+    """ A set of Processors """
+    def __init__(self, name):
+        Nameable.__init__(self, name)
+        self._pl = []  # Processors members of the set
+        self._attributes = {}  # Attributes characterizing the processors. {name: code list}
+
+    def append(self, p: Processor):
+        """
+        Append a Processor ONLY if it does not exist
+        Existence is determined by: name, taxa, position
+
+        :param p:
+        :return:
+        """
+        res = self.search(p.full_hierarchy_name(), p.attributes)
+        if not res:
+            self._pl.append(p)
+            return p
+        else:
+            if len(res) > 1:
+                raise Exception("The match should not involve more than 1 processor (0 or 1 allowed)")
+            else:
+                return res[0]
+
+    def append_attributes_codes(self, d):
+        for k in d:
+            if k not in self._attributes:
+                s = set()
+                self._attributes = s
+            else:
+                s = self._attributes[k]
+            s.add(d[k])
+
+    @property
+    def attributes(self):
+        return self._attributes
+
+    def search(self, name: str, attrs: dict) -> List[Processor]:
+        def matches() -> bool:
+            # Check if the name matches
+            # TODO Parse name. If hierarchical, check parent, parent of parent, ... (if any does not match, False)
+            if not strcmp(name, p.name):
+                return False
+            # Check if specified attributes match
+            for a in attrs:
+                # TODO Case Sensitive / Insensitive Comparison
+                # TODO Remember to implement EQ for GeoLocation and for TimeExtent
+                if p.attributes[a] not in attrs[a]:
+                    return False
+            return True
+        lst = []
+        for p in self._pl:
+            if matches():
+                lst.append(p)
+        return lst
+
+    def clone(self):
+        pass
+
+
+class ConnectionsSet(Nameable):
+    """ A set of connections. It exists to allow having different connection schemes for
+    the processors+factors network """
+    def __init__(self, name):
+        self._name = name
+        self._connections = None
+
+    @property
+    def connections(self):
+        return self._connections
+
+    @connections.setter
+    def connections_append(self, connection):
+        if isinstance(connection, (list, set)):
+            lst = connection
+        else:
+            lst = [connection]
+
+        self._connections.extend(lst)
 
 
 def connect_processors(source_p: Processor, dest_p: Processor, h: "Heterarchy", weight: float, taxon: FactorTaxon, source_name: str=None, dest_name: str=None):
@@ -636,10 +858,16 @@ def connect_processors(source_p: Processor, dest_p: Processor, h: "Heterarchy", 
 
 class Geolocation:
     """ For the geolocation of processors. Factors and Observations could also be qualified with Geolocation """
-    def __init__(self, name, projection=None, shape=None):
+    def __init__(self, name, region_name=None, projection=None, shape=None):
         self._name = name
+        self._region_name = region_name
         self._projection = projection
         self._shape = shape
+
+    def __eq__(self, other):
+        return self.region_name == other.region_name and \
+               self.projection == other.projection and \
+               self.shape == other.shape
 
     @property
     def name(self):
@@ -648,6 +876,14 @@ class Geolocation:
     @name.setter
     def name(self, name):
         self._name = name
+
+    @property
+    def region_name(self):
+        return self._region_name
+
+    @region_name.setter
+    def region_name(self, region_name):
+        self._region_name = region_name
 
     @property
     def projection(self):
@@ -672,9 +908,29 @@ class TimeExtent:
         self._start = start
         self._end = end
 
+    def __eq__(self, other):
+        return self.start == other.start and \
+               self.end == other.end
+
+    @property
+    def start(self):
+        return self._start
+
+    @start.setter
+    def start(self, start):
+        self._start = start
+
+    @property
+    def end(self):
+        return self._end
+
+    @end.setter
+    def end(self, end):
+        self._end = end
 
 # #################################################################################################################### #
 # NUSAP Pedigree
+
 
 class PedigreeTemplate(Nameable):
     """ A pedigree template (to represent a Pedigree Matrix), made of a dictionary of lists """
@@ -688,37 +944,6 @@ class Pedigree:
 
 # #################################################################################################################### #
 #
-
-
-class FactorObservation(Taggable, Qualifiable, Automatable):
-    """ An expression or quantity assigned to an Observable (Factor) """
-    def __init__(self, v: QualifiedQuantityExpression, factor: Factor=None, observer: Observer=None, tags=None, attributes=None):
-        Taggable.__init__(self, tags)
-        Qualifiable.__init__(self, attributes)
-        Automatable.__init__(self)
-        self._value = v
-        self._factor = factor
-        self._observer = observer
-
-    @staticmethod
-    def create(v, factor: Factor, observer: Observer, tags=None, attributes=None):
-        o = FactorObservation(v, factor, observer, tags, attributes)
-        if factor:
-            factor.observations_append(o)
-        if observer:
-            observer.observables_append(factor)
-
-    @property
-    def factor(self):
-        return self._factor
-
-    @property
-    def observer(self):
-        return self._observer
-
-    @property
-    def value(self):
-        return self._value
 
 
 class Parameter(Nameable):
@@ -749,7 +974,51 @@ class Indicator:
     # TODO Support for a wildcard indicator. Compute the same operation over all factors of a processor, over all processors.
     # TODO To generate multiple instances of the indicator or a single indicator acumulating many things.
     def __init__(self):
-        self._
+        self._indicator = None
+
+
+class Mapping:
+    """
+    Transcription of information specified by a mapping command
+    """
+    def __init__(self, name, source, dataset, origin, destination, the_map: List[Tuple]):
+        self.name = name
+        self.source = source
+        self.dataset = dataset
+        self.origin = origin
+        self.destination = destination
+        self.map = the_map
+
+
+# TODO Currently ExternalDataset is not used. Dataset (which can be persisted) is the current choice
+class ExternalDataset:
+    def __init__(self, name, ds: pd.DataFrame):
+        self._name = name
+        self._ds = None  # Dataframe containing the Dataset
+        self._persistent_dataset = None  # Reference to persistent Dataset, in case
+        self._function_returning_dataset = None  # A dataset can be delegated to a function
+
+    def get_dimensions(self):
+        return self._ds.index.columns
+
+    def get_columns(self):
+        return self._ds.columns
+
+    def get_data(self, select, filter_, aggregate, order, func_params=None):
+        """
+        Function responsible of obtaining part of previously gathered dataset, which is stored in memory in a Dataframe
+
+        Because a dataset can be dynamically obtained by a function, it has the optional "func_params" parameter,
+        containing a list of parameters which can be both args and kwargs (for the second, tuples of two elements are expected)
+
+        :param select: Similar to SQL's SELECT
+        :param filter_: Similar to SQL's WHERE
+        :param aggregate: Similar to SQL's GROUP BY
+        :param order: Similar to SQL's ORDER BY
+        :param params:
+        :return: The response
+        """
+        return None  # ExternalDataset(None, ds)
 
 
 class CaseStudyMetadata:

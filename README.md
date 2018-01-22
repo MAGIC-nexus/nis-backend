@@ -22,9 +22,9 @@
 * Separate Metadata and Data databases. The first contains all MuSIASEM things, plus datasets metadata. The second aims
   to be an OLAP repository.
 * Access to REDIS to persist temporarily open interactive sessions (needed because HTTP is stateless)
+* Web service for use from different domain (like official web site). Using CORS
 
 **TO-DO**
-* JSONP web service for use from different domain (like official web site)
 * Possibility to execute R scripts in a specialized Docker container, which provides a sandbox
   * Access to resources should be through URLs, not file system PATHs. Or standardized file system PATHs
 * MonetDB Docker used as data repository
