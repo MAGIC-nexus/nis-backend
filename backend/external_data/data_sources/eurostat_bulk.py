@@ -1,4 +1,5 @@
 import gzip
+
 import os
 import tempfile
 from io import StringIO
@@ -11,7 +12,7 @@ import pandasdmx
 import requests
 import requests_cache
 
-from backend.common.helper import create_dictionary, import_names
+from backend.common.helper import create_dictionary, import_names, memoize
 from backend.external_data.data_source_manager import IDataSourceManager, filter_dataset_into_dataframe
 from backend.external_data.rdb_model import DataSource, Database, Dataset, Dimension, CodeList, CodeImmutable
 
@@ -60,6 +61,7 @@ class Eurostat(IDataSourceManager):
         db.description = "Eurostat provides all Datasets in a single database"
         return [db]
 
+    @memoize
     def get_datasets(self, database=None) -> list:
         """ List of datasets in a database, or in all the datasource (if database==None)
             Return a list of tuples (database, dataset)
@@ -128,13 +130,13 @@ class Eurostat(IDataSourceManager):
             first = True
             # Read code lists
             cl = create_dictionary()
-            for m, v in list(zip(metadata.codelist.ix[l].index, metadata.codelist.ix[l]["name"])):
+            for m, v in list(zip(metadata.codelist.loc[l].index, metadata.codelist.loc[l]["name"])):
                 if not first:
                     cl[m] = v
                 else:
                     first = False
             # Attach it to the Dimension or Measure
-            if metadata.codelist.ix[l]["dim_or_attr"][0] == "D":
+            if metadata.codelist.loc[l]["dim_or_attr"][0] == "D":
                 # Build Code List from dictionary
                 dims[l].code_list = CodeList.construct(l, None, [""], [CodeImmutable(k, cl[k], "", []) for k in cl])
 

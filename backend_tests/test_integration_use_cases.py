@@ -198,24 +198,24 @@ class TestHighLevelUseCases(unittest.TestCase):
         isess.quit()
         self.assertIsNotNone(md)
         self.assertEqual(md["Title"], "Case study for test only")
-        # Check Session should not have CommandGenerator
+        # Check Session should not have CommandsContainer
         session = DBSession()
         self.assertEqual(len(session.query(CaseStudy).all()), 1)
         self.assertEqual(len(session.query(CaseStudyVersion).all()), 1)
         self.assertEqual(len(session.query(CaseStudyVersionSession).all()), 1)
-        self.assertEqual(len(session.query(CommandGenerator).all()), 0)
+        self.assertEqual(len(session.query(CommandsContainer).all()), 0)
         session.close()
 
     def test_005_new_case_study_with_metadata_plus_dummy_command(self):
         reset_database()
         # ----------------------------------------------------------------------
-        # Create case study, with one CommandGenerator
+        # Create case study, with one CommandsContainer
         uuid_, isess = new_case_study(with_metadata_command=3)
         session = DBSession()
         self.assertEqual(len(session.query(CaseStudy).all()), 1)
         self.assertEqual(len(session.query(CaseStudyVersion).all()), 1)
         self.assertEqual(len(session.query(CaseStudyVersionSession).all()), 1)
-        self.assertEqual(len(session.query(CommandGenerator).all()), 1)
+        self.assertEqual(len(session.query(CommandsContainer).all()), 1)
         session.close()
 
         # Reset State
@@ -237,7 +237,7 @@ class TestHighLevelUseCases(unittest.TestCase):
         uuid2, _, _ = isess.close_reproducible_session(issues, output, save=True)
         # Check Database objects
         session = DBSession()
-        self.assertEqual(len(session.query(CommandGenerator).all()), 2)
+        self.assertEqual(len(session.query(CommandsContainer).all()), 2)
         self.assertEqual(len(session.query(CaseStudy).all()), 1)
         self.assertEqual(len(session.query(CaseStudyVersion).all()), 1)
         self.assertEqual(len(session.query(CaseStudyVersionSession).all()), 2)
@@ -270,7 +270,7 @@ class TestHighLevelUseCases(unittest.TestCase):
         uuid2, _, _ = isess.close_reproducible_session(issues, output, save=True)
         # Database objects
         session = DBSession()
-        self.assertEqual(len(session.query(CommandGenerator).all()), 6)
+        self.assertEqual(len(session.query(CommandsContainer).all()), 6)
         self.assertEqual(len(session.query(CaseStudy).all()), 1)
         self.assertEqual(len(session.query(CaseStudyVersion).all()), 2)
         self.assertEqual(len(session.query(CaseStudyVersionSession).all()), 5)
@@ -288,7 +288,7 @@ class TestHighLevelUseCases(unittest.TestCase):
         uuid3, _, _ = isess.close_reproducible_session(issues, output, save=True)
         # Database objects
         session = DBSession()
-        self.assertEqual(len(session.query(CommandGenerator).all()), 11)
+        self.assertEqual(len(session.query(CommandsContainer).all()), 11)
         self.assertEqual(len(session.query(CaseStudy).all()), 2)
         self.assertEqual(len(session.query(CaseStudyVersion).all()), 3)
         self.assertEqual(len(session.query(CaseStudyVersionSession).all()), 9)
@@ -315,7 +315,7 @@ class TestHighLevelUseCases(unittest.TestCase):
 
         # Database objects
         session = DBSession()
-        self.assertEqual(len(session.query(CommandGenerator).all()), 12)
+        self.assertEqual(len(session.query(CommandsContainer).all()), 12)
         self.assertEqual(len(session.query(CaseStudy).all()), 2)
         self.assertEqual(len(session.query(CaseStudyVersion).all()), 4)
         self.assertEqual(len(session.query(CaseStudyVersionSession).all()), 10)
@@ -378,7 +378,7 @@ class TestHighLevelUseCases(unittest.TestCase):
     #     isess = InteractiveSession()
     #     isess.identify({"user": "rnebot"}) # Pass just user name.
     #     isess.open_reproducible_session(None, SessionCreationAction.NewCaseStudy)
-    #     issues, output = isess.execute_command_generator("worksheet", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "<whatever>")
+    #     issues, output = isess.execute_command_container("worksheet", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", "<whatever>")
     #     isess.close_reproducible_session(issues, output, save=True)  # It has to create a case study, a case study version, and a work session
     #     isess.quit()
     #
@@ -436,7 +436,7 @@ class TestHighLevelUseCases(unittest.TestCase):
 
 if __name__ == '__main__':
     setUpModule()
-    i = HighLevelUseCases()
+    i = TestHighLevelUseCases()
     i.test_005_new_case_study_with_only_metadata_command()
 
     print("Just a placeholder (useful when running to check if the file is syntactically valid")

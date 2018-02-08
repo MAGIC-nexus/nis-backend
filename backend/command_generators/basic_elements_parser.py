@@ -50,7 +50,17 @@ dataset = (simple_ident.setResultsName("ident") +
                                               'slice_params': t.slice_params,
                                               }
                             )
+# [ns::]dataset"."column_name
+dataset_with_column = (Optional(namespace).setResultsName("namespace") +
+                       Group(Or([simple_ident]) + dot.suppress() + simple_ident).setResultsName("parts")
+                       ).setParseAction(lambda _s, l, t:
+                                                         {'type': 'h_var',
+                                                          'ns': t.namespace[0] if t.namespace else None,
+                                                          'parts': t.parts.asList(),
+                                                          }
+                                        )
 obj_types = Or([simple_ident, func_call, dataset])
+# h_name, the most complex NAME, which can be a hierarchical composition of names, function calls and datasets
 h_name = (Optional(namespace).setResultsName("namespace") +
           Group(obj_types + ZeroOrMore(dot.suppress() + obj_types)).setResultsName("parts")
           # + Optional(hash + simple_ident).setResultsName("part")
@@ -329,6 +339,9 @@ def string_to_ast(rule: ParserElement, input_: str):
 if __name__ == '__main__':
     from backend.domain import State
     from dotted.collection import DottedDict
+
+    s = "ds.col"
+    res = string_to_ast(h_name, s)
 
     s = State()
     examples = [

@@ -124,7 +124,7 @@ class BaseMixin(object):
     #     elif isinstance(self, CaseStudyVersionSession):
     #         if 'commands' in state:
     #             del state['commands']
-    #     elif isinstance(self, CommandGenerator):
+    #     elif isinstance(self, CommandsContainer):
     #         if 'children_commands' in state:
     #             del state['children_commands']
     #     elif isinstance(self, User):
@@ -433,13 +433,14 @@ class CaseStudyVersionSession(ORMBase):
         return s
 
 
-class CommandGenerator(ORMBase):
-    """ The CommandGenerator object is either the representation of a primitive command or of a generator of command_executors.
+class CommandsContainer(ORMBase):
+    """ The CommandsContainer object is either the representation of a primitive command or of a generator of command_executors.
         It is not the executable command
         For a primitive command, the content is the serialized JSON content elaborated by the command itself.
         In this case, generator_type is "primitive", content_type "application/json"
-        For command generators, the content may be a Spreadsheet file or an R script. The generator_type could be "Spreadsheet", "Rscript"
-        The content type for the first would be "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        For command generators, the content may be a Spreadsheet file or an R script.
+        The generator_type could also be "Spreadsheet", "Rscript".
+        The content type for the first would be "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet".
     """
     __tablename__ = "cs_versions_sessions_cmd_gens"
 
@@ -447,7 +448,7 @@ class CommandGenerator(ORMBase):
     name = Column(String(80))
 
     session_id = Column(Integer, ForeignKey(CaseStudyVersionSession.id))
-    session = relationship(CaseStudyVersionSession, backref=backref("commands", order_by="CommandGenerator.order",
+    session = relationship(CaseStudyVersionSession, backref=backref("commands", order_by="CommandsContainer.order",
                            collection_class=ordering_list('order'), cascade="all, delete-orphan"))
 
     order = Column(Integer)
@@ -456,7 +457,7 @@ class CommandGenerator(ORMBase):
     content = Column(LargeBinary, nullable=True)  # A JSON string, a Worksheet file, an R script, ...
 
     parent_command_id = Column(Integer, ForeignKey("cs_versions_sessions_cmd_gens.id"))
-    parent_command = relationship("CommandGenerator", backref=backref("children_commands", remote_side=[id], order_by="CommandGenerator.order",
+    parent_command = relationship("CommandsContainer", backref=backref("children_commands", remote_side=[id], order_by="CommandsContainer.order",
                                   collection_class=ordering_list('order')), cascade="all, delete-orphan")
     # Role of the command regarding its parent command (to make child commands independent of the order,
     # like "named parameters", or "iterated command")
@@ -471,7 +472,7 @@ class CommandGenerator(ORMBase):
         :param file_type: 
         :param file: It can be a stream or a URL or a file name
         """
-        c = CommandGenerator()
+        c = CommandsContainer()
         c.name = None
         c.generator_type = generator_type
         c.content_type = file_type
@@ -481,7 +482,7 @@ class CommandGenerator(ORMBase):
         return c
 
     def __copy__(self):
-        c = CommandGenerator()
+        c = CommandsContainer()
         c.name = self.name
         # c.session NOT COPIED, assign it directly !!!!
         c.order = self.order

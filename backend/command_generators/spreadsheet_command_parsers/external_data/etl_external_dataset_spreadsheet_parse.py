@@ -41,17 +41,18 @@ def parse_etl_external_dataset_command(sh, area, dataset_name, state):
     we_have_time = False
     for d in dims:
         if dims[d].code_list:
-            cl[d] = dims[d].code_list.keys()  # Attach the code list
+            cl[d] = [k.lower() for k in dims[d].code_list.keys()]  # Attach the code list
+        else:
+            cl[d] = None  # No code list (TIME_PERIOD for instance)
         if dims[d].istime:
             we_have_time = True
     # Add matching mappings as more dimensions
     for m in mappings:
         if strcmp(mappings[m].source, source) and \
-                strcmp(mappings[m].dataset_name, dataset_name) and \
+                strcmp(mappings[m].dataset, dataset_name) and \
                 mappings[m].origin in dims:
             # Add a dictionary entry for the new dimension, add also the codes present in the map
             cl[mappings[m].destination] = set([t[1] for t in mappings[m].map])
-            break
 
     # Scan columns for Dimensions, Measures and Aggregation.
     # Pivot Table is a Visualization, so now it is not in the command, there will be a command aside.
@@ -96,7 +97,7 @@ def parse_etl_external_dataset_command(sh, area, dataset_name, state):
             # Check codes, and add them to the "filter"
             lst = obtain_column(c, area[0] + 1, area[1])
             for cd in lst:
-                if cd not in cl[col_name]:
+                if cd.lower() not in cl[col_name]:
                     issues.append((3, "The code '"+cd+"' is not present in the codes declared for dimension '"+col_name+"'. Please, check them."))
                 else:
                     if col_name not in filter_:
@@ -124,7 +125,7 @@ def parse_etl_external_dataset_command(sh, area, dataset_name, state):
         agg_funcs.append("average")
 
     if not result_name:
-        result_name = source + "_" + "dataset_name"
+        result_name = source + "_" + dataset_name
         issues.append((2, "No result name specified. Assuming '"+result_name+"'"))
 
     content = {"dataset_source": source,

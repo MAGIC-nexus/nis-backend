@@ -1,4 +1,5 @@
-from backend.common.helper import strcmp
+from backend.common.helper import strcmp, obtain_dataset_source, obtain_dataset_metadata, \
+                                  check_dataset_exists, create_dictionary
 from backend.command_executors.external_data.mapping_command import MappingCommand
 from backend.command_generators import basic_elements_parser
 
@@ -22,7 +23,7 @@ def parse_mapping_command(sh, area, origin, destination):
     """
     some_error = False
     issues = []
-    # Origin
+    # Analyze Origin
     cell = sh.cell(row=area[0], column=area[2])
     col_name = cell.value
     if origin:
@@ -31,7 +32,36 @@ def parse_mapping_command(sh, area, origin, destination):
             issues.append((3, "The Origin name is different in the sheet name and in the worksheet ("+origin+", "+col_name+")"))
     else:
         origin = col_name
-    # Destination
+
+    #   Obtain the source, the dataset and the dimension of "origin"
+    spl = origin.split(".")
+    if len(spl) == 3:  # Source.Dataset.Dimension
+        s, ds, dim = spl
+        s = s + "."
+        origin_ok = True
+    elif len(spl) == 2:  # Dataset.Dimension
+        ds, dim = spl
+        s = ""
+        origin_ok = True
+    else:
+        origin_ok = False
+        some_error = True
+        issues.append((3, "Origin must specify a dataset and a dimension name separated by '.'"))
+
+    if origin_ok:
+        origin_dataset = s + ds
+        origin_dim = dim
+
+        if not check_dataset_exists(origin_dataset):
+            some_error = True
+            issues.append((3, "The Origin '" + origin_dataset + "' does not match any registered dataset"))
+        else:
+            dims, attrs, meas = obtain_dataset_metadata(ds)
+            if origin_dim not in dims:
+                some_error = True
+                issues.append((3, "The Origin dataset '" + origin_dataset + "' does not have a dimension '" + origin_dim + "'"))
+
+    # Analyze Destination
     cell = sh.cell(row=area[0], column=area[2] + 1)
     col_name = cell.value
     if destination:
@@ -41,20 +71,18 @@ def parse_mapping_command(sh, area, origin, destination):
     else:
         destination = col_name
 
-    # Check that origin and destination heterarchy names are syntactically valid: [namespace::]simple_id(.simple_id)*
-    for d, c in [("Origin", origin), ("Destination", destination)]:
-        try:
-            basic_elements_parser.h_name.parseString(c, parseAll=True)
-        except:
-            some_error = True
-            issues.append((3, d + " '" + c + "' has to be a composed identifier"))
+    #  Destination name must be a simple identity
+    try:
+        basic_elements_parser.simple_ident.parseString(destination, parseAll=True)
+    except:
+        some_error = True
+        issues.append((3, "'" + destination + "' category name has to be a simple identifier"))
 
-    if len(issues) > 0:  # Issues at this point are errors, return if there are any
-        return None, issues
+    if some_error:  # Issues at this point are errors, return if there are any
+        return issues, None, None
 
-    o = []
-    d = []
-    exp = []
+    # Read mapping Origin to Destination
+    o_dict = create_dictionary()
     for r in range(area[0] + 1, area[1]):
         o_value = sh.cell(row=r, column=area[2]).value
         d_value = sh.cell(row=r, column=area[2] + 1).value
@@ -63,18 +91,32 @@ def parse_mapping_command(sh, area, origin, destination):
         except:
             exp_value = None
         if not o_value or not d_value:
-            if (not o_value and d_value) or (o_value and not d_value):
-                issues.append((2, "Row "+str(r)+": either Origin or Destination is not defined. Row skipped."))
+            if not o_value and d_value:
+                issues.append((2, "Row "+str(r)+": Origin not defined. Row skipped."))
+            else:
+                issues.append((2, "Row " + str(r) + ": Destination not defined. Row skipped."))
             continue
-        o.append(o_value)
-        d.append(d_value)
-        exp.append(exp_value)
-    the_map = [{"o": k, "d": v, "e": e} for k, v, e in zip(o, d, exp)]
-    content = {"origin": origin,  # Name of the origin heterarchy
+        elif not o_value and not d_value:
+            issues.append((2, "Row " + str(r) + ": Origin and Destination are not defined. Row skipped."))
+            continue
+
+        o_value = str(o_value).lower()
+        d_value = str(d_value).lower()
+        if o_value in o_dict:
+            lst = o_dict[o_value]
+        else:
+            lst = []
+            o_dict[o_value] = lst
+        lst.append({"d": d_value, "e": exp_value})
+
+    # List of dictionaries, where each dictionary contains the specification of an origin "o"
+    # For multiple entries (many to many map), the origin maps a list "to" of dictionaries "d", "e"
+    content = {"origin_dataset": origin_dataset,  # Name of the origin dataset (may include the source name)
+               "origin_dimension": origin_dim,  # Name of the origin dimension inside the dataset
                "destination": destination,  # Name of the destination heterarchy
-               "map": the_map  # List of dictionaries
+               "map": [{"o": k, "to": v} for k, v in o_dict.items()]
                }
-    label = content["origin"] + " - " + content["destination"]
+    label = content["origin_dataset"] + "." + content["origin_dimension"] + " - " + content["destination"]
     if True:
         return issues, label, content
     else:

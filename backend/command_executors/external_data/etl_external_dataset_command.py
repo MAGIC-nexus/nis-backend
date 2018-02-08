@@ -1,5 +1,6 @@
 import json
 
+
 import pandas as pd
 import numpy as np
 
@@ -13,17 +14,18 @@ def obtain_reverse_codes(mapped, dst):
     Given the list of desired dst codes and an extensive map src -> dst,
     obtain the list of src codes
 
-    :param mapped: Correspondence between src codes and dst codes
-    :param dst: List of destination codes
+    :param mapped: Correspondence between src codes and dst codes [{"o", "to": [{"d", "e"}]}]
+    :param dst: Iterable of destination codes
     :return: List of origin codes
     """
     src = set()
-    lst = [d.upper() for d in dst]
-    for k in mapped:
-        if k[1] in lst:
-            src.add(k[0])
+    dest_set = set([d.lower() for d in dst])  # Destination categories
+    # Obtain origin categories referencing "dest_set" destination categories
+    # for k in mapped:
+    #     if k[1].lower() in dest_set:
+    #         src.add[k[0].lower()]
 
-    return list(src)
+    return list(set([k[0].lower() for k in mapped if k[1].lower() in dest_set]))
 
 
 class ETLExternalDatasetCommand(IExecutableCommand):
@@ -44,10 +46,12 @@ class ETLExternalDatasetCommand(IExecutableCommand):
         # DS Source + DS Name
         source = self._content["dataset_source"]
         dataset_name = self._content["dataset_name"]
+
         # Result name
         result_name = self._content["result_name"]
         if result_name in datasets or state.get(result_name):
             issues.append((2, "A dataset called '"+result_name+"' is already stored in the registry of datasets"))
+
         # Dataset metadata
         dims, attrs, meas = obtain_dataset_metadata(dataset_name, source)
         # Obtain filter parameters
@@ -60,14 +64,13 @@ class ETLExternalDatasetCommand(IExecutableCommand):
                 lst = [lst]
             elif dim not in dims:
                 # Check if there is a mapping. If so, obtain the native equivalent(s). If not, ERROR
-                mapping = None
                 for m in mappings:
                     if strcmp(mappings[m].destination, dim) and \
                             strcmp(mappings[m].source, source) and \
-                            strcmp(mappings[m].dataset_name, dataset_name) and \
+                            strcmp(mappings[m].dataset, dataset_name) and \
                             mappings[m].origin in dims:
                         native_dim = mappings[m].origin
-                        lst = obtain_reverse_codes(mapping[m].map, lst)
+                        lst = obtain_reverse_codes(mappings[m].map, lst)
                         break
             else:
                 native_dim = dim
@@ -78,6 +81,7 @@ class ETLExternalDatasetCommand(IExecutableCommand):
                 else:
                     f = params[native_dim]
                 f.update(lst)
+
         # Convert param contents from set to list
         for p in params:
             params[p] = [i for i in params[p]]
@@ -89,9 +93,9 @@ class ETLExternalDatasetCommand(IExecutableCommand):
         # Join with mapped dimensions (augment it)
         for m in mappings:
             if strcmp(mappings[m].source, source) and \
-                    strcmp(mappings[m].dataset_name, dataset_name) and \
+                    strcmp(mappings[m].dataset, dataset_name) and \
                     mappings[m].origin in dims:
-                df_dst = pd.DataFrame(mappings[m].maps, columns=['sou_rce', mappings[m].destination])
+                df_dst = pd.DataFrame(mappings[m].map, columns=['sou_rce', mappings[m].destination.lower()])
                 for di in df.columns:
                     if strcmp(mappings[m].origin, di):
                         d = di
@@ -99,17 +103,16 @@ class ETLExternalDatasetCommand(IExecutableCommand):
                 # df[d] = df[d].str.upper()  # Upper case column before merging
                 df = pd.merge(df, df_dst, how='left', left_on=d, right_on='sou_rce')
                 del df['sou_rce']
-                break
 
         # Aggregate (If any dimension has been specified)
         if len(self._content["group_by"]) > 0:
-            values = ["value"] # TODO self._content["measures"]  # Column names where data is
+            values = ["value"]  # TODO self._content["measures"]  # Column names where data is
             rows = [v.lower() for v in self._content["group_by"]]  # Group by dimension names
             aggs = []  # Aggregation functions
             for f in self._content["agg_funcs"]:
-                if f in ["avg", "average"]:
+                if f.lower() in ["avg", "average"]:
                     aggs.append(np.average)
-                elif f in ["sum"]:
+                elif f.lower() in ["sum"]:
                     aggs.append(np.sum)
             # Calculate Pivot Table. The columns are a combination of values x aggregation functions
             # For instance, if two values ["v1", "v2"] and two agg. functions ["avg", "sum"] are provided
@@ -117,13 +120,17 @@ class ETLExternalDatasetCommand(IExecutableCommand):
             df2 = pd.pivot_table(df,
                                  values=values,
                                  index=rows,
-                                 aggfunc=aggs, fill_value=np.NaN, margins=False,
+                                 aggfunc=[aggs[0]], fill_value=np.NaN, margins=False,
                                  dropna=True)
+            # Remove the multiindex in columns
+            df2.columns = [col[-1] for col in df2.columns.values]
+            # Remove the index
+            df2.reset_index(inplace=True)
+            # The result, all columns (no index), is stored for later use
             ds.data = df2
 
         # Store the dataset in State
-        datasets[dataset_name] = ds
-        state.set(dataset_name, ds)
+        datasets[result_name] = ds
 
         return issues, None
 

@@ -1,10 +1,11 @@
+import json
 from abc import ABCMeta, abstractmethod
-from typing import List
+from typing import List, Union
 import pandas as pd
 import datetime
 from cachier import cachier
 
-from backend.common.helper import create_dictionary, memoize
+from backend.common.helper import create_dictionary, memoize, strcmp, obtain_dataset_source
 from backend.external_data.rdb_model import DataSource, Database, Dataset
 from backend.model.rdb_persistence.persistent import force_load
 
@@ -97,38 +98,72 @@ class DataSourceManager:
         return [s for s in self.registry]
         # e.g.: return ["Eurostat", "SSP"]
 
-    def get_databases(self, source: IDataSourceManager):
-        # Direct access to database
-        return source.get_databases()
+    def get_databases(self, source: Union[IDataSourceManager, str]):
+        # List of databases in source (a database contains one or more datasets)
+        if source:
+            source = self._get_source_manager(source)
 
-    #@cachier(stale_after=datetime.timedelta(days=1))
+        if not source:
+            lst = []
+            for s in self.registry:
+                lst.extend([(s,
+                             [db for db in self.registry[s].get_databases()]
+                             )
+                            ]
+                           )
+            return lst
+        else:
+            return [(source.get_name(),
+                     [db for db in source.get_databases()]
+                     )
+                    ]
+
+    # @cachier(stale_after=datetime.timedelta(days=1))
     @memoize
-    def get_datasets(self, source: IDataSourceManager=None, database=None):
+    def get_datasets(self, source: Union[IDataSourceManager, str]=None, database=None):
+        """
+        Obtain a list of tuples (Source, Dataset name)
+
+        :param source: If specified, the name of the source
+        :param database: If specified, the name of a database in the source
+        :return: List of tuples (Source name, Dataset name)
+        """
         if source:
             source = self._get_source_manager(source)
 
         if source:
-            return source.get_datasets(database)
+            if database:  # SOURCE+DATABASE DATASETS
+                return [(source.get_name(), source.get_datasets(database))]
+            else:  # ALL SOURCE DATASETS
+                lst = []
+                for db in source.get_databases():
+                    lst.extend(source.get_datasets(db))
+                return [(source.get_name(), lst)]  # List of tuples (dataset code, description, urn)
         else:  # ALL DATASETS
             lst = []
             for s in self.registry:
-                lst.extend([(s,) + ds for ds in self.registry[s].get_datasets()])
-            return lst
+                lst.append((s, [ds for ds in self.registry[s].get_datasets()]))
+            return lst  # List of tuples (source, dataset code, description, urn)
 
-    def get_dataset_structure(self, source: IDataSourceManager, dataset) -> Dataset:
+    def get_dataset_structure(self, source: Union[IDataSourceManager, str], dataset: str) -> Dataset:
         """ Obtain the structure of a dataset, a list of dimensions and measures, without data """
+        if not source:
+            source = obtain_dataset_source(dataset)
+            if not source:
+                raise Exception("Could not find a Source containing the Dataset '"+dataset+"'")
+
         source = self._get_source_manager(source)
         return source.get_dataset_structure(None, dataset)
 
-    def get_dataset_filtered(self, source: IDataSourceManager, dataset, dataset_params: dict) -> Dataset:
+    def get_dataset_filtered(self, source: Union[IDataSourceManager, str], dataset: str, dataset_params: dict) -> Dataset:
         """ Obtain the structure of a dataset, and DATA according to the specified FILTER, dataset_params """
         source = self._get_source_manager(source)
         return source.get_dataset_filtered(dataset, dataset_params)
 
-
 # --------------------------------------------------------------------------------------------------------------------
 
-def get_dataset_structure(session_factory, source: IDataSourceManager, dataset) -> Dataset:
+
+def get_dataset_structure(session_factory, source: IDataSourceManager, dataset: str) -> Dataset:
     """ Helper function called by IDataSourceManager implementations """
 
     src_name = source.get_name()

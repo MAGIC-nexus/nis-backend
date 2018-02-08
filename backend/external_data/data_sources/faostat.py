@@ -3,7 +3,7 @@ import subprocess
 from io import StringIO
 from typing import List
 from zipfile import ZipFile
-
+import numpy as np
 import pandas as pd
 import requests
 import sqlalchemy
@@ -357,6 +357,7 @@ class FAOSTAT(IDataSourceManager):  # FAOStat (not AquaStat)
                         data[dname] = data[dname].astype(str)
                         cl = code_lists[dname.lower()]
                         cl.update(dict(zip(data[dname+suffix].values, data[dname].values)))
+            dtypes = {}
             if engine_data:
                 # Remove unneeded columns
                 data = data[cols_to_keep]
@@ -364,9 +365,16 @@ class FAOSTAT(IDataSourceManager):  # FAOStat (not AquaStat)
                 del data["index"]
                 # Rename columns
                 data.columns = col_field_names
+                if not dtypes:
+                    for i, t in enumerate(data.dtypes):
+                        if t == np.dtype('O'):
+                            dtypes[data.columns[i]] = sqlalchemy.types.String(length=16)  # Unicode 16 caracteres
+                        elif t == np.dtype('float64'):
+                            dtypes[data.columns[i]] = sqlalchemy.types.Float(30)  # Float
+
                 # TODO Possibly, add convenient columns
                 # Insert into "Datamart", regenerate table if it exists, only in the first chunk
-                data.to_sql(dataset_row["Code"], engine_data, if_exists='append' if count2 > 0 else 'replace', index=False)
+                data.to_sql(dataset_row["Code"], engine_data, if_exists='append' if count2 > 0 else 'replace', index=False, dtype=dtypes)
             count2 += 1
 
         # ------------------------------

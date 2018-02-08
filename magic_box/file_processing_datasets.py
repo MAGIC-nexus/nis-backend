@@ -1,7 +1,6 @@
 # -*- coding: utf-8 -*-
 
 import pandas as pd
-
 import numpy as np
 import requests
 import collections
@@ -154,13 +153,13 @@ def get_statistical_dataset_structure(source, dataset, sh_out=None, dataset_mana
                 first = True
                 # Read code lists
                 cl = create_dictionary()
-                for m, v in list(zip(metadata.codelist.ix[l].index, metadata.codelist.ix[l]["name"])):
+                for m, v in list(zip(metadata.codelist.loc[l].index, metadata.codelist.loc[l]["name"])):
                     if not first:
                         cl[m] = v
                     else:
                         first = False
 
-                if metadata.codelist.ix[l]["dim_or_attr"][0] == "D":
+                if metadata.codelist.loc[l]["dim_or_attr"][0] == "D":
                     istime = str(dsd.dimensions.get(l)).split("|")[0].strip() == "TimeDimension"
                     dims[l] = SDMXConcept("dimension", l, istime, "", cl)
                 else:

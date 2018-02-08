@@ -1,9 +1,13 @@
 import json
 import pandas as pd
 import numpy as np
+from openpyxl.chart import reference
 
 from backend.domain import IExecutableCommand, State, get_case_study_registry_objects
-from backend.model.memory.musiasem_concepts import Observer
+from backend.model.memory.musiasem_concepts import Observer, Processor, Factor, \
+    ProcessorsRelationUndirectedFlowObservation, ProcessorsRelationPartOfObservation, \
+    ProcessorsRelationUpscaleObservation, \
+    FactorsRelationDirectedFlowObservation, FactorQuantitativeObservation
 
 
 class UpscaleCommand(IExecutableCommand):
@@ -62,7 +66,6 @@ class UpscaleCommand(IExecutableCommand):
                         found = True
                         ("column", i, k, child)
 
-
         parent.attributes
 
         # Analyze and Locate taxa mentioned in rows and columns
@@ -73,22 +76,35 @@ class UpscaleCommand(IExecutableCommand):
         # From each key identify taxa containing, then which processor type uses the taxa
 
         lst_taxa = []
-        #for
+
         # columns = [('c', 'a'), ('c', 'b')]
         # df.columns = pd.MultiIndex.from_tuples(columns)
 
         # CREATE the Observer of the Upscaling
-        oer_key = {"_type": "Observer", "_name": source}
-        oer = glb_idx.get(oer_key)
+        oer = glb_idx.get(Observer.partial_key(source, registry=glb_idx))
         if not oer:
             oer = Observer(source)
-            glb_idx.put(oer_key, oer)
+            glb_idx.put(oer.key(glb_idx), oer)
+        else:
+            oer = oer[0]
 
+        # TODO Obtain the parent and child processors
+        parent = None
+        child = None
+        quantity = None
 
-        parent = state.get
+        # Clone the child processor.
+        cloned_child = Processor.clone(child, reference=True)
 
-        state.set(self._var_name, self._description)
-        return None, None
+        # Elaborate the Observations: relational and quantitative
+        o1 = ProcessorsRelationPartOfObservation.create_and_append(parent, cloned_child, oer)  # Part-of
+        glb_idx.put(o1.key(glb_idx), o1)
+        o2 = ProcessorsRelationUndirectedFlowObservation.create_and_append(parent, cloned_child, oer)  # Flow
+        glb_idx.put(o2.key(glb_idx), o2)
+        o3 = ProcessorsRelationUpscaleObservation.create_and_append(parent, cloned_child, scaled_factor, quantity)  # Upscale
+        glb_idx.put(o3.key(glb_idx), o3)
+
+        return issues, None
 
     def estimate_execution_time(self):
         return 0

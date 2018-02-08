@@ -19,12 +19,12 @@ from backend.model.rdb_persistence.persistent import (User,
                                                       CaseStudy,
                                                       CaseStudyVersion,
                                                       CaseStudyVersionSession,
-                                                      CommandGenerator,
+                                                      CommandsContainer,
                                                       force_load,
                                                       serialize_from_object,
                                                       deserialize_to_object
                                                       )
-from backend.command_generators.factory import command_generator_parser_factory
+from backend.command_generators.factory import commands_container_parser_factory
 from backend.common.helper import PartialRetrievalDictionary, generate_json
 
 logger = logging.getLogger(__name__)
@@ -88,11 +88,11 @@ class CommandResult:
 # #####################################################################################################################
 
 
-def executable_command_to_command_generator(e_cmd: IExecutableCommand):
+def executable_command_to_commands_container(e_cmd: IExecutableCommand):
     """
-    IExecutableCommand -> CommandGenerator
+    IExecutableCommand -> CommandsContainer
 
-    The resulting CommandGenerator will be always in native (JSON) format, because the specification
+    The resulting CommandsContainer will be always in native (JSON) format, because the specification
     to construct an IExecutableCommand has been translated to this native format.
 
     :param command:
@@ -102,10 +102,10 @@ def executable_command_to_command_generator(e_cmd: IExecutableCommand):
          "label": e_cmd._serialization_label,
          "content": e_cmd.json_serialize()}
 
-    return CommandGenerator.create("native", "application/json", json.dumps(d).encode("utf-8"))
+    return CommandsContainer.create("native", "application/json", json.dumps(d).encode("utf-8"))
 
 
-def persistable_to_executable_command(p_cmd: CommandGenerator, limit=1000):
+def persistable_to_executable_command(p_cmd: CommandsContainer, limit=1000):
     """
     A persistable command can be either a single command or a sequence of commands (like a spreadsheet). In the future
     it could even be a full script.
@@ -124,7 +124,7 @@ def persistable_to_executable_command(p_cmd: CommandGenerator, limit=1000):
     outputs = []
     state = State()
     count = 0
-    for cmd, issues in command_generator_parser_factory(p_cmd.generator_type, p_cmd.file_type, p_cmd.file, state):
+    for cmd, issues in commands_container_parser_factory(p_cmd.generator_type, p_cmd.file_type, p_cmd.file, state):
         # If there are syntax ERRORS, STOP!!!
         stop = False
         if issues and len(issues) > 0:
@@ -145,11 +145,11 @@ def execute_command(state, e_cmd: "IExecutableCommand"):
     return e_cmd.execute(state)
 
 
-def execute_command_generator(state, p_cmd: CommandGenerator):
-    return execute_command_generator_file(state, p_cmd.generator_type, p_cmd.content_type, p_cmd.content)
+def execute_command_container(state, p_cmd: CommandsContainer):
+    return execute_command_container_file(state, p_cmd.generator_type, p_cmd.content_type, p_cmd.content)
 
 
-def execute_command_generator_file(state, generator_type, file_type: str, file):
+def execute_command_container_file(state, generator_type, file_type: str, file):
     """
     Creates a generator parser, then it feeds the file type and the file
     The generator parser has to parse the file and to generate command_executors as a Python generator
@@ -163,7 +163,7 @@ def execute_command_generator_file(state, generator_type, file_type: str, file):
     # Generator has to call "yield" whenever an ICommand is generated
     issues_aggreg = []
     outputs = []
-    for cmd, issues in command_generator_parser_factory(generator_type, file_type, file, state):
+    for cmd, issues in commands_container_parser_factory(generator_type, file_type, file, state):
         # If there are syntax ERRORS, STOP!!!
         stop = False
         if issues and len(issues) > 0:
@@ -203,7 +203,7 @@ def convert_generator_to_native(generator_type, file_type: str, file):
     output = []
     if generator_type.lower() not in ["json", "native", "primitive"]:
         state = State()
-        for cmd, issues in command_generator_parser_factory(generator_type, file_type, file, state):
+        for cmd, issues in commands_container_parser_factory(generator_type, file_type, file, state):
             # If there are syntax ERRORS, STOP!!!
             stop = False
             if issues and len(issues) > 0:
@@ -260,6 +260,10 @@ class InteractiveSession:
         self._state = State()
         # TODO self._recordable_session = None ??
 
+    @property
+    def state(self):
+        return self._state
+
     def get_sf(self):
         return self._session_factory
 
@@ -279,7 +283,8 @@ class InteractiveSession:
         End interactive session
         :return: 
         """
-        pass
+        self.close_reproducible_session()
+        self.close_db_session()
 
     # --------------------------------------------------------------------------------------------
 
@@ -338,11 +343,15 @@ class InteractiveSession:
         self._reproducible_session.open(self._session_factory, case_study_version_uuid, recover_previous_state, cr_new, allow_saving)
 
     def close_reproducible_session(self, issues=None, output=None, save=False, from_web_service=False):
-        if save:
-            self._reproducible_session.save(from_web_service)
-        uuid_, v_uuid, cs_uuid = self._reproducible_session.close()
-        self._reproducible_session = None
-        return uuid_, v_uuid, cs_uuid
+        if self._reproducible_session:
+            if save:
+                # TODO Save issues AND (maybe) output
+                self._reproducible_session.save(from_web_service)
+            uuid_, v_uuid, cs_uuid = self._reproducible_session.close()
+            self._reproducible_session = None
+            return uuid_, v_uuid, cs_uuid
+        else:
+            return None, None, None
 
     def reproducible_session_opened(self):
         return self._reproducible_session is not None
@@ -373,14 +382,14 @@ class InteractiveSession:
             raise Exception("More than zero of the parameters 'register' and 'execute' must be True")
 
         # Prepare persistable command
-        c = CommandGenerator.create(generator_type, file_type, file)
+        c = CommandsContainer.create(generator_type, file_type, file)
         if register:
             self._reproducible_session.register_persistable_command(c)
         if execute:
             pass_case_study = self._reproducible_session._session.version.case_study is not None
             return self._reproducible_session.execute_command_generator(c, pass_case_study)
             # Or
-            # return execute_command_generator(self._state, c)
+            # return execute_command_container(self._state, c)
         else:
             return None
     # --------------------------------------------------------------------------------------------
@@ -538,7 +547,7 @@ class ReproducibleSession:
                     self._isess._state = State()  # Zero State, execute all commands in sequence
                     for ws in lst:
                         for c in ws.commands:
-                            execute_command_generator(self._isess._state, c)
+                            execute_command_container(self._isess._state, c)
             else:
                 self._isess._state = State()
 
@@ -602,7 +611,7 @@ class ReproducibleSession:
         force_load(self._session)
         self._sess_factory.remove()
 
-    def register_persistable_command(self, cmd: CommandGenerator):
+    def register_persistable_command(self, cmd: CommandsContainer):
         cmd.session = self._session
 
     def create_and_register_persistable_command(self, generator_type, file_type, file):
@@ -613,15 +622,15 @@ class ReproducibleSession:
         :param file_type: 
         :param file: It can be a stream or a URL or a file name
         """
-        c = CommandGenerator.create(generator_type, file_type, file)
+        c = CommandsContainer.create(generator_type, file_type, file)
         self.register_persistable_command(c)
         return c
 
-    def execute_command_generator(self, cmd: CommandGenerator, pass_case_study=False):
+    def execute_command_generator(self, cmd: CommandsContainer, pass_case_study=False):
         if pass_case_study:  # CaseStudy can be modified by Metadata command, pass a reference to it
             self._isess._state.set("_case_study", self._session.version.case_study)
 
-        ret = execute_command_generator(self._isess._state, cmd)
+        ret = execute_command_container(self._isess._state, cmd)
 
         if pass_case_study:
             self._isess._state.set("_case_study", None)
@@ -629,7 +638,7 @@ class ReproducibleSession:
         return ret
 
     def register_executable_command(self, command: IExecutableCommand):
-        c = executable_command_to_command_generator(command)
+        c = executable_command_to_commands_container(command)
         c.session = self._session
 
     def set_sf(self, session_factory):

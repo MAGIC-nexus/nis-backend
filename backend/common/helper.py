@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 
 import collections
+import ast
 import json
 import pandas as pd
 from multidict import MultiDict, CIMultiDict
@@ -83,7 +84,7 @@ class CaseInsensitiveDict(collections.MutableMapping):
         return str(dict(self.items()))
 
 
-def create_dictionary(case_sens=case_sensitive, multi_dict=False):
+def create_dictionary(case_sens=case_sensitive, multi_dict=False, data={}):
     """
     Factory to create dictionaries
 
@@ -94,14 +95,14 @@ def create_dictionary(case_sens=case_sensitive, multi_dict=False):
 
     if not multi_dict:
         if case_sens:
-            return {}  # Normal, "native" dictionary
+            return {}.update(data)  # Normal, "native" dictionary
         else:
-            return CaseInsensitiveDict()
+            return CaseInsensitiveDict(data)
     else:
         if case_sens:
-            return MultiDict()
+            return MultiDict(data)
         else:
-            return CIMultiDict()
+            return CIMultiDict(data)
 
 
 def strcmp(s1, s2):
@@ -185,9 +186,16 @@ def generate_json(o):
 
 
 class PartialRetrievalDictionary:
-    """ The key is a dictionary, the value an object.
-        Depends on the powerful pd.DataFrame object, using MultiIndex:
+    """ The key is a dictionary, the value an object. Allows partial search.
 
+    >> IF "case_sensitive==False" -> VALUES are CASE INSENSITIVE <<<<<<<<<<<<<<<<<
+
+        It is prepared to store different key compositions, with a pd.DataFrame per key
+        When retrieving (get), it can match several of these, so it can return results from different pd.DataFrames
+
+        pd.DataFrame with MultiIndex:
+
+import pandas as pd
 df = pd.DataFrame(columns=["a", "b", "c"])  # Empty DataFrame
 df.set_index(["a", "b"], inplace=True)  # First columns are the MultiIndex
 df.loc[("h", "i"), "c"] = "hi"  # Insert values in two cells
@@ -197,6 +205,7 @@ df.loc[("h", slice(None)), "c"]
     """
     def __init__(self):
         self._dfs = {}  # Dict from sorted key-dictionary-keys (the keys in the key dictionary) to DataFrame
+        self._df_sorted = {}  # A Dict telling if each pd.DataFrame is sorted
         self._key_lst = []  # List of sets of keys, used in "get" when matching partial keys
 
     def put(self, key, value):
@@ -208,10 +217,16 @@ df.loc[("h", slice(None)), "c"]
         :return:
         """
         # Sort keys
-        s_tuple = tuple(sorted([k for k in key]))
+        keys = [k for k in key]
+        s_tuple = tuple(sorted(keys))
+        if case_sensitive:
+            df_key = tuple([key[k] if key[k] is not None else slice(None) for k in s_tuple])
+        else:
+            df_key = tuple([(key[k] if k.startswith("__") else key[k].lower()) if key[k] is not None else slice(None) for k in s_tuple])
+
         if s_tuple not in self._dfs:
             # Append to list of sets of keys
-            self._key_lst.append(set([k for k in key]))
+            self._key_lst.append(set(keys))
             # Add New DataFrame to the dictionary of pd.DataFrame
             cols = [s for s in s_tuple]
             cols.append("value")
@@ -223,42 +238,135 @@ df.loc[("h", slice(None)), "c"]
             df = self._dfs[s_tuple]
 
         # Do the insertion into the pd.DataFrame
-        df_key = tuple([key[k] if key[k] else slice(None) for k in s_tuple])
         df.loc[df_key, "value"] = value
 
-    def get(self, key):
+        # Flag the pd.DataFrame as unsorted
+        self._df_sorted[s_tuple] = False
+
+    def get(self, key, key_and_value: bool=False):
         """
-        The key can be a dictionary
+        Return elements of different kinds, matching the totally or partially specified key.
+
+        :param key: A dictionary with all or part of the key of elements to be retrieved
+        :param key_and_value: If True, return a list of tuple (key, value). If not, return a list of values
+        :return: A list of elements which can be (key, value) or "value", depending on the parameter "key_and_value"
+        """
+        keys = [k for k in key]
+        s_tuple = tuple(sorted(keys))
+        if s_tuple not in self._dfs:
+            # Try partial match
+            s = set(keys)
+            df = []
+            for s2 in self._key_lst:
+                if s.issubset(s2):
+                    s_tuple = tuple(sorted(s2))
+                    df.append((self._dfs[s_tuple], s_tuple))
+        else:
+            df = [(self._dfs[s_tuple], s_tuple)]
+
+        if df:
+            res = []
+            for df_, s_tuple in df:
+                try:
+                    if case_sensitive:
+                        df_key = tuple([key[k] if k in key else slice(None) for k in s_tuple])
+                    else:
+                        df_key = tuple([(key[k] if k.startswith("__") else key[k].lower()) if k in key else slice(None) for k in s_tuple])
+
+                    if s_tuple not in self._df_sorted or not self._df_sorted[s_tuple]:
+                        df_.sort_index(ascending=True, inplace=True)
+                        self._df_sorted[s_tuple] = True
+
+                    tmp = df_.loc[df_key, "value"]
+                    if isinstance(tmp, pd.Series):
+                        for i, v in enumerate(tmp):
+                            if key_and_value:
+                                k = {rk: rv for rk, rv in zip(s_tuple, tmp.index[i])}
+                                res.append((k, v))
+                            else:
+                                res.append(v)
+                    else:  # Single result, standardize to always (k, v)
+                        if key_and_value:
+                            k = {rk: rv for rk, rv in zip(s_tuple, df_key)}
+                            res.append((k, tmp))
+                        else:
+                            res.append(tmp)
+                except (IndexError, KeyError):
+                    pass
+            return res
+        else:
+            return []
+
+    def delete(self, key):
+        """
+        Remove elements matching each of the keys, total or partial, passed to the method
+
         :param key:
         :return:
         """
-        s_tuple = tuple(sorted([k for k in key]))
-        if s_tuple not in self._dfs:
-            # Try partial match
-            s = set([k for k in key])
-            df = None
-            for s2 in self._key_lst:
-                if s.issubset(s2):
-                    df = self._dfs[tuple(sorted(s2))]
-                    break
-        else:
-            df = self._dfs[s_tuple]
 
-        if df is not None:
-            df_key = tuple([key[k] if key[k] else slice(None) for k in s_tuple])
-            try:
-                return df.loc[df_key, "value"]
-            except (IndexError, KeyError):
-                return None
+        def delete_single(key):
+            """
+            Remove elements matching the total or partial key
+
+            :param key:
+            :return:
+            """
+            """
+            Return elements of different kinds, matching the totally or partially specified key.
+    
+            :param key: A dictionary with all or part of the key of elements to be retrieved
+            :param key_and_value: If True, return a list of tuple (key, value). If not, return a list of values
+            :return: A list of elements which can be (key, value) or "value", depending on the parameter "key_and_value"
+            """
+            keys = [k for k in key]
+            s_tuple = tuple(sorted(keys))
+            if s_tuple not in self._dfs:
+                # Try partial match
+                s = set(keys)
+                df = []
+                for s2 in self._key_lst:
+                    if s.issubset(s2):
+                        s_tuple = tuple(sorted(s2))
+                        df.append((self._dfs[s_tuple], s_tuple))
+            else:
+                df = [(self._dfs[s_tuple], s_tuple)]
+
+            if df:
+                res = 0
+                for df_, s_tuple in df:
+                    if case_sensitive:
+                        df_key = tuple([key[k] if k in key else slice(None) for k in s_tuple])
+                    else:
+                        df_key = tuple([(key[k] if k.startswith("__") else key[k].lower()) if k in key else slice(None) for k in s_tuple])
+                    try:
+                        tmp = df_.loc[df_key, "value"]
+                        if isinstance(tmp, pd.Series):
+                            df_.drop(tmp.index, inplace=True)
+                            res += len(tmp)
+                        else:  # Single result, standardize to always (k, v)
+                            df_.drop(df_key, inplace=True)
+                            res += 1
+                    except (IndexError, KeyError):
+                        pass
+                return res
+            else:
+                return 0
+
+        if isinstance(key, list):
+            res_ = 0
+            for k in key:
+                res_ += delete_single(k)
+            return res_
         else:
-            return None
+            return delete_single(key)
 
     def to_pickable(self):
         # Convert to a jsonpickable structure
         out = {}
         for k in self._dfs:
             df = self._dfs[k]
-            out[k] = (df.index.names, df.to_dict())
+            out[k] = df.to_dict()
         return out
 
     def from_pickable(self, inp):
@@ -266,11 +374,12 @@ df.loc[("h", slice(None)), "c"]
         self._dfs = {}
         self._key_lst = []
         for t in inp:
-            self._key_lst.append(set(t[0]))
-
-            df = pd.DataFrame(t[1])
-            df.index.names = t[0]
-            self._dfs[tuple(t[0])] = df
+            t_ = ast.literal_eval(t)
+            self._key_lst.append(set(t_))
+            inp[t]["value"] = {ast.literal_eval(k): v for k, v in inp[t]["value"].items()}
+            df = pd.DataFrame(inp[t])
+            df.index.names = t_
+            self._dfs[t_] = df
 
         return self  # Allows the following: prd = PartialRetrievalDictionary().from_pickable(inp)
 
@@ -325,24 +434,40 @@ def obtain_dataset_source(dset_name):
     # if not backend.data_source_manager:
     #     backend.data_source_manager = register_external_datasources(app.config, DBSession)
 
-    lst = backend.data_source_manager.get_datasets()
-    ds = {t[1]: t[0] for t in lst}
+    lst = backend.data_source_manager.get_datasets()  # ALL Datasets, (source, dataset)
+    ds = create_dictionary(data={d[0]: t[0] for t in lst for d in t[1]})  # Dataset to Source (to obtain the source given the dataset name)
+
     if dset_name in ds:
         source = ds[dset_name]
     else:
-        if dset_name.startswith("ssp_"):
-            # Obtain SSP
-            source = "SSP"
-        else:
-            source = "Eurostat"
+        source = None
+    # else:  # Last resource, try using how the dataset starts
+    #     if dset_name.startswith("ssp_"):
+    #         # Obtain SSP
+    #         source = "SSP"
+    #     else:
+    #         source = "Eurostat"
     return source
 
 
-def obtain_dataset_metadata(dset_name, source=None):
-    if not source:
-        source = obtain_dataset_source(dset_name)
+def check_dataset_exists(dset_name):
+    if len(dset_name.split(".")) == 2:
+        source, d_set = dset_name.split(".")
+    else:
+        d_set = dset_name
+    res = obtain_dataset_source(d_set)
+    return res is not None
 
-    _, metadata = get_statistical_dataset_structure(source, dset_name)
+
+def obtain_dataset_metadata(dset_name, source=None):
+    d_set = dset_name
+    if not source:
+        if len(dset_name.split(".")) == 2:
+            source, d_set = dset_name.split(".")
+        else:
+            source = obtain_dataset_source(d_set)
+
+    _, metadata = get_statistical_dataset_structure(source, d_set)
 
     return metadata
 

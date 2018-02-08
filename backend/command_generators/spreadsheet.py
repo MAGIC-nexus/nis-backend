@@ -67,10 +67,10 @@ Comando
     re_mapping = re.compile(r"^(Mapping|Map)([ _]" + cplex_var + "[ _]" + cplex_var + ")?", flags=flags)
 
     # For each worksheet, get the command type, convert into primitive JSON
-    for c, sh_name in enumerate(xl_in.get_sheet_names()):
+    for c, sh_name in enumerate(xl_in.sheetnames):
         issues = []
         total_issues = []  # type: List[Issue]
-        sh_in = xl_in.get_sheet_by_name(sh_name)
+        sh_in = xl_in[sh_name]
 
         c_type = None
         c_label = None
@@ -356,22 +356,23 @@ def binary_mask_from_worksheet(sh_in, only_numbers=True):
     return m
 
 
-def get_codes_all_statistical_datasets(source, dataset_manager):
-    """
-    Obtain a list of datasets available from a source
-    If no source is specified, all the sources are queried
-    For each dataset, the source, the name, the periods available, an example command and a description are obtained
-
-    :param source:
-    :param dataset_manager: It is a DataSourceManager
-    :return: A Dataframe with the list of datasets
-    """
-    lst2 = []
-    for r, k in enumerate(dataset_manager.get_datasets(source)):
-        if len(k) == 4:
-            src = k[3]
-        else:
-            src = ""
-        lst2.append((k[0], k[1], k[2], src))
-    return pd.DataFrame(data=lst2, columns=["Dataset ID", "Description", "URN", "Data Source"])
+# def get_codes_all_statistical_datasets(source, dataset_manager):
+#     """
+#     Obtain a list of datasets available from a source
+#     If no source is specified, all the sources are queried
+#     For each dataset, the source, the name, the periods available, an example command and a description are obtained
+#
+#     :param source:
+#     :param dataset_manager: It is a DataSourceManager
+#     :return: A Dataframe with the list of datasets
+#     """
+#     lst2 = []
+#     # TODO Probably "get_datasets" will not work as expected. It returns a tuple (Source, list of datasets)
+#     for r, k in enumerate(dataset_manager.get_datasets(source)):
+#         if len(k) == 4:
+#             src = k[3]
+#         else:
+#             src = ""
+#         lst2.append((k[0], k[1], k[2], src))
+#     return pd.DataFrame(data=lst2, columns=["Dataset ID", "Description", "URN", "Data Source"])
 

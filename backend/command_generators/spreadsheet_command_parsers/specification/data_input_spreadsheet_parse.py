@@ -1,8 +1,8 @@
 import regex as re
-
 from uncertainties import ufloat_fromstr
 from pint.errors import UndefinedUnitError
 
+from backend.command_generators.basic_elements_parser import simple_ident
 from backend.common.helper import create_dictionary, case_sensitive
 from backend import ureg
 from backend.command_generators import basic_elements_parser
@@ -89,27 +89,40 @@ def parse_data_input_command(sh, area, processors_type, state):
         flags = 0
     for kc in known_columns:
         cre[kc[0]] = re.compile(kc[0], flags=flags)
-    col_map = {}  # Internal (standardized) column name to column index in the worksheet (freedom in the order of columns)
-    taxa_cols = create_dictionary()  # Not recognized columns are considered freely named categories, attributes or tags
-    lst_taxa_cols = []  # List of attributes or tags (keys of the previous dictionary)
+    col_names = {}
+    standard_cols = {}  # Internal (standardized) column name to column index in the worksheet (freedom in the order of columns)
+    attribute_cols = create_dictionary()  # Not recognized columns are considered freely named categories, attributes or tags
+    attributes = []  # List of attributes or tags (keys of the previous dictionary)
+    col_allows_dataset = create_dictionary()  # If the column allows the reference to a dataset dimension
     for c in range(area[2], area[3]):
         col_name = sh.cell(row=area[0], column=c).value
+        if not col_name:
+            continue
+
+        col_names[c] = col_name
+
         # Match
         found = False
         for kc in known_columns:
             res = cre[kc[0]].search(col_name)
             if res:
-                if kc[1] in col_map:
+                if kc[1] in standard_cols:
                     issues.append((2, "Cannot repeat column name '" + col_name +"' (" + kc[0] +") in data input command '" + processors_type + "'"))
                 else:
-                    col_map[kc[1]] = c
+                    standard_cols[kc[1]] = c
+                    col_names[c] = kc[1]  # Override column name with pseudo column name for standard columns
+                    if col_names[c].lower() in ["factor", "value", "time", "geolocation"]:
+                        col_allows_dataset[col_names[c]] = True
+                    else:
+                        col_allows_dataset[col_names[c]] = False
                     found = True
                 break
         if not found:
-            if col_name not in taxa_cols:
+            if col_name not in attribute_cols:
                 # TODO Check valid col_names. It must be a valid Variable Name
-                taxa_cols[col_name] = c
-                lst_taxa_cols.append(col_name)
+                attribute_cols[col_name] = c
+                attributes.append(col_name)
+                col_allows_dataset[col_name] = True
             else:
                 issues.append((2, "Cannot repeat column name '" + col_name + "' in data input command '" + processors_type + "'"))
 
@@ -117,18 +130,22 @@ def parse_data_input_command(sh, area, processors_type, state):
 
     # Check if there are mandatory columns missing
 
-    # TODO There could be combinations of columns changing the character of mandatory
-    # TODO For instance, if only structure, no Value would is needed
+    # TODO There could be combinations of columns which change the character of mandatory of some columns
+    # TODO For instance, if we are only specifying structure, Value would not be needed
     for kc in known_columns:
         # "kc[2]" is the flag indicating if the column is mandatory or not
         # col_map contains standard column names present in the worksheet
-        if kc[2] and kc[1] not in col_map:
+        if kc[2] and kc[1] not in standard_cols:
             some_error = True
             issues.append((3, "Column name '" + kc[0] +"' must be specified in data input command '" + processors_type + "'"))
 
     # If there are errors, do not continue
     if some_error:
         return None, issues
+
+    processor_attribute_exclusions = create_dictionary()
+    processor_attribute_exclusions["scale"] = None  # Exclude these attributes when characterizing the processor
+    processor_attributes = [t for t in attributes if t not in processor_attribute_exclusions]
 
     # SCAN rows
     lst_observations = []  # List of ALL observations. -- Main outcome of the parse operation --
@@ -140,19 +157,65 @@ def parse_data_input_command(sh, area, processors_type, state):
     set_referenced_datasets = create_dictionary()  # Dictionary of datasets to be embedded into the result (it is a job of the execution part)
     processors_taxa = create_dictionary()  # Correspondence "processor" -> taxa (to avoid changes in this correspondence)
 
+    dataset_column_rule = basic_elements_parser.dataset_with_column
+    values = [None]*area[3]
+    # LOOP OVER EACH ROW
     for r in range(area[0] + 1, area[1]):  # Scan rows (observations)
         # Each row can specify: the processor, the factor, the quantity and qualities about the factor in the processor
         #                       It can also specify a "flow+containment hierarchy" relation
 
         row = {}  # Store parsed values of the row
 
-        taxa = {}  # Store attributes or taxa of the row
+        taxa = create_dictionary()  # Store attributes or taxa of the row
 
         referenced_dataset = None  # Once defined in a row, it cannot change!!
-        # If the flow type is decomposed, compose it first
-        for c in col_map:
-            value = sh.cell(row=r, column=col_map[c]).value
-            is_reference = False
+        # Scan the row first, looking for the dataset. The specification is allowed in certain columns:
+        # attribute_cols and some standard_cols
+        already_processed = create_dictionary()
+        for c in range(area[2], area[3]):
+            if c in col_names:
+                value = sh.cell(row=r, column=c).value
+                if isinstance(value, str) and value.startswith("#"):
+                    col_name = col_names[c]
+                    if col_allows_dataset[col_name]:
+                        if not referenced_dataset:
+                            try:
+                                ast = basic_elements_parser.string_to_ast(dataset_column_rule, value[1:])
+                                if len(ast["parts"]) == 2:
+                                    referenced_dataset = ast["parts"][0]
+                                    # Remove the dataset variable. It will be stored in "_referenced_dataset"
+                                    value = "#" + ast["parts"][1]
+                                else:
+                                    some_error = True
+                                    issues.append((3, "The first dataset reference of the row must contain the "
+                                                      "dataset variable name and the dimension name, row " + str(r)))
+
+                                # Mark as processed
+                                already_processed[col_name] = None
+                            except:
+                                some_error = True
+                                issues.append((3, "Column '" + col_name + "' has an invalid dataset reference '" + value + "', in row " + str(r)))
+                        else:
+                            try:
+                                ast = basic_elements_parser.string_to_ast(simple_ident, value[1:])
+                                # Mark as processed
+                                already_processed[col_name] = None
+                            except:
+                                some_error = True
+                                issues.append((3, "Column '" + col_name + "' has an invalid dataset reference '" + value + "', in row " + str(r)))
+                        if col_name in standard_cols:
+                            row[col_name] = value
+                        else:
+                            taxa[col_name] = value
+
+                values[c] = value
+
+        # TODO If the flow type is decomposed, compose it first
+        for c in standard_cols:
+            if c in already_processed:
+                continue
+
+            value = values[standard_cols[c]]
 
             # != "" or not
             if value is None or (value is not None and value == ""):
@@ -205,31 +268,12 @@ def parse_data_input_command(sh, area, processors_type, state):
                     some_error = True
                     issues.append((3, "ff_type must be one of :"+', '.join(allowed_ff_types)+", in row " + str(r)))
             elif c == "value":
-                # DS reference allowed <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
-                if isinstance(value, str):
-                    is_reference = value.startswith("#")
-                    if is_reference:  # Remove the # to check the syntax
-                        value = value[1:]
-                if is_reference:
-                    ast = basic_elements_parser.string_to_ast(basic_elements_parser.h_name, value)
-                    # Obtain and check dataset name
-                    for p in ast["parts"]:
-                        if p["type"] == "dataset":
-                            if referenced_dataset:
-                                if p["name"] != referenced_dataset:
-                                    some_error = True
-                                    issues.append((3, "The dataset in column 'Value' ("+p["name"]+") does not match "
-                                                      "the previously defined dataset '"+referenced_dataset+", in row " + str(r)))
-                            else:
-                                referenced_dataset = ast
-                            break
-                else:
-                    if not isinstance(value, str):
-                        value = str(value)
-                    # Expression allowed. Check syntax only. It can refer to parameters.
-                    ast = basic_elements_parser.string_to_ast(basic_elements_parser.expression, value)
-                    # TODO Check existence of used variables
-                    # TODO basic_elements_parser.ast_evaluator(ast, state, None, issues, "static")
+                if not isinstance(value, str):
+                    value = str(value)
+                # Expression allowed. Check syntax only. It can refer to parameters.
+                ast = basic_elements_parser.string_to_ast(basic_elements_parser.expression, value)
+                # TODO Check existence of used variables
+                # TODO basic_elements_parser.ast_evaluator(ast, state, None, issues, "static")
             elif c == "unit":
                 # It must be a recognized unit. Check with Pint
                 try:
@@ -250,54 +294,14 @@ def parse_data_input_command(sh, area, processors_type, state):
                 # TODO A valid pedigree specification
                 pass
             elif c == "time":
-                # Allow DS reference <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
-                if isinstance(value, str):
-                    is_reference = value.startswith("#")
-                    if is_reference:  # Remove the # to check the syntax
-                        value = value[1:]
-                if is_reference:
-                    ast = basic_elements_parser.string_to_ast(basic_elements_parser.h_name, value)
-                    # Obtain and check dataset name
-                    for p in ast["parts"]:
-                        if p["type"] == "dataset":
-                            if referenced_dataset:
-                                if p["name"] != referenced_dataset:
-                                    some_error = True
-                                    issues.append((3, "The dataset in column 'Time' ("+p["name"]+") does not match "
-                                                      "the previously defined dataset '"+referenced_dataset+", in row " + str(r)))
-                            else:
-                                referenced_dataset = p["name"]
-                            break
-                else:
-                    # A valid time specification. Possibilities: Year, Month-Year / Year-Month, Time span (two dates)
-                    if not isinstance(value, str):
-                        value = str(value)
-                    ast = basic_elements_parser.string_to_ast(basic_elements_parser.time_expression, value)
+                # A valid time specification. Possibilities: Year, Month-Year / Year-Month, Time span (two dates)
+                if not isinstance(value, str):
+                    value = str(value)
+                ast = basic_elements_parser.string_to_ast(basic_elements_parser.time_expression, value)
             elif c == "geolocation":
-                # Allow DS reference <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
-                # TODO Quite complex specification. It can be a reference. Some values are
-                # TODO allowed: country, region, geographic coordinates (decimal or degrees) relative to WGS84 ellipsoid
-                if isinstance(value, str):
-                    is_reference = value.startswith("#")
-                    if is_reference: # Remove the # to check the syntax
-                        value = value[1:]
-                if is_reference:
-                    ast = basic_elements_parser.string_to_ast(basic_elements_parser.h_name, value)
-                    # Obtain and check dataset name
-                    for p in ast["parts"]:
-                        if p["type"] == "dataset":
-                            if referenced_dataset:
-                                if p["name"] != referenced_dataset:
-                                    some_error = True
-                                    issues.append((3, "The dataset in column 'Geolocation' ("+p["name"]+") does not match "
-                                                      "the previously defined dataset '"+referenced_dataset+", in row " + str(r)))
-                            else:
-                                referenced_dataset = p["name"]
-                            break
-                else:
-                    # A valid GEO specification
-                    # ast = basic_elements_parser.string_to_ast(basic_elements_parser.geo_expression, value)
-                    pass
+                # A valid GEO specification
+                # ast = basic_elements_parser.string_to_ast(basic_elements_parser.geo_expression, value)
+                pass
             elif c == "source":
                 # TODO Who or what provided the information. It can be formal or informal. Formal can be references
                 pass
@@ -306,66 +310,39 @@ def parse_data_input_command(sh, area, processors_type, state):
                 pass
 
             # Store the parsed value
-            if isinstance(value, str):
-                row[c] = ("#" if is_reference else "") + value
-            else:
-                row[c] = value
+            row[c] = value
 
-        for c in taxa_cols:
-            value = sh.cell(row=r, column=taxa_cols[c]).value
+        for c in attribute_cols:
+            if c in already_processed:
+                continue
+
+            value = values[attribute_cols[c]]
 
             # != "" or not
             if not value:
                 taxa[c] = None
                 continue  # Skip the rest of the iteration!
 
-            # Allow DS (dataset) reference <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
             # TODO Check value. Valid identifier, no whitespace
-            if isinstance(value, str):
-                is_reference = value.startswith("#")
-                if is_reference:  # Remove the # to check the syntax
-                    value = value[1:]
-            if is_reference:
-                taxa[c] = None
-                ast = basic_elements_parser.string_to_ast(basic_elements_parser.h_name, value)
-                # Obtain and check dataset name
-                for p in ast["parts"]:
-                    if p["type"] == "dataset":
-                        if referenced_dataset:
-                            if p["name"] != referenced_dataset:
-                                some_error = True
-                                issues.append((3, "The dataset in column 'Geolocation' (" + p["name"] + ") does not match "
-                                                                                                        "the previously defined dataset '" + referenced_dataset + ", in row " + str(
-                                    r)))
-                        else:
-                            referenced_dataset = p["name"]
-                        break
-            else:
-                # Validate "value", it has to be a simple ID
-                try:
-                    if not isinstance(value, str):
-                        value = str(value)
-                    basic_elements_parser.simple_ident.parseString(value, parseAll=True)
-                except:
-                    value = None
-                    some_error = True
-                    issues.append((3,
-                                   "The value in column '" + c + "' has to be a simple identifier: start with letter, then letters, numbers and '_', no whitespace, in row " + str(
-                                       r)))
+            # Validate "value", it has to be a simple ID
+            try:
+                if not isinstance(value, str):
+                    value = str(value)
+                basic_elements_parser.simple_ident.parseString(value, parseAll=True)
+            except:
+                value = None
+                some_error = True
+                issues.append((3,
+                               "The value in column '" + c + "' has to be a simple identifier: start with letter, then letters, numbers and '_', no whitespace, in row " + str(
+                                   r)))
 
-                taxa[c] = value
+            taxa[c] = value
 
-                # Disable the registration of taxa. If a Dataset reference is used, there is no way to register
-                # taxa at parse time (the dataset is still not obtained). Leave it for the execution
-                if c not in set_taxa:
-                    set_taxa[c] = create_dictionary()
-                set_taxa[c][value] = None
-
-            # # Store the parsed value
-            # if isinstance(value, str):
-            #     row[c] = ("#" if is_reference else "") + value
-            # else:
-            #     row[c] = value
+            # Disable the registration of taxa. If a Dataset reference is used, there is no way to register
+            # taxa at parse time (the dataset is still not obtained). Leave it for the execution
+            if c not in set_taxa:
+                set_taxa[c] = create_dictionary()
+            set_taxa[c][value] = None
 
         # Now that individual columns have been parsed, do other things
 
@@ -374,8 +351,12 @@ def parse_data_input_command(sh, area, processors_type, state):
 
         # If "processor" not specified, concatenate taxa columns in order to generate an automatic name
         # (excluding the processor type)
+        p_taxa = taxa.copy()
+        for k in processor_attribute_exclusions:
+            if k in p_taxa: del p_taxa[k]
+
         if "processor" not in row:
-            row["processor"] = "_".join([str(taxa[t]) for t in lst_taxa_cols if t in taxa])  # TODO Which order? (the current is "order of appearance"; maybe "alphabetical order" would be better option)
+            row["processor"] = "_".join([str(taxa[t]) for t in processor_attributes])  # TODO Which order? (the current is "order of appearance"; maybe "alphabetical order" would be better option)
         # Add as "taxa" the processor type (which is an optional input parameter to this function)
         if processors_type:
             taxa["_processors_type"] = processors_type
@@ -383,11 +364,11 @@ def parse_data_input_command(sh, area, processors_type, state):
         row["taxa"] = taxa
         # Store taxa if the processor still does not have it
         if row["processor"] not in processors_taxa:
-            processors_taxa[row["processor"]] = taxa  # "::".join([taxa[t] for t in lst_taxa_cols])
+            processors_taxa[row["processor"]] = p_taxa  # "::".join([taxa[t] for t in lst_taxa_cols])
         else:
             # Taxa should be the same for each "processor". Error if different
             t = processors_taxa[row["processor"]]
-            if t != taxa:
+            if t != p_taxa:
                 issues.append((3, "The processor '"+row["processor"]+"' has different taxa assigned, in row "+str(r)))
 
         # Register new processor names, pedigree templates, and variable names
@@ -404,6 +385,7 @@ def parse_data_input_command(sh, area, processors_type, state):
 
     label = "Processors " + processors_type
     content = {"factor_observations": lst_observations,
+               "processor_attributes": processor_attributes,
                "processors": [k for k in set_processors],
                "pedigree_templates": [k for k in set_pedigree_templates],
                "factors": [k for k in set_factors],

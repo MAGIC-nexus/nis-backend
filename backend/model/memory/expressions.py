@@ -7,8 +7,8 @@ class Variable:
     """ Used by ExpressionsEvaluationEngine to represent variables or parameters """
     def __init__(self, name):
         self._name = name
-        self._type = None  # Parameter, factor, taxon, factortaxon, indicator
-        self._origin = None  # The original object (Parameter, Factor, Taxon, FactorTaxon, Indicator)
+        self._type = None  # Parameter, factor, taxon, factortype, indicator
+        self._origin = None  # The original object (Parameter, Factor, Taxon, FactorType, Indicator)
         self._values = []  # List of tuples (Literal, Expression). Expression refers to the one that caused obtaining the value, if None it is a "given", using
         # List of expressions where the variable appears. Each element is a tuple (expression, left|right).
         # "left"  if the variable appears to the left
@@ -46,7 +46,7 @@ class Expression:
             self._expression_string = e
         else:
             self._expression_string = None
-        self._origin = None  # The original object (QualifiedQuantityExpression, Factor, FactorTaxon, Taxon, TODO: Mapping)
+        self._origin = None  # The original object (QualifiedQuantityExpression, Factor, FactorType, Taxon, TODO: Mapping)
         self._vars = None  # Variables mentioned in the expression
 
     @property
@@ -89,7 +89,7 @@ class Expression:
             lst.append( get_factor_name(entity.factor) + "=" + entity.expression )
         elif isinstance(entity, Heterarchy):
             # TODO Find connections from and connections to
-            # TODO Check that the hierarchy is of Taxon or FactorTaxon
+            # TODO Check that the hierarchy is of Taxon or FactorType
             lst = add_taxon_hierarchy(entity)
         elif isinstance(entity, Indicator):
             # TODO This will probably require functions to select a variable number of processors

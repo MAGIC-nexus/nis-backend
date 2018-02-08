@@ -1,4 +1,7 @@
+import base64
+import uuid
 from abc import ABCMeta, abstractmethod  # Abstract Base Class
+
 import pandas as pd
 import logging
 
@@ -280,6 +283,7 @@ class State:
                 ds = datasets[ds_name]
                 if isinstance(ds.data, pd.DataFrame):
                     ds.data = serialize_dataframe(ds.data)
+
         return serialize_from_object(self)
 
     @staticmethod
@@ -292,10 +296,11 @@ class State:
         state = deserialize_to_object(st)
         # Iterate all namespaces
         for ns in state.list_namespaces():
-            glb_idx, p_sets, hh, datasets, mappings = get_case_study_registry_objects(state, ns)
-            if glb_idx:
+            glb_idx = state.get("_glb_idx", ns)
+            if isinstance(glb_idx, dict):
                 glb_idx = PartialRetrievalDictionary().from_pickable(glb_idx)
                 state.set("_glb_idx", glb_idx)
+            glb_idx, p_sets, hh, datasets, mappings = get_case_study_registry_objects(state, ns)
             # TODO Deserialize DataFrames
             # In datasets
             for ds_name in datasets:
@@ -323,7 +328,7 @@ def get_case_study_registry_objects(state, namespace=None):
     p_sets = state.get("_processor_sets", namespace)
     if not p_sets:
         p_sets = create_dictionary()
-        state.set("_processors_sets", p_sets, namespace)
+        state.set("_processor_sets", p_sets, namespace)
 
     # Hierarchies Dict
     hh = state.get("_hierarchies", namespace)
@@ -604,3 +609,21 @@ list command_executors, find an Excel expression
 """
 
 
+class LocallyUniqueIDManager:
+    class __LocallyUniqueIDManager:
+        def __init__(self, c: int = 0):
+            self.val = c
+        def get_new_id(self, inc):
+            return base64.a85encode(uuid.uuid1().bytes).decode("ascii")
+        def __str__(self):
+            return repr(self) + self.val
+    instance = None
+    def __init__(self, arg=0):
+        if not LocallyUniqueIDManager.instance:
+            LocallyUniqueIDManager.instance = LocallyUniqueIDManager.__LocallyUniqueIDManager(arg)
+        else:
+            LocallyUniqueIDManager.instance.val = arg
+    def get_new_id(self, inc: int = 1):
+        return self.instance.get_new_id(inc)
+    def __getattr__(self, name):
+        return getattr(self.instance, name)

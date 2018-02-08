@@ -25,7 +25,7 @@ if __name__ == '__main__':
     print("Executing locally!")
     os.environ["MAGIC_NIS_SERVICE_CONFIG_FILE"] = "./nis_local.conf"
 
-from backend.common.helper import generate_json
+from backend.common.helper import generate_json, strcmp, obtain_dataset_source
 from backend.model.rdb_persistence.persistent import *
 from backend.common.create_database import create_pg_database_engine, create_monet_database_engine
 from backend.restful_service import app
@@ -34,7 +34,7 @@ from backend.command_generators.json import create_command
 from backend.command_executors.specification.metadata_command import generate_dublin_core_xml
 from backend.domain import State
 from backend.domain.workspace import InteractiveSession, CreateNew, ReproducibleSession, \
-    execute_command_generator, convert_generator_to_native
+    execute_command_container, convert_generator_to_native
 from backend.restful_service import nis_api_base, nis_client_base, nis_external_client_base, log_level, \
     tm_default_users, \
     tm_authenticators, \
@@ -43,9 +43,9 @@ from backend.restful_service import nis_api_base, nis_client_base, nis_external_
     tm_case_study_version_statuses
 from backend.restful_service.serialization import serialize, deserialize
 from backend.external_data.data_source_manager import DataSourceManager
-
 from backend.external_data.data_sources.eurostat_bulk import Eurostat
 from backend.external_data.data_sources.faostat import FAOSTAT
+
 
 # #####################################################################################################################
 # >>>> BOOT TIME. FUNCTIONS AND CODE <<<<
@@ -612,7 +612,8 @@ def reproducible_session_open():
         buffer = bytes(io.BytesIO(request.get_data()).getbuffer())
         content_type = request.headers["Content-Type"]
 
-    read_parameters(json.loads(buffer))
+    if buffer:
+        read_parameters(json.loads(buffer))
     if not uuid2 and not read_uuid_state and not create_new and not allow_saving:
         read_parameters(request.form)
         if not uuid2 and not read_uuid_state and not create_new and not allow_saving:
@@ -726,7 +727,7 @@ def reproducible_session_append_single_command():  # Receive a JSON or CSV comma
         # Read content type header AND infer "generator_type"
         content_type = request.headers["Content-Type"]
         if content_type.lower() in ["application/json", "text/json", "text/csv"]:
-            generator_type = "primitive"
+            generator_type = "native"
 
         # Read binary content
         if len(request.files) > 0:
@@ -1347,7 +1348,7 @@ def case_study_version(cs_uuid, v_uuid):  # Information about a case study versi
             st = State()  # Zero State, execute all commands in sequence
             for ws in act_sess:
                 for c in ws.commands:
-                    execute_command_generator(st, c)
+                    execute_command_container(st, c)
 
         # List command_executors lista -> diccionario ("data": {}, "children": [ ... ])
         lst_cmds = []
@@ -1578,9 +1579,12 @@ def case_study_version_variables(cs_uuid, v_uuid):  # List of variables defined 
             # List all available variables, from state. A list of dictionaries "name", "type" and "namespace"
             lst = []
             for n in isess._state.list_namespaces():
+                # Add ALL variables EXCEPT the internal ones (which start with "_")
                 lst.extend([{"name": t[0],
                              "type": str(type(t[1])),
-                             "namespace": n} for t in isess._state.list_namespace_variables(n)])
+                             "namespace": n} for t in isess._state.list_namespace_variables(n) if not t[0].startswith("_")
+                            ]
+                           )
 
             r = build_json_response(lst, 200)
         else:
@@ -1865,41 +1869,60 @@ def data_sources():
     if isess and isinstance(isess, Response):
         return isess
 
+    # TODO Authentication, authorization
 
-@app.route(nis_api_base + "/sources/<id>", methods=["GET"])
-def data_source(id):
+    # Enumerate sources
+    dsm = backend.data_source_manager
+    lst = dsm.get_supported_sources()
+
+    return build_json_response(dict(sources=lst))
+
+
+@app.route(nis_api_base + "/sources/<source_id>", methods=["GET"])
+@app.route(nis_api_base + "/sources/<source_id>/databases/", methods=["GET"])
+def data_source_databases(source_id):
     # Recover InteractiveSession
     isess = deserialize_isession_and_prepare_db_session()
     if isess and isinstance(isess, Response):
         return isess
 
+    # Enumerate source databases
+    dsm = backend.data_source_manager
+    if source_id == "-":
+        source_id = None
+    lst = dsm.get_databases(source_id)
 
-@app.route(nis_api_base + "/sources/<id>/databases/", methods=["GET"])
-def data_source_databases(id):
+    ret_lst = []
+    for i in lst:
+        ret_lst.append(dict(source=i[0], databases=[dict(code=c.code, description=c.description) for c in i[1]]))
+
+    return build_json_response(ret_lst)
+
+
+@app.route(nis_api_base + "/sources/<source_id>/databases/<database_id>", methods=["GET"])
+@app.route(nis_api_base + "/sources/<source_id>/databases/<database_id>/datasets/", methods=["GET"])
+def data_source_database_datasets(source_id, database_id):
     # Recover InteractiveSession
     isess = deserialize_isession_and_prepare_db_session()
     if isess and isinstance(isess, Response):
         return isess
 
+    # Enumerate source+database datasets
+    dsm = backend.data_source_manager
+    if source_id == "-":
+        source_id = None
+        database_id = None
+    if database_id == "-":
+        database_id = None
+    lst = dsm.get_datasets(source_id, database_id)
 
-@app.route(nis_api_base + "/sources/<id>/databases/<database_id>", methods=["GET"])
-def data_source_database(id, database_id):
-    # Recover InteractiveSession
-    isess = deserialize_isession_and_prepare_db_session()
-    if isess and isinstance(isess, Response):
-        return isess
-
-
-@app.route(nis_api_base + "/sources/<id>/databases/<database_id>/datasets/", methods=["GET"])
-def data_source_database_datasets(id, database_id):
-    # Recover InteractiveSession
-    isess = deserialize_isession_and_prepare_db_session()
-    if isess and isinstance(isess, Response):
-        return isess
+    return build_json_response([dict(source=i[0],
+                                     datasets=[dict(code=j[0], description=j[1]) for j in i[1]]) for i in lst]
+                               )
 
 
-@app.route(nis_api_base + "/sources/<id>/databases/<database_id>/datasets/<dataset_id>", methods=["OPTIONS"])
-def data_source_database_dataset_parameters(id, database_id, dataset_id):
+@app.route(nis_api_base + "/sources/<source_id>/databases/<database_id>/datasets/<dataset_id>", methods=["GET"])
+def data_source_database_dataset_detail(source_id, database_id, dataset_id):
     """
     Return a JSON with the method "GET" and the possible values for the dimensions
     Also parameters to return a table of tuples or a precomputed pivot table
@@ -1914,6 +1937,36 @@ def data_source_database_dataset_parameters(id, database_id, dataset_id):
     isess = deserialize_isession_and_prepare_db_session()
     if isess and isinstance(isess, Response):
         return isess
+
+    dsm = backend.data_source_manager
+    if source_id == "-":
+        source_id = None
+        database_id = None
+    if database_id == "-":
+        database_id = None
+    if not dataset_id:
+        raise Exception("It is mandatory to define the dataset name when requesting the dataset parameters")
+
+    if not source_id:
+        source_id = obtain_dataset_source(dataset_id)
+
+    ds = dsm.get_dataset_structure(source_id, dataset_id)
+    dims = []
+    for d in ds.dimensions:
+        cl = []
+        if d.code_list:
+            # CodeList has one or more levels ".levels" property
+            # CodeListLevel has zero or more Codes ".codes" property
+            for level in d.code_list.levels:
+                for code in level.codes:
+                    cl.append(dict(code=code.code, description=code.description, level=level.code))
+
+        dims.append(dict(code=d.code, description=d.description, is_time=d.is_time, is_measure=d.is_measure, attributes=d.attributes, code_list=cl))
+
+    d = dict(id=ds.id, code=ds.code, description=ds.description, data_dictionary=ds.data_dictionary, attributes=ds.attributes,
+             dimensions=dims)
+
+    return build_json_response(d)
 
 
 @app.route(nis_api_base + "/sources/<id>/databases/<database_id>/datasets/<dataset_id>", methods=["GET"])

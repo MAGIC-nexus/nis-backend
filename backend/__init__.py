@@ -11,7 +11,7 @@ engine = None
 data_engine = None
 
 # Data source manager
-data_source_manager = None
+data_source_manager = None  # type: DataSourceManager
 
 # REDIS
 redis = None

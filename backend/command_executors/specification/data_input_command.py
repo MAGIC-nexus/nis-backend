@@ -1,7 +1,10 @@
 import json
 
+from backend.common.helper import create_dictionary
 from backend.domain import IExecutableCommand, State, get_case_study_registry_objects
-from backend.model.memory.musiasem_concepts import FactorTaxon, Observer, FactorInProcessorType, \
+from backend.command_generators import basic_elements_parser
+from backend.model.memory.musiasem_concepts_helper import create_quantitative_observation
+from backend.model.memory.musiasem_concepts import FactorType, Observer, FactorInProcessorType, \
     Processor, \
     Factor, FactorQuantitativeObservation, QualifiedQuantityExpression, \
     FlowFundRoegenType, ProcessorsSet, HierarchiesSet, allowed_ff_types
@@ -56,138 +59,135 @@ class DataInputCommand(IExecutableCommand):
                 internal = False
                 incoming = False
 
-            # CREATE FactorTaxon (if it does not exist). A Type of Observable
-            ft_key = {"_type": "FactorTaxon", "_name": row["factor"]}
-            ft = glb_idx.get(ft_key)
-            if not ft:
-                ft = FactorTaxon(row["factor"],  #
-                                 parent=None, hierarchy=None,
-                                 tipe=roegen_type,  #
-                                 tags=None,  # No tags
-                                 attributes=None,  # No attributes
-                                 expression=None  # No expression
-                                 )
-                glb_idx.put(ft_key, ft)
+            # Split "taxa" attributes. "scale" corresponds to the observation
+            p_attributes = row["taxa"].copy()
+            if "scale" in p_attributes:
+                other_attrs = create_dictionary()
+                other_attrs["scale"] = p_attributes["scale"]
+                del p_attributes["scale"]
+            else:
+                other_attrs = None
 
-            # CREATE processor (if it does not exist). An Observable
-            p_key = {"_type": "Processor", "_name": row["processor"]}
-            p_key.update(row["taxa"])
-            # if "_processors_type" in p_key:
-            #     del p_key["_processors_type"]
-            p = glb_idx.get(p_key)
-            if not p:
-                p = Processor(row["processor"],
-                              external=False,  # TODO Is it an external processor??
-                              location=None,
-                              tags=None,
-                              attributes=row["taxa"]
-                              )
-                glb_idx.put(p_key, p)
-                p_set.append(p)  # Appends the processor to the processor set ONLY if it does not exist
+            # CREATE FactorType (if it does not exist). A Type of Observable
+            p, ft, f, o = create_quantitative_observation(
+                glb_idx,
+                factor=row["processor"]+":"+row["factor"],
+                value=row["value"], unit=row["unit"],
+                observer=row["source"],
+                spread=row["uncertainty"] if "uncertainty" in row else None,
+                assessment=row["assessment"] if "assessment" in row else None,
+                pedigree=row["pedigree"] if "pedigree" in row else None,
+                pedigree_template=row["pedigree_template"] if "pedigree_template" in row else None,
+                relative_to=row["relative_to"] if "relative_to" in row else None,
+                time=row["time"] if "time" in row else None,
+                geolocation=None,
+                comments=row["comments"] if "comments" in row else None,
+                tags=None,
+                other_attributes=other_attrs,
+                proc_aliases=None,
+                proc_external=False,  # TODO
+                proc_attributes=p_attributes,
+                proc_location=None,
+                ftype_roegen_type=roegen_type,
+                ftype_attributes=None,
+                fact_external=not internal,
+                fact_incoming=incoming,
+                fact_location=row["geolocation"] if "geolocation" in row else None
+            )
+            if p_set.append(p, glb_idx):  # Appends codes to the pset if the processor was not member of the pset
                 p_set.append_attributes_codes(row["taxa"])
 
-            # CREATE Observer, the ANALYST, for the ProcessorObservations
-            author = state.get("_identity")
-            if not author:
-                author = "_anonymous"
+            # author = state.get("_identity")
+            # if not author:
+            #     author = "_anonymous"
+            #
+            # oer = glb_idx.get(Observer.partial_key(author, registry=glb_idx))
+            # if not oer:
+            #     oer = Observer(author, "Current user" if author != "_anonymous" else "Default anonymous user")
+            #     glb_idx.put(oer.key(glb_idx), oer)
+            # else:
+            #     oer = oer[0]
+        # -----------------------------------------------------------------------------------------------------
 
-            oer_key = {"_type": "Observer", "_name": author}
-            oer = glb_idx.get(oer_key)
-            if not oer:
-                oer = Observer(author, "Current user" if author != "_anonymous" else "Default anonymous user")
-                glb_idx.put(oer_key, oer)
-
-            # Create ProcessorObservation
-            # - For now, structural aspects of the processor
-            # - Existence observation is not needed (the mere declaration without relations does not affect calculations)
-            # -
-            # TODO Use "level", "parent". If they are specified, create a ProcessorObservation and a relation
-            # TODO po = ProcessorObservation(p, oer, tags=None, attributes=None)
-
-            # CREATE Factor (if it does not exist). An Observable
-            f_key = {"_type": "Factor", "_name": row["processor"] + "|" + row["factor"]}
-            f = glb_idx.get(f_key)
-            if not f:
-                f = Factor(row["factor"],
-                           p,
-                           in_processor_type=FactorInProcessorType(external="", incoming=""),
-                           taxon=ft,
-                           location=None,
-                           tags=None,
-                           attributes=None)
-                glb_idx.put(f_key, f)
-
-            # CREATE the Observer of the Quantity
-            oer_key = {"_type": "Observer", "_name": row["source"]}
-            oer = glb_idx.get(oer_key)
-            if not oer:
-                oer = Observer(row["source"])
-                glb_idx.put(oer_key, oer)
-
-            # >>>>>>>>>>>>>>>>>>> FINALLY, ADD FactorObservation <<<<<<<<<<<<<<<<<<<<<<<<<<<<
-            qq = QualifiedQuantityExpression(row["value"]+row["unit"])
-            # Creates and Inserts also
-            fo = FactorQuantitativeObservation.create_and_append(v=qq,
-                                                                 factor=f,
-                                                                 observer=oer,
-                                                                 tags=None,
-                                                                 attributes={"relative_to": row["relative_to"],
-                                                                 "time": row["time"],
-                                                                 "geolocation": row["geolocation"] if "geolocation" in row else None,
-                                                                 "spread": row["uncertainty"] if "uncertainty" in row else None,
-                                                                 "assessment": row["assessment"] if "assessment" in row else None,
-                                                                 "pedigree": row["pedigree"] if "pedigree" in row else None,
-                                                                 "pedigree_template": row["pedigree_template"] if "pedigree_template" in row else None,
-                                                                 "comments": row["comments"] if "comments" in row else None
-                                                                 }
-                                                                 )
+        glb_idx, p_sets, hh, datasets, mappings = get_case_study_registry_objects(state)
 
         # TODO Check semantic validity, elaborate issues
         issues = []
 
-        glb_idx, p_sets, hh, datasets, mappings = get_case_study_registry_objects(state)
-
+        p_set_name = self._name.split(" ")[1] if self._name.lower().startswith("processor") else self._name
         if self._name not in p_sets:
-            p_set = ProcessorsSet(self._name)
-            p_sets[self._name] = p_set
+            p_set = ProcessorsSet(p_set_name)
+            p_sets[p_set_name] = p_set
         else:
-            p_set = p_sets[self._name]
+            p_set = p_sets[p_set_name]
 
         # Store code lists (flat "hierarchies")
         for h in self._content["code_lists"]:
             # TODO If some hierarchies already exist, check that they grow (if new codes are added)
-            hh.append(h, self._content["code_lists"][h])
+            if h not in hh:
+                hh[h] = []
+            hh[h].extend(self._content["code_lists"][h])
+
+        dataset_column_rule = basic_elements_parser.dataset_with_column
+
+        processor_attributes = self._content["processor_attributes"]
 
         # Read each of the rows
-        for r in self._content["rows"]:
+        for i, r in enumerate(self._content["factor_observations"]):
             # Create processor, hierarchies (taxa) and factors
             # Check if the processor exists. Two ways to characterize a processor: name or taxa
             """
+            ABOUT PROCESSOR NAME
             The processor can have a name and/or a set of qualifications, defining its identity
-            The name can be assumed to be one more qualifications concatenated
+            If not defined, the name can be assumed to be the qualifications, concatenated
             Is assigning a name for all processors a difficult task? 
-            * In the specification moment it can get in the middle
+            * In the specification moment, it can get in the middle
             * When operating it is not so important
-            * If taxa allow obtaining the processor the name is optional
+            * If taxa identify uniquely the processor, name is optional, automatically obtained from taxa
             * The benefit is that it can help reducing hierarchic names
             * It may help in readability of the case study
-            * Automatic naming from taxa? From the columns, concatenate
             
             """
-            # TODO If a row contains a reference to a dataset, expand it
-            def dataset_referenced(r):
-                return False
-
-            if dataset_referenced(r):
-                # TODO Obtain dataset
-                # ds = obtain_dataset(r)
-                # # TODO Prepare non changing fields from the row
-                # fixed_dict = prepared_constant_fields(r)
-                # for r2 in ds:
-                #     r3 = r2.copy().update(fixed_dict)
-                #     process_row(r3)
-                pass
+            # If a row contains a reference to a dataset, expand it
+            if "_referenced_dataset" in r:
+                if r["_referenced_dataset"] in datasets:
+                    ds = datasets[r["_referenced_dataset"]]  # Obtain dataset
+                else:
+                    ds = None
+                    issues.append((3, "Dataset '" + r["_referenced_dataset"] + "' is not declared. Row "+str(i)))
             else:
+                ds = None
+            if ds:
+                # Obtain a dict to map columns to dataset columns
+                fixed_dict = {}
+                var_dict = {}
+                var_taxa_dict = {}
+                for k in r:  # Iterate through columns in row "r"
+                    if k == "taxa":
+                        for t in r[k]:
+                            if r[k][t].startswith("#"):
+                                var_taxa_dict[t] = r[k][t][1:]
+                        fixed_dict["taxa"] = r["taxa"].copy()
+                    elif k in ["_referenced_dataset", "_processor_type"]:
+                        continue
+                    elif not r[k].startswith("#"):
+                        fixed_dict[k] = r[k]  # Does not refer to the dataset
+                    else:  # Starts with "#"
+                        if k != "processor":
+                            var_dict[k] = r[k][1:]  # Dimension
+                        else:
+                            fixed_dict[k] = r[k]  # Special
+                # Iterate the dataset (a pd.DataFrame), row by row
+                for r_num, r2 in ds.data.iterrows():
+                    r_exp = fixed_dict.copy()
+                    r_exp.update({k: str(r2[v.lower()]) for k, v in var_dict.items()})
+                    if var_taxa_dict:
+                        taxa = r_exp["taxa"]
+                        taxa.update({k: r2[v.lower()] for k, v in var_taxa_dict.items()})
+                        if r_exp["processor"].startswith("#"):
+                            r_exp["processor"] = "_".join([str(taxa[t]) for t in processor_attributes if t in taxa])
+                    process_row(r_exp)
+            else:  # Literal values
                 process_row(r)
 
         return issues, None

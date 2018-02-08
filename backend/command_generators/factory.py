@@ -21,7 +21,7 @@ from backend.command_generators.json import commands_generator_from_native_json
 """
 
 
-def command_generator_parser_factory(generator_type, file_type, file, state):
+def commands_container_parser_factory(generator_type, file_type, file, state):
     """
     Returns a generator appropriate to parse "file" and generate command_executors
 

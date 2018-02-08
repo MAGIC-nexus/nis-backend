@@ -1,6 +1,117 @@
 import json
+from anytree import Node
 
-from backend.domain import IExecutableCommand
+from backend.domain import IExecutableCommand, get_case_study_registry_objects
+from backend.common.helper import obtain_dataset_metadata, strcmp, create_dictionary, obtain_dataset_source
+from backend.model.memory.musiasem_concepts import Mapping
+
+
+def convert_code_list_to_hierarchy(cl, as_list=False):
+    """
+    Receives a list of codes. Codes are sorted lexicographically (to include numbers).
+
+    Two types of coding schemes are supported by assuming that trailing zeros can be ignored to match parent -> child
+    relations. The first is uniformly sized codes (those with trailing zeros). The second is growing length codes.
+
+    Those with length less than others but common prefix are parents
+
+    :param cl:
+    :param as_list: if True, return a flat tree (all nodes are siblings, descending from a single root)
+    :return:
+    """
+
+    def can_be_child(parent_candidate, child_candidate):
+        # Strip zeros to the right, from parent_candidate, and
+        # check if the child starts with the resulting substring
+        return child_candidate.startswith(parent_candidate.rstrip("0"))
+
+    root = Node("")
+    path = [root]
+    code_to_node = create_dictionary()
+    for c in sorted(cl):
+        if as_list:
+            n = Node(c, path[-1])
+        else:
+            found = False
+            while len(path) > 0 and not found:
+                if can_be_child(path[-1].name, c):
+                    found = True
+                else:
+                    path.pop()
+            if c.rstrip("0") == path[-1].name:
+                # Just modify (it may enter here only in the root node)
+                path[-1].name = c
+                n = path[-1]
+            else:
+                # Create node and append it to the active path
+                n = Node(c, path[-1])
+                path.append(n)
+        code_to_node[c] = n  # Map the code to the node
+
+    return root, code_to_node
+
+
+def map_codelists(src, dst, corresp, dst_tree=False) -> (list, set):
+    """
+    Obtain map of two code lists
+    If the source is a tree, children of a mapped node are assigned to the same mapped node
+    The same source may be mapped more than once, to different nodes
+    The codes from the source not mapped, are stored in "unmapped"
+
+    :param src: source full code list
+    :param dst: destination full code list
+    :param corresp: list of tuples with the correspondence
+    :param dst_tree: Is the dst code list a tree?
+    :return: List of tuples (source code, target code), set of unmapped codes
+    """
+
+    def assign(n: str, v: str):
+        """
+        Assign a destination code name to a source code name
+        If the source has children, assign the same destination to children, recursively
+
+        :param n: Source code name
+        :param v: Destination code name
+        :return:
+        """
+        mapped.add(n, v)
+        if n in unmapped:
+            unmapped.remove(n)
+        for c in cn_src[n].children:
+            assign(c.name, v)
+
+    unmapped = set(src)
+    r_src, cn_src = convert_code_list_to_hierarchy(src, as_list=True)
+    if dst_tree:
+        r_dst, cn_dst = convert_code_list_to_hierarchy(dst)
+    else:
+        cn_dst = create_dictionary()
+        for i in dst:
+            cn_dst[i] = None  # Simply create the entry
+    mapped = create_dictionary(multi_dict=True)  # MANY TO MANY
+    for t in corresp:
+        if t[0] in cn_src and t[1] in cn_dst:
+            # Check that t[1] is a leaf node. If not, ERROR
+            if isinstance(cn_dst[t[1]], Node) and len(cn_dst[t[1]].children) > 0:
+                # TODO ERROR: the target destination code is not a leaf node
+                pass
+            else:
+                # Node and its children (recursively) correspond to t[1]
+                assign(t[0], t[1])
+
+    for k in sorted(unmapped):
+        print("Unmapped: " + k)
+    # for k in sorted(r):
+    #     print(k+" -> "+r[k])
+
+    # Convert mapped to a list of tuples
+    # Upper case
+    mapped_lst = []
+    for k in mapped:
+        for i in mapped.getall(k):
+            mapped_lst.append((k, i))
+
+    return mapped_lst, unmapped
 
 
 class MappingCommand(IExecutableCommand):
@@ -9,9 +120,52 @@ class MappingCommand(IExecutableCommand):
         self._content = None
 
     def execute(self, state: "State"):
-        # TODO Read mapping
-        # TODO Obtain the origin dataset Metadata
+        some_error = False
+        issues = []
+        # Read mapping parameters
+        origin_dataset = self._content["origin_dataset"]
+        origin_dimension = self._content["origin_dimension"]
+        destination = self._content["destination"]
+        map = self._content["map"]  # [{o, to: [{d, e}]}]
+        # Obtain the origin dataset Metadata, obtain the code list
+        dims, attrs, meas = obtain_dataset_metadata(origin_dataset)
+        if origin_dimension not in dims:
+            some_error = True
+            issues.append((3, "The origin dimension '"+origin_dimension+"' does not exist in dataset '"+origin_dataset+"'"))
+        else:
+            dim = dims[origin_dimension]
+            # Check all codes exist
+            src_code_list = [c for c in dim.code_list]
+            dst_code_set = set()
+            many_to_one_list = []
+            for i in map:
+                o = i["o"]
+                for j in i["to"]:
+                    d = j["d"]
+                    dst_code_set.add(d)
+                    many_to_one_list.append((o, d))
+            hierarchical_code = True
+            if hierarchical_code:
+                mapped, unmapped = map_codelists(src_code_list, list(dst_code_set), many_to_one_list)
+            else:
+                # Literal. All codes on the left MUST exist
+                mapped = many_to_one_list
+                for i in mapped:
+                    o = i["o"]
+                    if o not in dim.code_list:
+                        some_error = True
+                        issues.append((3, "The origin category '" + o + "' does not exist in dataset dimension '" + origin_dataset + "." +origin_dimension + "'"))
+
+        if some_error:  # Issues at this point are errors, return if there are any
+            return issues, None
+
+        # Create and store the mapping
+        glb_idx, p_sets, hh, datasets, mappings = get_case_study_registry_objects(state)
+        mappings[self._name] = Mapping(self._name, obtain_dataset_source(origin_dataset), origin_dataset, origin_dimension, destination, mapped)
+
         # TODO If the categories to the left are not totally covered, what to do?
+        # TODO - If a non-listed category appears, remove the line
+        # TODO - If a non-listed category appears, leave the target column NA
 
         # Store it in State
         # If there are datasets matching the origin, JOIN

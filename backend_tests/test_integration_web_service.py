@@ -206,7 +206,8 @@ class TestHighLevelUseCases(unittest.TestCase):
         r = a.post(nis_api_base + "/isession/rsession", data={"create_new": "case_study", "allow_saving": "True"})
         self.assertEqual(r.status_code, 204)
         # Send Spreadsheet file: store and execute it.
-        with open("/home/rnebot/input_file.xlsx", "rb") as f:
+        file_path = os.path.dirname(os.path.abspath(__file__))
+        with open(file_path + "/z_input_files/input_file.xlsx", "rb") as f:
             b = f.read()
         r = a.post(nis_api_base + "/isession/rsession/generator?execute=True&register=True",
                    data={'file': (io.BytesIO(b), "input_file.xlsx")},
@@ -290,4 +291,42 @@ class TestHighLevelUseCases(unittest.TestCase):
         pass
 
     def test_list_case_studies_3(self):
+        pass
+
+
+class TestLowerLevelUseCases(unittest.TestCase):
+
+    # ## Called before and after methods in the class are to be executed ###
+    @classmethod
+    def setUpClass(cls):
+        print('In setUpClass()')
+        # Alternative:
+        # HighLevelUseCases.app = RequestsClient("http://localhost:5000")
+        TestHighLevelUseCases.app = app.test_client()
+
+    @classmethod
+    def tearDownClass(cls):
+        print('In tearDownClass()')
+
+    # ######## Called before and after each method ##############
+
+    def setUp(self):
+        super().setUp()
+        print('\nIn setUp()')
+
+    def tearDown(self):
+        print('In tearDown()')
+        super().tearDown()
+
+    def test_001_obtain_dataset_parameters_json(self):
+        # TODO Obtain a JSON with one of the cacheable datasets parameters
+        pass
+
+    def test_002_obtain_dataset_parameters_csv(self):
+        # TODO Obtain a CVV with one of the cacheable datasets parameters
+        # TODO It can be copied to a spreadsheet
+        pass
+
+    def test_003_enumerate_all_datasets(self):
+        # TODO Obtain a list of all datasets: source, dataset_code, description (if available)
         pass

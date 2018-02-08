@@ -1,9 +1,8 @@
+import json
 from collections import namedtuple
-
 from typing import List
-
 from sqlalchemy import Column, Integer, String, Unicode, Boolean, ForeignKey
-from sqlalchemy import orm
+from sqlalchemy import orm, event
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.orm import relationship, backref
 
@@ -166,8 +165,20 @@ class Code(ORMBase): # A single value and its description for a Dimension
     level_id = Column(Integer, ForeignKey(CodeListLevel.id))
     level = relationship(CodeListLevel, backref=backref("codes", cascade="all, delete-orphan"))
 
-    children = Column(Unicode) # postgresql.JSONB)  # List of codes totalling this code
-    parents = Column(Unicode) # postgresql.JSONB)  # List of codes aggregating this code
+    children = Column(Unicode)  # postgresql.JSONB)  # List of codes totalling this code
+    parents = Column(Unicode)  # postgresql.JSONB)  # List of codes aggregating this code
+
+
+@event.listens_for(Code, 'before_insert')
+def code_before_insert(mapper, connection, target):
+    target.children = json.dumps(target.children) if target.children else None
+    target.parents = json.dumps(target.parents) if target.parents else None
+
+
+@event.listens_for(Code, "load")
+def code_after_load(target, context):
+    target.parents = json.loads(target.parents) if target.parents else {}
+    target.children = json.loads(target.children) if target.children else {}
 
 
 class Concept(ORMBase):  # Concepts are independent of datasets
@@ -190,6 +201,18 @@ class Concept(ORMBase):  # Concepts are independent of datasets
     code_list = relationship(CodeList, backref=backref("concept", cascade="all, delete-orphan"))
 
 
+@event.listens_for(Concept, 'before_insert')
+def concept_before_insert(mapper, connection, target):
+    target.code_list_emb = json.dumps(target.code_list_emb) if target.code_list_emb else None
+    target.attributes = json.dumps(target.attributes) if target.attributes else None
+
+
+@event.listens_for(Concept, "load")
+def concept_after_load(target, context):
+    target.attributes = json.loads(target.attributes) if target.attributes else {}
+    target.code_list_emb = json.loads(target.code_list_emb) if target.code_list_emb else {}
+
+
 # --------------------------------------------
 
 class DataSource(ORMBase):  # Eurostat, OECD, FAO, ...
@@ -199,6 +222,16 @@ class DataSource(ORMBase):  # Eurostat, OECD, FAO, ...
     name = Column(String(32))
     description = Column(String(1024))
     data_dictionary = Column(Unicode) # postgresql.JSONB)  # "Metadata"
+
+
+@event.listens_for(DataSource, 'before_insert')
+def datasource_before_insert(mapper, connection, target):
+    target.data_dictionary = json.dumps(target.data_dictionary) if target.data_dictionary else None
+
+
+@event.listens_for(DataSource, "load")
+def datasource_after_load(target, context):
+    target.data_dictionary = json.loads(target.data_dictionary) if target.data_dictionary else {}
 
 
 class Database(ORMBase): # A data source can have one or more databases
@@ -213,15 +246,25 @@ class Database(ORMBase): # A data source can have one or more databases
     data_source = relationship(DataSource)
 
 
+@event.listens_for(Database, 'before_insert')
+def database_before_insert(mapper, connection, target):
+    target.data_dictionary = json.dumps(target.data_dictionary) if target.data_dictionary else None
+
+
+@event.listens_for(Database, "load")
+def database_after_load(target, context):
+    target.data_dictionary = json.loads(target.data_dictionary) if target.data_dictionary else {}
+
+
 class Dataset(ORMBase): # A database has many datasets
     __tablename__ = "dc_datasets"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     code = Column(String(128))
     description = Column(String(1024))
-    data_dictionary = Column(Unicode) # postgresql.JSONB)  # "Metadata"
+    data_dictionary = Column(Unicode)  # postgresql.JSONB)  # "Metadata"
 
-    attributes = Column(Unicode) # postgresql.JSONB)
+    attributes = Column(Unicode)  # postgresql.JSONB)
 
     database_id = Column(Integer, ForeignKey(Database.id))
     database = relationship(Database)
@@ -235,6 +278,18 @@ class Dataset(ORMBase): # A database has many datasets
     @orm.reconstructor
     def init_on_load(self):
         self.data = None
+
+
+@event.listens_for(Dataset, 'before_insert')
+def dataset_before_insert(mapper, connection, target):
+    target.data_dictionary = json.dumps(target.data_dictionary) if target.data_dictionary else None
+    target.attributes = json.dumps(target.attributes) if target.attributes else None
+
+
+@event.listens_for(Dataset, "load")
+def dataset_after_load(target, context):
+    target.attributes = json.loads(target.attributes) if target.attributes else {}
+    target.data_dictionary = json.loads(target.data_dictionary) if target.data_dictionary else {}
 
 
 class Dimension(ORMBase):  # A dimension is a concept linked to a dataset. It can be a Measure (a Measure is a kind of Dimension)
@@ -260,6 +315,18 @@ class Dimension(ORMBase):  # A dimension is a concept linked to a dataset. It ca
     code_list = relationship(CodeList, backref=backref("dimension", cascade="all, delete-orphan"))
 
 
+@event.listens_for(Dimension, 'before_insert')
+def dimension_before_insert(mapper, connection, target):
+    target.code_list_emb = json.dumps(target.code_list_emb) if target.code_list_emb else None
+    target.attributes = json.dumps(target.attributes) if target.attributes else None
+
+
+@event.listens_for(Dimension, "load")
+def dimension_after_load(target, context):
+    target.attributes = json.loads(target.attributes) if target.attributes else {}
+    target.code_list_emb = json.loads(target.code_list_emb) if target.code_list_emb else {}
+
+
 class Store(ORMBase): # Location for one or more datasets. Datasets point to Stores, also a dataset can be in multiple locations
     __tablename__ = "dc_ds_stores"
 
@@ -268,6 +335,16 @@ class Store(ORMBase): # Location for one or more datasets. Datasets point to Sto
 
     dataset_id = Column(Integer, ForeignKey(Dataset.id))
     dataset = relationship(Dataset)
+
+
+@event.listens_for(Store, 'before_insert')
+def store_before_insert(mapper, connection, target):
+    target.parameters = json.dumps(target.parameters) if target.parameters else None
+
+
+@event.listens_for(Store, "load")
+def store_after_load(target, context):
+    target.parameters = json.loads(target.parameters) if target.parameters else {}
 
 
 """
