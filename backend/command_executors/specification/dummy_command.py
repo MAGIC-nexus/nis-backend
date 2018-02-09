@@ -1,5 +1,5 @@
 import json
-from backend.domain import IExecutableCommand
+from backend.model_services import IExecutableCommand
 
 
 class DummyCommand(IExecutableCommand):

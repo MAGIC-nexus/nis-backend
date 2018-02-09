@@ -337,7 +337,7 @@ def string_to_ast(rule: ParserElement, input_: str):
 
 
 if __name__ == '__main__':
-    from backend.domain import State
+    from backend.model_services import State
     from dotted.collection import DottedDict
 
     s = "ds.col"

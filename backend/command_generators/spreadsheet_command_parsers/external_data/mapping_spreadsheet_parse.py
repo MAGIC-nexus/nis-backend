@@ -1,6 +1,5 @@
 from backend.common.helper import strcmp, obtain_dataset_source, obtain_dataset_metadata, \
-                                  check_dataset_exists, create_dictionary
-from backend.command_executors.external_data.mapping_command import MappingCommand
+                                      check_dataset_exists, create_dictionary
 from backend.command_generators import basic_elements_parser
 
 
@@ -119,10 +118,10 @@ def parse_mapping_command(sh, area, origin, destination):
     label = content["origin_dataset"] + "." + content["origin_dimension"] + " - " + content["destination"]
     if True:
         return issues, label, content
-    else:
-        if not some_error:
-            cmd = MappingCommand(label)
-            cmd.json_deserialize(content)
-        else:
-            cmd = None
-        return cmd, issues
+    # else:
+    #     if not some_error:
+    #         cmd = MappingCommand(label)
+    #         cmd.json_deserialize(content)
+    #     else:
+    #         cmd = None
+    #     return cmd, issues

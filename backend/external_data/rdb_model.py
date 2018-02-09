@@ -8,7 +8,7 @@ from sqlalchemy.orm import relationship, backref
 
 from backend.common.helper import create_dictionary
 from backend.common.namedlist import namedlist
-from backend.model.rdb_persistence.persistent import ORMBase
+from backend.model.persistent_db.persistent import ORMBase
 
 # Ad-hoc structures
 ConceptImmutable = namedtuple("ConceptTuple", "name istime description attributes code_list")

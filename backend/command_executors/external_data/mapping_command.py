@@ -1,7 +1,7 @@
 import json
 from anytree import Node
 
-from backend.domain import IExecutableCommand, get_case_study_registry_objects
+from backend.model_services import IExecutableCommand, get_case_study_registry_objects
 from backend.common.helper import obtain_dataset_metadata, strcmp, create_dictionary, obtain_dataset_source
 from backend.model.memory.musiasem_concepts import Mapping
 

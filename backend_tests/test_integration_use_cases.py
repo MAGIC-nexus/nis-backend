@@ -2,7 +2,7 @@ import unittest
 import sqlalchemy
 
 # Memory
-from backend.domain.workspace import InteractiveSession, CreateNew
+from backend.model_services.workspace import InteractiveSession, CreateNew
 from backend.command_generators.json import create_command
 from backend.restful_service import tm_default_users, \
     tm_authenticators, \
@@ -11,7 +11,7 @@ from backend.restful_service import tm_default_users, \
     tm_case_study_version_statuses
 
 # Database (ORM)
-from backend.model.rdb_persistence.persistent import *
+from backend.model.persistent_db.persistent import *
 import backend
 
 

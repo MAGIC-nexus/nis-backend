@@ -1,5 +1,5 @@
 from backend.common.helper import obtain_dataset_source, obtain_dataset_metadata, create_dictionary, strcmp
-from backend.domain import get_case_study_registry_objects
+from backend.model_services import get_case_study_registry_objects
 
 
 def parse_etl_external_dataset_command(sh, area, dataset_name, state):

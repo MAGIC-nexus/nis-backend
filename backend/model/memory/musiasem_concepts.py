@@ -1,40 +1,51 @@
 # -*- coding: utf-8 -*-
 
 """
-In-memory model
+Model of MuSIASEM concepts
 
-* Primitives
-* Data structures
-* Commands
+The main meta-concepts are
 
+* Observable. Something on which hypothesis can be performed
+* Observation. A specific hypothesis, in our case in the form of a simple fact, like a qualified quantity or a relation between two or more Observables
+* Observer. An agent producing observations on observables
 
-Hierarchy / list
-Graph (which can be a DAG)
-Node
- Processor
- Factor
-  Flow
-  Fund
-Observation
- Literal
- Expression. Solved expression. Specified / consequence.
+The main MuSIASEM concepts are
 
-Parameter
-Indicator
-Group (list of entities)  <<<
-Geo
-TimeExtent
+* Processor. A Processor in MuSIASEM 2.0
+* FactorType. A type of flow or fund
+* Factor. An instance of FactorType associated to a specific processor
 
-ObservationProcess (Observer)
-Source
+The three are Observables, so Observations can be attached to them. FactorType allow a single Observer for their Relations.
 
+Support concepts
 
-=======
-= RDF =
-=======
+* Heterarchy. A set of categories organized either as a list or as a tree, or as a list of trees (forest?)
+* Mapping. Defines how to obtain a set of "destination categories" from another set of "origin categories"
+  * Currently it is Many to One
+  * Many to Many is being considered
+  * Because mappings are unidirectional (origin to destination), transitivity is implicit
+  * Mapping of several sets of categories is also being considered (will be useful?)
+* Observations:
+  * QualifiedQuantity. Attached to Factors
+  * Relation. Different kinds: part-of (holoarchy), flow (directed or undirected), upscale, transform (for FactorTypes)
+* Parameter.
+* Indicator. An arithmetic expression embedding some semantics, combining observations on Factors
+* NUSAP. Materialized in a QualifiedQuantity
+  * Number
+  * Unit
+  * Spread
+  * Assessment?
+  * PedigreeTemplate. Allows specifying the Pedigree of a QualifiedQuantity
+* Geolocation
+* TimeExtent
+* ObservationProcess, Source. Is the Observer
+*
+
+=============
+= About RDF =
+=============
 The most flexible approach involves using RDF, RDFlib.
 An interesting paper: "A survey of RDB to RDF translation approaches and tools"
-
 
 """
 
@@ -49,7 +60,7 @@ import logging
 
 from backend.common.helper import create_dictionary, strcmp, PartialRetrievalDictionary, case_sensitive
 from backend.model import ureg
-from backend.domain import State, get_case_study_registry_objects, LocallyUniqueIDManager
+from backend.model_services import State, get_case_study_registry_objects, LocallyUniqueIDManager
 from backend.restful_service import log_level
 
 logger = logging.getLogger(__name__)
@@ -121,60 +132,6 @@ class HeterarchyNode:
     @staticmethod
     def hierarchically_related(p1: "HeterarchyNode", p2: "HeterarchyNode", h: "Heterarchy" =None):
         return p1.get_parent(h) == p2 or p2.get_parent(h) == p1
-
-# Connection = collections.namedtuple("Connection", "source destination hierarchical weight")
-#
-#
-# class Connectable:
-#     """ Connect entities of the same type
-#         For Processor and Factor (Factor=a FactorType in a Processor)
-#         Two types of connection: hierarchy (parent-child) and side
-#         (direct connection, no matter which hierarchical connection there exists)
-#     """
-#     # TODO Possibility of having different "ConnectionSet"s
-#     # TODO Similar to the possibility of HierarchyNodes being members of several hierarchies
-#     # TODO In this case, there would be a base ConnectionSet (None), then additional ones would be
-#     # TODO for options. A ConnectionSet could have tags and attributes, so it would be possible to filter
-#     def __init__(self):
-#         self._connections = []  # type: Connection
-#
-#     @property
-#     def connections(self):
-#         return self._connections
-#
-#     def connect_to(self, other_entity_same_type: "Connectable", h: "Heterarchy" =None, weight: float=1.0):
-#         return Connectable.connect(self, other_entity_same_type, h, weight)
-#
-#     def connect_from(self, other_entity_same_type: "Connectable", h: "Heterarchy" =None, weight: float=1.0):
-#         return Connectable.connect(other_entity_same_type, self, h, weight)
-#
-#     def generate_expression(self):
-#         # TODO If it is a factor, generate expression relating the factors with all the input or (not and) output connections
-#         pass
-#
-#     @staticmethod
-#     def connect(entity: "Connectable", other_entity_same_type: "Connectable", h: "Heterarchy", weight: float):
-#         if other_entity_same_type and type(other_entity_same_type) is not entity.__class__:
-#             raise Exception("The source class is '" + str(entity.__class__) +
-#                             "' while the destination type is '" + str(type(other_entity_same_type)) + "'.")
-#
-#         # TODO Register connections? Good for elaboration of constraints
-#         # TODO If self is FACTOR, check that the direction is compatible with the FactorInProcessorType
-#         # TODO   If NOT, ¿overwrite? ¿issue an error?
-#         # Hierarchical or sequential connection?
-#         if isinstance(entity, Factor):
-#             p1 = entity._processor
-#             p2 = other_entity_same_type._processor
-#         else:
-#             p1 = entity
-#             p2 = other_entity_same_type
-#
-#         hierarchical = HeterarchyNode.hierarchically_related(p1, p2, h)
-#         # TODO If hierarchical==false, check that there is no hierarchical relationship, like grandparent-grandchild or longer
-#         c = Connection(source=entity, destination=other_entity_same_type, hierarchical=hierarchical, weight=weight)
-#         entity._connections.append(c)
-#         other_entity_same_type._connections.append(c)
-#         return c
 
 
 class Identifiable:
@@ -1408,15 +1365,20 @@ class Pedigree:
 # #################################################################################################################### #
 
 
-class Parameter(Nameable):
+class Parameter(Nameable, Identifiable):
     """ A numeric variable changeable directly by an analyst """
     def __init__(self, name):
+        Identifiable.__init__()
         Nameable.__init__(self, name)
+        self._type = None
         self._range = None
         self._description = None
-        self._type = None
-        self._current_value = None
         self._default_value = None
+        self._group = None
+        self._current_value = None
+
+    def key(self, registry: PartialRetrievalDictionary=None):
+        return {"_t": "param", "__o": self.ident}
 
 
 class Benchmark:
@@ -1431,7 +1393,11 @@ class Benchmark:
 
 
 class Indicator:
-    """ A numeric value result of operating several observations
+    """ An arithmetic expression resulting in a numeric value to assess a quality of the SES (SocioEcological System) under study
+    Categorize indicators:
+    * Attached to FactorType
+    * Attached to CaseStudy
+    * Attached to
     """
     # TODO Support for a wildcard indicator. Compute the same operation over all factors of a processor, over all processors.
     # TODO To generate multiple instances of the indicator or a single indicator acumulating many things.
@@ -1456,7 +1422,8 @@ class Mapping:
         self.map = the_map  # List of tuples (pairs) source code, destination code[, expression]
 
 
-# TODO Currently ExternalDataset is not used. Dataset (which can be persisted) is the current choice
+# TODO Currently ExternalDataset is used only in evaluation of expressions. It may be removed because
+# TODO expressions can refer dirctly to State -> datasets
 class ExternalDataset:
     def __init__(self, name, ds: pd.DataFrame):
         self._name = name

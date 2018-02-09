@@ -1,7 +1,7 @@
 from typing import Union, List, Tuple, Optional
 
 from backend.common.helper import PartialRetrievalDictionary, strcmp
-from backend.domain import State, get_case_study_registry_objects
+from backend.model_services import State, get_case_study_registry_objects
 from backend.model.memory.musiasem_concepts import \
     FlowFundRoegenType, FactorInProcessorType, RelationClassType, allowed_ff_types, \
     Processor, FactorType, Observer, Factor, \
@@ -117,8 +117,10 @@ def find_or_create_observable(state: Union[State, PartialRetrievalDictionary],
                 oer = oer[0]
 
     result = None
-
     p = None  # Processor to which the Factor is connected
+    ft = None  # FactorType
+    f = None  # Factor
+
     if p_names and aliases:
         # Create an alias for the Processor
         if isinstance(aliases, str):

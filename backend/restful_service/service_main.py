@@ -26,14 +26,14 @@ if __name__ == '__main__':
     os.environ["MAGIC_NIS_SERVICE_CONFIG_FILE"] = "./nis_local.conf"
 
 from backend.common.helper import generate_json, strcmp, obtain_dataset_source
-from backend.model.rdb_persistence.persistent import *
+from backend.model.persistent_db.persistent import *
 from backend.common.create_database import create_pg_database_engine, create_monet_database_engine
 from backend.restful_service import app
 import backend
 from backend.command_generators.json import create_command
 from backend.command_executors.specification.metadata_command import generate_dublin_core_xml
-from backend.domain import State
-from backend.domain.workspace import InteractiveSession, CreateNew, ReproducibleSession, \
+from backend.model_services import State
+from backend.model_services.workspace import InteractiveSession, CreateNew, ReproducibleSession, \
     execute_command_container, convert_generator_to_native
 from backend.restful_service import nis_api_base, nis_client_base, nis_external_client_base, log_level, \
     tm_default_users, \

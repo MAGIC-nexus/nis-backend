@@ -1,13 +1,13 @@
 import unittest
 import os
 
-from backend.domain import get_case_study_registry_objects
+from backend.model_services import get_case_study_registry_objects
 from backend_tests.test_integration_use_cases import setUpModule, tearDownModule, new_case_study, reset_database
-from backend.domain.workspace import InteractiveSession, CreateNew
+from backend.model_services.workspace import InteractiveSession, CreateNew
 from backend.command_generators.json import create_command
 
 # Database (ORM)
-from backend.model.rdb_persistence.persistent import *
+from backend.model.persistent_db.persistent import *
 import backend
 
 
@@ -102,3 +102,18 @@ class TestCommandFiles(unittest.TestCase):
         # Close interactive session
         isess.close_db_session()
 
+    def test_004_execute_file_four(self):
+        """
+
+        Parameters
+        Simple Expression evaluation in QQs
+
+        :return:
+        """
+
+    def test_005_execute_file_five(self):
+        """
+        Just Structure. From Soslaires.
+
+        :return:
+        """

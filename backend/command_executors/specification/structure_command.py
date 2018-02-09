@@ -1,6 +1,6 @@
 import json
 
-from backend.domain import IExecutableCommand, State, get_case_study_registry_objects
+from backend.model_services import IExecutableCommand, State, get_case_study_registry_objects
 from backend.model.memory.musiasem_concepts import FactorType, Observer, FactorInProcessorType, \
     Processor, \
     Factor, FactorQuantitativeObservation, QualifiedQuantityExpression, \
@@ -137,6 +137,15 @@ class StructureCommand(IExecutableCommand):
     def execute(self, state: "State"):
         """
             Process each of the specified relations, creating the endpoints if they do not exist already
+            {"name": <processor or factor>,
+             "attributes": {"<attr>": "value"},
+             "type": <default relation type>,
+             "dests": [
+                {"name": <processor or factor>,
+                 ["type": <relation type>,]
+                 "weight": <expression resulting in a numeric value>
+                }
+             }
         """
         # Process each record
         for o in self._content["origins"]:

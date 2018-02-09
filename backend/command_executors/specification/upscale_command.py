@@ -3,7 +3,7 @@ import pandas as pd
 import numpy as np
 from openpyxl.chart import reference
 
-from backend.domain import IExecutableCommand, State, get_case_study_registry_objects
+from backend.model_services import IExecutableCommand, State, get_case_study_registry_objects
 from backend.model.memory.musiasem_concepts import Observer, Processor, Factor, \
     ProcessorsRelationUndirectedFlowObservation, ProcessorsRelationPartOfObservation, \
     ProcessorsRelationUpscaleObservation, \

@@ -1,6 +1,6 @@
 import json
 
-from backend.domain import IExecutableCommand
+from backend.model_services import IExecutableCommand
 from backend import data_source_manager as dsm
 
 

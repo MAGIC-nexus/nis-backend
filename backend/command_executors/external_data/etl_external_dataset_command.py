@@ -5,7 +5,7 @@ import pandas as pd
 import numpy as np
 
 import backend
-from backend.domain import IExecutableCommand, get_case_study_registry_objects
+from backend.model_services import IExecutableCommand, get_case_study_registry_objects
 from backend.common.helper import obtain_dataset_metadata, strcmp, create_dictionary
 
 

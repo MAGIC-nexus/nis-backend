@@ -3,29 +3,24 @@
 * Registry of objects. Add, remove, search
 * Support for high level operations: directly create and/or modify objects, calling the specification API. Create connections
 """
-import logging
-
-
+import copy
 import datetime
+import json
+import logging
+import uuid
 from enum import Enum
 from typing import List
-import uuid
-import json
-import copy
 
-from backend.domain import State
-from backend.domain import IExecutableCommand
-from backend.model.rdb_persistence.persistent import (User,
-                                                      CaseStudy,
-                                                      CaseStudyVersion,
-                                                      CaseStudyVersionSession,
-                                                      CommandsContainer,
-                                                      force_load,
-                                                      serialize_from_object,
-                                                      deserialize_to_object
-                                                      )
-from backend.command_generators.factory import commands_container_parser_factory
-from backend.common.helper import PartialRetrievalDictionary, generate_json
+from backend.command_generators.parsers_factory import commands_container_parser_factory
+from backend.model.persistent_db.persistent import (User,
+                                                    CaseStudy,
+                                                    CaseStudyVersion,
+                                                    CaseStudyVersionSession,
+                                                    CommandsContainer,
+                                                    force_load
+                                                    )
+from backend.model_services import IExecutableCommand
+from backend.model_services import State
 
 logger = logging.getLogger(__name__)
 
@@ -406,6 +401,10 @@ class InteractiveSession:
         # TODO Check that the current user has READ access to the case study
         pass
 
+    def get_case_study_version_variables(self, case_study_version: str):
+        """ A tree of variables, by type: processors, flows """
+        pass
+
     def get_case_study_version_variable(self, case_study_version: str, variable: str):
         pass
 
@@ -415,10 +414,10 @@ class InteractiveSession:
     def share_case_study(self, case_study: str, identities: List[str], permission: str):
         pass
 
-    def remove_case_study_share(self, case_study: str, identities: List[str]):
+    def remove_case_study_share(self, case_study: str, identities: List[str], permission: str):
         pass
 
-    def get_case_study_shared(self, case_study: str):
+    def get_case_study_permissions(self, case_study: str):
         pass
 
     def export_case_study_version(self, case_study_version: str):

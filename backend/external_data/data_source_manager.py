@@ -7,7 +7,7 @@ from cachier import cachier
 
 from backend.common.helper import create_dictionary, memoize, strcmp, obtain_dataset_source
 from backend.external_data.rdb_model import DataSource, Database, Dataset
-from backend.model.rdb_persistence.persistent import force_load
+from backend.model.persistent_db.persistent import force_load
 
 
 class IDataSourceManager(metaclass=ABCMeta):

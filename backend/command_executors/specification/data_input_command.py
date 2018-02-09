@@ -1,7 +1,7 @@
 import json
 
 from backend.common.helper import create_dictionary
-from backend.domain import IExecutableCommand, State, get_case_study_registry_objects
+from backend.model_services import IExecutableCommand, State, get_case_study_registry_objects
 from backend.command_generators import basic_elements_parser
 from backend.model.memory.musiasem_concepts_helper import create_quantitative_observation
 from backend.model.memory.musiasem_concepts import FactorType, Observer, FactorInProcessorType, \

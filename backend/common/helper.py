@@ -430,7 +430,7 @@ def get_statistical_dataset_structure(source, dset_name):
 
 
 def obtain_dataset_source(dset_name):
-    # from backend.model.rdb_persistence.persistent import DBSession
+    # from backend.model.persistent_db.persistent import DBSession
     # if not backend.data_source_manager:
     #     backend.data_source_manager = register_external_datasources(app.config, DBSession)
 

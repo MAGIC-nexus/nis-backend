@@ -1,6 +1,7 @@
 import json
 
-from backend.domain import IExecutableCommand
+from backend.model.memory.musiasem_concepts import Parameter
+from backend.model_services import IExecutableCommand, get_case_study_registry_objects
 
 
 class ParametersCommand(IExecutableCommand):
@@ -9,7 +10,24 @@ class ParametersCommand(IExecutableCommand):
         self._content = None
 
     def execute(self, state: "State"):
-        # state.set(self._var_name, self._description)
+        # Obtain global variables in state
+        glb_idx, p_sets, hh, datasets, mappings = get_case_study_registry_objects(state)
+
+        for param in self._content:
+            name = param["name"]
+            p = Parameter(name)
+            "value", "type", "range", "group", "description"
+            if "value" in param:
+                p._default_value = p._current_value = param["value"]
+            if "type" in param:
+                p._type = param["type"]
+            if "range" in param:
+                p._range = param["range"]
+            if "description" in param:
+                p._description = param["description"]
+            if "group" in param:
+                p._group = None
+            state.set()
         return None, None
 
     def estimate_execution_time(self):

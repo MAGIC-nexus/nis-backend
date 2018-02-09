@@ -4,6 +4,7 @@ import backend.common.helper
 from backend.model.memory.expressions import ExpressionsEngine
 from backend.model.memory.musiasem_concepts import *
 from backend.model.memory.musiasem_concepts_helper import *
+from backend.model.memory.musiasem_concepts_helper import _get_observer, _obtain_relation
 
 """ Integration tests for in memory model structures """
 
@@ -194,8 +195,8 @@ class ModelBuildingQuantativeObservations(unittest.TestCase):
              "proc_external": False,
              "proc_location": None,
              "proc_attributes": None,
-             "fact_roegen_type": FlowFundRoegenType.fund,
-             "fact_attributes": None,
+             "ftype_roegen_type": FlowFundRoegenType.fund,
+             "ftype_attributes": None,
              "fact_incoming": True,
              "fact_external": None,
              "fact_location": None
@@ -206,7 +207,7 @@ class ModelBuildingQuantativeObservations(unittest.TestCase):
         create_quantitative_observation(state, "WindFarm:LU", "8800", "m2", **(k.copy()))
         create_quantitative_observation(state, "WindFarm:HA", "660", "hours", **(k.copy()))
         create_quantitative_observation(state, "WindFarm:PC", "2.64", "MW", **(k.copy()))
-        k["fact_roegen_type"] = FlowFundRoegenType.flow
+        k["ftype_roegen_type"] = FlowFundRoegenType.flow
         create_quantitative_observation(state, "WindFarm:WindElectricity", "9.28", "GWh", **(k.copy()))
         create_quantitative_observation(state, "WindFarm:WindElectricity.max_production", "23.2", "GWh", **(k.copy()))
         k["proc_external"] = True
@@ -293,7 +294,6 @@ class ModelBuildingRelationObservations(unittest.TestCase):
         # Check Relations between observables
         rels = glb_idx.get(FactorsRelationDirectedFlowObservation.partial_key(source=farm_lu[0]))
         self.assertEqual(len(rels), 8)
-        glb_idx.get(ProcessorsRelationPartOfObservation)
 
 
 class ModelBuildingProcessors(unittest.TestCase):

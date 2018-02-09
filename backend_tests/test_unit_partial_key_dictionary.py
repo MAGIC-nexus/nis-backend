@@ -3,7 +3,7 @@ import unittest
 import backend.common.helper
 from backend.common.helper import PartialRetrievalDictionary
 from backend.model.memory.musiasem_concepts import Processor, ProcessorsRelationPartOfObservation, Observer
-from backend.model.rdb_persistence.persistent import (
+from backend.model.persistent_db.persistent import (
                                                       serialize_from_object,
                                                       deserialize_to_object
                                                       )

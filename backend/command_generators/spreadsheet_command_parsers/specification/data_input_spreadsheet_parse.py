@@ -6,7 +6,6 @@ from backend.command_generators.basic_elements_parser import simple_ident
 from backend.common.helper import create_dictionary, case_sensitive
 from backend import ureg
 from backend.command_generators import basic_elements_parser
-from backend.command_executors.specification.data_input_command import DataInputCommand
 from backend.model.memory.musiasem_concepts import allowed_ff_types
 
 """

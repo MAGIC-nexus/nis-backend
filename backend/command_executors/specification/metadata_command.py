@@ -4,7 +4,7 @@ from xml.sax.saxutils import escape
 
 from backend import metadata_fields
 from backend.common.helper import create_dictionary
-from backend.domain import IExecutableCommand
+from backend.model_services import IExecutableCommand
 
 
 def generate_dublin_core_xml(content):

@@ -6,7 +6,7 @@ import pandas as pd
 import logging
 
 from backend.common.helper import create_dictionary, PartialRetrievalDictionary
-from backend.model.rdb_persistence.persistent import (
+from backend.model.persistent_db.persistent import (
                                                       serialize_from_object,
                                                       deserialize_to_object
                                                       )

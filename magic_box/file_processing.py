@@ -1766,7 +1766,7 @@ if __name__ == '__main__':
     import collections
     import io
     from backend.external_data.rdb_model import *
-    from backend.model.rdb_persistence.persistent import *
+    from backend.model.persistent_db.persistent import *
 
     # SDMX Concept can be: dimension, attribute or measure. Stored in "metadatasets" associated to a dataset by its name
     app_cfg = collections.namedtuple('App', 'config')
