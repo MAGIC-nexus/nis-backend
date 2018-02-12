@@ -1,4 +1,4 @@
-pandas==0.21.0
+pandas==0.22.0
 typing==3.6.2
 chardet==3.0.4
 Pint==0.8.1
@@ -7,7 +7,7 @@ regex==2017.9.23
 Werkzeug==0.12.2
 multidict==3.3.2
 cubes==1.1
-numpy==1.13.3
+numpy==1.14.0
 xlrd==1.1.0
 matplotlib==2.1.0rc1
 xmltodict==0.11.0
@@ -15,7 +15,9 @@ openpyxl==2.5.0b1
 koala2==0.0.17
 requests==2.18.4
 pyparsing==2.2.0
-pandaSDMX==0.7.0
+pandaSDMX==0.8.2
+sdmx
+pandas_datareader
 Flask==0.12.2
 Flask_Session==0.3.1
 Flask_Cors==3.0.3
@@ -29,6 +31,7 @@ python_magic==0.4.13
 SQLAlchemy==1.2.0b3
 redis
 anytree
+lxml
 jsonpickle==0.9.5
 xmltodict==0.11.0
 cachier==1.2.2

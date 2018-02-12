@@ -45,7 +45,7 @@ from backend.restful_service.serialization import serialize, deserialize
 from backend.external_data.data_source_manager import DataSourceManager
 from backend.external_data.data_sources.eurostat_bulk import Eurostat
 from backend.external_data.data_sources.faostat import FAOSTAT
-
+from backend.external_data.data_sources.oecd import OECD
 
 # #####################################################################################################################
 # >>>> BOOT TIME. FUNCTIONS AND CODE <<<<
@@ -126,7 +126,9 @@ def initialize_databases():
 
 def register_external_datasources(cfg):
     dsm2 = DataSourceManager(session_factory=DBSession)
+    # Eurostat
     dsm2.register_datasource_manager(Eurostat())
+    # FAO
     if 'FAO_DATASETS_DIR' in cfg:
         fao_dir = cfg['FAO_DATASETS_DIR']
     else:
@@ -135,7 +137,10 @@ def register_external_datasources(cfg):
                                            metadata_session_factory=DBSession,
                                            data_engine=backend.data_engine))
 
-    sources = dsm2.get_supported_sources()
+    # OECD
+    dsm2.register_datasource_manager(OECD())
+
+    # sources = dsm2.get_supported_sources()
     return dsm2
 
 
@@ -240,7 +245,7 @@ def serialize_isession_and_close_db_session(sess: InteractiveSession):
     tmp = sess.get_sf()
     sess.set_sf(None)
     sess._reproducible_session = None
-    # Serialize sess._state and sess._identity
+    # Serialize sess.state and sess._identity
     s = jsonpickle.encode(sess)
     flask_session["isession"] = s
     sess.set_sf(tmp)
@@ -704,8 +709,31 @@ def reproducible_session_get_state():  # Return current status of ReproducibleSe
 
     # A reproducible session must be open, signal about it if not
     if isess.reproducible_session_opened():
-        if isess._state:
-            r = build_json_response(jsonpickle.encode(isess._state), 200)
+        if isess.state:
+            r = build_json_response(jsonpickle.encode(isess.state), 200)
+        else:
+            r = build_json_response({}, 204)
+    else:
+        r = build_json_response({"error": "Cannot return state, no opened reproducible session"}, 401)
+
+    return r
+
+
+@app.route(nis_api_base + "/isession/rsession/state_query", methods=["GET"])
+def reproducible_session_query_state():  # Query aspects of State
+    # Recover InteractiveSession
+    isess = deserialize_isession_and_prepare_db_session()
+    if isess and isinstance(isess, Response):
+        return isess
+
+    # A reproducible session must be open, signal about it if not
+    if isess.reproducible_session_opened():
+        if isess.state:
+            # TODO Parse query, execute it, return results
+            # TODO By concept: Datasets, processors, factors, factor types, hierarchies, mappings, ISSUES (extra MuSIASEM, errors in some level: syntax, semantics, solving)
+            # TODO Information: name, quantitites (attached to factors), relations, hierarchy (for hierarchies)
+            # TODO By observer
+            pass
         else:
             r = build_json_response({}, 204)
     else:
@@ -1575,14 +1603,14 @@ def case_study_version_variables(cs_uuid, v_uuid):  # List of variables defined 
                                         )
 
         # A reproducible session must be open, signal about it if not
-        if isess._state:
+        if isess.state:
             # List all available variables, from state. A list of dictionaries "name", "type" and "namespace"
             lst = []
-            for n in isess._state.list_namespaces():
+            for n in isess.state.list_namespaces():
                 # Add ALL variables EXCEPT the internal ones (which start with "_")
                 lst.extend([{"name": t[0],
                              "type": str(type(t[1])),
-                             "namespace": n} for t in isess._state.list_namespace_variables(n) if not t[0].startswith("_")
+                             "namespace": n} for t in isess.state.list_namespace_variables(n) if not t[0].startswith("_")
                             ]
                            )
 
@@ -1623,10 +1651,10 @@ def case_study_version_variable(cs_uuid, v_uuid, name):  # Information about a c
                                         )
 
         # A reproducible session must be open, signal about it if not
-        if isess._state:
+        if isess.state:
             # TODO Parse Variable name can be "namespace'::'name"
             # TODO For now, just the variable name
-            v = isess._state.get(name)
+            v = isess.state.get(name)
             if v:
                 r = build_json_response({name: v}, 200)
             else:
@@ -1912,12 +1940,13 @@ def data_source_database_datasets(source_id, database_id):
     if source_id == "-":
         source_id = None
         database_id = None
-    if database_id == "-":
+    if database_id in ("-", "None"):
         database_id = None
     lst = dsm.get_datasets(source_id, database_id)
 
+    base = request.base_url+"/datasets/"
     return build_json_response([dict(source=i[0],
-                                     datasets=[dict(code=j[0], description=j[1]) for j in i[1]]) for i in lst]
+                                     datasets=[dict(code=j[0], description=j[1], info_url=base+j[0]) for j in i[1]]) for i in lst]
                                )
 
 
@@ -1969,20 +1998,20 @@ def data_source_database_dataset_detail(source_id, database_id, dataset_id):
     return build_json_response(d)
 
 
-@app.route(nis_api_base + "/sources/<id>/databases/<database_id>/datasets/<dataset_id>", methods=["GET"])
-def data_source_database_dataset_query(id, database_id, dataset_id):
-    """
-    This is the most powerful data method, allowing to
-
-    :param id:
-    :param database_id:
-    :param dataset_id:
-    :return:
-    """
-    # Recover InteractiveSession
-    isess = deserialize_isession_and_prepare_db_session()
-    if isess and isinstance(isess, Response):
-        return isess
+# @app.route(nis_api_base + "/sources/<id>/databases/<database_id>/datasets/<dataset_id>", methods=["GET"])
+# def data_source_database_dataset_query(id, database_id, dataset_id):
+#     """
+#     This is the most powerful data method, allowing to
+#
+#     :param id:
+#     :param database_id:
+#     :param dataset_id:
+#     :return:
+#     """
+#     # Recover InteractiveSession
+#     isess = deserialize_isession_and_prepare_db_session()
+#     if isess and isinstance(isess, Response):
+#         return isess
 
 
 def data_processes():
