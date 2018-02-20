@@ -1,8 +1,15 @@
 FROM grahamdumpleton/mod-wsgi-docker:python-3.5
 
+# TODO
+# Rewrite to contain three things:
+# * NIS application. Run using "gunicorn"
+# * R modules
+# * Celery
+# The tool is "supervisor". An example in:
+# https://github.com/pm990320/docker-flask-celery
 #
 #
-# This one is for MOD_WSGI (Apache2) <<<<<<<<<<<<<<<<<<
+# This one container is for MOD_WSGI (Apache2) <<<<<<<<<<<<<<<<<<
 #
 #
 # Build:

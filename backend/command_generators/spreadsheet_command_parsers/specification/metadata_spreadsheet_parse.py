@@ -39,7 +39,7 @@ def parse_metadata_command(sh, area):
                         # Control "value" if the field is controllable
                         cl = {"dimensions": ["water", "energy", "food", "land", "climate"],
                               "subject_topic_keywords": None,
-                              "geographical_level": ["regional", "region", "country", "europe", "sectoral", "sector"],
+                              "geographical_level": ["local", "regional", "region", "country", "europe", "sectoral", "sector"],
                               "geographical_situation": None,  # TODO Read the list of all geographical regions (A long list!!)
                               "restriction_level": ["internal", "confidential", "public"],
                               "language": None,  # TODO Read the list of ALL languages (or just "English"??)

@@ -81,10 +81,10 @@ class UpscaleCommand(IExecutableCommand):
         # df.columns = pd.MultiIndex.from_tuples(columns)
 
         # CREATE the Observer of the Upscaling
-        oer = glb_idx.get(Observer.partial_key(source, registry=glb_idx))
+        oer = glb_idx.get(Observer.partial_key(source))
         if not oer:
             oer = Observer(source)
-            glb_idx.put(oer.key(glb_idx), oer)
+            glb_idx.put(oer.key(), oer)
         else:
             oer = oer[0]
 
@@ -98,11 +98,11 @@ class UpscaleCommand(IExecutableCommand):
 
         # Elaborate the Observations: relational and quantitative
         o1 = ProcessorsRelationPartOfObservation.create_and_append(parent, cloned_child, oer)  # Part-of
-        glb_idx.put(o1.key(glb_idx), o1)
+        glb_idx.put(o1.key(), o1)
         o2 = ProcessorsRelationUndirectedFlowObservation.create_and_append(parent, cloned_child, oer)  # Flow
-        glb_idx.put(o2.key(glb_idx), o2)
+        glb_idx.put(o2.key(), o2)
         o3 = ProcessorsRelationUpscaleObservation.create_and_append(parent, cloned_child, scaled_factor, quantity)  # Upscale
-        glb_idx.put(o3.key(glb_idx), o3)
+        glb_idx.put(o3.key(), o3)
 
         return issues, None
 

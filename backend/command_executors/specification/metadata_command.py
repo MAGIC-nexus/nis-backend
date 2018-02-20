@@ -40,6 +40,7 @@ class MetadataCommand(IExecutableCommand):
         """ The execution creates an instance of a Metadata object, and assigns the name "metadata" to the variable,
             inserting it into "State" 
         """
+        issues = []
         cs = state.get("_case_study")
         state.set("_metadata", self._metadata_dictionary)
         if cs:
@@ -71,6 +72,8 @@ class MetadataCommand(IExecutableCommand):
             if "geographical_level" in self._metadata_dictionary and self._metadata_dictionary["geographical_level"]:
                 cs.geographic_level = ""
                 lst = [i.lower() for i in self._metadata_dictionary["geographical_level"]]
+                if "local" in lst:
+                    cs.geographic_level += "L"
                 if "regional" in lst or "region" in lst:
                     cs.geographic_level += "R"
                 if "country" in lst:
@@ -98,7 +101,7 @@ class MetadataCommand(IExecutableCommand):
             else:
                 cs.internal_code = self._metadata_dictionary["case_study_code"][0]
 
-        return None, None  # Issues, output
+        return issues, None  # Issues, output
 
     def estimate_execution_time(self):
         return 0
@@ -110,7 +113,7 @@ class MetadataCommand(IExecutableCommand):
     def json_deserialize(self, json_input):
         # TODO Check validity
         issues = []
-        if isinstance(json_input, dict):
+        if isinstance(json_input, (dict, list)):
             self._metadata_dictionary = json_input
         else:
             self._metadata_dictionary = json.loads(json_input)

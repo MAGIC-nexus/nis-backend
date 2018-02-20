@@ -1,8 +1,9 @@
 import importlib
+
 from pyparsing import (ParserElement,
                        oneOf, srange, operatorPrecedence, opAssoc,
                        Forward, Regex, Suppress, Literal, Word,
-                       Optional, OneOrMore, ZeroOrMore, Or,
+                       Optional, OneOrMore, ZeroOrMore, Or, alphanums,
                        Combine, Group, delimitedList, nums, quotedString, NotAny
                        )
 
@@ -19,19 +20,26 @@ quote = oneOf('" ''')
 signop = oneOf('+ -')
 multop = oneOf('* / // %')
 plusop = oneOf('+ -')
+processor_factor_separator = Literal(":")
 simple_ident = Word(srange("[a-zA-Z]"), srange("[a-zA-Z0-9_]"))  # Start in letter, then "_" + letters + numbers
+# Relation types
+relation_operator = Or([Literal('|'), Literal('>'), Literal('<'), Literal('<>'), Literal('><'), Literal('||')])
 
 # Basic data types
 integer = Word(nums).setParseAction(lambda t: {'type': 'int', 'value': int(t[0])})
 real = (Combine(Word(nums) + Optional("." + Word(nums))
                 + oneOf("E e") + Optional(oneOf('+ -')) + Word(nums))
         | Combine(Word(nums) + "." + Word(nums))
-        ).setParseAction(lambda t: {'type': 'float', 'value': float(t[0])})
+        ).setParseAction(lambda _s, l, t:
+                                {'type': 'float', 'value': float(t[0])}
+                         )
 string = quotedString.setParseAction(lambda t: {'type': 'str', 'value': t[0]})
 
 # RULES: namespace, parameter list, function call, dataset variable, hierarchical var name
 namespace = simple_ident + Literal("::").suppress()
 expression = Forward()
+expression2 = Forward()
+expression3 = Forward()
 named_parameter = Group(simple_ident + equals.suppress() + expression).setParseAction(lambda t: {'type': 'named_parameter', 'param': t[0][0], 'value': t[0][1]})
 named_parameters_list = delimitedList(named_parameter, ",")
 parameters_list = delimitedList(Or([expression, named_parameter]), ",")
@@ -70,7 +78,7 @@ h_name = (Optional(namespace).setResultsName("namespace") +
                                              }
                            )
 
-# This one is the same as "h_name", but instead of "obj_types" uses "simple_ident": no function calls or datasets allowed
+# This one is similar to "h_name". Instead of "obj_types" uses "simple_ident": no function calls or datasets allowed
 simple_h_name = (Optional(namespace).setResultsName("namespace") +
                  Group(simple_ident + ZeroOrMore(dot.suppress() + simple_ident)).setResultsName("ident")
                  ).setParseAction(lambda _s, l, t: {'type': 'h_var',
@@ -79,11 +87,16 @@ simple_h_name = (Optional(namespace).setResultsName("namespace") +
                                                     }
                                   )
 
-# RULES: Expression
+# simple_hierarchical_name [":" simple_hierarchical_name]
+processor_or_factor_name = (simple_h_name.setResultsName("processor") + Optional(Group(processor_factor_separator.suppress() + simple_h_name).setResultsName("factor"))
+                            ).setParseAction(lambda _s, l, t: {'type': 'pf_name',
+                                                               'processor': t.processor,
+                                                               'factor': t.factor[0] if t.factor else None
+                                                               }
+                                             )
 
-operand = Or([real, integer, string, h_name])
-
-expression << operatorPrecedence(operand,
+# RULES: Expression type 1
+expression << operatorPrecedence(Or([real, integer, string, h_name]), # Operand types
                                  [(signop, 1, opAssoc.RIGHT, lambda _s, l, t: {'type': 'u'+t.asList()[0][0], 'terms': [0, t.asList()[0][1]], 'ops': ['u'+t.asList()[0][0]]}),
                                   (multop, 2, opAssoc.LEFT, lambda _s, l, t: {'type': 'multipliers', 'terms': t.asList()[0][0::2], 'ops': t.asList()[0][1::2]}),
                                   (plusop, 2, opAssoc.LEFT, lambda _s, l, t: {'type': 'adders', 'terms': t.asList()[0][0::2], 'ops': t.asList()[0][1::2]}),
@@ -91,12 +104,48 @@ expression << operatorPrecedence(operand,
                                  lpar=lparen.suppress(),
                                  rpar=rparen.suppress())
 
+# RULES: Expression type 2. Can mention only parameters and numbers
+# (for parameters, namespaces are allowed, and also hierarchical naming)
+# TODO Check if it can be evaluated with "ast_evaluator"
+expression2 << operatorPrecedence(Or([real, integer, simple_h_name]), # Operand types
+                                  [(signop, 1, opAssoc.RIGHT, lambda _s, l, t: {'type': 'u'+t.asList()[0][0], 'terms': [0, t.asList()[0][1]], 'ops': ['u'+t.asList()[0][0]]}),
+                                   (multop, 2, opAssoc.LEFT, lambda _s, l, t: {'type': 'multipliers', 'terms': t.asList()[0][0::2], 'ops': t.asList()[0][1::2]}),
+                                   (plusop, 2, opAssoc.LEFT, lambda _s, l, t: {'type': 'adders', 'terms': t.asList()[0][0::2], 'ops': t.asList()[0][1::2]}),
+                                   ],
+                                  lpar=lparen.suppress(),
+                                  rpar=rparen.suppress())
+
+# RULES: Expression type 3. For hierarchies. Can mention only simple identifiers (codes) and numbers
+expression3 << operatorPrecedence(Or([real, integer, simple_ident]),  # Operand types
+                                  [(signop, 1, opAssoc.RIGHT, lambda _s, l, t: {'type': 'u'+t.asList()[0][0], 'terms': [0, t.asList()[0][1]], 'ops': ['u'+t.asList()[0][0]]}),
+                                   (multop, 2, opAssoc.LEFT, lambda _s, l, t: {'type': 'multipliers', 'terms': t.asList()[0][0::2], 'ops': t.asList()[0][1::2]}),
+                                   (plusop, 2, opAssoc.LEFT, lambda _s, l, t: {'type': 'adders', 'terms': t.asList()[0][0::2], 'ops': t.asList()[0][1::2]}),
+                                   ],
+                                  lpar=lparen.suppress(),
+                                  rpar=rparen.suppress())
+
+# [expression2 (previously parsed)] [relation_operator] processor_or_factor_name
+relation_expression = (Optional(expression2).setResultsName("weight") +
+                       Optional(relation_operator).setResultsName("relation_type") +
+                       processor_or_factor_name.setResultsName("destination")
+                       ).setParseAction(lambda _s, l, t: {'type': 'relation',
+                                                          'name': t.destination,
+                                                          'relation_type': t.relation_type,
+                                                          'weight': t.weight
+                                                          }
+                                        )
+
 # RULES: Level name
 level_name = (simple_ident + Optional(plusop+integer)
-              ).setParseAction(lambda t: {'type': 'level', 'domain': t[0], 'level': t[1][0]+t[1][1] if t[1] else None})
+              ).setParseAction(lambda t: {'type': 'level',
+                                          'domain': t[0],
+                                          'level': (t[1][0]+str(t[2]["value"])) if len(t) > 1 and t[1] else None
+                                          }
+                               )
 
 # RULES: Time expression
 # A valid time specification. Possibilities: Year, Month-Year / Year-Month, Time span (two dates)
+period_name = Or([Literal("Year"), Literal("Semester"), Literal("Quarter"), Literal("Month")])
 four_digits_year = Word(nums, min=4, max=4)
 month = Word(nums, min=1, max=2)
 year_month_separator = oneOf("- /")
@@ -108,14 +157,17 @@ date = Group(Or([four_digits_year.setResultsName("y") +
                 )
              )
 two_dates_separator = oneOf("- /")
-time_expression = (date + Optional(two_dates_separator.suppress()+date)
-                   ).setParseAction(
-                                    lambda _s, l, t:
-                                    {'type': 'time',
-                                     'dates': [{k: int(v) for k, v in d.items()} for d in t]
-                                     }
-                                    )
-
+time_expression = Or([(date + Optional(two_dates_separator.suppress()+date)
+                       ).setParseAction(
+                                       lambda _s, l, t:
+                                       {'type': 'time',
+                                        'dates': [{k: int(v) for k, v in d.items()} for d in t]
+                                        }
+                                       ),
+                      period_name.setParseAction(lambda _s, l, t:
+                                                 {'type': 'time',
+                                                  'period': t[0]})
+                      ])
 # #################################################################################################################### #
 
 # List of Global Functions
@@ -328,7 +380,104 @@ def ast_evaluator(exp, state, obj, issue_lst, evaluation_type):
     return val
 
 
+def ast_to_string(exp):
+    """
+    Elaborate string from expression AST
+
+    :param exp: Input dictionary
+    :param state: State used to obtain variables/objects
+    :param obj: An object used when evaluating hierarchical variables. simple names, functions and datasets are considered members of this object
+    :param issue_lst: List in which issues have to be annotated
+    :param evaluation_type: "numeric" for full evaluation, "static" to return True if the expression can be evaluated
+            (explicitly mentioned variables are defined previously)
+    :return: value (scalar EXCEPT for named parameters, which return a tuple "parameter name - parameter value"
+    """
+    val = None
+    if "type" in exp:
+        t = exp["type"]
+        if t in ("int", "float", "str"):
+            val = str(exp["value"])
+        elif t == "named_parameter":
+            val = str(exp["param"] + "=" + ast_to_string(exp["value"]))
+        elif t == "dataset":
+            # Function parameters and Slice parameters
+            func_params = [ast_to_string(p) for p in exp["func_params"]]
+            slice_params = [ast_to_string(p) for p in exp["slice_params"]]
+
+            val = exp["name"]
+            if func_params:
+                val += "(" + ", ".join(func_params) + ")"
+            if slice_params:
+                val += "[" + ", ".join(slice_params) + "]"
+        elif t == "function":  # Call function
+            # First, obtain the Parameters
+            val = exp["name"]
+            params = []
+            for p in [ast_to_string(p) for p in exp["params"]]:
+                if isinstance(p, tuple):
+                    params.append(p[0] + "=" + p[1])
+                else:
+                    params.append(p)
+            val += "(" + ", ".join(params) + ")"
+        elif t == "h_var":
+            # Evaluate in sequence
+            _namespace = exp["ns"]
+            if _namespace:
+                val = _namespace + "::"
+            else:
+                val = ""
+
+            parts = []
+            for o in exp["parts"]:
+                if isinstance(o, str):
+                    parts.append(o)
+                else:
+                    # Dictionary: function call or dataset access
+                    parts.append(ast_to_string(o))
+            val += ".".join(parts)
+        elif t in ("u+", "u-", "multipliers", "adders"):  # Arithmetic OPERATIONS
+            # Evaluate recursively the left and right operands
+            if t in "u+":
+                current = ""
+            elif t == "u-":
+                current = "-"
+            else:
+                current = ast_to_string(exp["terms"][0])
+
+            for i, e in enumerate(exp["terms"][1:]):
+                following = ast_to_string(e)
+
+                op = exp["ops"][i]
+                if op in ("+", "-", "u+", "u-"):
+                    if current is None:
+                        current = 0
+                    if following is None:
+                        following = 0
+                    if op in ("-", "u-"):
+                        following = "-(" + following + ")"
+
+                    current = "(" + current + ") + (" + following + ")"
+                else:  # Multipliers
+                    if following is None:
+                        following = ""
+                    if current is None:
+                        current = ""
+                    if op == "*":
+                        current = "(" + current + ") * (" + following + ")"
+                    elif op == "/":
+                        current = "(" + current + ") / (" + following + ")"
+                    elif op == "//":
+                        current = "(" + current + ") // (" + following + ")"
+                    elif op == "%":
+                        current = "(" + current + ") % (" + following + ")"
+
+            val = current
+
+    return val
+
+
 def string_to_ast(rule: ParserElement, input_: str):
+    input_ = input_.replace(u'\u2013', '-')  # "En dash" character is replaced by minus
     res = rule.parseString(input_, parseAll=True)
     res = res.asList()[0]
     while isinstance(res, list):
@@ -340,6 +489,8 @@ if __name__ == '__main__':
     from backend.model_services import State
     from dotted.collection import DottedDict
 
+    s = "c1 + c30 - c2 - 10"
+    res = string_to_ast(expression3, s)
     s = "ds.col"
     res = string_to_ast(h_name, s)
 

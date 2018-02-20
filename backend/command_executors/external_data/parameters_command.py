@@ -16,7 +16,6 @@ class ParametersCommand(IExecutableCommand):
         for param in self._content:
             name = param["name"]
             p = Parameter(name)
-            "value", "type", "range", "group", "description"
             if "value" in param:
                 p._default_value = p._current_value = param["value"]
             if "type" in param:
@@ -27,7 +26,7 @@ class ParametersCommand(IExecutableCommand):
                 p._description = param["description"]
             if "group" in param:
                 p._group = None
-            state.set()
+            glb_idx.put(p.key(), p)
         return None, None
 
     def estimate_execution_time(self):
@@ -40,7 +39,7 @@ class ParametersCommand(IExecutableCommand):
     def json_deserialize(self, json_input):
         # TODO Check validity
         issues = []
-        if isinstance(json_input, dict):
+        if isinstance(json_input, (dict, list)):
             self._content = json_input
         else:
             self._content = json.loads(json_input)

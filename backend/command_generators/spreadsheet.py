@@ -1,4 +1,5 @@
 import openpyxl
+
 import io
 # import koala # An Excel files parser elaborating a graph allowing automatic evaluation
 import numpy as np
@@ -11,9 +12,13 @@ from backend import Issue
 from backend.command_generators.json import create_command
 from backend.command_generators.spreadsheet_command_parsers.external_data.mapping_spreadsheet_parse import parse_mapping_command
 from backend.command_generators.spreadsheet_command_parsers.external_data.etl_external_dataset_spreadsheet_parse import parse_etl_external_dataset_command
+from backend.command_generators.spreadsheet_command_parsers.external_data.parameters_spreadsheet_parse import parse_parameters_command
+from backend.command_generators.spreadsheet_command_parsers.specification.hierarchy_spreadsheet_parser import \
+    parse_hierarchy_command
 from backend.command_generators.spreadsheet_command_parsers.specification.metadata_spreadsheet_parse import parse_metadata_command
 from backend.command_generators.spreadsheet_command_parsers.specification.data_input_spreadsheet_parse import parse_data_input_command
 from backend.command_generators.spreadsheet_command_parsers.specification.upscale_spreadsheet_parse import parse_upscale_command
+from backend.command_generators.spreadsheet_command_parsers.specification.structure_spreadsheet_parser import parse_structure_command
 
 global_fill = PatternFill("none")
 
@@ -56,10 +61,11 @@ Comando
     re_processors = re.compile(r"(Processors|Proc)[ _]" + var_name, flags=flags)
     re_hierarchy = re.compile(r"(Taxonomy|Tax|Composition|Comp)[ _]([cpf])[ ]" + var_name, flags=flags)
     re_upscale = re.compile(r"(Upscale|Up)[ _]" + var_name + "[ _]" + var_name, flags=flags)
-    re_relations = re.compile(r"(Relations|Rel)" + var_name, flags=flags)
+    re_relations = re.compile(r"(Grammar|Relations|Rel)[ _]?" + var_name+"?", flags=flags)
     re_transform = re.compile(r"(Transform|Tx)[ _]" + var_name + "[ _]" + var_name, flags=flags)
     re_pedigree_template = re.compile(r"(Pedigree|Ped)[ _]" + var_name, flags=flags)
     re_references = re.compile(r"(References|Ref)[ _]" + var_name, flags=flags)
+    re_parameters = re.compile(r"(Parameters|Params)([ _]" + var_name + ")?", flags=flags)
 
     re_enum = re.compile(r"(Dataset|DS)[ _]" + var_name + "[ _](Enumerate|Enum)", flags=flags)
     re_meta = re.compile(r"(Metadata|MD)[ _]" + var_name, flags=flags)
@@ -99,10 +105,12 @@ Comando
             #             get_codes_all_statistical_datasets(s, dsm)
             #             break
         elif re_meta.search(name):
-            # TODO
             dataset = re_meta.search(name).group(1)
             c_type = "dataset_metadata"
-            c_content = None
+        elif re_parameters.search(name):
+            name = re_parameters.search(name).group(1)
+            c_type = "parameters"
+            issues, c_label, c_content = parse_parameters_command(sh_in, t)
         elif re_data.search(name):
             dataset = re_data.search(name).group(2)
             c_type = "etl_dataset"
@@ -146,13 +154,16 @@ Comando
             c_label = "Upscale child '"+child+"' into parent '"+parent+"'"
             issues, c_label, c_content = parse_upscale_command(sh_in, t, c_label, None)
         elif re_hierarchy.search(name):
-            # TODO Read the hierarchy
+            # Read the hierarchy
             c_type = "hierarchy"
             res = re_hierarchy.search(name)
-            c_label = res.group(1) + ":" + res.group(2) + ":" + res.group(3)
+            h_type = res.group(2)
+            c_label = res.group(3)
+            issues, _, c_content = parse_hierarchy_command(sh_in, t, c_label, h_type)
         elif re_relations.search(name):
-            # TODO Read the content
+            # Read the content
             c_type = "structure"
+            issues, c_label, c_content = parse_structure_command(sh_in, t)
         elif re_transform.search(name):
             c_type = "scale_conversion"
         elif re_pedigree_template.search(name):
@@ -171,7 +182,11 @@ Comando
                 issue = {"sheet_number": c, "sheet_name": sh_name, "c_type": c_type, "type": i[0], "message": i[1]}
                 total_issues.append(issue)
         if errors == 0:
-            cmd, issues = create_command(c_type, c_label, c_content)
+            try:
+                cmd, issues = create_command(c_type, c_label, c_content)
+            except:
+                cmd = None
+                issues = [(3, "Could not create command of type '"+c_type+"'")]
             if issues:
                 for i in issues:
                     issue = {"sheet_number": c, "sheet_name": sh_name, "c_type": c_type, "type": i[0], "message": i[1]}
@@ -182,9 +197,9 @@ Comando
         yield cmd, total_issues
     # yield from []  # Empty generator
 
-# ################################## #
-# Worksheet related helper functions #
-# ################################## #
+# #################################### #
+#  Worksheet related helper functions  #
+# #################################### #
 
 
 def reset_cell_format(sh_writable, r, c):

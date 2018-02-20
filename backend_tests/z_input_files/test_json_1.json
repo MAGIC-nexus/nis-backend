@@ -1,0 +1,66 @@
+[
+    {
+        "command": "etl_dataset",
+        "content": {
+            "agg_funcs": [
+                "average"
+            ],
+            "dataset_name": "nama_10_a64_e",
+            "dataset_source": "Eurostat",
+            "dimensions": [
+                "FREQ",
+                "UNIT",
+                "NACE_R2",
+                "NA_ITEM",
+                "GEO",
+                "TIME_PERIOD"
+            ],
+            "group_by": [
+                "NACE_R2",
+                "GEO",
+                "NA_ITEM"
+            ],
+            "measures": [
+                "OBS_VALUE"
+            ],
+            "result_name": "Eurostat_dataset_name",
+            "where": {
+                "FREQ": [
+                    "A"
+                ],
+                "GEO": [
+                    "ES",
+                    "PT",
+                    "IT"
+                ],
+                "NA_ITEM": [
+                    "EMP_DC",
+                    "SAL_DC",
+                    "SELF_DC"
+                ],
+                "UNIT": [
+                    "THS_HW"
+                ],
+                "endPeriod": 2012,
+                "startPeriod": 2012
+            }
+        },
+        "issues": [
+            {
+                "c_type": "etl_dataset",
+                "message": "No aggregation function specified. Assuming 'average'",
+                "sheet_name": "Dataset_nama_10_a64_e",
+                "sheet_number": 0,
+                "type": 2
+            },
+            {
+                "c_type": "etl_dataset",
+                "message": "No result name specified. Assuming 'Eurostat_dataset_name'",
+                "sheet_name": "Dataset_nama_10_a64_e",
+                "sheet_number": 0,
+                "type": 2
+            }
+        ],
+        "label": null
+    }
+]

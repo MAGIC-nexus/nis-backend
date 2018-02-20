@@ -1,10 +1,16 @@
 import unittest
+
 import os
 
 from backend.model_services import get_case_study_registry_objects
 from backend_tests.test_integration_use_cases import setUpModule, tearDownModule, new_case_study, reset_database
 from backend.model_services.workspace import InteractiveSession, CreateNew
-from backend.command_generators.json import create_command
+from backend.model.memory.musiasem_concepts import Observer, \
+    Processor, FactorType, Factor, \
+    Hierarchy, \
+    FactorQuantitativeObservation, RelationObservation, ProcessorsRelationPartOfObservation, \
+    ProcessorsRelationUndirectedFlowObservation, ProcessorsRelationUpscaleObservation, \
+    FactorsRelationDirectedFlowObservation
 
 # Database (ORM)
 from backend.model.persistent_db.persistent import *
@@ -75,14 +81,14 @@ class TestCommandFiles(unittest.TestCase):
         Test number of processors read for each category, using processor sets and PartialRetrievalDictionary
         :return:
         """
-        file_path = os.path.dirname(os.path.abspath(__file__)) + "/z_input_files/test_spreadsheet_2.xlsx"
-        isess = execute_file(file_path, generator_type="spreadsheet")
-        # Check State of things
-        glb_idx, p_sets, hh, datasets, mappings = get_case_study_registry_objects(isess.state)
-        # Three processor sets
-        self.assertEqual(len(p_sets), 3)
-        # Close interactive session
-        isess.close_db_session()
+        # file_path = os.path.dirname(os.path.abspath(__file__)) + "/z_input_files/test_spreadsheet_2.xlsx"
+        # isess = execute_file(file_path, generator_type="spreadsheet")
+        # # Check State of things
+        # glb_idx, p_sets, hh, datasets, mappings = get_case_study_registry_objects(isess.state)
+        # # Three processor sets
+        # self.assertEqual(len(p_sets), 3)
+        # # Close interactive session
+        # isess.close_db_session()
 
     def test_003_execute_file_three(self):
         """
@@ -93,14 +99,14 @@ class TestCommandFiles(unittest.TestCase):
         Test number of processors read for each category, using processor sets and PartialRetrievalDictionary
         :return:
         """
-        file_path = os.path.dirname(os.path.abspath(__file__)) + "/z_input_files/test_spreadsheet_3_dataset.xlsx"
-        isess = execute_file(file_path, generator_type="spreadsheet")
-        # Check State of things
-        glb_idx, p_sets, hh, datasets, mappings = get_case_study_registry_objects(isess.state)
-        # Three processor sets
-        self.assertEqual(len(p_sets), 1)
-        # Close interactive session
-        isess.close_db_session()
+        # file_path = os.path.dirname(os.path.abspath(__file__)) + "/z_input_files/test_spreadsheet_3_dataset.xlsx"
+        # isess = execute_file(file_path, generator_type="spreadsheet")
+        # # Check State of things
+        # glb_idx, p_sets, hh, datasets, mappings = get_case_study_registry_objects(isess.state)
+        # # Three processor sets
+        # self.assertEqual(len(p_sets), 1)
+        # # Close interactive session
+        # isess.close_db_session()
 
     def test_004_execute_file_four(self):
         """
@@ -110,6 +116,14 @@ class TestCommandFiles(unittest.TestCase):
 
         :return:
         """
+        file_path = os.path.dirname(os.path.abspath(__file__)) + "/z_input_files/test_spreadsheet_4.xlsx"
+        isess = execute_file(file_path, generator_type="spreadsheet")
+        # Check State of things
+        glb_idx, p_sets, hh, datasets, mappings = get_case_study_registry_objects(isess.state)
+        # Three processor sets
+        self.assertEqual(len(p_sets), 3)
+        # Close interactive session
+        isess.close_db_session()
 
     def test_005_execute_file_five(self):
         """
@@ -117,3 +131,62 @@ class TestCommandFiles(unittest.TestCase):
 
         :return:
         """
+        file_path = os.path.dirname(os.path.abspath(__file__)) + "/z_input_files/Soslaires.xlsx"
+        isess = execute_file(file_path, generator_type="spreadsheet")
+        # Check State of things
+        glb_idx, p_sets, hh, datasets, mappings = get_case_study_registry_objects(isess.state)
+        # Four processor sets
+        self.assertEqual(len(p_sets), 4)
+        # Obtain all Observers
+        print("---- Observer ----")
+        oers = glb_idx.get(Observer.partial_key())
+        for i in oers:
+            print(i.name)
+        # Obtain all processors
+        print("---- Processor ----")
+        procs = glb_idx.get(Processor.partial_key())
+        for i in procs:
+            print(i.name)
+        # Obtain all FactorTypes
+        print("---- FactorType ----")
+        fts = glb_idx.get(FactorType.partial_key())
+        for i in fts:
+            print(i.name)
+        # Obtain all Factors
+        print("---- Factor ----")
+        fs = glb_idx.get(Factor.partial_key())
+        for i in fs:
+            print(i.processor.name + ":" + i.taxon.name)
+        # Obtain all Quantitative Observations
+        print("---- Quantities ----")
+        qqs = glb_idx.get(FactorQuantitativeObservation.partial_key())
+        for i in qqs:
+            print(i.factor.processor.name + ":" + i.factor.taxon.name + "= " + str(i.value.expression if i.value else ""))
+        # Obtain all part-of Relation Observations
+        print("---- Part-of relations (P-P) ----")
+        po_rels = glb_idx.get(ProcessorsRelationPartOfObservation.partial_key())
+        for i in po_rels:
+            print(i.parent_processor.name + " \/ " + i.child_processor.name)
+        # Obtain all undirected flow Relation Observations
+        print("---- Undirected flow relations (P-P) ----")
+        uf_rels = glb_idx.get(ProcessorsRelationUndirectedFlowObservation.partial_key())
+        for i in uf_rels:
+            print(i.source_processor.name + " <> " + i.target_processor.name)
+        # Obtain all upscale Relation Observations
+        print("---- Upscale relations (P-P) ----")
+        up_rels = glb_idx.get(ProcessorsRelationUpscaleObservation.partial_key())
+        for i in up_rels:
+            print(i.parent_processor.name + " \/ " + i.child_processor.name + "(" + i.factor_name+ ": " + str(i.quantity) + ")")
+        # Obtain all directed flow Relation Observations
+        print("---- Directed flow relations (F-F) ----")
+        df_rels = glb_idx.get(FactorsRelationDirectedFlowObservation.partial_key())
+        for i in df_rels:
+            print(i.source_factor.processor.name + ":" + i.source_factor.taxon.name + " -> " +
+                  i.target_factor.processor.name + ":" + i.target_factor.taxon.name + (" (" + str(i.weight) + ")" if i.weight else ""))
+        # Obtain all hierarchies
+        print("---- FactorType Hierarchies ----")
+        hies = glb_idx.get(Hierarchy.partial_key())
+        for i in hies:
+            print(i.name)
+        # Close interactive session
+        isess.close_db_session()

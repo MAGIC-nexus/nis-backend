@@ -46,6 +46,10 @@ class DataInputCommand(IExecutableCommand):
                 roegen_type = FlowFundRoegenType.fund
                 internal = True
                 incoming = True
+            elif ft == "ext_in_fund":
+                roegen_type = FlowFundRoegenType.fund
+                internal = False
+                incoming = True
             elif ft == "int_out_flow":
                 roegen_type = FlowFundRoegenType.flow
                 internal = True
@@ -58,6 +62,18 @@ class DataInputCommand(IExecutableCommand):
                 roegen_type = FlowFundRoegenType.flow
                 internal = False
                 incoming = False
+            elif ft == "env_out_flow":
+                roegen_type = FlowFundRoegenType.flow
+                internal = False
+                incoming = False
+            elif ft == "env_in_flow":
+                roegen_type = FlowFundRoegenType.flow
+                internal = False
+                incoming = True
+            elif ft == "env_in_fund":
+                roegen_type = FlowFundRoegenType.fund
+                internal = False
+                incoming = True
 
             # Split "taxa" attributes. "scale" corresponds to the observation
             p_attributes = row["taxa"].copy()
@@ -68,12 +84,14 @@ class DataInputCommand(IExecutableCommand):
             else:
                 other_attrs = None
 
-            # CREATE FactorType (if it does not exist). A Type of Observable
+            # CREATE FactorType, A Type of Observable, IF it does not exist
+            # AND ADD Quantitative Observation
             p, ft, f, o = create_quantitative_observation(
                 glb_idx,
                 factor=row["processor"]+":"+row["factor"],
-                value=row["value"], unit=row["unit"],
-                observer=row["source"],
+                value=row["value"] if "value" in row else None,
+                unit=row["unit"],
+                observer=row["source"] if "source" in row else None,
                 spread=row["uncertainty"] if "uncertainty" in row else None,
                 assessment=row["assessment"] if "assessment" in row else None,
                 pedigree=row["pedigree"] if "pedigree" in row else None,
@@ -101,10 +119,10 @@ class DataInputCommand(IExecutableCommand):
             # if not author:
             #     author = "_anonymous"
             #
-            # oer = glb_idx.get(Observer.partial_key(author, registry=glb_idx))
+            # oer = glb_idx.get(Observer.partial_key(author))
             # if not oer:
             #     oer = Observer(author, "Current user" if author != "_anonymous" else "Default anonymous user")
-            #     glb_idx.put(oer.key(glb_idx), oer)
+            #     glb_idx.put(oer.key(), oer)
             # else:
             #     oer = oer[0]
         # -----------------------------------------------------------------------------------------------------

@@ -1,10 +1,13 @@
 import json
 
 from backend.command_executors.external_data.mapping_command import MappingCommand
+from backend.command_executors.external_data.etl_external_dataset_command import ETLExternalDatasetCommand
+from backend.command_executors.external_data.parameters_command import ParametersCommand
 from backend.command_executors.specification.dummy_command import DummyCommand
+from backend.command_executors.specification.hierarchy_command import HierarchyCommand
 from backend.command_executors.specification.metadata_command import MetadataCommand
 from backend.command_executors.specification.data_input_command import DataInputCommand
-from backend.command_executors.external_data.etl_external_dataset_command import ETLExternalDatasetCommand
+from backend.command_executors.specification.structure_command import StructureCommand
 from backend.command_executors.specification.upscale_command import UpscaleCommand
 
 
@@ -20,17 +23,20 @@ def create_command(cmd_type, name, json_input):
     :raise
     """
     cmds = {"dummy":       DummyCommand,  # Simple assignation of a string to a variable. Useful to test things
-            "mapping":     MappingCommand,
             "metadata":    MetadataCommand,
+            "mapping":     MappingCommand,
             "data_input":  DataInputCommand,
+            "structure":   StructureCommand,
             "upscale":     UpscaleCommand,
-            "etl_dataset": ETLExternalDatasetCommand
+            "hierarchy":   HierarchyCommand,
+            "etl_dataset": ETLExternalDatasetCommand,
+            "parameters":  ParametersCommand
             }
     if cmd_type in cmds:
         tmp = cmds[cmd_type](name)  # Reflective CALL to construct the empty command instance
         tmp._serialization_type = cmd_type  # Injected attribute. Used later for serialization
         tmp._serialization_label = name  # Injected attribute. Used later for serialization
-        if isinstance(json_input, (str, dict)):
+        if isinstance(json_input, (str, dict, list)):
             if json_input != {}:
                 issues = tmp.json_deserialize(json_input)
             else:

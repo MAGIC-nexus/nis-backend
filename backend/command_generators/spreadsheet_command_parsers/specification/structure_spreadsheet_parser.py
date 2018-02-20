@@ -3,9 +3,9 @@ Declaration of Observables and relations between Processors and/or Factors
 
 """
 import collections
+import traceback
 
 from backend.command_generators import basic_elements_parser
-from backend.common.helper import strcmp, create_dictionary
 
 
 def parse_structure_command(sh, area):
@@ -35,14 +35,17 @@ def parse_structure_command(sh, area):
     # Scan the sheet, the first column must be one of the keys of "k_list", following
     # columns can contain repeating values
     col_names = {("origin",): "origin",
-                 ("relation",): "default_relation",
-                 ("destination",): "destination",
+                 ("relation", "default relation"): "default_relation",
+                 ("destination", "destinations"): "destinations",
                  ("origin label", "label"): "description"
                  }
     # Check columns
     col_map = collections.OrderedDict()
     for c in range(area[2], area[3]):
         col_name = sh.cell(row=area[0], column=c).value
+        if not col_name:
+            continue
+
         for k in col_names:
             if col_name.lower() in k:
                 col_map[c] = col_names[k]
@@ -50,7 +53,7 @@ def parse_structure_command(sh, area):
 
     # Map key to a list of values
     content = []  # Dictionary of lists, one per metadata key
-    for r in range(area[0], area[1]):
+    for r in range(area[0]+1, area[1]):
         item = {}
         for c in col_map:
             value = sh.cell(row=r, column=c).value
@@ -61,55 +64,56 @@ def parse_structure_command(sh, area):
             if k == "origin":  # Mandatory
                 # Check syntax
                 try:
-                    basic_elements_parser.string_to_ast(basic_elements_parser.simple_ident, value)
+                    basic_elements_parser.string_to_ast(basic_elements_parser.processor_or_factor_name, value)
                     item[k] = value
                 except:
                     some_error = True
                     issues.append((3, "The name specified for the origin element, '" + value + "', is not valid, in row " + str(r) + ". It must be either a processor or a factor name."))
-            elif k == "relation":  # Optional (if not specified, all destinations must specify it)
+            elif k == "default_relation":  # Optional (if not specified, all destinations must specify it)
                 # Check syntax
-                if value in ('|', '>', '<', '|>', '|<', '<|', '>|', '||>', '||<', '>||', '<||'):
-                    if value == '<|': value = '|<'
-                    elif value == '>|': value = '|>'
-                    elif value == '>||': value = '||>'
-                    elif value == '<||': value = '||<'
+                allowed_relations = ('|', '>', '<', '<>', '><', '||')
+                if value in allowed_relations:
                     item[k] = value
                 else:
                     some_error = True
-                    issues.append((3, "The Default relation type specified for the origin element, '" + value + "', is not valid, in row " + str(r) + ". It must be one of '|', '>', '<', '|>', '|<', '||>', '||<'."))
-            if k == "destination":  # Mandatory
-                # TODO Check syntax. It can contain: a weight, a relation type, a processor or factor name.
-                # TODO name. w name. relation name. w relation name
+                    issues.append((3, "The Default relation type specified for the origin element, '" + value + "', is not valid, in row " + str(r) + ". It must be one of " + ', '.join(allowed_relations) + "."))
+            elif k == "destinations":  # Mandatory
+                # Because the expression (weight relation p_f_name) and the simple p_f_name can collide syntactically,
+                # first try the simpler expression then the complex one
                 try:
-                    basic_elements_parser.string_to_ast(basic_elements_parser.simple_ident, value)
-                    dest = None
-                    relation = None
-                    weight = None
+                    dummy = basic_elements_parser.string_to_ast(basic_elements_parser.processor_or_factor_name, value)
+                except:
+                    try:
+                        dummy = basic_elements_parser.string_to_ast(basic_elements_parser.relation_expression, value)
+                    except:
+                        traceback.print_exc()
+                        some_error = True
+                        issues.append((3,
+                                       "The specification of destination, '" + value + "', is not valid, in row " + str(
+                                           r) + ". It is a sequence of weight (optional) relation (optional) destination element (mandatory)"))
 
+                    # Check syntax. It can contain: a weight, a relation type, a processor or factor name.
+
+                if dummy:
                     if k not in item:
                         lst = []
                         item[k] = lst
                     else:
                         lst = item[k]
-                    if relation == '<|': relation = '|<'
-                    elif relation == '>|': relation = '|>'
-                    elif relation == '>||': relation = '||>'
-                    elif relation == '<||': relation = '||<'
-                    lst.append(dict(name=dest, relation=relation, weight=weight))
-                    item[k] = value
-                except:
-                    some_error = True
-                    issues.append((3, "The specification of destination, '" + value + "', is not valid, in row " + str(r) + ". It is a sequence of weight (optional) relation (optional) destination element (mandatory)"))
+                    lst.append(value)
             elif k == "description":  # Optional
                 item[k] = value
 
         # Check parameter completeness before adding it to the list of parameters
         if "origin" not in item:
-            issues.append((3, "The element must have a Name, row "+str(r)))
+            issues.append((3, "The element must have an Origin, row "+str(r)))
+            continue
+        if "destinations" not in item:
+            issues.append((3, "The element must have at least one Destination, row "+str(r)))
             continue
 
         content.append(item)
 
-    return issues, None, content
+    return issues, None, dict(structure=content)
 
 

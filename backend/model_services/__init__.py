@@ -470,7 +470,7 @@ Case study level command types:
 * Work session
   * Work session variables
 * Case study
-* Heterarchy, which includes hierarchy
+* Hierarchy
   * Categories
   * Flows
   * Funds

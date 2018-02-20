@@ -62,12 +62,12 @@ def parse_data_input_command(sh, area, processors_type, state):
                      (r"Parent", "parent", False),
                      (r"FF[_ ]type", "ff_type", False),
                      (r"Var|Variable", "factor", True),
-                     (r"Value|NUSAP\.N", "value", True),
-                     (r"Unit|NUSAP\.U", "unit", True),
+                     (r"Value|NUSAP\.N", "value", False),  # If value is not specified, then just declare the Factor
+                     (r"Unit|NUSAP\.U", "unit", True),  # If blank, a dimensionless amount is assumed
                      (r"Relative[_ ]to", "relative_to", False),
                      (r"Uncertainty|Spread|NUSAP\.S", "uncertainty", False),
-                     (r"Assesment|NUSAP\.A", "assessment", False),
-                     (r"Pedi[_ ]template|NUSAP\.PT", "pedigree_template", False),
+                     (r"Assessment|NUSAP\.A", "assessment", False),
+                     (r"Pedigree[_ ]template|NUSAP\.PT", "pedigree_template", False),
                      (r"Pedigree|NUSAP\.P", "pedigree", False),
                      (r"Time", "time", False),
                      (r"Geo|Geolocation", "geolocation", False),
@@ -98,6 +98,7 @@ def parse_data_input_command(sh, area, processors_type, state):
         if not col_name:
             continue
 
+        col_name = col_name.replace("\n", " ")
         col_names[c] = col_name
 
         # Match
@@ -218,10 +219,13 @@ def parse_data_input_command(sh, area, processors_type, state):
 
             # != "" or not
             if value is None or (value is not None and value == ""):
-                if mandatory[c]:
-                    some_error = True
-                    issues.append((3, "Column '" + c + "' is mandatory, row " + str(r)))
-                continue  # Skip the rest of the iteration!
+                if c == "unit":
+                    value = "-"
+                if not value:
+                    if mandatory[c]:
+                        some_error = True
+                        issues.append((3, "Column '" + c + "' is mandatory, row " + str(r)))
+                    continue  # Skip the rest of the iteration!
 
             # Parse the value
             if c in ["processor", "factor", "pedigree_template"]:
@@ -249,7 +253,12 @@ def parse_data_input_command(sh, area, processors_type, state):
                         issues.append((3, "The unit name '"+s[1]+"' is not registered in the units processing package, in row "+str(r)))
             elif c == "level":
                 # A valid level name
-                basic_elements_parser.string_to_ast(basic_elements_parser.level_name, value)
+                try:
+                    basic_elements_parser.string_to_ast(basic_elements_parser.level_name, value)
+                except:
+                    some_error = True
+                    issues.append((3, "The level '" + value + "' syntax is not valid, in row " + str(r)))
+
             elif c == "parent":
                 # Check that value is a valid parent name. It can be either a list of tags OR
                 # a processor name, something defining a single processor
@@ -276,11 +285,12 @@ def parse_data_input_command(sh, area, processors_type, state):
             elif c == "unit":
                 # It must be a recognized unit. Check with Pint
                 try:
+                    value = value.replace("€", "Euro").replace("$", "Dollar")
                     if value == "-":
                         value = ""  # Dimensionless
                     ureg(value)
                     ureg.parse_unit_name(value, case_sensitive)
-                except UndefinedUnitError:
+                except:
                     some_error = True
                     issues.append((3, "The unit name '"+value+"' is not registered in the units processing package, in row "+str(r)))
             elif c == "uncertainty":

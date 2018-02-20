@@ -4,7 +4,7 @@ import backend.common.helper
 from backend.model.memory.expressions import ExpressionsEngine
 from backend.model.memory.musiasem_concepts import *
 from backend.model.memory.musiasem_concepts_helper import *
-from backend.model.memory.musiasem_concepts_helper import _get_observer, _obtain_relation
+from backend.model.memory.musiasem_concepts_helper import _get_observer, _find_or_create_relation
 
 """ Integration tests for in memory model structures """
 
@@ -96,7 +96,7 @@ class ModelBuildingHierarchies(unittest.TestCase):
     # ###########################################################
 
     def test_001_hierarchy(self):
-        h = Heterarchy("Test")
+        h = Hierarchy("Test")
         t1 = Taxon("T1", None, h)
         t2 = Taxon("T2", t1, h)
         t3 = Taxon("T3", None, h)
@@ -110,11 +110,13 @@ class ModelBuildingHierarchies(unittest.TestCase):
         self.assertEqual(t3.get_parent(h), None)
 
     def test_002_hierarchy_2(self):
-        h = build_hierarchy("Test_auto", "Taxon", None, {"T1": {"T2": None}, "T3": None})
+        prd = PartialRetrievalDictionary()
+        h = build_hierarchy("Test_auto", "Taxon", prd, [dict(code="T1", children=[dict(code="T2")]),
+                                                        dict(code="T3")])
         self.assertEqual(len(h.roots), 2)
 
     def test_003_hierarchy_of_factors(self):
-        h = Heterarchy("Test2")
+        h = Hierarchy("Test2")
         f1 = FactorType("F1", None, h)
         f2 = FactorType("F2", f1, h)
         t1 = Taxon("T1")
@@ -139,7 +141,7 @@ class ModelBuildingHierarchies(unittest.TestCase):
         names = p2.full_hierarchy_names(glb_idx)
         self.assertEqual(names[0], "P1.P2")
         # Make "p1.p2.p3" processor descend from "p1.p2b" so it will be also "p1.p2b.p3"
-        r = _obtain_relation(p5, p4, RelationClassType.pp_part_of, "test_observer", None, state)
+        r = _find_or_create_relation(p5, p4, RelationClassType.pp_part_of, "test_observer", None, state)
         names = p4.full_hierarchy_names(glb_idx)
         self.assertEqual(names[0], "P1.P2.P3")
 
@@ -158,7 +160,7 @@ class ModelBuildingHierarchies(unittest.TestCase):
         names = p2.full_hierarchy_names(glb_idx)
         self.assertEqual(names[0], "P1.P2")
         # Make "p1.p2.p3" processor descend from "p1.p2b" so it will be also "p1.p2b.p3"
-        r = _obtain_relation(p5, p4, RelationClassType.pp_part_of, "test_observer", None, state)
+        r = _find_or_create_relation(p5, p4, RelationClassType.pp_part_of, "test_observer", None, state)
         names = p4.full_hierarchy_names(glb_idx)
         self.assertEqual(names[0], "P1.P2.P3")
 
@@ -215,17 +217,17 @@ class ModelBuildingQuantativeObservations(unittest.TestCase):
         # ============================= READS AND ASSERTIONS =============================
         glb_idx, p_sets, hh, datasets, mappings = get_case_study_registry_objects(state)
         # Check function "get_factor_or_processor_or_factor_type"
-        wf = find_observable("WindFarm", glb_idx) # Get a Processor
+        wf = find_observable_by_name("WindFarm", glb_idx) # Get a Processor
         self.assertIsInstance(wf, Processor)
-        wf = find_observable("WindFarm:", glb_idx) # Get a Processor
+        wf = find_observable_by_name("WindFarm:", glb_idx) # Get a Processor
         self.assertIsInstance(wf, Processor)
-        lu = find_observable(":LU", glb_idx) # Get a FactorType
+        lu = find_observable_by_name(":LU", glb_idx) # Get a FactorType
         self.assertIsInstance(lu, FactorType)
-        wf_lu = find_observable("WindFarm:LU", glb_idx) # Get a Factor, using full name
+        wf_lu = find_observable_by_name("WindFarm:LU", glb_idx) # Get a Factor, using full name
         self.assertIsInstance(wf_lu, Factor)
-        wf_lu = find_observable(":LU", glb_idx, processor=wf) # Get a Factor, using already known Processor
+        wf_lu = find_observable_by_name(":LU", glb_idx, processor=wf) # Get a Factor, using already known Processor
         self.assertIsInstance(wf_lu, Factor)
-        wf_lu = find_observable("WindFarm:", glb_idx, factor_type=lu) # Get a Factor, using already known FactorType
+        wf_lu = find_observable_by_name("WindFarm:", glb_idx, factor_type=lu) # Get a Factor, using already known FactorType
         self.assertIsInstance(wf_lu, Factor)
         # Check things about the Factor
         self.assertEqual(wf_lu.processor.name, "WindFarm")
@@ -284,12 +286,13 @@ class ModelBuildingRelationObservations(unittest.TestCase):
         glb_idx, p_sets, hh, datasets, mappings = get_case_study_registry_objects(state)
         # Check Observables and FlowTypes existence
         processors = glb_idx.get(Processor.partial_key(None))
+        processors = set(processors)
         self.assertEqual(len(processors), 12)
         dplant = glb_idx.get(Processor.partial_key("desalinationplant"))
         farm = glb_idx.get(Processor.partial_key("farm"))
         banana = glb_idx.get(Processor.partial_key("farm.banana"))
         lu = glb_idx.get(FactorType.partial_key("lU"))
-        farm_lu = glb_idx.get(Factor.partial_key(processor=farm[0], taxon=lu[0]))
+        farm_lu = glb_idx.get(Factor.partial_key(processor=farm[0], factor_type=lu[0]))
 
         # Check Relations between observables
         rels = glb_idx.get(FactorsRelationDirectedFlowObservation.partial_key(source=farm_lu[0]))
@@ -325,7 +328,9 @@ class ModelBuildingProcessors(unittest.TestCase):
 
     def test_tagged_processors(self):
         # Create a taxonomy
-        h = build_hierarchy("Test_auto", "Taxon", None, {"T1": {"T2": None}, "T3": None})
+        prd = PartialRetrievalDictionary()
+        h = build_hierarchy("Test_auto", "Taxon", prd, [dict(code="T1", children=[dict(code="T2")]),
+                                                        dict(code="T3")])
         # Create a processor and tag it
         p1 = Processor("P1")
         t1 = h.get_node("T1")
@@ -354,7 +359,9 @@ class ModelBuildingProcessors(unittest.TestCase):
             Need to specify if input and other. Only Funds do not need this specification
         """
         # Create a Hierarchy of FactorType
-        ft = build_hierarchy("Taxs", "FactorType", None, {"F1": None, "F2": None})
+        prd = PartialRetrievalDictionary()
+        ft = build_hierarchy("Taxs", "FactorType", prd, [dict(code="P1"),
+                                                         dict(code="P2")])
         # Create a processor
         p1 = Processor("P1")
         # Create a Factor and append it to the Processor (¿register it into the FactorType also?)
@@ -384,55 +391,62 @@ class ModelBuildingFactors(unittest.TestCase):
     def test_sequentially_connected_factors(self):
         """ Two or more processors, with factors. Connect some of them """
         # Create a Hierarchy of FactorType
-        ft = build_hierarchy("Taxs", "FactorType", None, {"F1": None, "F2": None})
+        prd = PartialRetrievalDictionary()
+        ft = build_hierarchy("Taxs", "FactorType", prd, [dict(code="F1"),
+                                                         dict(code="F2")])
         # Create two Processors, same level
-        ps = build_hierarchy("Procs", "Processor", None, {"P1": None, "P2": None})
+        ps = build_hierarchy("Procs", "Processor", prd, [dict(code="P1"),
+                                                         dict(code="P2")])
         # Create a Factor for each processor
-        f1 = Factor("", ps.get_node("P1"), FactorInProcessorType(external=False, incoming=False), ft.get_node("F1"))
-        f2 = Factor("", ps.get_node("P2"), FactorInProcessorType(external=False, incoming=True), ft.get_node("F1"))
+        f1 = Factor("", prd.get(Processor.partial_key("P1")), FactorInProcessorType(external=False, incoming=False), ft.get_node("F1"))
+        f2 = Factor("", prd.get(Processor.partial_key("P2")), FactorInProcessorType(external=False, incoming=True), ft.get_node("F1"))
         # Connect from one to the other
-        c = f1.connect_to(f2)
+        c = _find_or_create_relation(f1, f2, RelationClassType.ff_directed_flow, Observer.no_observer_specified, None, prd)  # c = f1.connect_to(f2)
         # Check that the connection exists in both sides, and that it is sequential
-        self.assertTrue(c in f1.connections)
-        self.assertTrue(c in f2.connections)
-        self.assertFalse(c.hierarchical)
+        self.assertTrue(c in f1.observations)
+        self.assertTrue(c in f2.observations)
 
     def test_hierarchically_connected_factors(self):
         """ Two or more processors, with factors. Connect some of them """
         # Create a Hierarchy of FactorType
-        ft = build_hierarchy("Taxs", "FactorType", None, {"F1": None, "F2": None})
+        prd = PartialRetrievalDictionary()
+        ft = build_hierarchy("Taxs", "FactorType", prd, [dict(code="F1"),
+                                                         dict(code="F2")])
         # Create two Processors, parent and child
-        ps = build_hierarchy("Procs", "Processor", None, {"P1": {"P2": None}})
+        ps = build_hierarchy("Procs", "Processor", prd, [dict(code="P1", children=[dict(code="P2")]),
+                                                         ])
         # Create a Factor for each processor
-        f1 = Factor.create("", ps.get_node("P1"), FactorInProcessorType(external=False, incoming=False), ft.get_node("F1"))
-        f2 = Factor.create("", ps.get_node("P2"), FactorInProcessorType(external=False, incoming=True), ft.get_node("F1"))
+        p1 = prd.get(Processor.partial_key("P1"))[0]
+        p2 = prd.get(Processor.partial_key("P1.P2"))[0]
+        f1 = Factor.create("", p1, FactorInProcessorType(external=False, incoming=False), ft.get_node("F1"))
+        f2 = Factor.create("", p2, FactorInProcessorType(external=False, incoming=True),  ft.get_node("F1"))
         # Connect from one to the other
-        c = f1.connect_to(f2, ps)
-        # Check that the connection exists in both sides, and that it is Hierarchical
-        self.assertTrue(c in f1.connections)
-        self.assertTrue(c in f2.connections)
-        self.assertTrue(c.hierarchical)
+        c = _find_or_create_relation(f1, f2, RelationClassType.ff_directed_flow, Observer.no_observer_specified, None, prd)
+        # Check that the connection exists in both sides
+        self.assertTrue(c in f1.observations)
+        self.assertTrue(c in f2.observations)
 
     def test_hybrid_connected_factors(self):
         # Create a Hierarchy of FactorType
-        ft = build_hierarchy("Taxs", "FactorType", None, {"F1": None, "F2": None})
+        prd = PartialRetrievalDictionary()
+        ft = build_hierarchy("Taxs", "FactorType", prd, [dict(code="F1"),
+                                                         dict(code="F2")])
         # Create Three Processors, parent and child, and siblings
-        ps = build_hierarchy("Procs", "Processor", None, {"P1": {"P2": None}, "P3": None})
+        ps = build_hierarchy("Procs", "Processor", prd, [dict(code="P1", children=[dict(code="P2")]),
+                                                         dict(code="P3")])
         # Create a Factor for each processor, and an additional factor for the processor which is parent and sibling
-        f11 = Factor.create("", ps.get_node("P1"), FactorInProcessorType(external=False, incoming=False), ft.get_node("F1"))
-        f2 = Factor.create("", ps.get_node("P2"), FactorInProcessorType(external=False, incoming=True), ft.get_node("F1"))
-        f12 = Factor.create("", ps.get_node("P1"), FactorInProcessorType(external=False, incoming=False), ft.get_node("F1"))
-        f3 = Factor.create("", ps.get_node("P3"), FactorInProcessorType(external=False, incoming=True), ft.get_node("F1"))
+        f11 = Factor.create("", prd.get(Processor.partial_key("P1"))[0], FactorInProcessorType(external=False, incoming=False), ft.get_node("F1"))
+        f2 = Factor.create("", prd.get(Processor.partial_key("P1.P2"))[0], FactorInProcessorType(external=False, incoming=True), ft.get_node("F1"))
+        f12 = Factor.create("", prd.get(Processor.partial_key("P1"))[0], FactorInProcessorType(external=False, incoming=False), ft.get_node("F1"))
+        f3 = Factor.create("", prd.get(Processor.partial_key("P3"))[0], FactorInProcessorType(external=False, incoming=True), ft.get_node("F1"))
         # Do the connections
-        ch = f11.connect_to(f2, ps)
-        cs = f12.connect_to(f3, ps)
+        ch = _find_or_create_relation(f11, f2, RelationClassType.ff_directed_flow, Observer.no_observer_specified, None, prd)  # ch = f11.connect_to(f2, ps)
+        cs = _find_or_create_relation(f12, f3, RelationClassType.ff_directed_flow, Observer.no_observer_specified, None, prd)  # cs = f12.connect_to(f3, ps)
         # Check each connection
-        self.assertTrue(ch in f11.connections)
-        self.assertTrue(ch in f2.connections)
-        self.assertTrue(cs in f12.connections)
-        self.assertTrue(cs in f3.connections)
-        self.assertTrue(ch.hierarchical)
-        self.assertFalse(cs.hierarchical)
+        self.assertTrue(ch in f11.observations)
+        self.assertTrue(ch in f2.observations)
+        self.assertTrue(cs in f12.observations)
+        self.assertTrue(cs in f3.observations)
 
     def test_create_qq(self):
         # Create a value with incorrect unit
@@ -443,7 +457,9 @@ class ModelBuildingFactors(unittest.TestCase):
 
     def test_processors_with_factors_with_one_observation(self):
         # Create a Hierarchy of FactorType
-        ft = build_hierarchy("Taxs", "FactorType", None, {"F1": None, "F2": None})
+        prd = PartialRetrievalDictionary()
+        ft = build_hierarchy("Taxs", "FactorType", prd, [dict(code="F1"),
+                                                         dict(code="F2")])
         # Create a processor
         p1 = Processor("P1")
         # Create a Factor and assign it to the Processor
@@ -459,7 +475,9 @@ class ModelBuildingFactors(unittest.TestCase):
 
     def test_processors_with_factors_with_more_than_one_observation(self):
         # Create a Hierarchy of FactorType
-        ft = build_hierarchy("Taxs", "FactorType", None, {"F1": None, "F2": None})
+        prd = PartialRetrievalDictionary()
+        ft = build_hierarchy("Taxs", "FactorType", prd, [dict(code="F1"),
+                                                         dict(code="F2")])
         # Create a processor
         p1 = Processor("P1")
         # Create a Factor and assign it to the Processor
@@ -498,11 +516,13 @@ class ModelBuildingExpressions(unittest.TestCase):
 
     def test_processors_with_expression_in_taxonomy(self):
         # A hierarchy of Taxon
-        h = build_hierarchy("H1", "Taxon", None, {"T1": {"T2": None}, "T3": None})
+        prd = PartialRetrievalDictionary()
+        h = build_hierarchy("H1", "Taxon", prd, [dict(code="T1", children=[dict(code="T2")]),
+                                                 dict(code="T3")])
         # A taxon is a function of others
         t3 = h.get_node("T3")
         t3.expression = {"op": "*", "oper": [{"n": 0.5}, {"v": "T1"}]}
-        t2 = h.get_node("T2")
+        t2 = h.get_node("T1.T2")
         t2.expression = {"n": 3, "u": "kg"}
         # INJECT EXPRESSIONS into the ExpEvaluator:
         expev = ExpressionsEngine()
@@ -520,9 +540,12 @@ class ModelBuildingExpressions(unittest.TestCase):
 
     def test_processors_with_factors_with_expression_observation(self):
         # A hierarchy of FactorType
-        ft = build_hierarchy("Taxs", "FactorType", None, {"F1": None, "F2": None})
+        prd = PartialRetrievalDictionary()
+        ft = build_hierarchy("Taxs", "FactorType", prd, [dict(code="F1"),
+                                                         dict(code="F2")])
         # Hierarchy of Processors
-        ps = build_hierarchy("Procs", "Processor", None, {"P1": {"P2": None, "P4": None}, "P3": None})
+        ps = build_hierarchy("Procs", "Processor", prd, [dict(code="P1", children=[dict(code="P2"), dict(code="P4")]),
+                                                         dict(code="P3")])
         # Attach Factor
         #connect_processors(source_p: Processor, dest_p: Processor, h: "Hierarchy", weight: float, taxon: FactorType, source_name: str = None, dest_name: str = None)
         # TODO A taxon is a function of others

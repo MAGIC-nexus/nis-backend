@@ -38,7 +38,7 @@ def parse_parameters_command(sh, area):
 
     # Map key to a list of values
     content = []  # Dictionary of lists, one per metadata key
-    for r in range(area[0], area[1]):
+    for r in range(area[0]+1, area[1]):
         param = {}
         for k in ["name", "value", "type", "range", "group", "description"]:
             if k not in col_map:
@@ -68,7 +68,9 @@ def parse_parameters_command(sh, area):
                     issues.append((3, "The Value specified for the parameter, '" + value + "', is not valid, in row " + str(r) + ". It must be an expression."))
             elif k == "type":  # Mandatory
                 # Check syntax
-                if value.lower().strip() in ("category", "integer", "number"):
+                if value.lower().strip() in ("category", "integer", "number", "float"):
+                    if value.lower().strip() in ("number", "float"):
+                        value = "number"  # "float" --> "number"
                     param[k] = value
                 else:
                     some_error = True

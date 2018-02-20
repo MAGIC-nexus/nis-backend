@@ -112,7 +112,7 @@ def parse_mapping_command(sh, area, origin, destination):
     # For multiple entries (many to many map), the origin maps a list "to" of dictionaries "d", "e"
     content = {"origin_dataset": origin_dataset,  # Name of the origin dataset (may include the source name)
                "origin_dimension": origin_dim,  # Name of the origin dimension inside the dataset
-               "destination": destination,  # Name of the destination heterarchy
+               "destination": destination,  # Name of the destination hierarchy
                "map": [{"o": k, "to": v} for k, v in o_dict.items()]
                }
     label = content["origin_dataset"] + "." + content["origin_dimension"] + " - " + content["destination"]

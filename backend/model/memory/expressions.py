@@ -76,7 +76,7 @@ class Expression:
         def get_factor_name(f: Factor):
             return f.processor.name+"."+f.name
 
-        def add_taxon_hierarchy(h: Heterarchy) -> List[Expression]:
+        def add_taxon_hierarchy(h: Hierarchy) -> List[Expression]:
             """ Traverse the hierarchy and generate expressions. The expression is always:
                 parent node = SUM children nodes. The sum may be weighted. The expression could be also given for the node
                 if the node is a leaf node. The case for a parent node with a given expression should be studied, if two
@@ -87,7 +87,7 @@ class Expression:
         lst = []
         if isinstance(entity, FactorQuantitativeObservation):
             lst.append( get_factor_name(entity.factor) + "=" + entity.expression )
-        elif isinstance(entity, Heterarchy):
+        elif isinstance(entity, Hierarchy):
             # TODO Find connections from and connections to
             # TODO Check that the hierarchy is of Taxon or FactorType
             lst = add_taxon_hierarchy(entity)

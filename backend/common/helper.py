@@ -293,6 +293,8 @@ df.loc[("h", slice(None)), "c"]
                             res.append(tmp)
                 except (IndexError, KeyError):
                     pass
+                except Exception as e:
+                    pass
             return res
         else:
             return []

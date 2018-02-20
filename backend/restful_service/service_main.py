@@ -2034,7 +2034,7 @@ def mappings():
     pass
 
 
-def heterarchies():
+def hierarchies():
     a= 6
     pass
 
