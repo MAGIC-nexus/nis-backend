@@ -1,6 +1,12 @@
+from typing import Union
+
 from sqlalchemy.orm import relationship, backref, composite, scoped_session, sessionmaker, class_mapper
+import pandas as pd
 
 # Some ideas from function "model_to_dict" (Google it, StackOverflow Q&A)
+from backend.common.helper import PartialRetrievalDictionary
+from backend.model.persistent_db.persistent import serialize_from_object, deserialize_to_object
+from backend.model_services import State, get_case_study_registry_objects
 
 
 def serialize(o_list):
@@ -114,3 +120,66 @@ def deserialize(d_list):
             setattr(t[0], t[1], k)
 
     return o_list
+
+
+def serialize_state(state: State):
+    """
+    Serialization prepared for a given organization of the state
+
+    !!! WARNING: It destroys "state"
+
+    :return:
+    """
+
+    def serialize_dataframe(df):
+        return df.index.names, df.to_dict()
+
+    # Iterate all namespaces
+    for ns in state.list_namespaces():
+        glb_idx, p_sets, hh, datasets, mappings = get_case_study_registry_objects(state, ns)
+        if glb_idx:
+            glb_idx = glb_idx.to_pickable()
+            state.set("_glb_idx", glb_idx, ns)
+        # TODO Serialize other DataFrames.
+        # Datasets
+        for ds_name in datasets:
+            ds = datasets[ds_name]
+            if isinstance(ds.data, pd.DataFrame):
+                ds.data = serialize_dataframe(ds.data)
+
+    return serialize_from_object(state)
+
+
+def deserialize_state(st: str):
+    """
+    Deserializes an object previously serialized using "serialize_state"
+
+    It can receive also a "State" modified for the serialization to restore it
+
+    :param st:
+    :return:
+    """
+    def deserialize_dataframe(t):
+        df = pd.DataFrame(t[1])
+        df.index.names = t[0]
+        return df
+
+    if isinstance(st, str):
+        state = deserialize_to_object(st)
+    else:
+        raise Exception("It must be a string")
+
+    # Iterate all namespaces
+    for ns in state.list_namespaces():
+        glb_idx = state.get("_glb_idx", ns)
+        if isinstance(glb_idx, dict):
+            glb_idx = PartialRetrievalDictionary().from_pickable(glb_idx)
+            state.set("_glb_idx", glb_idx)
+        glb_idx, p_sets, hh, datasets, mappings = get_case_study_registry_objects(state, ns)
+        # TODO Deserialize DataFrames
+        # In datasets
+        for ds_name in datasets:
+            ds = datasets[ds_name]
+            if ds.data:
+                ds.data = deserialize_dataframe(ds.data)
+    return state

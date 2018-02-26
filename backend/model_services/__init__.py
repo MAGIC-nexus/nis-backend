@@ -171,8 +171,8 @@ class Namespace:
         if self.__current_scope:
             var_exists = name in self.__current_scope
             self.__current_scope[name] = entity
-            if var_exists:
-                logger.warning("'" + name + "' overwritten.")
+            # if var_exists:
+            #     logger.warning("'" + name + "' overwritten.")
 
     def get(self, name: str, scope=None, return_scope=False):
         """ Return the entity named "name". Return also the Scope in which it was found """
@@ -216,6 +216,12 @@ class State:
         It is basically a list of Namespaces. One is active by default.
         The others have a name. Variables inside these other Namespaces may be accessed using that
         name then "::", same as C++
+
+    State Serialization functions specialized in the way State is used in MuSIASEM are in the "serialization" module:
+
+    serialize_state
+    deserialize_state
+
     """
 
     def __init__(self):
@@ -266,48 +272,6 @@ class State:
             self.new_namespace(namespace_name)
 
         return self._namespaces[namespace_name].get(name, scope)
-
-    def serialize(self):
-        def serialize_dataframe(df):
-            return df.index.names, df.to_dict()
-
-        # Iterate all namespaces
-        for ns in self.list_namespaces():
-            glb_idx, p_sets, hh, datasets, mappings = get_case_study_registry_objects(self, ns)
-            if glb_idx:
-                glb_idx = glb_idx.to_pickable()
-                self.set("_glb_idx", glb_idx, ns)
-            # TODO Serialize other DataFrames.
-            # Datasets
-            for ds_name in datasets:
-                ds = datasets[ds_name]
-                if isinstance(ds.data, pd.DataFrame):
-                    ds.data = serialize_dataframe(ds.data)
-
-        return serialize_from_object(self)
-
-    @staticmethod
-    def deserialize(st):
-        def deserialize_dataframe(t):
-            df = pd.DataFrame(t[1])
-            df.index.names = t[0]
-            return df
-
-        state = deserialize_to_object(st)
-        # Iterate all namespaces
-        for ns in state.list_namespaces():
-            glb_idx = state.get("_glb_idx", ns)
-            if isinstance(glb_idx, dict):
-                glb_idx = PartialRetrievalDictionary().from_pickable(glb_idx)
-                state.set("_glb_idx", glb_idx)
-            glb_idx, p_sets, hh, datasets, mappings = get_case_study_registry_objects(state, ns)
-            # TODO Deserialize DataFrames
-            # In datasets
-            for ds_name in datasets:
-                ds = datasets[ds_name]
-                if ds.data:
-                    ds.data = deserialize_dataframe(ds.data)
-        return state
 
 
 def get_case_study_registry_objects(state, namespace=None):

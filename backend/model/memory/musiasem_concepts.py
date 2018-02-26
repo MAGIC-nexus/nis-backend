@@ -362,6 +362,9 @@ class QualifiedQuantityExpression:
             raise Exception("The specified unit '" + u + "' is not recognized")
         return QualifiedQuantityExpression(json.dumps({'n': n, 'u': u}))
 
+    def __repr__(self):
+        return str(self.expression)
+
 # #################################################################################################################### #
 # HIERARCHIES and TAXA
 # #################################################################################################################### #

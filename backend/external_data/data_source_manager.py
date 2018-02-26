@@ -3,7 +3,6 @@ from abc import ABCMeta, abstractmethod
 from typing import List, Union
 import pandas as pd
 import datetime
-from cachier import cachier
 
 from backend.common.helper import create_dictionary, memoize, strcmp, obtain_dataset_source
 from backend.external_data.rdb_model import DataSource, Database, Dataset

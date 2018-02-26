@@ -1,10 +1,12 @@
 import unittest
 
+
 import backend.common.helper
 from backend.model.memory.expressions import ExpressionsEngine
 from backend.model.memory.musiasem_concepts import *
 from backend.model.memory.musiasem_concepts_helper import *
 from backend.model.memory.musiasem_concepts_helper import _get_observer, _find_or_create_relation
+from backend.restful_service.serialization import serialize_state, deserialize_state
 
 """ Integration tests for in memory model structures """
 
@@ -150,8 +152,8 @@ class ModelBuildingHierarchies(unittest.TestCase):
     def test_005_hierarchy_of_processors_after_serialization_deserialization(self):
         state = prepare_simple_processors_hierarchy()
         # Serialize, deserialize
-        s = state.serialize()
-        state = State.deserialize(s)
+        s = serialize_state(state)
+        state = deserialize_state(s)
         glb_idx, p_sets, hh, datasets, mappings = get_case_study_registry_objects(state)
         p2 = glb_idx.get(Processor.partial_key("P1.P2"))[0]
         p4 = glb_idx.get(Processor.partial_key("P1.P2.P3"))[0]

@@ -495,6 +495,13 @@ def _obtain_name_parts(n):
     return p_, f_
 
 
+def get_factor_id(f_: Union[Factor, Processor], ft: FactorType=None):
+    if isinstance(f_, Factor):
+        return (f_.processor.name + ":" + f_.taxon.name).lower()
+    elif isinstance(f_, Processor) and isinstance(ft, FactorType):
+        return (f_.name + ":" + ft.name).lower()
+
+
 def _create_quantitative_observation(factor: Factor,
                                      value: str, unit: str,
                                      spread: str, assessment: str, pedigree: str, pedigree_template: str,
@@ -504,6 +511,8 @@ def _create_quantitative_observation(factor: Factor,
                                      geolocation: str,
                                      comments: str,
                                      tags, other_attributes):
+    f_name = get_factor_id(factor)
+    print(f_name)
     if other_attributes:
         attrs = other_attributes.copy()
     else:

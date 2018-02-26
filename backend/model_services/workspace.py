@@ -21,6 +21,7 @@ from backend.model.persistent_db.persistent import (User,
                                                     )
 from backend.model_services import IExecutableCommand
 from backend.model_services import State
+from backend.restful_service.serialization import serialize_state, deserialize_state
 
 logger = logging.getLogger(__name__)
 
@@ -541,7 +542,7 @@ class ReproducibleSession:
                 # Load state if it is persisted
                 if vs.state:
                     # Deserialize
-                    self._isess._state = State.deserialize(vs.state)
+                    self._isess._state = deserialize_state(vs.state)
                 else:
                     self._isess._state = State()  # Zero State, execute all commands in sequence
                     for ws in lst:
@@ -578,7 +579,7 @@ class ReproducibleSession:
         if not self._allow_saving:
             raise Exception("The ReproducibleSession was opened disallowing saving. Please close it and reopen it with the proper value")
         # Serialize state
-        st = self._isess._state.serialize()
+        st = serialize_state(self._isess._state)
         self._session.version.state = st
         self._session.state = st
         # Open DB session

@@ -3,6 +3,7 @@ import unittest
 import os
 
 from backend.model_services import get_case_study_registry_objects
+from backend.restful_service.serialization import serialize_state, deserialize_state
 from backend_tests.test_integration_use_cases import setUpModule, tearDownModule, new_case_study, reset_database
 from backend.model_services.workspace import InteractiveSession, CreateNew
 from backend.model.memory.musiasem_concepts import Observer, \
@@ -133,8 +134,13 @@ class TestCommandFiles(unittest.TestCase):
         """
         file_path = os.path.dirname(os.path.abspath(__file__)) + "/z_input_files/Soslaires.xlsx"
         isess = execute_file(file_path, generator_type="spreadsheet")
+        # # Save state
+        s = serialize_state(isess.state)
+        with open("/home/rnebot/GoogleDrive/AA_MAGIC/Soslaires.serialized", "wt") as f:
+            f.write(s)
+        local_state = deserialize_state(s)
         # Check State of things
-        glb_idx, p_sets, hh, datasets, mappings = get_case_study_registry_objects(isess.state)
+        glb_idx, p_sets, hh, datasets, mappings = get_case_study_registry_objects(local_state)
         # Four processor sets
         self.assertEqual(len(p_sets), 4)
         # Obtain all Observers
