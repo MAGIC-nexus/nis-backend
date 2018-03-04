@@ -134,7 +134,7 @@ def parse_hierarchy_command(sh, area, name: str, n_type: str):
         code = n["code"]
         if "expression" in n:
             expression = n["expression"]
-            ast = basic_elements_parser.string_to_ast(basic_elements_parser.expression3, expression)
+            ast = basic_elements_parser.string_to_ast(basic_elements_parser.hierarchy_expression, expression)
             for p in ast["terms"]:
                 if isinstance(p, str):
                     if p.lower() not in codes:

@@ -8,8 +8,8 @@ import pandas as pd
 import requests
 import sqlalchemy
 
-from backend.external_data.data_source_manager import IDataSourceManager, get_dataset_structure
-from backend.external_data.rdb_model import DataSource, Database, Dataset, Dimension, CodeList, CodeImmutable
+from backend.ie_imports.data_source_manager import IDataSourceManager, get_dataset_structure
+from backend.ie_imports.rdb_model import DataSource, Database, Dataset, Dimension, CodeList, CodeImmutable
 
 # eng = sqlalchemy.create_engine("monetdb:///demo:", echo=True)
 # df = pd.DataFrame(np.random.randn(6, 4), index=pd.date_range('20130101', periods=6), columns=list('ABCD'))

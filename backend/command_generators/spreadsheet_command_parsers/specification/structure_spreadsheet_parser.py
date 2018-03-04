@@ -64,7 +64,7 @@ def parse_structure_command(sh, area):
             if k == "origin":  # Mandatory
                 # Check syntax
                 try:
-                    basic_elements_parser.string_to_ast(basic_elements_parser.processor_or_factor_name, value)
+                    basic_elements_parser.string_to_ast(basic_elements_parser.core_concept_name, value)
                     item[k] = value
                 except:
                     some_error = True
@@ -81,7 +81,7 @@ def parse_structure_command(sh, area):
                 # Because the expression (weight relation p_f_name) and the simple p_f_name can collide syntactically,
                 # first try the simpler expression then the complex one
                 try:
-                    dummy = basic_elements_parser.string_to_ast(basic_elements_parser.processor_or_factor_name, value)
+                    dummy = basic_elements_parser.string_to_ast(basic_elements_parser.core_concept_name, value)
                 except:
                     try:
                         dummy = basic_elements_parser.string_to_ast(basic_elements_parser.relation_expression, value)

@@ -1,4 +1,10 @@
 """
+
+  - NIS -> Zenodo. Upload the information in Nextcloud case study to Zenodo. Update it if already exists.
+  - Zenodo -> NIS. After uploading, automatically modify DOI, create a new version.
+
+   ------------------------------------------------------------------------------------------------------------------
+
 Copyright (c) 2015 Federal Institute for Risk Assessment (BfR), Germany
 
 This program is free software: you can redistribute it and/or modify

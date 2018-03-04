@@ -1,5 +1,6 @@
 import json
 
+from backend.command_executors.analysis.indicators_command import IndicatorsCommand
 from backend.command_executors.external_data.mapping_command import MappingCommand
 from backend.command_executors.external_data.etl_external_dataset_command import ETLExternalDatasetCommand
 from backend.command_executors.external_data.parameters_command import ParametersCommand
@@ -30,7 +31,8 @@ def create_command(cmd_type, name, json_input):
             "upscale":     UpscaleCommand,
             "hierarchy":   HierarchyCommand,
             "etl_dataset": ETLExternalDatasetCommand,
-            "parameters":  ParametersCommand
+            "parameters":  ParametersCommand,
+            "indicators":  IndicatorsCommand,
             }
     if cmd_type in cmds:
         tmp = cmds[cmd_type](name)  # Reflective CALL to construct the empty command instance

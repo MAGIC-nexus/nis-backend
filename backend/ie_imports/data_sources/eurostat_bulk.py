@@ -13,8 +13,8 @@ import requests
 import requests_cache
 
 from backend.common.helper import create_dictionary, import_names, memoize
-from backend.external_data.data_source_manager import IDataSourceManager, filter_dataset_into_dataframe
-from backend.external_data.rdb_model import DataSource, Database, Dataset, Dimension, CodeList, CodeImmutable
+from backend.ie_imports.data_source_manager import IDataSourceManager, filter_dataset_into_dataframe
+from backend.ie_imports.rdb_model import DataSource, Database, Dataset, Dimension, CodeList, CodeImmutable
 
 
 def create_estat_request():

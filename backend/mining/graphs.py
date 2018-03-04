@@ -13,6 +13,7 @@ from backend.model_services.workspace import State
 from backend.restful_service.serialization import deserialize_state
 
 """
+IN DEVELOPMENT. NOT READY FOR INTEGRATION INTO THE DOCKER CONTAINER
 
 This module will contain functions to compose graphs for different purposes
 
@@ -507,10 +508,49 @@ def construct_solve_graph(state: State, query: IQueryObjects, filt: Union[str, d
     nx.write_gml(factors_graph, "/home/rnebot/LegendGraph.gml")
 
 
-# Deserialize previously recorded Soslaires State
-with open("/home/rnebot/GoogleDrive/AA_MAGIC/Soslaires.serialized", "r") as file:
-    s = file.read()
-state = deserialize_state(s)
-# Create a Query and execute a query
-query = BasicQuery(state)
-construct_solve_graph(state, query, None)
+# # Deserialize previously recorded Soslaires State (WARNING! Execute unit tests to generated the ".serialized" file)
+# with open("/home/rnebot/GoogleDrive/AA_MAGIC/Soslaires.serialized", "r") as file:
+#     s = file.read()
+# state = deserialize_state(s)
+# # Create a Query and execute a query
+# query = BasicQuery(state)
+# construct_solve_graph(state, query, None)
+
+
+# NUTS files
+# Each file is a Code List
+# Levels. Each level has a name
+# Entry.
+#   Each code has a shape (reproject (unify) to geographic coordinates (WKT)).
+#   Each code can have a parent.
+#   Each code is in a level.
+#   An entry can have several codes and descriptions
+
+#
+import shapefile
+dbf = "NUTS_RG_BN_60M_2013"
+# "NUTS_AT_2013",
+lst = ["NUTS_LB_2013",
+       "NUTS_SEPA_LI_2013",
+       "NUTS_RG_60M_2013",
+       "NUTS_JOIN_LI_2013",
+       "NUTS_BN_60M_2013"
+       ]
+base_dir = "/home/rnebot/Downloads/borrame/NUTS_2013_60M_SH/data/"
+for f in lst:
+    sh = shapefile.Reader(base_dir + f)
+    n_shapes = len(sh.shapes())
+    print("-----------------------------------------")
+    print(f + " #" + str(n_shapes))
+    shapes = sh.shapes()
+    fields = sh.fields
+    records = sh.records()
+    print("-----------------------------------------")
+    for i in range(10):
+        s_type = sh.shape(i).shapeType
+        if s_type == 1:
+            bbox = [0, 0, 0, 0]
+        else:
+            bbox = sh.shape(i).bbox
+        n_points = len(sh.shape(i).points)
+        print(str(s_type)+"; # points:" + str(n_points) + "; " + str(['%.3f' % coord for coord in bbox]))

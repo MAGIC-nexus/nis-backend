@@ -12,9 +12,9 @@ import pint  # Units management
 import regex as re
 
 from backend.common.create_database import create_pg_database_engine, create_monet_database_engine
-from backend.external_data.data_source_manager import DataSourceManager
-from backend.external_data.data_sources.eurostat_bulk import Eurostat
-from backend.external_data.data_sources.faostat import FAOSTAT
+from backend.ie_imports.data_source_manager import DataSourceManager
+from backend.ie_imports.data_sources.eurostat_bulk import Eurostat
+from backend.ie_imports.data_sources.faostat import FAOSTAT
 import backend
 
 from magic_box import app, the_registry
@@ -1765,7 +1765,7 @@ row height: ws.row_dimensions
 if __name__ == '__main__':
     import collections
     import io
-    from backend.external_data.rdb_model import *
+    from backend.ie_imports.rdb_model import *
     from backend.model.persistent_db.persistent import *
 
     # SDMX Concept can be: dimension, attribute or measure. Stored in "metadatasets" associated to a dataset by its name

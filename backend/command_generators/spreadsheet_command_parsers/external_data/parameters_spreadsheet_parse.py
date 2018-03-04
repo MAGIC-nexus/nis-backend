@@ -40,7 +40,7 @@ def parse_parameters_command(sh, area):
     content = []  # Dictionary of lists, one per metadata key
     for r in range(area[0]+1, area[1]):
         param = {}
-        for k in ["name", "value", "type", "range", "group", "description"]:
+        for k in col_names.values():
             if k not in col_map:
                 continue
 

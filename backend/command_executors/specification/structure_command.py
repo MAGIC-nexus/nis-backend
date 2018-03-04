@@ -53,7 +53,7 @@ class StructureCommand(IExecutableCommand):
             destinations = []
             for r in o["destinations"]:
                 try:
-                    result = basic_elements_parser.string_to_ast(basic_elements_parser.processor_or_factor_name, r)
+                    result = basic_elements_parser.string_to_ast(basic_elements_parser.core_concept_name, r)
                 except:
                     try:
                         result = basic_elements_parser.string_to_ast(basic_elements_parser.relation_expression, r)

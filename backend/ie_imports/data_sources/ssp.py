@@ -6,8 +6,8 @@ import sys
 import logging
 from typing import List
 
-from backend.external_data.rdb_model import DataSource, Database, Dataset
-from backend.external_data.data_source_manager import IDataSourceManager, filter_dataset_into_dataframe
+from backend.ie_imports.rdb_model import DataSource, Database, Dataset
+from backend.ie_imports.data_source_manager import IDataSourceManager, filter_dataset_into_dataframe
 
 
 def get_ssp_dimension_names_dataset(dataset_name):

@@ -1,6 +1,8 @@
 import openpyxl
 import numpy as np
 
+from backend.command_generators.spreadsheet import obtain_rectangular_submatrices, worksheet_to_numpy_array
+
 
 def parse_upscale_command(sh, area):
     """
@@ -18,6 +20,7 @@ def parse_upscale_command(sh, area):
     command is present
     :return: list of issues (issue_type, message), command label, command content
     """
+
     some_error = False
     issues = []
     # Read base fields
@@ -26,20 +29,20 @@ def parse_upscale_command(sh, area):
     child_processor_type = None
     scaled_factor = None
     source = None
-    for c in range(area[2], area[3]):
+    for c in range(area[2], area[3]):  # Columns
         key = sh.cell(row=1, column=c).value
         value = sh.cell(row=2, column=c).value
-        if key.lower() in ["parent processor type"]:
+        if key.lower() in ["parent"]:
             parent_processor_type = value
-        elif key.lower() in ["child processor type"]:
+        elif key.lower() in ["child"]:
             child_processor_type = value
         elif key.lower() in ["scaled factor"]:
             scaled_factor = value
-        elif key.lower() in ["source"]:
+        elif key.lower() in ["source"]:  # "Observer"
             source = value
 
-    # TODO Detect the matrix
-    m = binary_mask_from_worksheet(sh, True)  # True for cells containing numbers
+    # Detect the matrix defining scales
+    m = binary_mask_from_worksheet(sh, True)  # "True" is to focus on cells containing numbers
     # Locate the matrix with numbers. Assume this defines the labels to consider, they will be around the matrix
     t = obtain_rectangular_submatrices(m)[0]  # Take just the first element
     v = worksheet_to_numpy_array(sh)
@@ -59,8 +62,8 @@ def parse_upscale_command(sh, area):
             break
     if not container_situation:
         issues.append((2, "Neither the sum of rows nor of columns is summing to one"))
-    # TODO Detect the factors
 
+    # TODO Detect the factors
 
     content = {"parent_processor_type": parent_processor_type,
                "child_processor_type": child_processor_type,

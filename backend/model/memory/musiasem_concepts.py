@@ -1570,17 +1570,48 @@ class Benchmark:
         return None
 
 
-class Indicator:
+class IndicatorCategories(Enum):  # Used in FlowFund
+    factor_types_expression = 1  # It can be instantiated into several processors, generating "factors_expression" indicators. At the same time, it may serve to compute the accumulated of these processors
+    factors_expression = 2  # An example is a Metabolic Rate of a processor. Can be originated from a "factor_types_expression"
+    case_study = 3  # An expression operating on factors of from different parts of the case study
+
+
+class Indicator(Nameable, Identifiable):
     """ An arithmetic expression resulting in a numeric value to assess a quality of the SES (SocioEcological System) under study
     Categorize indicators:
     * Attached to FactorType
+    * Attached to Processor
     * Attached to CaseStudy
-    * Attached to
     """
-    # TODO Support for a wildcard indicator. Compute the same operation over all factors of a processor, over all processors.
-    # TODO To generate multiple instances of the indicator or a single indicator acumulating many things.
-    def __init__(self):
-        self._indicator = None
+    # TODO Expressions should support rich selectors, of the form "factors from processors matching these properties and factor types with those properties (include "all factors in a processor") AND/OR ..." plus set operations (union/intersection).
+    # TODO Then, compute an operation over all selected factors.
+    # TODO To generate multiple instances of the indicator or a single indicator accumulating many things.
+    def __init__(self, name: str, formula: str, from_indicator: "Indicator", benchmark: Benchmark, indicator_category: IndicatorCategories):
+        Identifiable.__init__(self)
+        Nameable.__init__(self, name)
+        self._formula = formula
+        self._from_indicator = from_indicator
+        self._benchmark = benchmark
+        self._indicator_category = indicator_category
+        self._description = None
+
+    @staticmethod
+    def partial_key(name: str=None):
+        d = dict(_t="i")
+        if name:
+            d["_n"] = name
+
+        return d
+
+    def key(self):
+        """
+        Return a Key for the identification of the Hierarchy in the registry
+
+        :param registry:
+        :return:
+        """
+        return {"_t": "i", "_n": self.name, "__id": self.ident}
+
 
 # #################################################################################################################### #
 # MAPPING, EXTERNAL DATASETS
@@ -1597,6 +1628,10 @@ class Mapping:
         self.dataset = dataset
         self.origin = origin  # Dimension
         self.destination = destination # Destination Dimension
+        # the_map is of the form:
+        # [{"o": "", "to": [{"d": "", "w": ""}]}]
+        # [ {o: origin category, to: [{d: destination category, w: weight assigned to destination category}] } ]
+        # It is used by the ETL load dataset command
         self.map = the_map  # List of tuples (pairs) source code, destination code[, expression]
 
 

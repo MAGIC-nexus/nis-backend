@@ -114,6 +114,24 @@ def map_codelists(src, dst, corresp, dst_tree=False) -> (list, set):
     return mapped_lst, unmapped
 
 
+# Combinatory of lists (for many-to-many mappings)
+#
+# import itertools
+# a = [[(0.5, "a"),(4, "b"),(7, "c")],[(1, "b")],[(0.2, "z"),(0.1, "y"),(0.7, "x")]]
+# list(itertools.product(*a))
+#
+
+def fill_map_with_all_origin_categories(dim, map):
+    # Check all codes exist
+    mapped_codes = set(map.keys())
+    all_codes = set([c for c in dim.code_list])
+    for c in all_codes - mapped_codes:  # Loop over "unmapped" origin codes
+        # This sentence MODIFIES map, so it is not necessary to return it
+        map[c] = [{"d": None, "w": 1.0}]  # Map to placeholder, with weight 1
+
+    return map
+
+
 class MappingCommand(IExecutableCommand):
     def __init__(self, name: str):
         self._name = name
@@ -126,7 +144,9 @@ class MappingCommand(IExecutableCommand):
         origin_dataset = self._content["origin_dataset"]
         origin_dimension = self._content["origin_dimension"]
         destination = self._content["destination"]
-        map = self._content["map"]  # [{o, to: [{d, e}]}]
+        # [{"o": "", "to": [{"d": "", "w": ""}]}]
+        # [ {o: origin category, to: [{d: destination category, w: weight assigned to destination category}] } ]
+        map = self._content["map"]
         # Obtain the origin dataset Metadata, obtain the code list
         dims, attrs, meas = obtain_dataset_metadata(origin_dataset)
         if origin_dimension not in dims:
@@ -134,34 +154,35 @@ class MappingCommand(IExecutableCommand):
             issues.append((3, "The origin dimension '"+origin_dimension+"' does not exist in dataset '"+origin_dataset+"'"))
         else:
             dim = dims[origin_dimension]
-            # Check all codes exist
-            src_code_list = [c for c in dim.code_list]
-            dst_code_set = set()
-            many_to_one_list = []
-            for i in map:
-                o = i["o"]
-                for j in i["to"]:
-                    d = j["d"]
-                    dst_code_set.add(d)
-                    many_to_one_list.append((o, d))
-            hierarchical_code = True
-            if hierarchical_code:
-                mapped, unmapped = map_codelists(src_code_list, list(dst_code_set), many_to_one_list)
-            else:
-                # Literal. All codes on the left MUST exist
-                mapped = many_to_one_list
-                for i in mapped:
-                    o = i["o"]
-                    if o not in dim.code_list:
-                        some_error = True
-                        issues.append((3, "The origin category '" + o + "' does not exist in dataset dimension '" + origin_dataset + "." +origin_dimension + "'"))
+            map = fill_map_with_all_origin_categories(dim, map)
+            # # Check all codes exist
+            # src_code_list = [c for c in dim.code_list]
+            # dst_code_set = set()
+            # many_to_one_list = []
+            # for i in map:
+            #     o = i["o"]
+            #     for j in i["to"]:
+            #         d = j["d"]
+            #         dst_code_set.add(d)
+            #         many_to_one_list.append((o, d))
+            # hierarchical_code = True
+            # if hierarchical_code:
+            #     mapped, unmapped = map_codelists(src_code_list, list(dst_code_set), many_to_one_list)
+            # else:
+            #     # Literal. All codes on the left MUST exist
+            #     mapped = many_to_one_list
+            #     for i in mapped:
+            #         o = i["o"]
+            #         if o not in dim.code_list:
+            #             some_error = True
+            #             issues.append((3, "The origin category '" + o + "' does not exist in dataset dimension '" + origin_dataset + "." +origin_dimension + "'"))
 
         if some_error:  # Issues at this point are errors, return if there are any
             return issues, None
 
         # Create and store the mapping
         glb_idx, p_sets, hh, datasets, mappings = get_case_study_registry_objects(state)
-        mappings[self._name] = Mapping(self._name, obtain_dataset_source(origin_dataset), origin_dataset, origin_dimension, destination, mapped)
+        mappings[self._name] = Mapping(self._name, obtain_dataset_source(origin_dataset), origin_dataset, origin_dimension, destination, map)
 
         # TODO If the categories to the left are not totally covered, what to do?
         # TODO - If a non-listed category appears, remove the line

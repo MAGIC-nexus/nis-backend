@@ -1,7 +1,8 @@
 import unittest
+import pandas as pd
 
 import backend.common.helper
-from backend.common.helper import PartialRetrievalDictionary
+from backend.common.helper import PartialRetrievalDictionary, augment_dataframe_with_mapped_columns
 from backend.model.memory.musiasem_concepts import Processor, ProcessorsRelationPartOfObservation, Observer
 from backend.model.persistent_db.persistent import (
                                                       serialize_from_object,
@@ -35,6 +36,91 @@ def prepare_partial_key_dictionary():
     prd.put({"_type": "PartOf", "_parent": "A2", "_child": "B"}, ProcessorsRelationPartOfObservation(p1, p2, oer))
     prd.put({"_type": "PartOf", "_parent": "B", "_child": "C"}, ProcessorsRelationPartOfObservation(p2, p3, oer))
     return prd
+
+
+class TestMapFunction(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        pass  # Executed BEFORE test methods of the class
+
+    @classmethod
+    def tearDownClass(cls):
+        pass  # Executed AFTER tests methods of the class
+
+    def setUp(self):
+        super().setUp()
+        pass  # Repeated BEFORE each test...
+
+    def tearDown(self):
+        pass  # Repeated AFTER each test...
+        super().tearDown()
+
+    # ###########################################################
+    def test_001_many_to_one_1(self):
+        # Prepare a many to one map from category set to category set
+        m = [("cat_o_1", "cat_d_1",
+              [
+                  {"o": "c11", "to": [{"d": "c21", "w": 1.0}]},
+                  {"o": "c12", "to": [{"d": "c23", "w": 1.0}]},
+                  {"o": "c13", "to": [{"d": "c23", "w": 1.0}]},
+               ]
+              )
+             ]
+        # Prepare a simple DataFrame
+        df = pd.DataFrame(data=[["c11", 4], ["c12", 3], ["c13", 1.5]], columns=["cat_o_1", "value"])
+        # Call
+        df2 = augment_dataframe_with_mapped_columns(df, m, ["value"])
+        # Check result
+        self.assertEqual(list(df2.columns), ["cat_o_1", "cat_d_1", "value"])
+        self.assertEqual(df2.shape, (3, 3))
+
+    def test_002_many_to_many_1(self):
+        # Prepare a many to many map from category set to category set
+        # Prepare a simple DataFrame containing
+        m = [("cat_o_1", "cat_d_1",
+              [
+                  {"o": "c11", "to": [{"d": "c21", "w": 0.6},
+                                      {"d": "c22", "w": 0.4}]},
+                  {"o": "c12", "to": [{"d": "c23", "w": 1.0}]},
+                  {"o": "c13", "to": [{"d": "c23", "w": 1.0}]},
+               ]
+              )
+             ]
+        # Prepare a simple DataFrame
+        df = pd.DataFrame(data=[["c11", 4], ["c12", 3], ["c13", 1.5]], columns=["cat_o_1", "value"])
+        # Call
+        df2 = augment_dataframe_with_mapped_columns(df, m, ["value"])
+        # Check result
+        self.assertEqual(list(df2.columns), ["cat_o_1", "cat_d_1", "value"])
+        self.assertEqual(df2.shape, (4, 3))
+
+    def test_003_many_to_many_2(self):
+        # Prepare a many to many map from category set to category set
+        # Prepare a simple DataFrame containing
+        m = [("cat_o_1", "cat_d_1",
+              [
+                  {"o": "c11", "to": [{"d": "c21", "w": 0.6},
+                                      {"d": "c22", "w": 0.4}]},
+                  {"o": "c12", "to": [{"d": "c23", "w": 1.0}]},
+                  {"o": "c13", "to": [{"d": "c23", "w": 1.0}]},
+               ]
+              ),
+             ("cat_o_2", "cat_d_2",
+              [
+                  {"o": "c31", "to": [{"d": "c41", "w": 0.3},
+                                      {"d": "c42", "w": 0.7}]},
+                  {"o": "c32", "to": [{"d": "c43", "w": 1.0}]},
+                  {"o": "c33", "to": [{"d": "c43", "w": 1.0}]},
+              ]
+              )
+             ]
+        # Prepare a simple DataFrame
+        df = pd.DataFrame(data=[["c11", "c31", 4], ["c12", "c32", 3], ["c13", "c31", 1.5]], columns=["cat_o_1", "cat_o_2", "value"])
+        # Call
+        df2 = augment_dataframe_with_mapped_columns(df, m, ["value"])
+        # Check result
+        self.assertEqual(list(df2.columns), ["cat_o_1", "cat_o_2", "cat_d_1", "cat_d_2", "value"])
+        self.assertEqual(df2.shape, (7, 5))
 
 
 class TestPartialKeyDictionary(unittest.TestCase):

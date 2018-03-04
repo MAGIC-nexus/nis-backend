@@ -165,6 +165,9 @@ class Code(ORMBase): # A single value and its description for a Dimension
     level_id = Column(Integer, ForeignKey(CodeListLevel.id))
     level = relationship(CodeListLevel, backref=backref("codes", cascade="all, delete-orphan"))
 
+    geography = Column(Unicode)  # If it is a geographical code, what is the boundary
+    geography_url = Column()
+
     children = Column(Unicode)  # postgresql.JSONB)  # List of codes totalling this code
     parents = Column(Unicode)  # postgresql.JSONB)  # List of codes aggregating this code
 

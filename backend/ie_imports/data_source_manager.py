@@ -5,7 +5,7 @@ import pandas as pd
 import datetime
 
 from backend.common.helper import create_dictionary, memoize, strcmp, obtain_dataset_source
-from backend.external_data.rdb_model import DataSource, Database, Dataset
+from backend.ie_imports.rdb_model import DataSource, Database, Dataset
 from backend.model.persistent_db.persistent import force_load
 
 

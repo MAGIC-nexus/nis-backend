@@ -77,19 +77,19 @@ class TestCommandFiles(unittest.TestCase):
     def test_002_execute_file_two(self):
         """
         A file containing QQs for three different sets of processor: Crop, Farm, AgrarianRegion
-        AND Upscaling
+        AND UPSCALING
         (extracted from Almeria case study)
         Test number of processors read for each category, using processor sets and PartialRetrievalDictionary
         :return:
         """
-        # file_path = os.path.dirname(os.path.abspath(__file__)) + "/z_input_files/test_spreadsheet_2.xlsx"
-        # isess = execute_file(file_path, generator_type="spreadsheet")
-        # # Check State of things
-        # glb_idx, p_sets, hh, datasets, mappings = get_case_study_registry_objects(isess.state)
-        # # Three processor sets
-        # self.assertEqual(len(p_sets), 3)
-        # # Close interactive session
-        # isess.close_db_session()
+        file_path = os.path.dirname(os.path.abspath(__file__)) + "/z_input_files/test_spreadsheet_2.xlsx"
+        isess = execute_file(file_path, generator_type="spreadsheet")
+        # Check State of things
+        glb_idx, p_sets, hh, datasets, mappings = get_case_study_registry_objects(isess.state)
+        # Three processor sets
+        self.assertEqual(len(p_sets), 3)
+        # Close interactive session
+        isess.close_db_session()
 
     def test_003_execute_file_three(self):
         """
@@ -100,6 +100,9 @@ class TestCommandFiles(unittest.TestCase):
         Test number of processors read for each category, using processor sets and PartialRetrievalDictionary
         :return:
         """
+        # ####
+        # COMMENTED OUT BECAUSE IT IS QUITE SLOW
+        # ####
         # file_path = os.path.dirname(os.path.abspath(__file__)) + "/z_input_files/test_spreadsheet_3_dataset.xlsx"
         # isess = execute_file(file_path, generator_type="spreadsheet")
         # # Check State of things

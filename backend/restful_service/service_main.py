@@ -42,10 +42,10 @@ from backend.restful_service import nis_api_base, nis_client_base, nis_external_
     tm_permissions, \
     tm_case_study_version_statuses
 from backend.restful_service.serialization import serialize, deserialize
-from backend.external_data.data_source_manager import DataSourceManager
-from backend.external_data.data_sources.eurostat_bulk import Eurostat
-from backend.external_data.data_sources.faostat import FAOSTAT
-from backend.external_data.data_sources.oecd import OECD
+from backend.ie_imports.data_source_manager import DataSourceManager
+from backend.ie_imports.data_sources.eurostat_bulk import Eurostat
+from backend.ie_imports.data_sources.faostat import FAOSTAT
+from backend.ie_imports.data_sources.oecd import OECD
 
 # #####################################################################################################################
 # >>>> BOOT TIME. FUNCTIONS AND CODE <<<<

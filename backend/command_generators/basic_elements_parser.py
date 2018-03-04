@@ -38,8 +38,9 @@ string = quotedString.setParseAction(lambda t: {'type': 'str', 'value': t[0]})
 # RULES: namespace, parameter list, function call, dataset variable, hierarchical var name
 namespace = simple_ident + Literal("::").suppress()
 expression = Forward()
-expression2 = Forward()
-expression3 = Forward()
+expression_with_parameters = Forward()
+hierarchy_expression = Forward()
+indicator_expression = Forward()
 named_parameter = Group(simple_ident + equals.suppress() + expression).setParseAction(lambda t: {'type': 'named_parameter', 'param': t[0][0], 'value': t[0][1]})
 named_parameters_list = delimitedList(named_parameter, ",")
 parameters_list = delimitedList(Or([expression, named_parameter]), ",")
@@ -88,12 +89,12 @@ simple_h_name = (Optional(namespace).setResultsName("namespace") +
                                   )
 
 # simple_hierarchical_name [":" simple_hierarchical_name]
-processor_or_factor_name = (simple_h_name.setResultsName("processor") + Optional(Group(processor_factor_separator.suppress() + simple_h_name).setResultsName("factor"))
-                            ).setParseAction(lambda _s, l, t: {'type': 'pf_name',
-                                                               'processor': t.processor,
-                                                               'factor': t.factor[0] if t.factor else None
-                                                               }
-                                             )
+core_concept_name = (Optional(simple_h_name.setResultsName("processor")) + Optional(Group(processor_factor_separator.suppress() + simple_h_name).setResultsName("factor"))
+                     ).setParseAction(lambda _s, l, t: {'type': 'pf_name',
+                                                                'processor': t.processor if t.processor else None,
+                                                                'factor': t.factor[0] if t.factor else None
+                                                        }
+                                      )
 
 # RULES: Expression type 1
 expression << operatorPrecedence(Or([real, integer, string, h_name]), # Operand types
@@ -107,27 +108,37 @@ expression << operatorPrecedence(Or([real, integer, string, h_name]), # Operand 
 # RULES: Expression type 2. Can mention only parameters and numbers
 # (for parameters, namespaces are allowed, and also hierarchical naming)
 # TODO Check if it can be evaluated with "ast_evaluator"
-expression2 << operatorPrecedence(Or([real, integer, simple_h_name]), # Operand types
-                                  [(signop, 1, opAssoc.RIGHT, lambda _s, l, t: {'type': 'u'+t.asList()[0][0], 'terms': [0, t.asList()[0][1]], 'ops': ['u'+t.asList()[0][0]]}),
-                                   (multop, 2, opAssoc.LEFT, lambda _s, l, t: {'type': 'multipliers', 'terms': t.asList()[0][0::2], 'ops': t.asList()[0][1::2]}),
-                                   (plusop, 2, opAssoc.LEFT, lambda _s, l, t: {'type': 'adders', 'terms': t.asList()[0][0::2], 'ops': t.asList()[0][1::2]}),
-                                   ],
-                                  lpar=lparen.suppress(),
-                                  rpar=rparen.suppress())
+expression_with_parameters << operatorPrecedence(Or([real, integer, simple_h_name]),  # Operand types
+                                                 [(signop, 1, opAssoc.RIGHT, lambda _s, l, t: {'type': 'u'+t.asList()[0][0], 'terms': [0, t.asList()[0][1]], 'ops': ['u'+t.asList()[0][0]]}),
+                                                  (multop, 2, opAssoc.LEFT, lambda _s, l, t: {'type': 'multipliers', 'terms': t.asList()[0][0::2], 'ops': t.asList()[0][1::2]}),
+                                                  (plusop, 2, opAssoc.LEFT, lambda _s, l, t: {'type': 'adders', 'terms': t.asList()[0][0::2], 'ops': t.asList()[0][1::2]}),
+                                                  ],
+                                                 lpar=lparen.suppress(),
+                                                 rpar=rparen.suppress())
 
 # RULES: Expression type 3. For hierarchies. Can mention only simple identifiers (codes) and numbers
-expression3 << operatorPrecedence(Or([real, integer, simple_ident]),  # Operand types
-                                  [(signop, 1, opAssoc.RIGHT, lambda _s, l, t: {'type': 'u'+t.asList()[0][0], 'terms': [0, t.asList()[0][1]], 'ops': ['u'+t.asList()[0][0]]}),
-                                   (multop, 2, opAssoc.LEFT, lambda _s, l, t: {'type': 'multipliers', 'terms': t.asList()[0][0::2], 'ops': t.asList()[0][1::2]}),
-                                   (plusop, 2, opAssoc.LEFT, lambda _s, l, t: {'type': 'adders', 'terms': t.asList()[0][0::2], 'ops': t.asList()[0][1::2]}),
-                                   ],
-                                  lpar=lparen.suppress(),
-                                  rpar=rparen.suppress())
+hierarchy_expression << operatorPrecedence(Or([real, integer, simple_ident]),  # Operand types
+                                           [(signop, 1, opAssoc.RIGHT, lambda _s, l, t: {'type': 'u'+t.asList()[0][0], 'terms': [0, t.asList()[0][1]], 'ops': ['u'+t.asList()[0][0]]}),
+                                            (multop, 2, opAssoc.LEFT, lambda _s, l, t: {'type': 'multipliers', 'terms': t.asList()[0][0::2], 'ops': t.asList()[0][1::2]}),
+                                            (plusop, 2, opAssoc.LEFT, lambda _s, l, t: {'type': 'adders', 'terms': t.asList()[0][0::2], 'ops': t.asList()[0][1::2]}),
+                                            ],
+                                           lpar=lparen.suppress(),
+                                           rpar=rparen.suppress())
+
+# RULES: Expression type 4. For indicators. Can mention only numbers and core concepts
+indicator_expression << operatorPrecedence(Or([real, integer, core_concept_name]),  # Operand types
+                                           [(signop, 1, opAssoc.RIGHT, lambda _s, l, t: {'type': 'u'+t.asList()[0][0], 'terms': [0, t.asList()[0][1]], 'ops': ['u'+t.asList()[0][0]]}),
+                                            (multop, 2, opAssoc.LEFT, lambda _s, l, t: {'type': 'multipliers', 'terms': t.asList()[0][0::2], 'ops': t.asList()[0][1::2]}),
+                                            (plusop, 2, opAssoc.LEFT, lambda _s, l, t: {'type': 'adders', 'terms': t.asList()[0][0::2], 'ops': t.asList()[0][1::2]}),
+                                            ],
+                                           lpar=lparen.suppress(),
+                                           rpar=rparen.suppress())
+
 
 # [expression2 (previously parsed)] [relation_operator] processor_or_factor_name
-relation_expression = (Optional(expression2).setResultsName("weight") +
+relation_expression = (Optional(expression_with_parameters).setResultsName("weight") +
                        Optional(relation_operator).setResultsName("relation_type") +
-                       processor_or_factor_name.setResultsName("destination")
+                       core_concept_name.setResultsName("destination")
                        ).setParseAction(lambda _s, l, t: {'type': 'relation',
                                                           'name': t.destination,
                                                           'relation_type': t.relation_type,
@@ -181,7 +192,7 @@ global_functions = {i["name"]: i for i in f}
 
 def ast_evaluator(exp, state, obj, issue_lst, evaluation_type):
     """
-    Numerically evaluate the result of the parse of the previous "expression" rule
+    Numerically evaluate the result of the parse of "expression" rule (not valid for the other "expression" rules)
 
     :param exp: Input dictionary
     :param state: State used to obtain variables/objects
@@ -385,11 +396,6 @@ def ast_to_string(exp):
     Elaborate string from expression AST
 
     :param exp: Input dictionary
-    :param state: State used to obtain variables/objects
-    :param obj: An object used when evaluating hierarchical variables. simple names, functions and datasets are considered members of this object
-    :param issue_lst: List in which issues have to be annotated
-    :param evaluation_type: "numeric" for full evaluation, "static" to return True if the expression can be evaluated
-            (explicitly mentioned variables are defined previously)
     :return: value (scalar EXCEPT for named parameters, which return a tuple "parameter name - parameter value"
     """
     val = None
@@ -399,6 +405,8 @@ def ast_to_string(exp):
             val = str(exp["value"])
         elif t == "named_parameter":
             val = str(exp["param"] + "=" + ast_to_string(exp["value"]))
+        elif t == "pf_name":
+            val = str(exp["processor"] if exp["processor"] else "") + (":" + exp["factor"]) if exp["factor"] else ""
         elif t == "dataset":
             # Function parameters and Slice parameters
             func_params = [ast_to_string(p) for p in exp["func_params"]]
@@ -490,7 +498,7 @@ if __name__ == '__main__':
     from dotted.collection import DottedDict
 
     s = "c1 + c30 - c2 - 10"
-    res = string_to_ast(expression3, s)
+    res = string_to_ast(hierarchy_expression, s)
     s = "ds.col"
     res = string_to_ast(h_name, s)
 

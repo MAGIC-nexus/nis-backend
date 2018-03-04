@@ -10,6 +10,8 @@ import regex as re  # Improvement over standard "re"
 
 from backend import Issue
 from backend.command_generators.json import create_command
+from backend.command_generators.spreadsheet_command_parsers.analysis.indicators_spreadsheet_parse import \
+    parse_indicators_command
 from backend.command_generators.spreadsheet_command_parsers.external_data.mapping_spreadsheet_parse import parse_mapping_command
 from backend.command_generators.spreadsheet_command_parsers.external_data.etl_external_dataset_spreadsheet_parse import parse_etl_external_dataset_command
 from backend.command_generators.spreadsheet_command_parsers.external_data.parameters_spreadsheet_parse import parse_parameters_command
@@ -72,6 +74,8 @@ Comando
     re_data = re.compile(r"(Dataset|DS)[ _]" + var_name, flags=flags)
     re_mapping = re.compile(r"^(Mapping|Map)([ _]" + cplex_var + "[ _]" + cplex_var + ")?", flags=flags)
 
+    re_indicators = re.compile(r"(Indicators|KPI)([ _]" + var_name + ")?", flags=flags)
+
     # For each worksheet, get the command type, convert into primitive JSON
     for c, sh_name in enumerate(xl_in.sheetnames):
         issues = []
@@ -107,10 +111,6 @@ Comando
         elif re_meta.search(name):
             dataset = re_meta.search(name).group(1)
             c_type = "dataset_metadata"
-        elif re_parameters.search(name):
-            name = re_parameters.search(name).group(1)
-            c_type = "parameters"
-            issues, c_label, c_content = parse_parameters_command(sh_in, t)
         elif re_data.search(name):
             dataset = re_data.search(name).group(2)
             c_type = "etl_dataset"
@@ -136,6 +136,10 @@ Comando
                 issue = {"sheet_number": c, "sheet_name": sh_name, "c_type": c_type, "type": 3, "message": "Either origin or destination are not correctly specified in the sheet name '"+sh_name+"'"}
                 total_issues.append(issue)
             issues, c_label, c_content = parse_mapping_command(sh_in, t, origin, destination)
+        elif re_parameters.search(name):  # Parameters are not external datasets but are information coming from outside, somehow
+            name = re_parameters.search(name).group(1)
+            c_type = "parameters"
+            issues, c_label, c_content = parse_parameters_command(sh_in, t)
         # SPECIFICATIONS
         elif re_metadata.search(name):
             c_type = "metadata"
@@ -172,6 +176,11 @@ Comando
         elif re_references.search(name):
             # TODO Read the content
             c_type = "referenceable_data"
+        # ANALYSIS COMMANDS
+        elif re_indicators.search(name):  # Indicators
+            name = re_parameters.search(name).group(1)
+            c_type = "indicators"
+            issues, c_label, c_content = parse_indicators_command(sh_in, t)
 
         # Append issues
         errors = 0

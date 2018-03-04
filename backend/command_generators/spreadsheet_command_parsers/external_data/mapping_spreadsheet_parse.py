@@ -9,9 +9,8 @@ def parse_mapping_command(sh, area, origin, destination):
     If the categories do not exist, they are created flat. Later they can be turned into a hierarchy and the mapping
     will still hold
 
-    The mapping has to be MANY to ONE
-    The mapping has to be complete (all elements from left side must be covered)
-
+    The syntax of the mapping allows expressing MANY to ONE and also MANY to MANY correspondence.
+    The mapping has to be complete (all elements from left side must be covered, if not "" is assumed on the right side)
 
     :param sh: Input worksheet
     :param area: Tuple (top, bottom, left, right) representing the rectangular area of the input worksheet where the
@@ -83,12 +82,17 @@ def parse_mapping_command(sh, area, origin, destination):
     # Read mapping Origin to Destination
     o_dict = create_dictionary()
     for r in range(area[0] + 1, area[1]):
-        o_value = sh.cell(row=r, column=area[2]).value
-        d_value = sh.cell(row=r, column=area[2] + 1).value
+        o_value = sh.cell(row=r, column=area[2]).value  # First column -> Origin
+        d_value = sh.cell(row=r, column=area[2] + 1).value  # Second column -> Destination
         try:
-            exp_value = sh.cell(row=r, column=area[2] + 2).value
+            exp_value = sh.cell(row=r, column=area[2] + 2).value  # Third column -> Weight (for Many to Many mappings)
+            try:
+                exp_value = float(exp_value)
+            except:  # If it is not possible, it maybe an expression, postpone conversion until usage
+                pass
         except:
-            exp_value = None
+            exp_value = 1.0  # Many to One
+
         if not o_value or not d_value:
             if not o_value and d_value:
                 issues.append((2, "Row "+str(r)+": Origin not defined. Row skipped."))
@@ -106,7 +110,11 @@ def parse_mapping_command(sh, area, origin, destination):
         else:
             lst = []
             o_dict[o_value] = lst
-        lst.append({"d": d_value, "e": exp_value})
+        # Check "d_value" is not being repeated for "o_value"
+        if len(lst) >= 1 and d_value not in [d["d"] for d in lst]:
+            lst.append({"d": d_value, "w": exp_value})
+        else:
+            issues.append((3, "Destination category '" + destination + "' has been repeated for origin category '" + o_value + "'"))
 
     # List of dictionaries, where each dictionary contains the specification of an origin "o"
     # For multiple entries (many to many map), the origin maps a list "to" of dictionaries "d", "e"
