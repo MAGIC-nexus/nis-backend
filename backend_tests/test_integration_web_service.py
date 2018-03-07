@@ -33,6 +33,7 @@ backend.restful_service.app.config["TESTING"] = "True"
 import backend.restful_service.service_main
 from backend.restful_service import app, nis_api_base
 
+
 def to_str(resp_data):
     import flask.wrappers
     if isinstance(resp_data, flask.wrappers.Response):
@@ -268,6 +269,34 @@ class TestHighLevelUseCases(unittest.TestCase):
         # TODO Try to add a version, it should be OK
         # TODO Delete user2. ¿disable it?
         pass
+
+    def test_004_convert_xlsx_into_json(self):
+        """
+        Test conversion from XLSX to MSM-JSON
+        Just simple checks
+
+        :return:
+        """
+        a = TestHighLevelUseCases.app
+        # Reset DB (not necessary, but it resets also Interactive Session)
+        r = a.post(nis_api_base + "/resetdb")
+        self.assertEqual(r.status_code, 204)
+        # An interactive session
+        r = a.post(nis_api_base + "/isession")
+        self.assertEqual(r.status_code, 204)
+        r = a.put(nis_api_base + "/isession/identity?user=test_user")
+        self.assertEqual(r.status_code, 200)
+        # Send Spreadsheet file: store and execute it.
+        file_path = os.path.dirname(os.path.abspath(__file__))
+        with open(file_path + "/z_input_files/test_spreadsheet_1.xlsx", "rb") as f:
+            b = f.read()
+        r = a.post(nis_api_base + "/isession/generator.json",
+                   data={'file': (io.BytesIO(b), "input_file.xlsx")},
+                   headers={"Content-Type": "multipart/form-data"})  # application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
+        self.assertEqual(r.status_code, 200)
+        # d = json.loads(r.data)
+        # Logout
+        a.delete(nis_api_base + "/isession")
 
     def test_submit_worksheet_new_version(self):
         pass

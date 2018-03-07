@@ -1,7 +1,7 @@
 import openpyxl
 import numpy as np
 
-from backend.command_generators.spreadsheet import obtain_rectangular_submatrices, worksheet_to_numpy_array
+from backend.command_generators.spreadsheet_utils import worksheet_to_numpy_array, obtain_rectangular_submatrices
 
 
 def parse_upscale_command(sh, area):

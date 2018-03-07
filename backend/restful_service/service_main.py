@@ -523,6 +523,9 @@ def convert_generator_to_json_generator():
     # Receive file
     generator_type, content_type, buffer, _, _ = receive_file_submission(request)
 
+    if len(buffer) == 0:
+        raise Exception("No content was received. Please check the original file exists.")
+
     output = convert_generator_to_native(generator_type, content_type, buffer)
 
     # Return the conversion
@@ -553,6 +556,9 @@ def convert_generator_to_dublin_core():
 
     # Receive file
     generator_type, content_type, buffer, _, _ = receive_file_submission(request)
+
+    if len(buffer) == 0:
+        raise Exception("No content was received. Please check the original file exists.")
 
     output = convert_generator_to_native(generator_type, content_type, buffer)
     xml = None

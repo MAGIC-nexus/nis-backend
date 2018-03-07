@@ -1,4 +1,4 @@
-from backend.command_generators.spreadsheet import commands_generator_from_ooxml_file
+from backend.command_generators.spreadsheet_parser import commands_generator_from_ooxml_file
 from backend.command_generators.json import commands_generator_from_native_json
 
 """

@@ -168,6 +168,8 @@ def _json_serial(obj):
     if isinstance(obj, datetime):
         serial = obj.isoformat()
         return serial
+    elif isinstance(obj, CaseInsensitiveDict):
+        return str(obj)
     raise TypeError("Type not serializable")
 
 
