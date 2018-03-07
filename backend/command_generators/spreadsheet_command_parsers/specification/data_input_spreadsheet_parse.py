@@ -351,7 +351,8 @@ def parse_data_input_command(sh, area, processors_type, state):
             # taxa at parse time (the dataset is still not obtained). Leave it for the execution
             if c not in set_taxa:
                 set_taxa[c] = create_dictionary()
-            set_taxa[c][value] = None
+            if value is not None:
+                set_taxa[c][value] = None
 
         # Now that individual columns have been parsed, do other things
 
