@@ -420,8 +420,8 @@ class ModelBuildingFactors(unittest.TestCase):
         # Create a Factor for each processor
         p1 = prd.get(Processor.partial_key("P1"))[0]
         p2 = prd.get(Processor.partial_key("P1.P2"))[0]
-        f1 = Factor.create("", p1, FactorInProcessorType(external=False, incoming=False), ft.get_node("F1"))
-        f2 = Factor.create("", p2, FactorInProcessorType(external=False, incoming=True),  ft.get_node("F1"))
+        f1 = Factor.create_and_append("", p1, FactorInProcessorType(external=False, incoming=False), ft.get_node("F1"))
+        f2 = Factor.create_and_append("", p2, FactorInProcessorType(external=False, incoming=True), ft.get_node("F1"))
         # Connect from one to the other
         c = _find_or_create_relation(f1, f2, RelationClassType.ff_directed_flow, Observer.no_observer_specified, None, prd)
         # Check that the connection exists in both sides
@@ -437,10 +437,10 @@ class ModelBuildingFactors(unittest.TestCase):
         ps = build_hierarchy("Procs", "Processor", prd, [dict(code="P1", children=[dict(code="P2")]),
                                                          dict(code="P3")])
         # Create a Factor for each processor, and an additional factor for the processor which is parent and sibling
-        f11 = Factor.create("", prd.get(Processor.partial_key("P1"))[0], FactorInProcessorType(external=False, incoming=False), ft.get_node("F1"))
-        f2 = Factor.create("", prd.get(Processor.partial_key("P1.P2"))[0], FactorInProcessorType(external=False, incoming=True), ft.get_node("F1"))
-        f12 = Factor.create("", prd.get(Processor.partial_key("P1"))[0], FactorInProcessorType(external=False, incoming=False), ft.get_node("F1"))
-        f3 = Factor.create("", prd.get(Processor.partial_key("P3"))[0], FactorInProcessorType(external=False, incoming=True), ft.get_node("F1"))
+        f11 = Factor.create_and_append("", prd.get(Processor.partial_key("P1"))[0], FactorInProcessorType(external=False, incoming=False), ft.get_node("F1"))
+        f2 = Factor.create_and_append("", prd.get(Processor.partial_key("P1.P2"))[0], FactorInProcessorType(external=False, incoming=True), ft.get_node("F1"))
+        f12 = Factor.create_and_append("", prd.get(Processor.partial_key("P1"))[0], FactorInProcessorType(external=False, incoming=False), ft.get_node("F1"))
+        f3 = Factor.create_and_append("", prd.get(Processor.partial_key("P3"))[0], FactorInProcessorType(external=False, incoming=True), ft.get_node("F1"))
         # Do the connections
         ch = _find_or_create_relation(f11, f2, RelationClassType.ff_directed_flow, Observer.no_observer_specified, None, prd)  # ch = f11.connect_to(f2, ps)
         cs = _find_or_create_relation(f12, f3, RelationClassType.ff_directed_flow, Observer.no_observer_specified, None, prd)  # cs = f12.connect_to(f3, ps)
@@ -465,7 +465,7 @@ class ModelBuildingFactors(unittest.TestCase):
         # Create a processor
         p1 = Processor("P1")
         # Create a Factor and assign it to the Processor
-        f1 = Factor.create("", p1, FactorInProcessorType(external=False, incoming=False), ft.get_node("F1"))
+        f1 = Factor.create_and_append("", p1, FactorInProcessorType(external=False, incoming=False), ft.get_node("F1"))
         # Observer of the Value
         oer = Observer("oer1")
         # Create an Observation with its value
@@ -483,7 +483,7 @@ class ModelBuildingFactors(unittest.TestCase):
         # Create a processor
         p1 = Processor("P1")
         # Create a Factor and assign it to the Processor
-        f1 = Factor.create("", p1, FactorInProcessorType(external=False, incoming=False), ft.get_node("F1"))
+        f1 = Factor.create_and_append("", p1, FactorInProcessorType(external=False, incoming=False), ft.get_node("F1"))
         # Observer of the Value
         oer1 = Observer("oer1")
         oer2 = Observer("oer2")

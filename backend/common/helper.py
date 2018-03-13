@@ -88,12 +88,13 @@ class CaseInsensitiveDict(collections.MutableMapping):
         return str(dict(self.items()))
 
 
-def create_dictionary(case_sens=case_sensitive, multi_dict=False, data={}):
+def create_dictionary(case_sens=case_sensitive, multi_dict=False, data=dict()):
     """
     Factory to create dictionaries
 
     :param case_sens: True to create a case sensitive dictionary, False to create a case insensitive one
     :param multi_dict: True to create a "MultiDict", capable of storing several values
+    :param data: Dictionary with which the new dictionary is initialized
     :return:
     """
 
@@ -313,11 +314,11 @@ df.loc[("h", slice(None)), "c"]
         :return:
         """
 
-        def delete_single(key):
+        def delete_single(key_):
             """
             Remove elements matching the total or partial key
 
-            :param key:
+            :param key_:
             :return:
             """
             """
@@ -327,7 +328,7 @@ df.loc[("h", slice(None)), "c"]
             :param key_and_value: If True, return a list of tuple (key, value). If not, return a list of values
             :return: A list of elements which can be (key, value) or "value", depending on the parameter "key_and_value"
             """
-            keys = [k for k in key]
+            keys = [k_ for k_ in key_]
             s_tuple = tuple(sorted(keys))
             if s_tuple not in self._dfs:
                 # Try partial match
@@ -344,9 +345,9 @@ df.loc[("h", slice(None)), "c"]
                 res = 0
                 for df_, s_tuple in df:
                     if case_sensitive:
-                        df_key = tuple([key[k] if k in key else slice(None) for k in s_tuple])
+                        df_key = tuple([key_[k_] if k_ in key_ else slice(None) for k_ in s_tuple])
                     else:
-                        df_key = tuple([(key[k] if k.startswith("__") else key[k].lower()) if k in key else slice(None) for k in s_tuple])
+                        df_key = tuple([(key_[k_] if k_.startswith("__") else key_[k_].lower()) if k_ in key_ else slice(None) for k_ in s_tuple])
                     try:
                         tmp = df_.loc[df_key, "value"]
                         if isinstance(tmp, pd.Series):
@@ -498,7 +499,7 @@ class Memoize:
         return self.memo[args]
 
 
-class memoize(object):
+class Memoize2(object):
     """cache the return value of a method
 
     This class is meant to be used as a decorator of methods. The return value
@@ -541,10 +542,10 @@ class memoize(object):
 # >>>> MAPPING <<<<
 # #####################################################################################################################
 
-
+# TODO Consider optimization using numba or others
 def augment_dataframe_with_mapped_columns(df, maps, measure_columns):
     """
-    Elaborate a pd.DataFrame from the input DataFrame "df",
+    Elaborate a pd.DataFrame from the input DataFrame "df" and
     "maps" which is a list of tuples ("source_column", "destination_column", map)
     where map is of the form:
         [{"o": "", "to": [{"d": "", "w": ""}]}]
@@ -610,7 +611,7 @@ def augment_dataframe_with_mapped_columns(df, maps, measure_columns):
         lst = []
         n_subrows = 1
         for c_name, c in mapped_cols.items():
-            dest_col = dict_of_maps[c_name][0]
+            # dest_col = dict_of_maps[c_name][0]
             map_ = dict_of_maps[c_name][1]
             code = m[r, c]
             n_subrows *= len(map_[code])

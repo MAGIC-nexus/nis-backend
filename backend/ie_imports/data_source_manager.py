@@ -4,7 +4,7 @@ from typing import List, Union
 import pandas as pd
 import datetime
 
-from backend.common.helper import create_dictionary, memoize, strcmp, obtain_dataset_source
+from backend.common.helper import create_dictionary, Memoize2, strcmp, obtain_dataset_source
 from backend.ie_imports.rdb_model import DataSource, Database, Dataset
 from backend.model.persistent_db.persistent import force_load
 
@@ -118,7 +118,7 @@ class DataSourceManager:
                     ]
 
     # @cachier(stale_after=datetime.timedelta(days=1))
-    @memoize
+    @Memoize2
     def get_datasets(self, source: Union[IDataSourceManager, str]=None, database=None):
         """
         Obtain a list of tuples (Source, Dataset name)

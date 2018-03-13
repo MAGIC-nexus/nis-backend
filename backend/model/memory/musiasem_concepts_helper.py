@@ -237,13 +237,13 @@ def find_or_create_observable(state: Union[State, PartialRetrievalDictionary],
             # CREATE Factor (if it does not exist). An Observable
             f = glb_idx.get(Factor.partial_key(processor=p, factor_type=ft))
             if not f:
-                f = Factor(acum_name,
-                           p,
-                           in_processor_type=FactorInProcessorType(external=fact_external, incoming=fact_incoming),
-                           taxon=ft,
-                           location=fact_location,
-                           tags=None,
-                           attributes=fact_attributes)
+                f = Factor.create_and_append(acum_name,
+                                             p,
+                                             in_processor_type=FactorInProcessorType(external=fact_external, incoming=fact_incoming),
+                                             taxon=ft,
+                                             location=fact_location,
+                                             tags=None,
+                                             attributes=fact_attributes)
                 glb_idx.put(f.key(), f)
             else:
                 f = f[0]
@@ -272,11 +272,13 @@ def create_quantitative_observation(state: Union[State, PartialRetrievalDictiona
                                     fact_incoming: bool=None, fact_external: bool=None, fact_location=None):
     """
     Creates an Observation of a Factor
+    If the containing Processor does not exist, it is created
+    If the FactorType does not exist, it is created
     If the Factor does not exist, it is created
-    If no "value" is passed, only the Factor is created
+    Finally, if no "value" is passed, only the Factor is created
 
-    :param state:
-    :param factor: string processor:factor_type or Factor
+    :param state: A State or PartialRetrievalDictionary instance
+    :param factor: string processor:factor_type or Factor. If str, the Factor (and Processor and FactorType) can be created
     :param value: expression with the value
     :param unit: metric unit
     :param observer: string with the name of the observer or Observer

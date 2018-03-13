@@ -12,7 +12,7 @@ import pandasdmx
 import requests
 import requests_cache
 
-from backend.common.helper import create_dictionary, import_names, memoize
+from backend.common.helper import create_dictionary, import_names, Memoize2
 from backend.ie_imports.data_source_manager import IDataSourceManager, filter_dataset_into_dataframe
 from backend.ie_imports.rdb_model import DataSource, Database, Dataset, Dimension, CodeList, CodeImmutable
 
@@ -61,7 +61,7 @@ class Eurostat(IDataSourceManager):
         db.description = "Eurostat provides all Datasets in a single database"
         return [db]
 
-    @memoize
+    @Memoize2
     def get_datasets(self, database=None) -> list:
         """ List of datasets in a database, or in all the datasource (if database==None)
             Return a list of tuples (database, dataset)

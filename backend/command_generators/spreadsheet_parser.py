@@ -13,6 +13,10 @@ from backend.command_generators.spreadsheet_command_parsers.external_data.parame
 from backend.command_generators.spreadsheet_command_parsers.specification.hierarchy_spreadsheet_parser import parse_hierarchy_command
 from backend.command_generators.spreadsheet_command_parsers.specification.metadata_spreadsheet_parse import parse_metadata_command
 from backend.command_generators.spreadsheet_command_parsers.specification.data_input_spreadsheet_parse import parse_data_input_command
+from backend.command_generators.spreadsheet_command_parsers.specification.pedigree_matrix_spreadsheet_parse import \
+    parse_pedigree_matrix_command
+from backend.command_generators.spreadsheet_command_parsers.specification.references_spreadsheet_parser import \
+    parse_references_command
 from backend.command_generators.spreadsheet_command_parsers.specification.upscale_spreadsheet_parse import parse_upscale_command
 from backend.command_generators.spreadsheet_command_parsers.specification.structure_spreadsheet_parser import parse_structure_command
 from backend.command_generators.spreadsheet_utils import binary_mask_from_worksheet, obtain_rectangular_submatrices
@@ -53,12 +57,12 @@ Comando
     # Regular expressions for the different commands
     flags = re.IGNORECASE
     re_metadata = re.compile(r"^Metadata", flags=flags)
-    re_processors = re.compile(r"(Processors|Proc)[ _]" + var_name, flags=flags)
+    re_processors = re.compile(r"(Processors|Proc)[ _]+" + var_name, flags=flags)
     re_hierarchy = re.compile(r"(Taxonomy|Tax|Composition|Comp)[ _]([cpf])[ ]" + var_name, flags=flags)
-    re_upscale = re.compile(r"(Upscale|Up)[ _]" + var_name + "[ _]" + var_name, flags=flags)
-    re_relations = re.compile(r"(Grammar|Relations|Rel)[ _]?" + var_name+"?", flags=flags)
+    re_upscale = re.compile(r"(Upscale|Up)[ _](" + var_name + "[ _]" + var_name + ")?", flags=flags)
+    re_relations = re.compile(r"(Grammar|Relations|Rel)([ _]+" + var_name+")?", flags=flags)
     re_transform = re.compile(r"(Transform|Tx)[ _]" + var_name + "[ _]" + var_name, flags=flags)
-    re_pedigree_template = re.compile(r"(Pedigree|Ped)[ _]" + var_name, flags=flags)
+    re_pedigree_template = re.compile(r"(Pedigree|Ped)[ _]+" + var_name, flags=flags)
     re_references = re.compile(r"(References|Ref)[ _]" + var_name, flags=flags)
     re_parameters = re.compile(r"(Parameters|Params)([ _]" + var_name + ")?", flags=flags)
 
@@ -143,13 +147,12 @@ Comando
             c_label = re_processors.search(name).group(2)
             issues, c_label, c_content = parse_data_input_command(sh_in, t, c_label, None)
         elif re_upscale.search(name):
-            # TODO Upscale
             c_type = "upscale"
             res = re_upscale.search(name)
             child = res.group(2)
             parent = res.group(3)
             c_label = "Upscale child '"+child+"' into parent '"+parent+"'"
-            issues, c_label, c_content = parse_upscale_command(sh_in, t, c_label, None)
+            issues, c_label, c_content = parse_upscale_command(sh_in, t)
         elif re_hierarchy.search(name):
             # Read the hierarchy
             c_type = "hierarchy"
@@ -164,11 +167,13 @@ Comando
         elif re_transform.search(name):
             c_type = "scale_conversion"
         elif re_pedigree_template.search(name):
-            # TODO Read the content
+            # Read the content
             c_type = "pedigree_matrix"
+            issues, c_label, c_content = parse_pedigree_matrix_command(sh_in, t)
         elif re_references.search(name):
-            # TODO Read the content
-            c_type = "referenceable_data"
+            # Read the content
+            c_type = "references"
+            issues, c_label, c_content = parse_references_command(sh_in, t)
         # ANALYSIS COMMANDS
         elif re_indicators.search(name):  # Indicators
             name = re_parameters.search(name).group(1)

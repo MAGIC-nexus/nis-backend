@@ -1,11 +1,10 @@
 import json
-from backend.model_services import IExecutableCommand
+from backend.model_services import IExecutableCommand, get_case_study_registry_objects
 
 
-class PedigreeMatrixCommand(IExecutableCommand):
-    """
-    Declaration of a pedigree matrix, which can be used
-
+class ReferencesCommand(IExecutableCommand):
+    """ It is a mere data container
+        Depending on the type, the format can be controlled with a predefined schema
     """
     def __init__(self, name: str):
         self._name = name
@@ -13,9 +12,13 @@ class PedigreeMatrixCommand(IExecutableCommand):
 
     def execute(self, state: "State"):
         """
-        Create the PedigreeMatrix object to which QQ observation may refer
-
+        Process each of the references, simply storing them as Reference objects
         """
+        glb_idx, _, _, _, _ = get_case_study_registry_objects(state)
+
+        # TODO Process each reference
+        for i, o in enumerate(self._content):
+            pass
 
         return None, None
 

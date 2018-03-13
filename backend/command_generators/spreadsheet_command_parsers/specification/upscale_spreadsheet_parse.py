@@ -1,7 +1,6 @@
 import openpyxl
-import numpy as np
 
-from backend.command_generators.spreadsheet_utils import worksheet_to_numpy_array, obtain_rectangular_submatrices
+from backend.command_generators.spreadsheet_utils import obtain_rectangular_submatrices, binary_mask_from_worksheet
 
 
 def parse_upscale_command(sh, area):
@@ -21,86 +20,136 @@ def parse_upscale_command(sh, area):
     :return: list of issues (issue_type, message), command label, command content
     """
 
+    def get_subrow(r, c1, c2):
+        lst = []
+        # To deal with combined cell ranges, store "previous" value, and if "" is found, assume it is a merged cell
+        previous = None
+        for c in range(c1, c2):
+            v = sh.cell(row=r, column=c).value
+            if not v:
+                if previous:
+                    lst.append(previous)
+                else:
+                    lst.append("")
+            else:
+                previous = v
+                lst.append(v)
+
+        return lst
+
+    def get_subcolumn(c, r1, r2):
+        lst = []
+        # To deal with combined cell ranges, store "previous" value, and if "" is found, assume it is a merged cell
+        # !!! This may not be correct at all times: when a cell is intentionally left blank
+        # To solve this, use "sh.merged_cell_ranges" to check if the current cell (r, c) is inside a range
+        previous = None
+        for r in range(r1, r2):
+            v = sh.cell(row=r, column=c).value
+            if not v:
+                if previous:
+                    lst.append(previous)
+                else:
+                    lst.append("")
+            else:
+                previous = v
+                lst.append(v)
+        return lst
+
     some_error = False
     issues = []
-    # Read base fields
-    # Parent Processor type	Child Processor type	Scaled Factor	Source
-    parent_processor_type = None
-    child_processor_type = None
-    scaled_factor = None
-    source = None
-    for c in range(area[2], area[3]):  # Columns
-        key = sh.cell(row=1, column=c).value
-        value = sh.cell(row=2, column=c).value
-        if key.lower() in ["parent"]:
-            parent_processor_type = value
-        elif key.lower() in ["child"]:
-            child_processor_type = value
-        elif key.lower() in ["scaled factor"]:
-            scaled_factor = value
-        elif key.lower() in ["source"]:  # "Observer"
-            source = value
 
     # Detect the matrix defining scales
     m = binary_mask_from_worksheet(sh, True)  # "True" is to focus on cells containing numbers
     # Locate the matrix with numbers. Assume this defines the labels to consider, they will be around the matrix
-    t = obtain_rectangular_submatrices(m)[0]  # Take just the first element
-    v = worksheet_to_numpy_array(sh)
-    for t in [(t[0], t[1], t[2], t[3]), (t[0] + 1, t[1], t[2], t[3]), (t[0], t[1], t[2] + 1, t[3])]:
-        f = v[t[0]:t[1], t[2]:t[3]].astype(np.float64)
-        row_sum = np.sum(f, axis=1)  # A column vector. If "all ones", the container will be along rows
-        col_sum = np.sum(f, axis=0)  # A row vector. If "all ones", the container will be along columns
-        container_situation = None
-        if np.allclose(row_sum, 1, 1e-2):
-            container_situation = "in_rows"
-        if np.allclose(col_sum, 1, 1e-2):
-            if container_situation:
-                some_error = True
-                issues.append((3, "Both rows and columns should not add up to 1.0"))
-            container_situation = "in_columns"
-        if container_situation:
-            break
-    if not container_situation:
-        issues.append((2, "Neither the sum of rows nor of columns is summing to one"))
+    t = obtain_rectangular_submatrices(m)[0]  # Take just the first tuple: U=t[0], D=t[1], L=t[2], R=t[3]
+    t = (t[0]+1, t[1]+1, t[2]+1, t[3]+1)  # The previous calculation is done using Numpy, so it is Zero based. Correct this
 
-    # TODO Detect the factors
+    # Obtain the parent, child and factor being scaled
+    try:
+        parent_child = sh.cell(row=t[0] - 1, column=t[2] - 1).value
+        child, parent = parent_child.split("/")
+        parent_processor_type = parent.strip()
+        child_processor_type = child.strip()
+    except:
+        issues.append((3, "Could not obtain the parent and child processor types: '"+parent_child+"' in upscale command"))
+        some_error = True
+
+    scaled_factor = sh.cell(row=t[0]-2, column=t[2]-1).value
+    if not scaled_factor:
+        issues.append((3, "Factor not specified in upscale command"))
+        some_error = True
+
+    if some_error:
+        return issues, None, None
+
+    # # Merged cells
+    # for ra in sh.merged_cell_ranges:
+    #     t = openpyxl.utils.range_boundaries(ra)  # min col, min row, max col, max row (max's included)
+    #     mc = (t[1]-1, t[3]-1, t[0]-1, t[2]-1)  # Rearrange and subtract one
+    #     v = m[mc[0], mc[2]]
+    #     m[mc[0]:mc[1]+1, mc[2]:mc[3]+1] = v
+
+    # Analyze rows above the matrix, to see code lists
+    subrows = []
+    for r in range(t[0]-1, 0, -1):
+        # Get the whole subrow into a list
+        subrow = get_subrow(r, t[2], t[3])
+        # If empty, break
+        if not any(subrow):
+            break
+        subrows.append(subrow)
+
+    # Analyze cols to the left of the matrix, to see code lists
+    subcols = []
+    for c in range(t[2]-1, 0, -1):
+        # Get the whole subcolumn into a list
+        subcol = get_subcolumn(c, t[0], t[1])
+        # If empty, break
+        if not any(subcol):
+            break
+        subcols.append(subcol)
+
+    # "scales" list will contain a list of dictionaries with the keys "codes" which are the codes leading to a cell
+    # in the table, and "weight" the number in the cell. To form "codes" a prefix, formed by codes in the columns to the
+    # left, is concatenated to a suffix, formed by the codes in the rows on top of the matrix
+
+    # Obtain suffix tuples from columns (as lists really)
+    sufix_tuples = []
+    for i, c in enumerate(range(t[2], t[3])):
+        sufix_tuples.append([subrows[j][i] for j in range(len(subrows))])
+
+    # Iterate every row, col in the factors matrix to obtain the SCALES list
+    scales = []
+    for i, r in enumerate(range(t[0], t[1])):
+        prefix_tuple = [subcols[j][i] for j in range(len(subcols))]  # Subtuple from subcols
+        for j, c in enumerate(range(t[2], t[3])):
+            w = sh.cell(row=r, column=c).value
+            scales.append(dict(codes=prefix_tuple+sufix_tuples[j], weight=w))
+
+    # # Parent Processor type	Child Processor type	Scaled Factor	Source
+    # parent_processor_type = None
+    # child_processor_type = None
+    # scaled_factor = None
+    # source = None
+    # for c in range(area[2], area[3]):  # Columns
+    #     key = sh.cell(row=1, column=c).value
+    #     value = sh.cell(row=2, column=c).value
+    #     if key.lower() in ["parent"]:
+    #         parent_processor_type = value
+    #     elif key.lower() in ["child"]:
+    #         child_processor_type = value
+    #     elif key.lower() in ["scaled factor"]:
+    #         scaled_factor = value
+    #     elif key.lower() in ["source"]:  # "Observer"
+    #         source = value
 
     content = {"parent_processor_type": parent_processor_type,
                "child_processor_type": child_processor_type,
                "scaled_factor": scaled_factor,
-               "source": source,
-               "column_headers": column_headers,  # List of lists
-               "row_headers": row_headers,  # List of lists
-               "scales": scales  # Matrix of scales, row by row
+               "source": None,
+               "scales": scales
                }
-    return issues, None, content
+    label = "Upscale child '"+child_processor_type+"' into parent '"+parent_processor_type+"'"
+    return issues, label, content
 
 
-def binary_mask_from_worksheet(sh_in, only_numbers=True):
-    """
-    Sweep the worksheet, considering merged cells, elaborate a mask for those cells which
-    are not empty or contain a number
-
-    :param sh_in:
-    :param only_numbers:
-    :return:
-    """
-    m = np.zeros((sh_in.max_row, sh_in.max_column), dtype=bool)
-    for r in range(sh_in.max_row):
-        for c in range(sh_in.max_column):
-            v = sh_in.cell(row=r + 1, column=c + 1).value
-            if v:
-                if only_numbers:
-                    if isinstance(v, int) or isinstance(v, float):
-                        m[r, c] = 1
-                else:
-                    m[r, c] = 1
-
-    # Merged cells
-    for ra in sh_in.merged_cell_ranges:
-        t = openpyxl.utils.range_boundaries(ra)  # min col, min row, max col, max row (max's included)
-        mc = (t[1]-1, t[3]-1, t[0]-1, t[2]-1)  # Rearrange and subtract one
-        v = m[mc[0], mc[2]]
-        m[mc[0]:mc[1]+1, mc[2]:mc[3]+1] = v
-
-    return m

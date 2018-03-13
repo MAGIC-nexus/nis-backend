@@ -2,12 +2,13 @@ import json
 import pandas as pd
 import numpy as np
 from openpyxl.chart import reference
+import math
 
 from backend.model_services import IExecutableCommand, State, get_case_study_registry_objects
 from backend.model.memory.musiasem_concepts import Observer, Processor, Factor, \
     ProcessorsRelationUndirectedFlowObservation, ProcessorsRelationPartOfObservation, \
     ProcessorsRelationUpscaleObservation, \
-    FactorsRelationDirectedFlowObservation, FactorQuantitativeObservation
+    FactorsRelationDirectedFlowObservation, FactorQuantitativeObservation, ProcessorsSet
 
 
 class UpscaleCommand(IExecutableCommand):
@@ -31,8 +32,8 @@ class UpscaleCommand(IExecutableCommand):
         child_processor_type = self._content["child_processor_type"]
         scaled_factor = self._content["scaled_factor"]
         source = self._content["source"]
-        column_headers = self._content["column_headers"]
-        row_headers = self._content["row_headers"]
+        # column_headers = self._content["column_headers"]
+        # row_headers = self._content["row_headers"]
         scales = self._content["scales"]
 
         # Find processor sets, for parent and child
@@ -50,36 +51,6 @@ class UpscaleCommand(IExecutableCommand):
         if some_error:
             return issues, None
 
-        # Processor Sets have associated attributes, and each of them has a code list
-        parent = p_sets[parent_processor_type]
-        child = p_sets[child_processor_type]
-
-        for c in column_headers:  # A list in vertical (top of the matrix)
-            for i, cc in enumerate(c):
-                found = False
-                for k in parent.attributes:
-                    if cc in k:
-                        found = True
-                        ("column", i, k, parent)
-                for k in child.attributes:
-                    if cc in k:
-                        found = True
-                        ("column", i, k, child)
-
-        parent.attributes
-
-        # Analyze and Locate taxa mentioned in rows and columns
-
-        # Build a DataFrame
-        df = pd.DataFrame(data=np.array(scales).reshape((len(row_headers), len(column_headers))))
-
-        # From each key identify taxa containing, then which processor type uses the taxa
-
-        lst_taxa = []
-
-        # columns = [('c', 'a'), ('c', 'b')]
-        # df.columns = pd.MultiIndex.from_tuples(columns)
-
         # CREATE the Observer of the Upscaling
         oer = glb_idx.get(Observer.partial_key(source))
         if not oer:
@@ -88,21 +59,122 @@ class UpscaleCommand(IExecutableCommand):
         else:
             oer = oer[0]
 
-        # TODO Obtain the parent and child processors
-        parent = None
-        child = None
-        quantity = None
+        # Processor Sets have associated attributes, and each of them has a code list
+        parent = p_sets[parent_processor_type]  # type: ProcessorsSet
+        child = p_sets[child_processor_type]  # type: ProcessorsSet
 
-        # Clone the child processor.
-        cloned_child = Processor.clone(child, reference=True)
+        # Form code lists from the command specification
+        code_lists = None
+        for sc_dict in scales:
+            codes = sc_dict["codes"]
+            if not code_lists:
+                code_lists = [set() for _ in codes]
 
-        # Elaborate the Observations: relational and quantitative
-        o1 = ProcessorsRelationPartOfObservation.create_and_append(parent, cloned_child, oer)  # Part-of
-        glb_idx.put(o1.key(), o1)
-        o2 = ProcessorsRelationUndirectedFlowObservation.create_and_append(parent, cloned_child, oer)  # Flow
-        glb_idx.put(o2.key(), o2)
-        o3 = ProcessorsRelationUpscaleObservation.create_and_append(parent, cloned_child, scaled_factor, quantity)  # Upscale
-        glb_idx.put(o3.key(), o3)
+            for i, c in enumerate(codes):
+                code_lists[i].add(c)
+
+        # Match existing code lists (from Processor attributes) with the ones gathered in the specification of
+        # the two (parent and child) processors sets.
+        # Form lists of attributes of processors used in the code lists
+        parent_attrs = []
+        child_attrs = []
+        matched = []
+        for i, cl in enumerate(code_lists):
+            found = False
+            for attr, attr_values in parent.attributes.items():
+                if set(attr_values).issuperset(cl):
+                    parent_attrs.append((attr, i))  # (Attribute, code list index)
+                    found = True
+                    break
+            for attr, attr_values in child.attributes.items():
+                if set(attr_values).issuperset(cl):
+                    child_attrs.append((attr, i))  # (Attribute, code list index)
+                    found = True
+                    break
+            matched.append(found)
+        for i, found in enumerate(matched):
+            if not found:
+                cl = code_lists[i]
+                # TODO Try cl as a list of names of parent or child processors
+                if not found:
+                    issues.append((2, "The code list: " + ", ".join(cl) + " is not contained in the attributes of the parent processors set '" + parent_processor_type + "' nor in the attributes of the child processors set '" + child_processor_type + "'"))
+
+        # Execute the upscale for each
+        cached_processors = {}
+        for sc_dict in scales:
+            codes = sc_dict["codes"]
+            # Find parent processor
+            parent_dict = {attr: codes[i] for attr, i in parent_attrs}
+            d2s = str(parent_dict)
+            if d2s in cached_processors:
+                parent = cached_processors[d2s]
+                if not parent:
+                    issues.append((3, "Either the tuple (" + d2s + ") did not match any Processor or matched more than one."))
+            else:
+                parent_dict.update(Processor.partial_key())
+                parents = glb_idx.get(parent_dict) # Query the PartialRetrievalDictionary by attributes
+                if len(parents) > 1:
+                    issues.append((3, "The tuple ("+str(parent_dict)+") matches "+str(len(parents))+" Processors: "+(", ".join([p.name for p in parents]))))
+                    parent = None
+                elif len(parents) == 0:
+                    issues.append((3, "The tuple (" + str(parent_dict) + ") did not match any Processor"))
+                    parent = None
+                else:
+                    parent = parents[0]
+
+                cached_processors[d2s] = parent
+
+            # Find child processor
+            child_dict = {attr: codes[i] for attr, i in child_attrs}
+            d2s = str(child_dict)
+            if d2s in cached_processors:
+                child = cached_processors[d2s]
+                if not child:
+                    issues.append((3, "Either the tuple (" + d2s + ") did not match any Processor or matched more than one."))
+            else:
+                child_dict.update(Processor.partial_key())
+                children = glb_idx.get(child_dict) # Query the PartialRetrievalDictionary by attributes
+                if len(children) > 1:
+                    issues.append((3, "The tuple ("+str(child_dict)+") matches "+str(len(parents))+" Processors: "+(", ".join([p.name for p in children]))))
+                    child = None
+                elif len(children) == 0:
+                    issues.append((3, "The tuple (" + str(child_dict) + ") did not match any Processor"))
+                    child = None
+                else:
+                    child = children[0]  # type: Processor
+
+                cached_processors[d2s] = child
+
+            # Clone child processor (and its descendants) and add an upscale relation between "parent" and the clone
+            if parent and child:
+                try:
+                    non_zero_weight = math.fabs(float(sc_dict["weight"])) > 1e-6
+                except:
+                    non_zero_weight = True
+                if non_zero_weight:
+                    # Clone the child processor
+                    cloned_child = child.clone(glb_idx)
+
+                    # Create the new Relation Observations
+                    # - Part-of Relation
+                    o1 = ProcessorsRelationPartOfObservation.create_and_append(parent, cloned_child, oer)  # Part-of
+                    glb_idx.put(o1.key(), o1)
+                    # - Upscale Relation
+                    quantity = str(sc_dict["weight"])
+                    o3 = ProcessorsRelationUpscaleObservation.create_and_append(parent, cloned_child,
+                                                                                observer=None,
+                                                                                factor_name=scaled_factor,
+                                                                                quantity=quantity)
+                    glb_idx.put(o3.key(), o3)
+            else:
+                parent_dict = str({attr: codes[i] for attr, i in parent_attrs})
+                child_dict = str({attr: codes[i] for attr, i in child_attrs})
+                if not parent and child:
+                    issues.append((2, "Could not find parent Processor matching attributes: "+parent_dict))
+                elif not child and parent:
+                    issues.append((2, "Could not find child Processor matching attributes: "+child_dict))
+                else:
+                    issues.append((2, "Could not find parent Processor matching attributes: "+parent_dict+", nor child Processor matching attributes: " + child_dict))
 
         return issues, None
 

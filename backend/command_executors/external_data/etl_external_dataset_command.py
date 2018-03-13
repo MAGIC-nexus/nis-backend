@@ -6,7 +6,8 @@ import numpy as np
 
 import backend
 from backend.model_services import IExecutableCommand, get_case_study_registry_objects
-from backend.common.helper import obtain_dataset_metadata, strcmp, create_dictionary
+from backend.common.helper import obtain_dataset_metadata, strcmp, create_dictionary, \
+    augment_dataframe_with_mapped_columns
 
 
 def obtain_reverse_codes(mapped, dst):
@@ -91,6 +92,8 @@ class ETLExternalDatasetCommand(IExecutableCommand):
         df = ds.data
 
         # Join with mapped dimensions (augment it)
+        # TODO Prepare an "m" containing ALL the mappings affecting "df"
+        # TODO df2 = augment_dataframe_with_mapped_columns(df, m, ["value"])
         for m in mappings:
             if strcmp(mappings[m].source, source) and \
                     strcmp(mappings[m].dataset, dataset_name) and \

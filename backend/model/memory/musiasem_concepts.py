@@ -797,42 +797,128 @@ class Processor(Identifiable, Nameable, Taggable, Qualifiable, Automatable, Obse
             last_part = self.name.split(".")[-1]
             return [(p+"."+last_part) for rel in part_of_relations for p in rel.parent_processor.full_hierarchy_names(registry)]
 
-    def clone(self, state: State, p_set: "ProcessorsSet", reference=True, objects_processed: dict= {}):
-        glb_idx, _, _, _, _ = get_case_study_registry_objects(state)
-        if reference:
-            p = Processor(self.name, referenced_processor=self)
-            # TODO Find relations in which the processor is parent, to copy children
-            # TODO Clone these processors and the relations
-            part_of_relations = glb_idx.get(ProcessorsRelationPartOfObservation.partial_key(parent=self))
-            upscale_relations = glb_idx.get(ProcessorsRelationUpscaleObservation.partial_key(parent=self))
-            for rel in part_of_relations + upscale_relations:
-                if rel.child not in objects_processed:
-                    p2 = rel.child.clone(state, p_set, reference, objects_processed)
-                    objects_processed[rel.child] = p2
-                else:
-                    p2 = objects_processed[rel.child]
+    def clone(self, state: Union[PartialRetrievalDictionary, State], objects_processed: dict=None, level=0):
+        """
+        Processor elements:
+         - Attributes. Generic; type, external, stock
+         - Location
+         - Factors
+           - Observations
+           - Relations
+         - Local_indicators
+         - Relations:
+           - part-of: if the processor is the parent part, clone recursively (include the part-of relations)
+           - undirected flow
 
-                if isinstance(rel, ProcessorsRelationPartOfObservation):
-                    o1 = ProcessorsRelationPartOfObservation.create_and_append(p, p2, rel.observer)
-                    glb_idx.put(o1.key(), o1)
-                else:  # Upscale relation
-                    if rel.target_processor not in objects_processed:
-                        pass
-                rel.clone(state)
-            # TODO Flow relations do not clone the other, ONLY the relation
-            flow_relations = glb_idx.get(ProcessorsRelationUndirectedFlowObservation.partial_key(source=self))
+        = Reference cloned processor (or not)
+        = Register in Processor Set (or not)
+
+        :param state: Global state
+        :param objects_processed: Dictionary containing already processed Processors and Factors (INTERNAL USE)
+        :param level: Recursion level (INTERNAL USE)
+        :return:
+        """
+        if isinstance(state, PartialRetrievalDictionary):
+            glb_idx = state
         else:
-            p = Processor(self.name,
-                          external=self.external, location=self._location,
-                          tags=self._tags, attributes=self._attributes,
-                          referenced_processor=self.referenced_processor
-                          )
-            # Clone factors also
-            for f in self.factors:
-                f_ = Factor.clone(f, p)
-                p.factors_append(f_)
+            glb_idx, _, _, _, _ = get_case_study_registry_objects(state)
 
-        p_set.append(p)
+        # Create new Processor
+        p = Processor(self.name,
+                      external=self.external,
+                      location=self._location,
+                      tags=self._tags,
+                      attributes=self._attributes,
+                      referenced_processor=self.referenced_processor
+                      )
+        p._type = self._type
+        p._external = self._external
+        p._stock = self._stock
+
+        if not objects_processed:
+            objects_processed = {}
+
+        objects_processed[self] = p
+
+        # Factors
+        for f in self.factors:
+            f_ = Factor.clone_and_append(f, p) # The Factor is cloned and appended into the Processor "p"
+            if f not in objects_processed:
+                objects_processed[f] = f_
+            else:
+                raise Exception("Unexpected: the factor "+f.processor.name+":"+f.taxon.name+" should not be cloned again.")
+
+        # Local indicators
+        for li in self._local_indicators:
+            formula = li._formula  # TODO Adapt formula of the new indicator to the new Factors
+            li_ = Indicator(li._name, formula, li, li._benchmark, li._indicator_category)
+            self._local_indicators.append(li_)
+
+        # Clone child Processors (look for part-of relations)
+        part_of_relations = glb_idx.get(ProcessorsRelationPartOfObservation.partial_key(parent=self))
+        for rel in part_of_relations:
+            if rel.child_processor not in objects_processed:
+                p2 = rel.child_processor.clone(state, objects_processed, level+1)  # Recursive call
+                objects_processed[rel.child_processor] = p2
+            else:
+                p2 = objects_processed[rel.child_processor]
+
+            # Clone part-of relation
+            o1 = ProcessorsRelationPartOfObservation.create_and_append(p, p2, rel.observer)
+            glb_idx.put(o1.key(), o1)
+
+            # If there is a Upscale relation, clone it also
+            upscale_relations = glb_idx.get(ProcessorsRelationUpscaleObservation.partial_key(parent=self, child=rel.child_processor))
+            if upscale_relations:
+                factor_name = upscale_relations[0].factor_name
+                quantity = upscale_relations[0].quantity
+                o2 = ProcessorsRelationUpscaleObservation.create_and_append(p, p2, rel.observer, factor_name, quantity)
+                glb_idx.put(o2.key(), o2)
+
+        # PROCESS FLOW relations: directed and undirected (if at entry level, i.e., level == 0)
+        # This step is needed because flow relations may involve processors and flows outside of the clone processor.
+        # If a flow is totally contained, pointing to two cloned elements, the cloned flow will point to the two new elements.
+        # If a flow points to an element out, the cloned flow will point have at one side a new element, at the other an existing one.
+        if level == 0:
+            considered_flows = set()  # Set of already processed flows
+            for o in objects_processed:
+                if isinstance(o, Factor):
+                    for f in glb_idx.get(FactorsRelationDirectedFlowObservation.partial_key(source=o)): # As Source
+                        if f not in considered_flows:
+                            if f.target_factor in objects_processed:
+                                new_f = FactorsRelationDirectedFlowObservation(source=o, target=objects_processed[f.target_factor], observer=f.observer, weight=f.weight, tags=f.tags, attributes=f.attributes)
+                            else:
+                                new_f = FactorsRelationDirectedFlowObservation(source=o, target=f.target_factor, observer=f.observer, weight=f.weight, tags=f.tags, attributes=f.attributes)
+                            glb_idx.put(new_f.key(), new_f)
+                            considered_flows.add(f)
+                    for f in glb_idx.get(FactorsRelationDirectedFlowObservation.partial_key(target=o)): # As Target
+                        if f not in considered_flows:
+                            if f.source_factor in objects_processed:
+                                new_f = FactorsRelationDirectedFlowObservation(source=objects_processed[f.source_factor], target=o, observer=f.observer, weight=f.weight, tags=f.tags, attributes=f.attributes)
+                            else:
+                                new_f = FactorsRelationDirectedFlowObservation(source=f.source_factor, target=o, observer=f.observer, weight=f.weight, tags=f.tags, attributes=f.attributes)
+
+                            glb_idx.put(new_f.key(), new_f)
+                            considered_flows.add(f)
+                else:  # "o" is a Processor
+                    for f in glb_idx.get(ProcessorsRelationUndirectedFlowObservation.partial_key(source=o)): # As Source
+                        if f not in considered_flows:
+                            if f.target_factor in objects_processed:
+                                new_f = ProcessorsRelationUndirectedFlowObservation(source=o, target=objects_processed[f.target_factor], observer=f.observer, weight=f.weight, tags=f.tags, attributes=f.attributes)
+                            else:
+                                new_f = ProcessorsRelationUndirectedFlowObservation(source=o, target=f.target_factor, observer=f.observer, weight=f.weight, tags=f.tags, attributes=f.attributes)
+                            glb_idx.put(new_f.key(), new_f)
+                            considered_flows.add(f)
+                    for f in glb_idx.get(FactorsRelationDirectedFlowObservation.partial_key(target=o)): # As Target
+                        if f not in considered_flows:
+                            if f.source_factor in objects_processed:
+                                new_f = ProcessorsRelationUndirectedFlowObservation(source=objects_processed[f.source_factor], target=o, observer=f.observer, weight=f.weight, tags=f.tags, attributes=f.attributes)
+                            else:
+                                new_f = ProcessorsRelationUndirectedFlowObservation(source=f.source_factor, target=o, observer=f.observer, weight=f.weight, tags=f.tags, attributes=f.attributes)
+
+                            glb_idx.put(new_f.key(), new_f)
+                            considered_flows.add(f)
+
         return p
 
     @staticmethod
@@ -902,8 +988,8 @@ class Factor(Identifiable, Nameable, Taggable, Qualifiable, Observable, Automata
         return self._referenced_factor
 
     @staticmethod
-    def create(name, processor: Processor, in_processor_type: FactorInProcessorType, taxon: FactorType,
-               location: "Geolocation"=None, tags=None, attributes=None):
+    def create_and_append(name, processor: Processor, in_processor_type: FactorInProcessorType, taxon: FactorType,
+                          location: "Geolocation"=None, tags=None, attributes=None):
         f = Factor(name, processor, in_processor_type, taxon, location, tags, attributes)
         if processor:
             processor.factors_append(f)
@@ -945,12 +1031,15 @@ class Factor(Identifiable, Nameable, Taggable, Qualifiable, Observable, Automata
         return tmp
 
     @staticmethod
-    def clone(factor: "Factor", processor: Processor):
-        f = Factor.create(factor.name, processor, in_processor_type=factor.type, taxon=factor._taxon,
-                          location=factor._location, tags=factor._tags, attributes=factor._attributes)
-        # Observations
-        for o in f.observations:
-            o_ = o.clone()
+    def clone_and_append(factor: "Factor", processor: Processor):
+        f = Factor.create_and_append(factor.name, processor, in_processor_type=factor.type, taxon=factor._taxon,
+                                     location=factor._location, tags=factor._tags, attributes=factor._attributes)
+        # Observations (only Quantities, because they are owned by the Factor)
+        for o in factor.observations:
+            if isinstance(o, FactorQuantitativeObservation):
+                FactorQuantitativeObservation.create_and_append(o.value, o.factor, o.observer, o.tags, o.attributes)
+
+        return f
 
     @staticmethod
     def partial_key(processor: Processor=None, factor_type: FactorType=None):
@@ -975,7 +1064,7 @@ class ProcessorsSet(Nameable):
     def __init__(self, name):
         Nameable.__init__(self, name)
         self._pl = set([])  # Processors members of the set
-        self._attributes = {}  # Attributes characterizing the processors. {name: code list}
+        self._attributes = create_dictionary()  # Attributes characterizing the processors. {attribute_name: code list}
 
     def append(self, p: Processor, prd: PartialRetrievalDictionary):
         """
@@ -998,17 +1087,15 @@ class ProcessorsSet(Nameable):
     def append_attributes_codes(self, d: dict):
         """
         Receives a dictionary with attributes (key, value) of a processor
-        with the goal of elaborating a code list for each attribute
-
-        FOR NOW THIS HAS NO APPLICATION, IT IS AN INDEX TO THIS INFORMATION IN A DIFFERENT WAY
+        with the goal of elaborating a code-list for each attribute
 
         :param d:
         :return:
         """
-        for k in d:
+        for k in d:  # "k" is the name (the header) of the attribute, d[k] is one of the possible values
             if k not in self._attributes:
                 s = set()
-                self._attributes = s
+                self._attributes[k] = s
             else:
                 s = self._attributes[k]
             s.add(d[k])
@@ -1161,7 +1248,10 @@ class FactorQuantitativeObservation(Taggable, Qualifiable, Automatable):
         return d
 
     def key(self):
-        return {"_t": "qq", "__f": self._factor.ident, "__oer": self._observer.ident}
+        d = {"_t": "qq", "__f": self._factor.ident}
+        if self._observer:
+            d["__oer"] = self._observer.ident
+        return d
 
 
 class RelationObservation(Taggable, Qualifiable, Automatable):  # All relation kinds
@@ -1235,9 +1325,11 @@ class FactorTypesRelationUnidirectionalLinearTransformObservation(FactorTypesRel
         return d
 
     def key(self):
-        return {"_t": RelationClassType.ft_directed_linear_transform.name,
-                "__o": self._origin.ident, "__d": self._destination.ident,
-                "__oer": self._observer.ident}
+        d = {"_t": RelationClassType.ft_directed_linear_transform.name,
+             "__o": self._origin.ident, "__d": self._destination.ident}
+        if self._observer:
+            d["__oer"] = self._observer.ident
+        return d
 
 
 class ProcessorsRelationPartOfObservation(ProcessorsRelationObservation):
@@ -1288,7 +1380,10 @@ class ProcessorsRelationPartOfObservation(ProcessorsRelationObservation):
         return d
 
     def key(self):
-        return {"_t": RelationClassType.pp_part_of.name, "__p": self._parent.ident, "__c": self._child.ident, "__oer": self._observer.ident}
+        d = {"_t": RelationClassType.pp_part_of.name, "__p": self._parent.ident, "__c": self._child.ident}
+        if self._observer:
+            d["__oer"] = self._observer.ident
+        return d
 
 
 class ProcessorsRelationUndirectedFlowObservation(ProcessorsRelationObservation):
@@ -1349,7 +1444,10 @@ class ProcessorsRelationUndirectedFlowObservation(ProcessorsRelationObservation)
         return d
 
     def key(self):
-        return {"_t": RelationClassType.pp_undirected_flow.name, "__s": self._source.ident, "__t": self._target.parent, "__oer": self._observer.ident}
+        d = {"_t": RelationClassType.pp_undirected_flow.name, "__s": self._source.ident, "__t": self._target.parent}
+        if self._observer:
+            d["__oer"] = self._observer.ident
+        return d
 
 
 class ProcessorsRelationUpscaleObservation(ProcessorsRelationObservation):
@@ -1451,7 +1549,10 @@ class ProcessorsRelationUpscaleObservation(ProcessorsRelationObservation):
         return d
 
     def key(self):
-        return {"_t": RelationClassType.pp_upscale.name, "__p": self._parent.ident, "__c": self._child.ident, "__oer": self._observer.ident}
+        d = {"_t": RelationClassType.pp_upscale.name, "__p": self._parent.ident, "__c": self._child.ident}
+        if self._observer:
+            d["__oer"] = self._observer.ident
+        return d
 
 
 class FactorsRelationDirectedFlowObservation(FactorsRelationObservation):
@@ -1514,22 +1615,24 @@ class FactorsRelationDirectedFlowObservation(FactorsRelationObservation):
         return d
 
     def key(self):
-        return {"_t": RelationClassType.ff_directed_flow.name, "__s": self._source.ident, "__t": self._target.ident, "__oer": self._observer.ident}
+        d = {"_t": RelationClassType.ff_directed_flow.name, "__s": self._source.ident, "__t": self._target.ident}
+        if self._observer:
+            d["__oer"] = self._observer.ident
+        return d
 
 # #################################################################################################################### #
-# NUSAP Pedigree
+# NUSAP PedigreeMatrix
 # #################################################################################################################### #
 
 
-class PedigreeTemplate(Nameable):
-    """ A pedigree template (to represent a Pedigree Matrix), made of a dictionary of lists """
+class PedigreeMatrix(Nameable):
+    """ A Pedigree Matrix, made of a list of lists
+        Each list and each element of a list may have a description
+    """
     def __init__(self, name):
         Nameable.__init__(self, name)
         self._categories = create_dictionary()
 
-
-class Pedigree:
-    pass
 
 # #################################################################################################################### #
 # PARAMETERS, BENCHMARKS, INDICATORS
