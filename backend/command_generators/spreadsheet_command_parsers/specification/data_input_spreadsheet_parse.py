@@ -67,7 +67,7 @@ def parse_data_input_command(sh, area, processors_type, state):
                      (r"Relative[_ ]to", "relative_to", False),
                      (r"Uncertainty|Spread|NUSAP\.S", "uncertainty", False),
                      (r"Assessment|NUSAP\.A", "assessment", False),
-                     (r"Pedigree[_ ]template|NUSAP\.PT", "pedigree_template", False),
+                     (r"Pedigree[_ ]matrix|NUSAP\.PM", "pedigree_matrix", False),
                      (r"Pedigree|NUSAP\.P", "pedigree", False),
                      (r"Time", "time", False),
                      (r"Geo|Geolocation", "geolocation", False),
@@ -150,7 +150,7 @@ def parse_data_input_command(sh, area, processors_type, state):
     # SCAN rows
     lst_observations = []  # List of ALL observations. -- Main outcome of the parse operation --
 
-    set_pedigree_templates = create_dictionary()  # List of pedigree templates
+    set_pedigree_matrices = create_dictionary()  # List of pedigree templates
     set_processors = create_dictionary()  # List of processor names
     set_factors = create_dictionary()  # List of factors
     set_taxa = create_dictionary()  # Dictionary of taxa with their lists of values. Useful to return CODE LISTS
@@ -228,9 +228,11 @@ def parse_data_input_command(sh, area, processors_type, state):
                     continue  # Skip the rest of the iteration!
 
             # Parse the value
-            if c in ["processor", "factor", "pedigree_template"]:
+            if c in ["processor", "factor"]:
                 # Check that it is a variable name, and allow hierarchical names
                 basic_elements_parser.string_to_ast(basic_elements_parser.simple_h_name, value)
+            elif c == "pedigree_matrix":
+                basic_elements_parser.string_to_ast(basic_elements_parser.simple_ident, value)
             elif c == "relative_to":
                 # Two elements, the first a hierarchical name, the second a unit name
                 s = value.split(" ")
@@ -297,11 +299,19 @@ def parse_data_input_command(sh, area, processors_type, state):
                 # TODO It must be a valid uncertainty specificator
                 pass
             elif c == "assessment":
-                # A free text
-                pass
+                # See page 135 of Funtowicz S., Ravetz J., "Uncertainty and Quality in Science for Policy"
+                # "c" is "cognitive" assessment, "p" is pragmatic assessment.
+                allowed = ["nil", "low", "medium", "high", "total",
+                           "nil_c", "low_c", "medium_c", "high_c", "total_c",
+                           "nil_p", "low_p", "medium_p", "high_p", "total_p"]
+                if value and value.lower() not in allowed:
+                    issues.append((3, "Assessment must be empty or one of: "+", ".join(allowed)))
             elif c == "pedigree":
-                # TODO A valid pedigree specification
-                pass
+                # A valid pedigree specification is just an integer
+                try:
+                    int(value)
+                except:
+                    issues.append((3, "The pedigree specification '"+value+"' must be an integer"))
             elif c == "time":
                 # A valid time specification. Possibilities: Year, Month-Year / Year-Month, Time span (two dates)
                 if not isinstance(value, str):
@@ -384,8 +394,8 @@ def parse_data_input_command(sh, area, processors_type, state):
         # Register new processor names, pedigree templates, and variable names
         if "processor" in row:
             set_processors[row["processor"]] = None
-        if "pedigree_template" in row:
-            set_pedigree_templates[row["pedigree_template"]] = None
+        if "pedigree_matrix" in row:
+            set_pedigree_matrices[row["pedigree_matrix"]] = None
         if "factor" in row:
             set_factors[row["factor"]] = None
         if referenced_dataset:
@@ -397,7 +407,7 @@ def parse_data_input_command(sh, area, processors_type, state):
     content = {"factor_observations": lst_observations,
                "processor_attributes": processor_attributes,
                "processors": [k for k in set_processors],
-               "pedigree_templates": [k for k in set_pedigree_templates],
+               "pedigree_matrices": [k for k in set_pedigree_matrices],
                "factors": [k for k in set_factors],
                "referenced_datasets": [ds for ds in set_referenced_datasets],
                "code_lists": {k: [k2 for k2 in set_taxa[k]] for k in set_taxa}

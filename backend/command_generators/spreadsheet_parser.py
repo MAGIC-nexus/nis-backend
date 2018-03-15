@@ -62,7 +62,7 @@ Comando
     re_upscale = re.compile(r"(Upscale|Up)[ _](" + var_name + "[ _]" + var_name + ")?", flags=flags)
     re_relations = re.compile(r"(Grammar|Relations|Rel)([ _]+" + var_name+")?", flags=flags)
     re_transform = re.compile(r"(Transform|Tx)[ _]" + var_name + "[ _]" + var_name, flags=flags)
-    re_pedigree_template = re.compile(r"(Pedigree|Ped)[ _]+" + var_name, flags=flags)
+    re_pedigree_template = re.compile(r"(Pedigree|Ped|NUSAP\.PM)[ _]+" + var_name, flags=flags)
     re_references = re.compile(r"(References|Ref)[ _]" + var_name, flags=flags)
     re_parameters = re.compile(r"(Parameters|Params)([ _]" + var_name + ")?", flags=flags)
 
@@ -169,7 +169,9 @@ Comando
         elif re_pedigree_template.search(name):
             # Read the content
             c_type = "pedigree_matrix"
-            issues, c_label, c_content = parse_pedigree_matrix_command(sh_in, t)
+            res = re_pedigree_template.search(name)
+            pm_name = res.group(2)
+            issues, c_label, c_content = parse_pedigree_matrix_command(sh_in, t, pm_name)
         elif re_references.search(name):
             # Read the content
             c_type = "references"

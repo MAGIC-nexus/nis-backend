@@ -1,5 +1,7 @@
 import json
-from backend.model_services import IExecutableCommand
+
+from backend.model.memory.musiasem_concepts import PedigreeMatrix
+from backend.model_services import IExecutableCommand, get_case_study_registry_objects
 
 
 class PedigreeMatrixCommand(IExecutableCommand):
@@ -16,6 +18,21 @@ class PedigreeMatrixCommand(IExecutableCommand):
         Create the PedigreeMatrix object to which QQ observation may refer
 
         """
+        some_error = False
+        issues = []
+
+        glb_idx, _, _, _, _ = get_case_study_registry_objects(state)
+
+        # Prepare PedigreeMatrix object instance
+        phases = self._content["phases"]
+        codes = self._content["codes"]
+        name = self._content["name"]
+
+        pm = PedigreeMatrix(name)
+        pm.set_phases(codes, phases)
+
+        # Insert the PedigreeMatrix object into the state
+        glb_idx.put(pm.key(), pm)
 
         return None, None
 

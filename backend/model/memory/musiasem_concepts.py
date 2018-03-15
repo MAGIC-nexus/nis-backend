@@ -1625,13 +1625,82 @@ class FactorsRelationDirectedFlowObservation(FactorsRelationObservation):
 # #################################################################################################################### #
 
 
-class PedigreeMatrix(Nameable):
+class PedigreeMatrix(Nameable, Identifiable):
     """ A Pedigree Matrix, made of a list of lists
         Each list and each element of a list may have a description
     """
+    PedigreeMatrixPhase = collections.namedtuple("PedigreeMatrixPhase", "code description modes")
+
     def __init__(self, name):
+        Identifiable.__init__(self)
         Nameable.__init__(self, name)
-        self._categories = create_dictionary()
+        self._codes = None # Dict code to order
+        self._phases = None
+
+    def set_phases(self, codes, phases):
+        """
+        Initialize the pedigree matrix
+
+        :param codes: list of codes
+        :param phases: list of phases as parsed from the command
+        :return:
+        """
+        self._codes = {int(c["mode"]): i for i, c in enumerate(codes)}
+        self._phases = []
+        for phase in phases:
+            lst = []
+            for i, mode in enumerate(phase):
+                if i == 0:
+                    continue
+                lst.append((mode["mode"], ""))
+            asp = PedigreeMatrix.PedigreeMatrixPhase(code=phase[0]["mode"], description=phase[0]["description"], modes=lst)
+            self._phases.append(asp)
+
+    def get_modes_for_code(self, code: str):
+        """
+        From a string of integers return a list of modes
+
+        :param code:
+        :return:
+        """
+        lst = []
+        code = str(code)
+        for i in range(len(code)):
+            asp = self._phases[i]
+            idx = self._codes[int(code[i])]
+            lst.append(asp.modes[idx][0])
+        return lst
+
+    def get_phase(self, aspect: int):
+        """
+        From the aspect number (starting at 1) get the code
+
+        :param aspect:
+        :return:
+        """
+        asp = self._phases[aspect - 1]
+        return asp.code
+
+    def get_phase_mode(self, phase: int, mode: int):
+        """
+        From the phase number and the mode inside the phase, get the code
+
+        """
+        asp = self._phases[phase - 1]
+        ret = asp.modes[self._codes[mode]][0]
+        return ret
+
+    @staticmethod
+    def partial_key(name: str=None, ident: str=None):
+        d = dict(_t="pm")
+        if name:
+            d["_n"] = name
+        if ident:
+            d["__id"] = ident
+        return d
+
+    def key(self):
+        return {"_t": "pm", "_n": self.name, "__id": self.ident}
 
 
 # #################################################################################################################### #

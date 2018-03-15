@@ -7,7 +7,7 @@ from backend.model.memory.musiasem_concepts_helper import create_quantitative_ob
 from backend.model.memory.musiasem_concepts import FactorType, Observer, FactorInProcessorType, \
     Processor, \
     Factor, FactorQuantitativeObservation, QualifiedQuantityExpression, \
-    FlowFundRoegenType, ProcessorsSet, HierarchiesSet, allowed_ff_types
+    FlowFundRoegenType, ProcessorsSet, HierarchiesSet, allowed_ff_types, PedigreeMatrix
 
 
 class DataInputCommand(IExecutableCommand):
@@ -84,6 +84,24 @@ class DataInputCommand(IExecutableCommand):
             else:
                 other_attrs = None
 
+            # Check existence of PedigreeMatrix, if used
+            if "pedigree_matrix" in row:
+                pm = glb_idx.get(PedigreeMatrix.partial_key(name=row["pedigree_matrix"]))
+                if len(pm) != 1:
+                    issues.append((3, "Could not find Pedigree Matrix '"+row["pedigree_matrix"]+"'"))
+                    del row["pedigree_matrix"]
+                else:
+                    try:
+                        lst = pm[0].get_modes_for_code(row["pedigree"])
+                    except:
+                        issues.append((3, "Could not decode Pedigree '"+row["pedigree"]+"' for Pedigree Matrix '"+row["pedigree_matrix"]+"'"))
+                        del row["pedigree"]
+                        del row["pedigree_matrix"]
+            else:
+                if "pedigree" in row:
+                    issues.append((3, "Pedigree specified without accompanying Pedigree Matrix"))
+                    del row["pedigree"]
+
             # CREATE FactorType, A Type of Observable, IF it does not exist
             # AND ADD Quantitative Observation
             p, ft, f, o = create_quantitative_observation(
@@ -95,7 +113,7 @@ class DataInputCommand(IExecutableCommand):
                 spread=row["uncertainty"] if "uncertainty" in row else None,
                 assessment=row["assessment"] if "assessment" in row else None,
                 pedigree=row["pedigree"] if "pedigree" in row else None,
-                pedigree_template=row["pedigree_template"] if "pedigree_template" in row else None,
+                pedigree_template=row["pedigree_matrix"] if "pedigree_matrix" in row else None,
                 relative_to=row["relative_to"] if "relative_to" in row else None,
                 time=row["time"] if "time" in row else None,
                 geolocation=None,
