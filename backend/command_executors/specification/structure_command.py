@@ -93,7 +93,7 @@ class StructureCommand(IExecutableCommand):
 
             rels = create_relation_observations(glb_idx, origin_name, destinations, default_relation, source)
 
-        return None, None
+        return issues, None
 
     def estimate_execution_time(self):
         return 0

@@ -10,6 +10,7 @@ from backend.command_executors.specification.metadata_command import MetadataCom
 from backend.command_executors.specification.data_input_command import DataInputCommand
 from backend.command_executors.specification.pedigree_matrix_command import PedigreeMatrixCommand
 from backend.command_executors.specification.references_command import ReferencesCommand
+from backend.command_executors.specification.scale_conversion_command import ScaleConversionCommand
 from backend.command_executors.specification.structure_command import StructureCommand
 from backend.command_executors.specification.upscale_command import UpscaleCommand
 
@@ -25,18 +26,19 @@ def create_command(cmd_type, name, json_input):
     :return: The instance of the command and the issues creating it
     :raise
     """
-    cmds = {"dummy":           DummyCommand,  # Simple assignation of a string to a variable. Useful to test things
-            "metadata":        MetadataCommand,
-            "mapping":         MappingCommand,
-            "data_input":      DataInputCommand,
-            "structure":       StructureCommand,
-            "upscale":         UpscaleCommand,
-            "hierarchy":       HierarchyCommand,
-            "etl_dataset":     ETLExternalDatasetCommand,
-            "parameters":      ParametersCommand,
-            "indicators":      IndicatorsCommand,
-            "references":      ReferencesCommand,
-            "pedigree_matrix": PedigreeMatrixCommand,
+    cmds = {"dummy":            DummyCommand,  # Simple assignation of a string to a variable. Useful to test things
+            "metadata":         MetadataCommand,
+            "mapping":          MappingCommand,
+            "data_input":       DataInputCommand,
+            "structure":        StructureCommand,
+            "upscale":          UpscaleCommand,
+            "hierarchy":        HierarchyCommand,
+            "etl_dataset":      ETLExternalDatasetCommand,
+            "parameters":       ParametersCommand,
+            "indicators":       IndicatorsCommand,
+            "references":       ReferencesCommand,
+            "pedigree_matrix":  PedigreeMatrixCommand,
+            "scale_conversion": ScaleConversionCommand,
             }
     if cmd_type in cmds:
         tmp = cmds[cmd_type](name)  # Reflective CALL to construct the empty command instance

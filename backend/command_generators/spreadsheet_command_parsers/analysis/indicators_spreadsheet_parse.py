@@ -65,6 +65,7 @@ def parse_indicators_command(sh, area):
                     some_error = True
                     issues.append((3, "The Formula specified for the indicator, '" + value + "', is not valid, in row " + str(r) + "."))
             elif k == "benchmark":  # Optional
+                # This column can appear multiple times.
                 # Check syntax
                 if value.lower().strip() in ():
                     if value.lower().strip() in ("number", "float"):

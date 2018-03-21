@@ -17,6 +17,8 @@ from backend.command_generators.spreadsheet_command_parsers.specification.pedigr
     parse_pedigree_matrix_command
 from backend.command_generators.spreadsheet_command_parsers.specification.references_spreadsheet_parser import \
     parse_references_command
+from backend.command_generators.spreadsheet_command_parsers.specification.scale_conversion_spreadsheet_parse import \
+    parse_scale_conversion_command
 from backend.command_generators.spreadsheet_command_parsers.specification.upscale_spreadsheet_parse import parse_upscale_command
 from backend.command_generators.spreadsheet_command_parsers.specification.structure_spreadsheet_parser import parse_structure_command
 from backend.command_generators.spreadsheet_utils import binary_mask_from_worksheet, obtain_rectangular_submatrices
@@ -65,6 +67,7 @@ Comando
     re_pedigree_template = re.compile(r"(Pedigree|Ped|NUSAP\.PM)[ _]+" + var_name, flags=flags)
     re_references = re.compile(r"(References|Ref)[ _]" + var_name, flags=flags)
     re_parameters = re.compile(r"(Parameters|Params)([ _]" + var_name + ")?", flags=flags)
+    re_scale_conversion = re.compile(r"Scale", flags=flags)
 
     re_enum = re.compile(r"(Dataset|DS)[ _]" + var_name + "[ _](Enumerate|Enum)", flags=flags)
     re_meta = re.compile(r"(Metadata|MD)[ _]" + var_name, flags=flags)
@@ -176,6 +179,9 @@ Comando
             # Read the content
             c_type = "references"
             issues, c_label, c_content = parse_references_command(sh_in, t)
+        elif re_scale_conversion.search(name):
+            c_type = "scale_conversion"
+            issues, c_label, c_content = parse_scale_conversion_command(sh_in, t)
         # ANALYSIS COMMANDS
         elif re_indicators.search(name):  # Indicators
             name = re_parameters.search(name).group(1)

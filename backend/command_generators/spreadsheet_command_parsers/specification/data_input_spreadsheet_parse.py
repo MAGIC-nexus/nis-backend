@@ -296,7 +296,7 @@ def parse_data_input_command(sh, area, processors_type, state):
                     some_error = True
                     issues.append((3, "The unit name '"+value+"' is not registered in the units processing package, in row "+str(r)))
             elif c == "uncertainty":
-                # TODO It must be a valid uncertainty specificator
+                # TODO It must be a valid uncertainty specifier
                 pass
             elif c == "assessment":
                 # See page 135 of Funtowicz S., Ravetz J., "Uncertainty and Quality in Science for Policy"
@@ -318,11 +318,14 @@ def parse_data_input_command(sh, area, processors_type, state):
                     value = str(value)
                 ast = basic_elements_parser.string_to_ast(basic_elements_parser.time_expression, value)
             elif c == "geolocation":
-                # A valid GEO specification
-                # ast = basic_elements_parser.string_to_ast(basic_elements_parser.geo_expression, value)
-                pass
+                # A reference to a geolocation
+                try:
+                    basic_elements_parser.string_to_ast(basic_elements_parser.reference, value)
+                except:
+                    some_error = True
+                    issues.append((3, "The geolocation must be a reference"))
             elif c == "source":
-                # TODO Who or what provided the information. It can be formal or informal. Formal can be references
+                # Who or what provided the information. It can be formal or informal. Formal can be references (but evaluated later)
                 pass
             elif c == "comments":
                 # Free text

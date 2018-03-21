@@ -23,7 +23,12 @@ plusop = oneOf('+ -')
 processor_factor_separator = Literal(":")
 simple_ident = Word(srange("[a-zA-Z]"), srange("[a-zA-Z0-9_]"))  # Start in letter, then "_" + letters + numbers
 # Relation types
-relation_operator = Or([Literal('|'), Literal('>'), Literal('<'), Literal('<>'), Literal('><'), Literal('||')])
+relation_operator = Or([Literal('|'),  # Part-of
+                        Literal('>'), Literal('<'),  # Directed flow
+                        Literal('<>'), Literal('><'),  # Undirected flow
+                        Literal('||')  # Upscale (implies part-of also)
+                        ]
+                       )
 
 # Basic data types
 integer = Word(nums).setParseAction(lambda t: {'type': 'int', 'value': int(t[0])})
@@ -31,11 +36,16 @@ real = (Combine(Word(nums) + Optional("." + Word(nums))
                 + oneOf("E e") + Optional(oneOf('+ -')) + Word(nums))
         | Combine(Word(nums) + "." + Word(nums))
         ).setParseAction(lambda _s, l, t:
-                                {'type': 'float', 'value': float(t[0])}
+                         {'type': 'float', 'value': float(t[0])}
                          )
 string = quotedString.setParseAction(lambda t: {'type': 'str', 'value': t[0]})
 
-# RULES: namespace, parameter list, function call, dataset variable, hierarchical var name
+# RULES: reference, namespace, parameter list, function call, dataset variable, hierarchical var name
+reference = (lbracket + simple_ident.setResultsName("ident") + rbracket
+             ).setParseAction(lambda _s, l, t: {'type': 'reference',
+                                                'ref_id': t.ident
+                                                }
+                              )
 namespace = simple_ident + Literal("::").suppress()
 expression = Forward()
 expression_with_parameters = Forward()

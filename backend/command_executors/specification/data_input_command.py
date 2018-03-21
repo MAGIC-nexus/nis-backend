@@ -7,7 +7,7 @@ from backend.model.memory.musiasem_concepts_helper import create_quantitative_ob
 from backend.model.memory.musiasem_concepts import FactorType, Observer, FactorInProcessorType, \
     Processor, \
     Factor, FactorQuantitativeObservation, QualifiedQuantityExpression, \
-    FlowFundRoegenType, ProcessorsSet, HierarchiesSet, allowed_ff_types, PedigreeMatrix
+    FlowFundRoegenType, ProcessorsSet, HierarchiesSet, allowed_ff_types, PedigreeMatrix, Reference
 
 
 class DataInputCommand(IExecutableCommand):
@@ -102,6 +102,32 @@ class DataInputCommand(IExecutableCommand):
                     issues.append((3, "Pedigree specified without accompanying Pedigree Matrix"))
                     del row["pedigree"]
 
+            # Source
+            if "source" in row:
+                try:
+                    ast = basic_elements_parser.string_to_ast(basic_elements_parser.reference, row["source"])
+                    ref_id = ast["ref_id"]
+                    references = glb_idx.get(Reference.partial_key(ref_id), ref_type="provenance")
+                    if len(references) == 1:
+                        source = references[0]
+                except:
+                    source = row["source"]
+            else:
+                source = None
+
+            # Geolocation
+            if "geolocation" in row:
+                try:
+                    ast = basic_elements_parser.string_to_ast(basic_elements_parser.reference, row["geolocation"])
+                    ref_id = ast["ref_id"]
+                    references = glb_idx.get(Reference.partial_key(ref_id), ref_type="geographic")
+                    if len(references) == 1:
+                        geolocation = references[0]
+                except:
+                    geolocation = row["geolocation"]
+            else:
+                geolocation = None
+
             # CREATE FactorType, A Type of Observable, IF it does not exist
             # AND ADD Quantitative Observation
             p, ft, f, o = create_quantitative_observation(
@@ -109,7 +135,7 @@ class DataInputCommand(IExecutableCommand):
                 factor=row["processor"]+":"+row["factor"],
                 value=row["value"] if "value" in row else None,
                 unit=row["unit"],
-                observer=row["source"] if "source" in row else None,
+                observer=source,
                 spread=row["uncertainty"] if "uncertainty" in row else None,
                 assessment=row["assessment"] if "assessment" in row else None,
                 pedigree=row["pedigree"] if "pedigree" in row else None,
@@ -128,7 +154,7 @@ class DataInputCommand(IExecutableCommand):
                 ftype_attributes=None,
                 fact_external=not internal,
                 fact_incoming=incoming,
-                fact_location=row["geolocation"] if "geolocation" in row else None
+                fact_location=geolocation
             )
             if p_set.append(p, glb_idx):  # Appends codes to the pset if the processor was not member of the pset
                 p_set.append_attributes_codes(row["taxa"])

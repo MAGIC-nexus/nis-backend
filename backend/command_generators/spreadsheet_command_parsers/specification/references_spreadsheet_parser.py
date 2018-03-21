@@ -1,7 +1,25 @@
 import openpyxl
 import numpy as np
 
+from backend.command_generators.spreadsheet_command_parsers.specification import profile_field_name_sets, ref_prof
 from backend.command_generators.spreadsheet_utils import worksheet_to_numpy_array, obtain_rectangular_submatrices
+
+
+def find_profile(col_names):
+    # Convert in set and remove "ref_id"
+    cn = set(col_names)
+    cn.remove("ref_id")
+    for prof_name, fields in profile_field_name_sets().items():
+        if fields.issuperset(cn):
+            for prof in ref_prof:
+                if prof["type"] == prof_name:
+                    return prof
+            raise Exception("Should not be here!?")
+    return None  # Free profile (or misspelled field name)
+
+
+def validate(v, field):
+    return True
 
 
 def parse_references_command(sh, area):
@@ -23,21 +41,46 @@ def parse_references_command(sh, area):
 
     references = []
 
-    # TODO Analyze columns. "ref_id" must exist. Obtain columns where
+    column_names = []
+    for c in range(area[2], area[3]):
+        value = sh.cell(row=area[0], column=c).value
+        column_names.append(value.lower())
+    if "ref_id" not in column_names:
+        issues((3, "'ref_id' column is mandatory"))
 
-    # TODO Read each row
+    if some_error:
+        return issues, None, []
+
+    # Determine the type of reference contained in the worksheet
+    profile = find_profile(column_names)
+    if profile:
+        type_ = profile["type"]
+        col2field = {}
+        for col in column_names:
+            for f in profile["fields"]:
+                if col == f.name:
+                    col2field[col] = f
+                    break
+    else:
+        type_ = "free_form"
+
+    # Read each row
     for r in range(area[0]+1, area[1]):
-        # Gather row
-        reference = {"type": ["undefined", "bibliographic", "geographic"],
-                     "key1": "value1"}
-        # TODO Depending on the type, check for the presence of certain attributes
-        # TODO Depending on the type, validate certain attributes
+        ref = dict(type=type_)  # Result dictionary
+        for c in range(area[2], area[3]):
+            value = sh.cell(row=area[0], column=c).value
+            col = column_names[c-area[2]]
+            if col == "ref_id":
+                # Validate "ref_id" ¿syntax rules?
+                ref["ref_id"] = value
+            else:
+                ref[col] = value
+                field = col2field[col]
+                if not validate(value, field):
+                    issues((3, "Problem validating field '"+field.name+"' with value: "+value))
 
-        references.append(reference)
+        references.append(ref)
 
-
-    content = references
+    content = dict(references=references)
 
     return issues, None, content
-
-

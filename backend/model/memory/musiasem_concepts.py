@@ -1704,6 +1704,31 @@ class PedigreeMatrix(Nameable, Identifiable):
 
 
 # #################################################################################################################### #
+# REFERENCES (containers of key-value pairs with some validation schema (search code for "ref_prof" global variable)
+# #################################################################################################################### #
+
+class Reference(Nameable, Identifiable):
+    """ A dictionary containing a set of key-value pairs """
+    def __init__(self, name, ref_type, content):
+        Identifiable.__init__(self)
+        Nameable.__init__(self, name)
+        self._ref_type = ref_type
+        self._content = content
+
+    @staticmethod
+    def partial_key(name: str=None, ref_type: str=None):
+        d = dict(_t="r")
+        if name:
+            d["_n"] = name
+        if ref_type:
+            d["_rt"] = ref_type
+        return d
+
+    def key(self):
+        return {"_t": "r", "_n": self.name, "_rt": self._ref_type, "__o": self.ident}
+
+
+# #################################################################################################################### #
 # PARAMETERS, BENCHMARKS, INDICATORS
 # #################################################################################################################### #
 
