@@ -8,7 +8,6 @@ import numpy as np
 import openpyxl
 import openpyxl.utils
 import pandas as pd
-import pint  # Units management
 import regex as re
 
 from backend.common.create_database import create_pg_database_engine, create_monet_database_engine
@@ -1765,8 +1764,8 @@ row height: ws.row_dimensions
 if __name__ == '__main__':
     import collections
     import io
-    from backend.ie_imports.rdb_model import *
-    from backend.model.persistent_db.persistent import *
+    from backend.models.statistical_datasets import *
+    from backend.models.musiasem_methodology_support import *
 
     # SDMX Concept can be: dimension, attribute or measure. Stored in "metadatasets" associated to a dataset by its name
     app_cfg = collections.namedtuple('App', 'config')

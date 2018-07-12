@@ -86,12 +86,15 @@ def parse_mapping_command(sh, area, origin, destination):
         d_value = sh.cell(row=r, column=area[2] + 1).value  # Second column -> Destination
         try:
             exp_value = sh.cell(row=r, column=area[2] + 2).value  # Third column -> Weight (for Many to Many mappings)
-            try:
-                exp_value = float(exp_value)
-            except:  # If it is not possible, it maybe an expression, postpone conversion until usage
-                pass
+            if exp_value:
+                try:
+                    exp_value = float(exp_value)
+                except:  # If it is not possible, it maybe an expression, postpone conversion until usage
+                    pass
+            else:
+                exp_value = 1.0  # If undefined -> Many to One
         except:
-            exp_value = 1.0  # Many to One
+            exp_value = 1.0  # If undefined -> Many to One
 
         if not o_value or not d_value:
             if not o_value and d_value:
@@ -111,7 +114,7 @@ def parse_mapping_command(sh, area, origin, destination):
             lst = []
             o_dict[o_value] = lst
         # Check "d_value" is not being repeated for "o_value"
-        if len(lst) >= 1 and d_value not in [d["d"] for d in lst]:
+        if (len(lst) == 0) or (len(lst) >= 1 and d_value not in [d["d"] for d in lst]):
             lst.append({"d": d_value, "w": exp_value})
         else:
             issues.append((3, "Destination category '" + destination + "' has been repeated for origin category '" + o_value + "'"))
@@ -124,8 +127,7 @@ def parse_mapping_command(sh, area, origin, destination):
                "map": [{"o": k, "to": v} for k, v in o_dict.items()]
                }
     label = content["origin_dataset"] + "." + content["origin_dimension"] + " - " + content["destination"]
-    if True:
-        return issues, label, content
+    return issues, label, content
     # else:
     #     if not some_error:
     #         cmd = MappingCommand(label)

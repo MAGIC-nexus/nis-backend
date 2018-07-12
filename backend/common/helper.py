@@ -1,12 +1,17 @@
 # -*- coding: utf-8 -*-
 
 import collections
+import functools
+import gzip
 import itertools
-from numba import jit
+# from numba import jit
 import ast
 import json
+from typing import IO
+
 import pandas as pd
 import numpy as np
+from flask import after_this_request, request
 from multidict import MultiDict, CIMultiDict
 from functools import partial
 
@@ -171,6 +176,8 @@ def _json_serial(obj):
         return serial
     elif isinstance(obj, CaseInsensitiveDict):
         return str(obj)
+    elif isinstance(obj, np.int64):
+        return int(obj)
     raise TypeError("Type not serializable")
 
 
@@ -192,7 +199,7 @@ def generate_json(o):
 # #####################################################################################################################
 
 
-class PartialRetrievalDictionary:
+class PartialRetrievalDictionary2:
     """ The key is a dictionary, the value an object. Allows partial search.
 
     >> IF "case_sensitive==False" -> VALUES are CASE INSENSITIVE <<<<<<<<<<<<<<<<<
@@ -392,6 +399,176 @@ df.loc[("h", slice(None)), "c"]
 
         return self  # Allows the following: prd = PartialRetrievalDictionary().from_pickable(inp)
 
+
+class PartialRetrievalDictionary:
+    def __init__(self):
+        # A dictionary of key-name to dictionaries, where the dictionaries are each of the values of the key and the
+        # value is a set of IDs having that value
+        # dict(key-name, dict(key-value, set(obj-IDs with that key-value))
+        self._keys = {}
+        # Dictionary from ID to the tuple (composite-key-elements dict, object)
+        self._objs = {}
+        self._rev_objs = {}  # From object to ID
+        # Counter
+        self._id_counter = 0
+
+    def get(self, key, key_and_value=False, full_key=False, just_oid=False):
+        """
+        Retrieve one or more objects matching "key"
+        If "key_and_value" is True, return not only the value, also matching key (useful for multiple matching keys)
+        If "full_key" is True, zero or one objects should be the result
+        :param key:
+        :param full_key:
+        :return: A list of matching elements
+        """
+        if True:
+            key2 = {k.lower(): v if k.startswith("__") else v.lower() for k, v in key.items()}
+        else:
+            key2 = key
+
+        sets = [self._keys.get(k, {}).get(v, set()) for k, v in key2.items()]
+
+        # Find shorter set and Remove it from the list
+        min_len = 1e30
+        min_len_set_idx = None
+        for i, s in enumerate(sets):
+            if len(s) < min_len:
+                min_len = len(s)
+                min_len_set_idx = i
+        min_len_set = sets[min_len_set_idx]
+        del sets[min_len_set_idx]
+        # Compute intersections
+        result = min_len_set.intersection(*sets)
+        if just_oid:
+            return result
+
+        # Obtain list of results
+        if full_key and len(result) > 1:
+            raise Exception("Zero or one results were expected. "+str(len(result)+" obtained."))
+        if not key_and_value:
+            return [self._objs[oid][1] for oid in result]
+        else:
+            return [self._objs[oid] for oid in result]
+
+    def put(self, key, value):
+        """
+        Insert implies the key does not exist
+        Update implies the key exists
+        Upsert does not care
+
+        :param key:
+        :param value:
+        :return:
+        """
+        ptype = 'i'  # 'i', 'u', 'ups'
+        if True:
+            key2 = {k.lower(): v if k.startswith("__") else v.lower() for k, v in key.items()}
+        else:
+            key2 = key
+        # Arrays containing key: values "not-present" and "present"
+        not_present = []  # List of tuples (dictionary of key-values, value to be stored)
+        present = []  # List of sets storing IDs having same key-value
+        for k, v in key2.items():
+            d = self._keys.get(k, {})
+            if len(d) == 0:
+                self._keys[k] = d
+            if v not in d:
+                not_present.append((d, v))
+            else:
+                present.append(d.get(v))
+
+        if len(not_present) > 0:
+            is_new = True
+        else:
+            if len(present) > 1:
+                is_new = len(present[0].intersection(*present[1:])) == 0
+            elif len(present) == 1:
+                is_new = len(present) == 0
+            else:
+                is_new = False
+
+        # Insert, Update or Upsert
+        if is_new:  # It seems to be an insert
+            # Check
+            if ptype == 'u':
+                raise Exception("Key does not exist")
+            # Insert
+            if value in self._rev_objs:
+                oid = self._rev_objs[value]
+            else:
+                self._id_counter += 1
+                oid = self._id_counter
+                self._objs[oid] = (key, value)
+                self._rev_objs[value] = oid
+
+            # Insert
+            for d, v in not_present:
+                s = set()
+                d[v] = s
+                s.add(oid)
+            for s in present:
+                s.add(oid)
+        else:
+            if ptype == 'i':
+                raise Exception("Key already exists")
+            # Update
+            # Find the ID for the key
+            res = self.get(key, just_oid=True)
+            if len(res) != 1:
+                raise Exception("Only one result expected")
+            # Update value (key is the same, ID is the same)
+            self._objs[res[0]] = value
+
+    def delete(self, key):
+        def delete_single(key):
+            if True:
+                key2 = {k.lower(): v if k.startswith("__") else v.lower() for k, v in key.items()}
+            else:
+                key2 = key
+
+            # Get IDs
+            oids = self.get(key, just_oid=True)
+            if len(oids) > 0:
+                # From key_i: value_i remove IDs (set difference)
+                for k, v in key2.items():
+                    d = self._keys.get(k, None)
+                    if d:
+                        s = d.get(v, None)
+                        if s:
+                            s2 = s.difference(oids)
+                            d[v] = s2
+                            if not s2:
+                                del d[v]  # Remove the value for the key
+
+                # Delete oids
+                for oid in oids:
+                    del self._objs[oid]
+
+                return len(oids)
+            else:
+                return 0
+
+        if isinstance(key, list):
+            res_ = 0
+            for k in key:
+                res_ += delete_single(k)
+            return res_
+        else:
+            return delete_single(key)
+
+    def to_pickable(self):
+        # Convert to a jsonpickable structure
+        return dict(keys=self._keys, objs=self._objs, cont=self._id_counter)
+
+    def from_pickable(self, inp):
+        self._keys = inp["keys"]
+        self._objs = {int(k): v for k, v in inp["objs"].items()}
+        self._rev_objs = {v[1]: k for k, v in self._objs.items()}
+        self._id_counter = inp["cont"]
+
+        return self  # Allows the following: prd = PartialRetrievalDictionary().from_pickable(inp)
+
+
 # #####################################################################################################################
 # >>>> EXTERNAL DATASETS <<<<
 # #####################################################################################################################
@@ -538,9 +715,47 @@ class Memoize2(object):
             res = cache[key] = self.func(*args, **kw)
         return res
 
+
+def gzipped(f):
+    """
+    Decorator to ZIP the response
+    """
+    @functools.wraps(f)
+    def view_func(*args, **kwargs):
+        @after_this_request
+        def zipper(response):
+            accept_encoding = request.headers.get('Accept-Encoding', '')
+
+            if 'gzip' not in accept_encoding.lower():
+                return response
+
+            response.direct_passthrough = False
+
+            if (response.status_code < 200 or
+                response.status_code >= 300 or
+                'Content-Encoding' in response.headers):
+                return response
+            gzip_buffer = IO()
+            gzip_file = gzip.GzipFile(mode='wb',
+                                      fileobj=gzip_buffer)
+            gzip_file.write(response.data)
+            gzip_file.close()
+
+            response.data = gzip_buffer.getvalue()
+            response.headers['Content-Encoding'] = 'gzip'
+            response.headers['Vary'] = 'Accept-Encoding'
+            response.headers['Content-Length'] = len(response.data)
+
+            return response
+
+        return f(*args, **kwargs)
+
+    return view_func
+
 # #####################################################################################################################
 # >>>> MAPPING <<<<
 # #####################################################################################################################
+
 
 # TODO Consider optimization using numba or others
 def augment_dataframe_with_mapped_columns(df, maps, measure_columns):
@@ -643,3 +858,66 @@ def augment_dataframe_with_mapped_columns(df, maps, measure_columns):
     tmp = pd.DataFrame(data=mm, columns=col_names)
 
     return tmp
+
+
+if __name__ == '__main__':
+    import random
+    import string
+    from timeit import default_timer as timer
+
+    class Dummy:
+        def __init__(self, a):
+            self._a = a
+
+    def rndstr(n):
+        return random.choices(string.ascii_uppercase + string.digits, k=n)
+
+    prd = PartialRetrievalDictionary2()
+    ktypes = [("a", "b", "c"), ("a", "b"), ("a", "d"), ("a", "f", "g")]
+    # Generate a set of keys and empty objects
+    vals = []
+    print("Generating sample")
+    for i in range(30000):
+        # Choose random key
+        ktype = ktypes[random.randrange(len(ktypes))]
+        # Generate the element
+        vals.append(({k: ''.join(rndstr(6)) for k in ktype}, Dummy(rndstr(12))))
+
+    print("Insertion started")
+    df = pd.DataFrame()
+    start = timer()
+    # Insert each element
+    for v in vals:
+        prd.put(v[0], v[1])
+    stop = timer()
+    print(stop-start)
+
+    print("Reading started")
+
+    # Select all elements
+    start = timer()
+    # Insert each element
+    for v in vals:
+        r = prd.get(v[0], False)
+        if len(r) == 0:
+            raise Exception("Unexpected!")
+    stop = timer()
+    print(stop-start)
+
+    print("Deleting started")
+
+    # Select all elements
+    start = timer()
+    # Insert each element
+    for v in vals:
+        r = prd.delete(v[0])
+        if r == 0:
+            raise Exception("Unexpected!")
+    stop = timer()
+    print(stop-start)
+
+    print("Finished!!")
+
+
+def str2bool(v: str):
+    return str(v).lower() in ("yes", "true", "t", "1")

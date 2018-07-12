@@ -3,11 +3,8 @@ import json
 from backend.common.helper import create_dictionary
 from backend.model_services import IExecutableCommand, State, get_case_study_registry_objects
 from backend.command_generators import basic_elements_parser
-from backend.model.memory.musiasem_concepts_helper import create_quantitative_observation
-from backend.model.memory.musiasem_concepts import FactorType, Observer, FactorInProcessorType, \
-    Processor, \
-    Factor, FactorQuantitativeObservation, QualifiedQuantityExpression, \
-    FlowFundRoegenType, ProcessorsSet, HierarchiesSet, allowed_ff_types, PedigreeMatrix, Reference
+from backend.models.musiasem_concepts_helper import create_quantitative_observation
+from backend.models.musiasem_concepts import FlowFundRoegenType, ProcessorsSet, PedigreeMatrix, Reference
 
 
 class DataInputCommand(IExecutableCommand):
@@ -216,7 +213,7 @@ class DataInputCommand(IExecutableCommand):
                     ds = datasets[r["_referenced_dataset"]]  # Obtain dataset
                 else:
                     ds = None
-                    issues.append((3, "Dataset '" + r["_referenced_dataset"] + "' is not declared. Row "+str(i)))
+                    issues.append((3, "Dataset '" + r["_referenced_dataset"] + "' is not declared. Row "+str(i+1)))
             else:
                 ds = None
             if ds:
@@ -239,16 +236,23 @@ class DataInputCommand(IExecutableCommand):
                             var_dict[k] = r[k][1:]  # Dimension
                         else:
                             fixed_dict[k] = r[k]  # Special
-                # Iterate the dataset (a pd.DataFrame), row by row
-                for r_num, r2 in ds.data.iterrows():
-                    r_exp = fixed_dict.copy()
-                    r_exp.update({k: str(r2[v.lower()]) for k, v in var_dict.items()})
-                    if var_taxa_dict:
-                        taxa = r_exp["taxa"]
-                        taxa.update({k: r2[v.lower()] for k, v in var_taxa_dict.items()})
-                        if r_exp["processor"].startswith("#"):
-                            r_exp["processor"] = "_".join([str(taxa[t]) for t in processor_attributes if t in taxa])
-                    process_row(r_exp)
+                # Check that the # names are in the Dataset
+
+                diff = set([v.lower() for v in list(var_dict.values())+list(var_taxa_dict.values())]).difference(set(ds.data.columns))
+                if diff:
+                    # There are request fields in var_dict NOT in the input dataset "ds.data"
+                    issues.append((3, "'"+', '.join(diff)+"' are not present in the requested dataset '"+r["_referenced_dataset"]+"'. Row " + str(i+1)))
+                else:
+                    # Iterate the dataset (a pd.DataFrame), row by row
+                    for r_num, r2 in ds.data.iterrows():
+                        r_exp = fixed_dict.copy()
+                        r_exp.update({k: str(r2[v.lower()]) for k, v in var_dict.items()})
+                        if var_taxa_dict:
+                            taxa = r_exp["taxa"]
+                            taxa.update({k: r2[v.lower()] for k, v in var_taxa_dict.items()})
+                            if r_exp["processor"].startswith("#"):
+                                r_exp["processor"] = "_".join([str(taxa[t]) for t in processor_attributes if t in taxa])
+                        process_row(r_exp)
             else:  # Literal values
                 process_row(r)
 

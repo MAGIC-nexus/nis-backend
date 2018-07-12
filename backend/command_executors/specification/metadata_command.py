@@ -42,16 +42,17 @@ class MetadataCommand(IExecutableCommand):
         """
         issues = []
         cs = state.get("_case_study")
+        cs_version = state.get("_case_study_version")
         state.set("_metadata", self._metadata_dictionary)
         if cs:
             # Modify case study attributes
-            cs.name = ""
+            cs_version.name = ""
             if "case_study_name" in self._metadata_dictionary and self._metadata_dictionary["case_study_name"]:
-                cs.name = "; ".join(self._metadata_dictionary["case_study_name"])
+                cs_version.name += "- ".join(self._metadata_dictionary["case_study_name"])
             if "title" in self._metadata_dictionary and self._metadata_dictionary["title"]:
-                if cs.name:
-                    cs.name += ":: "
-                cs.name += "; ".join(self._metadata_dictionary["title"])
+                if cs_version.name:
+                    cs_version.name += "; "
+                cs_version.name += "- ".join(self._metadata_dictionary["title"])
             if "doi" in self._metadata_dictionary and self._metadata_dictionary["doi"]:
                 cs.oid = self._metadata_dictionary["doi"][0]
             if "description" in self._metadata_dictionary and self._metadata_dictionary["description"]:

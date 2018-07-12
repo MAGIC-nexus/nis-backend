@@ -1,15 +1,31 @@
-FROM grahamdumpleton/mod-wsgi-docker:python-3.5
+FROM grahamdumpleton/mod-wsgi-docker:python-3.6
+
+# The image used, "grahamdumpleton/mod-wsgi-docker:python-3.6" is not in "Docker Hub"
+# It has to be built from the original source code of 3.5 image (source code in Github), with the following versions
+# in the corresponding Dockerfile section:
+#
+# ENV PYTHON_VERSION=3.6.5 \
+#    NGHTTP2_VERSION=1.32.0 \
+#    APR_VERSION=1.6.3 \
+#    APR_UTIL_VERSION=1.6.1 \
+#    APACHE_VERSION=2.4.33 \
+#    MOD_WSGI_VERSION=4.6.4 \
+#    NSS_WRAPPER_VERSION=1.1.3 \
+#    TINI_VERSION=0.18.0
+#
+# Build the image using the modified Dockerfile, with the name "grahamdumpleton/mod-wsgi-docker:python-3.6"
 
 # TODO
 # Rewrite to contain three things:
 # * NIS application. Run using "gunicorn"
 # * R modules
 # * Celery
-# The tool is "supervisor". An example in:
+#
+# The tool to run both "gunicorn" and "Celery" is "supervisor". An example in:
 # https://github.com/pm990320/docker-flask-celery
 #
 #
-# This one container is for MOD_WSGI (Apache2) <<<<<<<<<<<<<<<<<<
+# The present container is for MOD_WSGI (Apache2) <<<<<<<<<<<<<<<<<<
 #
 #
 # Build:
@@ -28,16 +44,18 @@ FROM grahamdumpleton/mod-wsgi-docker:python-3.5
 #               -v /home/rnebot/DATOS/docker/nis-local:/srv
 #               -e MAGIC_NIS_SERVICE_CONFIG_FILE="nis_docker_local_sqlite.conf" magic-nis:latest
 #
-# Production server:
-# docker create --name nis-local -l magic-postgis -l magic-redis -v /srv/docker/magic/data/nis:/srv
-#   -e VIRTUAL_HOST=one.nis.magic-nexus-eu -e VIRTUAL_PORT=80 -e LETSENCRYPT_HOST=one.nis.magic-nexus-eu
+# NOTE: in the example, the host directory (/home/rnebot/DATOS/docker/nis-local) must have RWX permissions
+#       for all users: chmod rwx+o ...
+#       If not, it may not be possible to create
+#
+# PRODUCTION SERVER:
+#
+# docker create --name nis-local --network=magic-net -l magic-postgis -l magic-redis -v /srv/docker/magic/data/nis:/srv
+#   -e VIRTUAL_HOST=one.nis.magic-nexus.eu -e VIRTUAL_PORT=80 -e LETSENCRYPT_HOST=one.nis.magic-nexus.eu
 #   -e LETSENCRYPT_EMAIL=rnebot@itccanarias.org -e MAGIC_NIS_SERVICE_CONFIG_FILE="nis_docker_naples.conf"
 #   magic-nis:latest
 #
 #
-# NOTE: in this last example, the host directory (/home/rnebot/DATOS/docker/nis-local) must have RWX permissions
-#       for all users: chmod rwx+o ...
-#       If not, it may not be possible to create
 
 ENV MAGIC_NIS_SERVICE_CONFIG_FILE=""
 

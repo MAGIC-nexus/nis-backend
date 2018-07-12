@@ -3,6 +3,7 @@ import openpyxl
 import io
 # import koala # An Excel files parser elaborating a graph allowing automatic evaluation
 import regex as re  # Improvement over standard "re"
+from openpyxl import Workbook
 
 from backend import Issue
 from backend.command_generators.json import create_command
@@ -26,7 +27,8 @@ from backend.command_generators.spreadsheet_utils import binary_mask_from_worksh
 # Most complex name
 # [namespace::][type:]var(.var)*[(@|#)var] : [namespace] + [type] + var + [attribute or tag]
 var_name = "([a-zA-Z][a-zA-Z0-9_-]*)"
-cplex_var = "((" + var_name + "::)?" + var_name + "(\\." + var_name + ")*)"
+hvar_name = "("+var_name + r"(\." + var_name + ")*)"
+cplex_var = "((" + var_name + "::)?" + hvar_name + ")"
 
 # ############################### #
 #  Main function                  #
@@ -62,7 +64,7 @@ Comando
     re_processors = re.compile(r"(Processors|Proc)[ _]+" + var_name, flags=flags)
     re_hierarchy = re.compile(r"(Taxonomy|Tax|Composition|Comp)[ _]([cpf])[ ]" + var_name, flags=flags)
     re_upscale = re.compile(r"(Upscale|Up)[ _](" + var_name + "[ _]" + var_name + ")?", flags=flags)
-    re_relations = re.compile(r"(Grammar|Relations|Rel)([ _]+" + var_name+")?", flags=flags)
+    re_relations = re.compile(r"(Grammar|Structure|Relations|Rel)([ _]+" + var_name+")?", flags=flags)
     re_transform = re.compile(r"(Transform|Tx)[ _]" + var_name + "[ _]" + var_name, flags=flags)
     re_pedigree_template = re.compile(r"(Pedigree|Ped|NUSAP\.PM)[ _]+" + var_name, flags=flags)
     re_references = re.compile(r"(References|Ref)[ _]" + var_name, flags=flags)
@@ -71,7 +73,7 @@ Comando
 
     re_enum = re.compile(r"(Dataset|DS)[ _]" + var_name + "[ _](Enumerate|Enum)", flags=flags)
     re_meta = re.compile(r"(Metadata|MD)[ _]" + var_name, flags=flags)
-    re_data = re.compile(r"(Dataset|DS)[ _]" + var_name, flags=flags)
+    re_data = re.compile(r"(Dataset|DS)[ _]" + hvar_name, flags=flags)
     re_mapping = re.compile(r"^(Mapping|Map)([ _]" + cplex_var + "[ _]" + cplex_var + ")?", flags=flags)
 
     re_indicators = re.compile(r"(Indicators|KPI)([ _]" + var_name + ")?", flags=flags)
@@ -89,6 +91,9 @@ Comando
         # Extract worksheet matrices
         m = binary_mask_from_worksheet(sh_in, False)
         t = obtain_rectangular_submatrices(m)
+        if len(t) == 0:  # No data
+            continue
+
         t = t[0]  # Take just the first element, a tuple (top, bottom, left, right) representing a rectangular region
         t = (t[0]+1, t[1]+1, t[2]+1, t[3]+1)  # Indices start at 1
         # v = worksheet_to_numpy_array(sh_in)
@@ -198,7 +203,7 @@ Comando
                 total_issues.append(issue)
         if errors == 0:
             try:
-                cmd, issues = create_command(c_type, c_label, c_content)
+                cmd, issues = create_command(c_type, c_label, c_content, sh_name)
             except:
                 cmd = None
                 issues = [(3, "Could not create command of type '"+c_type+"'")]
@@ -207,7 +212,7 @@ Comando
                     issue = {"sheet_number": c, "sheet_name": sh_name, "c_type": c_type, "type": i[0], "message": i[1]}
                     total_issues.append(issue)
         else:
-            cmd, _ = create_command(c_type, c_label, {})
+            cmd, _ = create_command(c_type, c_label, {}, sh_name)
 
         yield cmd, total_issues
     # yield from []  # Empty generator

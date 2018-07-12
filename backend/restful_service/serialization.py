@@ -1,11 +1,9 @@
-from typing import Union
-
-from sqlalchemy.orm import relationship, backref, composite, scoped_session, sessionmaker, class_mapper
+from sqlalchemy.orm import class_mapper
 import pandas as pd
 
 # Some ideas from function "model_to_dict" (Google it, StackOverflow Q&A)
-from backend.common.helper import PartialRetrievalDictionary
-from backend.model.persistent_db.persistent import serialize_from_object, deserialize_to_object
+from backend.common.helper import PartialRetrievalDictionary, create_dictionary
+from backend.models.musiasem_methodology_support import serialize_from_object, deserialize_to_object
 from backend.model_services import State, get_case_study_registry_objects
 
 
@@ -132,22 +130,46 @@ def serialize_state(state: State):
     """
 
     def serialize_dataframe(df):
-        return df.index.names, df.to_dict()
+        return df.to_json(orient="split")  # list(df.index.names), df.to_dict()
+
+    print("  serialize_state IN")
+
+    import copy
+    # "_datasets"
+    ns_ds = {}
+    # Save and nullify before deep copy
+    for ns in state.list_namespaces():
+        _, _, _, datasets, _ = get_case_study_registry_objects(state, ns)
+        ns_ds[ns] = datasets
+        state.set("_datasets", create_dictionary(), ns)  # Nullify datasets
+
+    state2 = copy.deepcopy(state)
 
     # Iterate all namespaces
-    for ns in state.list_namespaces():
-        glb_idx, p_sets, hh, datasets, mappings = get_case_study_registry_objects(state, ns)
+    for ns in state2.list_namespaces():
+        glb_idx, p_sets, hh, _, mappings = get_case_study_registry_objects(state2, ns)
         if glb_idx:
-            glb_idx = glb_idx.to_pickable()
-            state.set("_glb_idx", glb_idx, ns)
+            tmp = glb_idx.to_pickable()
+            state2.set("_glb_idx", tmp, ns)
+        datasets = ns_ds[ns]
         # TODO Serialize other DataFrames.
-        # Datasets
+        # Process Datasets
         for ds_name in datasets:
             ds = datasets[ds_name]
             if isinstance(ds.data, pd.DataFrame):
-                ds.data = serialize_dataframe(ds.data)
+                tmp = serialize_dataframe(ds.data)
+            else:
+                tmp = None
+                # ds.data = None
+            # DB serialize the datasets
+            lst2 = serialize(ds.get_objects_list())
+            lst2.append(tmp)  # Append the serialized DataFrame
+            datasets[ds_name] = lst2
+        state2.set("_datasets", datasets, ns)
+    tmp = serialize_from_object(state2)  # <<<<<<<< SLOWEST !!!!
+    print("  serialize_state length: "+str(len(tmp))+" OUT")
 
-    return serialize_from_object(state)
+    return tmp
 
 
 def deserialize_state(st: str):
@@ -160,10 +182,11 @@ def deserialize_state(st: str):
     :return:
     """
     def deserialize_dataframe(t):
-        df = pd.DataFrame(t[1])
-        df.index.names = t[0]
+        df = pd.read_json(t, orient="split")  # pd.DataFrame(t[1])
+        # df.index.names = t[0]
         return df
 
+    print("  deserialize_state")
     if isinstance(st, str):
         state = deserialize_to_object(st)
     else:
@@ -176,10 +199,14 @@ def deserialize_state(st: str):
             glb_idx = PartialRetrievalDictionary().from_pickable(glb_idx)
             state.set("_glb_idx", glb_idx)
         glb_idx, p_sets, hh, datasets, mappings = get_case_study_registry_objects(state, ns)
+        if isinstance(glb_idx, dict):
+            print("glb_idx is DICT, after deserialization!!!")
         # TODO Deserialize DataFrames
         # In datasets
         for ds_name in datasets:
-            ds = datasets[ds_name]
-            if ds.data:
-                ds.data = deserialize_dataframe(ds.data)
+            lst = datasets[ds_name]
+            ds = deserialize(lst[:-1])[0]
+            ds.data = deserialize_dataframe(lst[-1])
+            datasets[ds_name] = ds
+
     return state

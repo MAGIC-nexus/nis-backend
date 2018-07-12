@@ -97,7 +97,8 @@ def obtain_rectangular_submatrices(mask, region=None):
     # Ranges
     rs = nonzero_sequences(row_sum.flatten())
     cs = nonzero_sequences(col_sum.flatten())
-    lst.append((rs[0][0], rs[0][1], cs[0][0], cs[0][1]))
+    if len(rs) > 0:
+        lst.append((rs[0][0], rs[0][1], cs[0][0], cs[0][1]))
 
     return lst
 
@@ -177,3 +178,19 @@ def show_message(sh, r, c, message, type="error", accumulate=True):
     cell.comment = comment
     # if type == "error":
     #     sh.title = "!" + sh.title
+
+
+def rewrite_xlsx_file(xl):
+    """
+    Regenerates the worksheets of the input file. The aim is to calculate correctly the "dimension@ref" attribute of
+    each of the Worksheets, in order to have it correctly processed by the Kendo UI Spreadsheet
+
+    :param xl: A Workbook object, constructed with OpenPyXL
+    :return: Nothing, the "xl" object is modified inplace
+    """
+    sn = xl.sheetnames
+    for c, sh_name in enumerate(sn):
+        source = xl.get_sheet_by_name(sh_name)
+        tmp = xl.copy_worksheet(source)
+        xl.remove_sheet(source)
+        tmp.title = sh_name

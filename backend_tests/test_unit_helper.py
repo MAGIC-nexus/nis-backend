@@ -3,8 +3,8 @@ import pandas as pd
 
 import backend.common.helper
 from backend.common.helper import PartialRetrievalDictionary, augment_dataframe_with_mapped_columns
-from backend.model.memory.musiasem_concepts import Processor, ProcessorsRelationPartOfObservation, Observer
-from backend.model.persistent_db.persistent import (
+from backend.models.musiasem_concepts import Processor, ProcessorsRelationPartOfObservation, Observer
+from backend.models.musiasem_methodology_support import (
                                                       serialize_from_object,
                                                       deserialize_to_object
                                                       )

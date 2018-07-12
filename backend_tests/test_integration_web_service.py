@@ -213,7 +213,7 @@ class TestHighLevelUseCases(unittest.TestCase):
         r = a.post(nis_api_base + "/isession/rsession/generator?execute=True&register=True",
                    data={'file': (io.BytesIO(b), "input_file.xlsx")},
                    headers={"Content-Type": "multipart/form-data"})  # application/vnd.openxmlformats-officedocument.spreadsheetml.sheet
-        self.assertEqual(r.status_code, 204)
+        self.assertEqual(r.status_code, 200)
         # Close the reproducible session
         r = a.delete(nis_api_base + "/isession/rsession?save_before_close=True")
         self.assertEqual(r.status_code, 200)

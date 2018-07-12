@@ -4,18 +4,17 @@ import os
 
 from backend.model_services import get_case_study_registry_objects
 from backend.restful_service.serialization import serialize_state, deserialize_state
-from backend_tests.test_integration_use_cases import setUpModule, tearDownModule, new_case_study, reset_database
+from backend_tests.test_integration_use_cases import reset_database
 from backend.model_services.workspace import InteractiveSession, CreateNew
-from backend.model.memory.musiasem_concepts import Observer, \
+from backend.models.musiasem_concepts import Observer, \
     Processor, FactorType, Factor, \
     Hierarchy, \
-    FactorQuantitativeObservation, RelationObservation, ProcessorsRelationPartOfObservation, \
+    FactorQuantitativeObservation, ProcessorsRelationPartOfObservation, \
     ProcessorsRelationUndirectedFlowObservation, ProcessorsRelationUpscaleObservation, \
     FactorsRelationDirectedFlowObservation
 
 # Database (ORM)
-from backend.model.persistent_db.persistent import *
-import backend
+from backend.models.musiasem_methodology_support import *
 
 
 def execute_file(file_name, generator_type):
@@ -82,10 +81,15 @@ class TestCommandFiles(unittest.TestCase):
         Test number of processors read for each category, using processor sets and PartialRetrievalDictionary
         :return:
         """
-        file_path = os.path.dirname(os.path.abspath(__file__)) + "/z_input_files/test_spreadsheet_2.xlsx"
+        file_path = os.path.dirname(os.path.abspath(__file__)) + "/z_input_files/test_spreadsheet_upscale_reduced.xlsx"
         isess = execute_file(file_path, generator_type="spreadsheet")
+        # # Save state
+        s = serialize_state(isess.state)
+        with open("/home/rnebot/GoogleDrive/AA_MAGIC/MiniAlmeria.serialized", "wt") as f:
+            f.write(s)
+        local_state = deserialize_state(s)
         # Check State of things
-        glb_idx, p_sets, hh, datasets, mappings = get_case_study_registry_objects(isess.state)
+        glb_idx, p_sets, hh, datasets, mappings = get_case_study_registry_objects(local_state)
         # Three processor sets
         self.assertEqual(len(p_sets), 3)
         # Close interactive session
@@ -200,3 +204,26 @@ class TestCommandFiles(unittest.TestCase):
             print(i.name)
         # Close interactive session
         isess.close_db_session()
+
+    def test_006_execute_file_five(self):
+        """
+
+        Parameters
+        Simple Expression evaluation in QQs
+
+        :return:
+        """
+        file_path = os.path.dirname(os.path.abspath(__file__)) + "/z_input_files/mapping_example_maddalena.xlsx"
+        isess = execute_file(file_path, generator_type="spreadsheet")
+        # Check State of things
+        glb_idx, p_sets, hh, datasets, mappings = get_case_study_registry_objects(isess.state)
+        # Three processor sets
+        self.assertEqual(len(p_sets), 3)
+        # Close interactive session
+        isess.close_db_session()
+
+
+if __name__ == '__main__':
+    i = TestCommandFiles()
+
+    i.test_006_execute_file_five()

@@ -1,10 +1,12 @@
 import gzip
 
 import os
+import re
 import tempfile
 from io import StringIO
 from typing import List
 import getpass
+import csv
 
 import numpy as np
 import pandas as pd
@@ -14,14 +16,14 @@ import requests_cache
 
 from backend.common.helper import create_dictionary, import_names, Memoize2
 from backend.ie_imports.data_source_manager import IDataSourceManager, filter_dataset_into_dataframe
-from backend.ie_imports.rdb_model import DataSource, Database, Dataset, Dimension, CodeList, CodeImmutable
+from backend.models.statistical_datasets import DataSource, Database, Dataset, Dimension, CodeList, CodeImmutable
 
 
 def create_estat_request():
     # from magic_box import app  # APP is this now. Adapt to the current app object!
-    app = import_names("magic_box", "app")
+    app = import_names("backend.restful_service", "app")
     if not app:
-        app = import_names("backend.restful_service", "app")
+        app = import_names("magic_box", "app")
     # EuroStat datasets
     if 'CACHE_FILE_LOCATION' in app.config:
         cache_name = app.config['CACHE_FILE_LOCATION']
@@ -157,10 +159,9 @@ class Eurostat(IDataSourceManager):
         """
         url = "http://ec.europa.eu/eurostat/estat-navtree-portlet-prod/BulkDownloadListing?downfile=data%2F" + dataset + ".tsv.gz"
         zip_name = tempfile.gettempdir() + "/" + dataset + '.tsv.gz'
-
         if os.path.isfile(zip_name):
             if not update:
-                return
+                return zip_name
             else:
                 os.remove(zip_name)
 
@@ -177,7 +178,6 @@ class Eurostat(IDataSourceManager):
         """ This method has to consider the last dataset download, to re"""
 
         def multi_replace(text, rep):
-            import re
             rep = dict((re.escape(k), v) for k, v in rep.items())
             pattern = re.compile("|".join(rep.keys()))
             return pattern.sub(lambda m: rep[re.escape(m.group(0))], text)
@@ -193,42 +193,69 @@ class Eurostat(IDataSourceManager):
 
         if df is None:
             zip_name = self.etl_dataset(dataset, update=False)
-            with gzip.open(zip_name, "rb") as gz:
-                # Read file and
-                # Remove status flags (documented at http://ec.europa.eu/eurostat/data/database/information)
-                st = multi_replace(gz.read().decode("utf-8"),
-                                   {":": "NaN", " p": "", " e": "", " f": "", " n": "", " c": "", " u": "",
-                                    " z": "", " r": "", " b": "", " d": ""})
-                fc = StringIO(st)
-                # fc = StringIO(gz.read().decode("utf-8").replace(" p\t", "\t").replace(":", "NaN"))
-            os.remove(zip_name)
-            # Remove ":" -> NaN
-            # Remove " p" -> ""
-            df = pd.read_csv(fc, sep="\t")
+            new_method = False
+            if new_method:
+                # TODO Obtain a Dataframe with pairs of columns for observations
+                with gzip.open(zip_name, "rb") as gz:
+                    st = None
+                    fc = StringIO(st)
+                    # Read header
+                    csv_reader = csv.reader(fc)
+                    header = next(csv_reader)
+                    fc.seek(0)
+                    # Obtain real header: each period column is added a
+                    # Parse it
 
-            def split_codes(all_codes):  # Split, strip and lower
-                return [s.strip().lower() for s in all_codes.split(",")]
+            else:
+                with gzip.open(zip_name, "rb") as gz:
+                    # Read file and
+                    # Remove status flags (documented at http://ec.europa.eu/eurostat/data/database/information)
+                    #
+                    # TODO ISOLATE STATUS FLAGS INTO ANOTHER COLUMN
+                    # TODO ":" -> "NaN\t",
+                    # TODO ([-+]?[0-9]*\.?[0-9]+([eE][-+]?[0-9]+)?)(.*) -> (1)\t(2)
+                    pattern = re.compile("(\\:)|( [b-fnpruz]+)")
+                    st = pattern.sub(lambda m: "NaN" if m.group(0) == ":" else "", gz.read().decode("utf-8"))
 
-            original_column = df.columns[0]
-            new_cols = [s.strip() for s in original_column.split(",")]
-            new_cols[-1] = new_cols[-1][:new_cols[-1].find("\\")]
-            temp = list(zip(*df[original_column].map(split_codes)))
-            del df[original_column]
-            df.columns = [c.strip() for c in df.columns]
-            # Convert to numeric
-            for cn in df.columns:
-                df[cn] = df[cn].astype(np.float)
-                # df[cn] = df[cn].apply(lambda x: pd.to_numeric(x, errors='coerce'))
-            # Add index columns
-            for i, c in enumerate(new_cols):
-                df[c] = temp[i]
-            # set index on the dimension columns
-            df.set_index(new_cols, inplace=True)
-            # Save df
-            df.to_msgpack(dataframe_fn)
+                    # st = multi_replace(gz.read().decode("utf-8"),
+                    #                    {":": "NaN", " p": "", " e": "", " f": "", " n": "", " c": "", " u": "",
+                    #                     " z": "", " r": "", " b": "", " d": ""})
+                    fc = StringIO(st)
+                    # fc = StringIO(gz.read().decode("utf-8").replace(" p\t", "\t").replace(":", "NaN"))
+                os.remove(zip_name)
+                # Remove ":" -> NaN
+                # Remove " p" -> ""
+                df = pd.read_csv(fc, sep="\t")
+
+                def split_codes(all_codes):  # Split, strip and lower
+                    return [s.strip().lower() for s in all_codes.split(",")]
+
+                original_column = df.columns[0]
+                new_cols = [s.strip() for s in original_column.split(",")]
+                new_cols[-1] = new_cols[-1][:new_cols[-1].find("\\")]
+                temp = list(zip(*df[original_column].map(split_codes)))
+                del df[original_column]
+                df.columns = [c.strip() for c in df.columns]
+                # Convert to numeric
+                for cn in df.columns:
+                    try:
+                        df[cn] = df[cn].astype(np.float)
+                    except ValueError:
+                        print("BORRAME - Error conversion columna "+cn+", probablemente queda algun flag sin eliminar")
+                    # df[cn] = df[cn].apply(lambda x: pd.to_numeric(x, errors='coerce'))
+                # Add index columns
+                for i, c in enumerate(new_cols):
+                    df[c] = temp[i]
+                # set index on the dimension columns
+                df.set_index(new_cols, inplace=True)
+                # Save df
+                df.to_msgpack(dataframe_fn)
 
         # Filter it using generic Pandas filtering capabilities
-        ds.data = filter_dataset_into_dataframe(df, dataset_params, eurostat_postprocessing=True)
+        if dataset_params:
+            ds.data = filter_dataset_into_dataframe(df, dataset_params, eurostat_postprocessing=True)
+        else:
+            ds.data = df
 
         return ds
 
@@ -241,3 +268,8 @@ def multi_replace(text, rep):
     rep = dict((re.escape(k), v) for k, v in rep.items())
     pattern = re.compile("|".join(rep.keys()))
     return pattern.sub(lambda m: rep[re.escape(m.group(0))], text)
+
+
+if __name__ == '__main__':
+    e = Eurostat()
+    e.get_dataset_filtered("sbs_na_ind_r2", None)

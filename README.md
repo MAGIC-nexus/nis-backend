@@ -1,6 +1,6 @@
 # nis-backend
 
-## Technological Features of NIS product
+## Technological Features of NIS tool
 
 **DONE**
 * Dockerized: a Dockerfile for Apache2, receiving the name of the configuration file on image creation

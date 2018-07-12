@@ -1,6 +1,6 @@
 import json
 
-from backend.model.memory.musiasem_concepts_helper import build_hierarchy
+from backend.models.musiasem_concepts_helper import build_hierarchy
 from backend.model_services import IExecutableCommand, get_case_study_registry_objects
 
 

@@ -22,11 +22,11 @@ def obtain_reverse_codes(mapped, dst):
     src = set()
     dest_set = set([d.lower() for d in dst])  # Destination categories
     # Obtain origin categories referencing "dest_set" destination categories
-    # for k in mapped:
-    #     if k[1].lower() in dest_set:
-    #         src.add[k[0].lower()]
-
-    return list(set([k[0].lower() for k in mapped if k[1].lower() in dest_set]))
+    for k in mapped:
+        for t in k["to"]:
+            if t["d"] and t["d"].lower() in dest_set:
+                src.add(k["o"])
+    return list(src)  # list(set([k[0].lower() for k in mapped if k[1].lower() in dest_set]))
 
 
 class ETLExternalDatasetCommand(IExecutableCommand):
@@ -98,7 +98,14 @@ class ETLExternalDatasetCommand(IExecutableCommand):
             if strcmp(mappings[m].source, source) and \
                     strcmp(mappings[m].dataset, dataset_name) and \
                     mappings[m].origin in dims:
-                df_dst = pd.DataFrame(mappings[m].map, columns=['sou_rce', mappings[m].destination.lower()])
+                # TODO Change by n-to-m mapping
+                # Elaborate a many to one mapping
+                tmp = []
+                for el in mappings[m].map:
+                    for to in el["to"]:
+                        if to["d"]:
+                            tmp.append([el["o"], to["d"]])
+                df_dst = pd.DataFrame(tmp, columns=['sou_rce', mappings[m].destination.lower()])
                 for di in df.columns:
                     if strcmp(mappings[m].origin, di):
                         d = di
@@ -109,7 +116,9 @@ class ETLExternalDatasetCommand(IExecutableCommand):
 
         # Aggregate (If any dimension has been specified)
         if len(self._content["group_by"]) > 0:
-            values = ["value"]  # TODO self._content["measures"]  # Column names where data is
+            # Column names where data is
+            # HACK: for the case where the measure has been named "obs_value", use "value"
+            values = [m.lower() if m.lower() != "obs_value" else "value" for m in self._content["measures"]]
             rows = [v.lower() for v in self._content["group_by"]]  # Group by dimension names
             aggs = []  # Aggregation functions
             for f in self._content["agg_funcs"]:
@@ -120,17 +129,38 @@ class ETLExternalDatasetCommand(IExecutableCommand):
             # Calculate Pivot Table. The columns are a combination of values x aggregation functions
             # For instance, if two values ["v1", "v2"] and two agg. functions ["avg", "sum"] are provided
             # The columns will be: [["average", "v1"], ["average", "v2"], ["sum", "v1"], ["sum", "v2"]]
-            df2 = pd.pivot_table(df,
-                                 values=values,
-                                 index=rows,
-                                 aggfunc=[aggs[0]], fill_value=np.NaN, margins=False,
-                                 dropna=True)
-            # Remove the multiindex in columns
-            df2.columns = [col[-1] for col in df2.columns.values]
-            # Remove the index
-            df2.reset_index(inplace=True)
-            # The result, all columns (no index), is stored for later use
-            ds.data = df2
+            try:
+                # Check that all "rows" on which pivot table aggregates are present in the input "df"
+                # If not either synthesize them (only if there is a single filter value) or remove (if not present
+                for r in rows.copy():
+                    if r not in df.columns:
+                        found = False
+                        for k in params:
+                            if k.lower() == r:
+                                found = True
+                                if len(params[k]) == 1:
+                                    df[r] = params[k][0]
+                                else:
+                                    rows.remove(r)
+                                    issues((2, "Dimension '" + r + "' removed from the list of dimensions because it is not present in the raw input dataset."))
+                                break
+                        if not found:
+                            rows.remove(r)
+                            issues((2, "Dimension '" + r + "' removed from the list of dimensions because it is not present in the raw input dataset."))
+                # Pivot table
+                df2 = pd.pivot_table(df,
+                                     values=values,
+                                     index=rows,
+                                     aggfunc=[aggs[0]], fill_value=np.NaN, margins=False,
+                                     dropna=True)
+                # Remove the multiindex in columns
+                df2.columns = [col[-1] for col in df2.columns.values]
+                # Remove the index
+                df2.reset_index(inplace=True)
+                # The result, all columns (no index), is stored for later use
+                ds.data = df2
+            except Exception as e:
+                issues.append((3, "There was a problem: "+str(e)))
 
         # Store the dataset in State
         datasets[result_name] = ds

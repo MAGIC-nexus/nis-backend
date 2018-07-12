@@ -11,7 +11,7 @@ from backend.restful_service import tm_default_users, \
     tm_case_study_version_statuses
 
 # Database (ORM)
-from backend.model.persistent_db.persistent import *
+from backend.models.musiasem_methodology_support import *
 import backend
 
 
@@ -240,7 +240,7 @@ class TestHighLevelUseCases(unittest.TestCase):
         self.assertEqual(len(session.query(CommandsContainer).all()), 2)
         self.assertEqual(len(session.query(CaseStudy).all()), 1)
         self.assertEqual(len(session.query(CaseStudyVersion).all()), 1)
-        self.assertEqual(len(session.query(CaseStudyVersionSession).all()), 2)
+        self.assertEqual(len(session.query(CaseStudyVersionSession).all()), 1)
         session.close()
         isess.reset_state()
 
@@ -270,10 +270,11 @@ class TestHighLevelUseCases(unittest.TestCase):
         uuid2, _, _ = isess.close_reproducible_session(issues, output, save=True)
         # Database objects
         session = DBSession()
-        self.assertEqual(len(session.query(CommandsContainer).all()), 6)
-        self.assertEqual(len(session.query(CaseStudy).all()), 1)
+        cs_lst = session.query(CaseStudy).all()
+        self.assertEqual(len(cs_lst), 1)
         self.assertEqual(len(session.query(CaseStudyVersion).all()), 2)
-        self.assertEqual(len(session.query(CaseStudyVersionSession).all()), 5)
+        self.assertEqual(len(session.query(CaseStudyVersionSession).all()), 2)
+        self.assertEqual(len(session.query(CommandsContainer).all()), 6)
         session.close()
 
         # ----------------------------------------------------------------------
@@ -288,10 +289,11 @@ class TestHighLevelUseCases(unittest.TestCase):
         uuid3, _, _ = isess.close_reproducible_session(issues, output, save=True)
         # Database objects
         session = DBSession()
-        self.assertEqual(len(session.query(CommandsContainer).all()), 11)
-        self.assertEqual(len(session.query(CaseStudy).all()), 2)
+        cs_lst = session.query(CaseStudy).all()
+        self.assertEqual(len(cs_lst), 2)
         self.assertEqual(len(session.query(CaseStudyVersion).all()), 3)
-        self.assertEqual(len(session.query(CaseStudyVersionSession).all()), 9)
+        self.assertEqual(len(session.query(CaseStudyVersionSession).all()), 3)
+        self.assertEqual(len(session.query(CommandsContainer).all()), 11)
         session.close()
 
         # ----------------------------------------------------------------------
@@ -315,10 +317,10 @@ class TestHighLevelUseCases(unittest.TestCase):
 
         # Database objects
         session = DBSession()
-        self.assertEqual(len(session.query(CommandsContainer).all()), 12)
         self.assertEqual(len(session.query(CaseStudy).all()), 2)
         self.assertEqual(len(session.query(CaseStudyVersion).all()), 4)
-        self.assertEqual(len(session.query(CaseStudyVersionSession).all()), 10)
+        self.assertEqual(len(session.query(CaseStudyVersionSession).all()), 3)
+        self.assertEqual(len(session.query(CommandsContainer).all()), 12)
         session.close()
 
         # ----------------------------------------------------------------------

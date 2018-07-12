@@ -9,7 +9,7 @@ import requests
 import sqlalchemy
 
 from backend.ie_imports.data_source_manager import IDataSourceManager, get_dataset_structure
-from backend.ie_imports.rdb_model import DataSource, Database, Dataset, Dimension, CodeList, CodeImmutable
+from backend.models.statistical_datasets import DataSource, Database, Dataset, Dimension, CodeList, CodeImmutable
 
 # eng = sqlalchemy.create_engine("monetdb:///demo:", echo=True)
 # df = pd.DataFrame(np.random.randn(6, 4), index=pd.date_range('20130101', periods=6), columns=list('ABCD'))
@@ -215,8 +215,8 @@ class FAOSTAT(IDataSourceManager):  # FAOStat (not AquaStat)
 
     def etl_dataset(self, dataset, update=False) -> str:
         """
-        Download a file (general purpose, not only for Eurostat datasets)
-        It provokes a total refresh of Data and Metadata
+        Download a file for an FAO Dataset
+        It provokes a total refresh of its Data and Metadata
 
         :param url:
         :param local_filename:
@@ -232,7 +232,7 @@ class FAOSTAT(IDataSourceManager):  # FAOStat (not AquaStat)
                 if update:
                     os.remove(file)
                 break
-        # TODO Check if possible if the file on the Web is newer than the file at the file system
+        # TODO Check, if possible, if the file on the Web is newer than the file at the file system
         # Download the file if it is not in the file system
         for i in file_suffix:
             url = self._bulk_download_url + file_base + i

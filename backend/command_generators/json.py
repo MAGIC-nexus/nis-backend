@@ -15,7 +15,7 @@ from backend.command_executors.specification.structure_command import StructureC
 from backend.command_executors.specification.upscale_command import UpscaleCommand
 
 
-def create_command(cmd_type, name, json_input):
+def create_command(cmd_type, name, json_input, source_block=None):
     """
     Factory creating and initializing a command from its type, optional name and parameters
 
@@ -23,6 +23,7 @@ def create_command(cmd_type, name, json_input):
     :param name: An optional name (label) for the command
     :param json_input: Parameters specific of the command type (each command knows how to interpret,
                        validate and integrate them)
+    :param source_block: String defining the name of the origin block (in a spreadsheet is the worksheet name, but other block types could appear)
     :return: The instance of the command and the issues creating it
     :raise
     """
@@ -44,6 +45,7 @@ def create_command(cmd_type, name, json_input):
         tmp = cmds[cmd_type](name)  # Reflective CALL to construct the empty command instance
         tmp._serialization_type = cmd_type  # Injected attribute. Used later for serialization
         tmp._serialization_label = name  # Injected attribute. Used later for serialization
+        tmp._source_block_name = source_block
         if isinstance(json_input, (str, dict, list)):
             if json_input != {}:
                 issues = tmp.json_deserialize(json_input)

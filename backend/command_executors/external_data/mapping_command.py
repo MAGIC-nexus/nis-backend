@@ -3,7 +3,7 @@ from anytree import Node
 
 from backend.model_services import IExecutableCommand, get_case_study_registry_objects
 from backend.common.helper import obtain_dataset_metadata, strcmp, create_dictionary, obtain_dataset_source
-from backend.model.memory.musiasem_concepts import Mapping
+from backend.models.musiasem_concepts import Mapping
 
 
 def convert_code_list_to_hierarchy(cl, as_list=False):
@@ -123,11 +123,11 @@ def map_codelists(src, dst, corresp, dst_tree=False) -> (list, set):
 
 def fill_map_with_all_origin_categories(dim, map):
     # Check all codes exist
-    mapped_codes = set(map.keys())
+    mapped_codes = set([d["o"] for d in map])
     all_codes = set([c for c in dim.code_list])
     for c in all_codes - mapped_codes:  # Loop over "unmapped" origin codes
         # This sentence MODIFIES map, so it is not necessary to return it
-        map[c] = [{"d": None, "w": 1.0}]  # Map to placeholder, with weight 1
+        map.append({"o": c, "to": [{"d": None, "w": 1.0}]})  # Map to placeholder, with weight 1
 
     return map
 

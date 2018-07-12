@@ -1,13 +1,9 @@
 # -*- coding: utf-8 -*-
 import pandas as pd
-import numpy
-import datetime
-import sys
-import logging
 from typing import List
 
-from backend.ie_imports.rdb_model import DataSource, Database, Dataset
-from backend.ie_imports.data_source_manager import IDataSourceManager, filter_dataset_into_dataframe
+from backend.models.statistical_datasets import DataSource, Database, Dataset
+from backend.ie_imports.data_source_manager import IDataSourceManager
 
 
 def get_ssp_dimension_names_dataset(dataset_name):

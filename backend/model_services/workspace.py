@@ -12,13 +12,13 @@ from enum import Enum
 from typing import List
 
 from backend.command_generators.parsers_factory import commands_container_parser_factory
-from backend.model.persistent_db.persistent import (User,
-                                                    CaseStudy,
-                                                    CaseStudyVersion,
-                                                    CaseStudyVersionSession,
-                                                    CommandsContainer,
-                                                    force_load
-                                                    )
+from backend.models.musiasem_methodology_support import (User,
+                                                         CaseStudy,
+                                                         CaseStudyVersion,
+                                                         CaseStudyVersionSession,
+                                                         CommandsContainer,
+                                                         force_load
+                                                         )
 from backend.model_services import IExecutableCommand
 from backend.model_services import State
 from backend.restful_service.serialization import serialize_state, deserialize_state
@@ -159,7 +159,9 @@ def execute_command_container_file(state, generator_type, file_type: str, file):
     # Generator has to call "yield" whenever an ICommand is generated
     issues_aggreg = []
     outputs = []
+    cont = 0
     for cmd, issues in commands_container_parser_factory(generator_type, file_type, file, state):
+        cont += 1  # Command counter
         # If there are syntax ERRORS, STOP!!!
         stop = False
         if issues and len(issues) > 0:
@@ -170,15 +172,33 @@ def execute_command_container_file(state, generator_type, file_type: str, file):
                 elif isinstance(t, tuple):
                     if t[0] == 3:  # Error
                         stop = True
+
+        if issues:
+            issues_aggreg.extend(issues)
+
         if stop:
             break
 
-        issues_aggreg.extend(issues)
-        i, output = execute_command(state, cmd)
-        if i:
-            issues_aggreg.extend(i)
+        issues, output = execute_command(state, cmd)
+        if issues:
+            stop = False
+            # Process the new issues
+            for i in issues:
+                if i[0] == 3:
+                    stop = True
+                issue = {"sheet_number": cont,
+                         "sheet_name": cmd._source_block_name if hasattr(cmd, "_source_block_name") else "",
+                         "c_type": cmd._serialization_type,
+                         "type": i[0],
+                         "message": i[1]
+                         }
+                issues_aggreg.append(issue)
+
         if output:
             outputs.append(output)
+
+        if stop:
+            break
 
     return issues_aggreg, outputs
 
@@ -338,11 +358,11 @@ class InteractiveSession:
         self._reproducible_session = ReproducibleSession(self)
         self._reproducible_session.open(self._session_factory, case_study_version_uuid, recover_previous_state, cr_new, allow_saving)
 
-    def close_reproducible_session(self, issues=None, output=None, save=False, from_web_service=False):
+    def close_reproducible_session(self, issues=None, output=None, save=False, from_web_service=False, cs_uuid=None, cs_name=None):
         if self._reproducible_session:
             if save:
                 # TODO Save issues AND (maybe) output
-                self._reproducible_session.save(from_web_service)
+                self._reproducible_session.save(from_web_service, cs_uuid=cs_uuid, cs_name=cs_name)
             uuid_, v_uuid, cs_uuid = self._reproducible_session.close()
             self._reproducible_session = None
             return uuid_, v_uuid, cs_uuid
@@ -352,6 +372,10 @@ class InteractiveSession:
     def reproducible_session_opened(self):
         return self._reproducible_session is not None
 
+    @property
+    def reproducible_session(self):
+        return self._reproducible_session
+
     # --------------------------------------------------------------
 
     def execute_executable_command(self, cmd: IExecutableCommand):
@@ -359,6 +383,37 @@ class InteractiveSession:
 
     def register_executable_command(self, cmd: IExecutableCommand):
         self._reproducible_session.register_executable_command(cmd)
+
+    def register_andor_execute_command_generator1(self, c: CommandsContainer, register=True, execute=False):
+        """
+        Creates a generator parser, then it feeds the file type and the file
+        The generator parser has to parse the file and to generate command_executors as a Python generator
+
+        :param generator_type:
+        :param file_type:
+        :param file:
+        :param register: If True, register the command in the ReproducibleSession
+        :param execute: If True, execute the command in the ReproducibleSession
+        :return:
+        """
+        if not self._reproducible_session:
+            raise Exception("In order to execute a command generator, a work session is needed")
+        if not register and not execute:
+            raise Exception("More than zero of the parameters 'register' and 'execute' must be True")
+
+        if register:
+            self._reproducible_session.register_persistable_command(c)
+
+        if execute:
+            c.execution_start = datetime.datetime.now()
+            pass_case_study = self._reproducible_session._session.version.case_study is not None
+            ret = self._reproducible_session.execute_command_generator(c, pass_case_study)
+            c.execution_end = datetime.datetime.now()
+            return ret
+            # Or
+            # return execute_command_container(self._state, c)
+        else:
+            return None
 
     def register_andor_execute_command_generator(self, generator_type, file_type: str, file, register=True, execute=False):
         """
@@ -372,22 +427,13 @@ class InteractiveSession:
         :param execute: If True, execute the command in the ReproducibleSession
         :return: 
         """
-        if not self._reproducible_session:
-            raise Exception("In order to execute a command generator, a work session is needed")
-        if not register and not execute:
-            raise Exception("More than zero of the parameters 'register' and 'execute' must be True")
 
-        # Prepare persistable command
-        c = CommandsContainer.create(generator_type, file_type, file)
-        if register:
-            self._reproducible_session.register_persistable_command(c)
-        if execute:
-            pass_case_study = self._reproducible_session._session.version.case_study is not None
-            return self._reproducible_session.execute_command_generator(c, pass_case_study)
-            # Or
-            # return execute_command_container(self._state, c)
-        else:
-            return None
+        return self.register_andor_execute_command_generator1(
+            CommandsContainer.create(generator_type, file_type, file),
+            register,
+            execute
+        )
+
     # --------------------------------------------------------------------------------------------
 
     def get_case_studies(self):
@@ -440,6 +486,10 @@ class ReproducibleSession:
         self._sess_factory = None
         self._allow_saving = None
         self._session = None  # type: CaseStudyVersionSession
+
+    @property
+    def ws_commands(self):
+        return self._session.commands if self._session else None
 
     def open(self, session_factory, uuid_: str=None, recover_previous_state=True, cr_new:CreateNew=CreateNew.NO, allow_saving=True):
         """
@@ -535,6 +585,9 @@ class ReproducibleSession:
                 vs = vs2
             else:
                 # Load into memory
+                if len(lst) == 1:
+                    ws = lst[0]
+                    force_load(ws)
                 force_load(vs)
                 force_load(cs)
 
@@ -554,6 +607,7 @@ class ReproducibleSession:
         else:  # New Case Study AND new Case Study Version
             cs = CaseStudy()
             vs = CaseStudyVersion()
+            vs.creation_instant = datetime.datetime.utcnow()
             vs.case_study = cs
 
         # Detach Case Study and Case Study Version
@@ -563,28 +617,67 @@ class ReproducibleSession:
             session.expunge(vs)
         # Create the Case Study Version Session
         usr = session.query(User).filter(User.name == self._identity).first()
-        force_load(usr)
-        self._session = CaseStudyVersionSession()
-        self._session.version = vs
+        if usr:
+            force_load(usr)
+        else:
+            if allow_saving:
+                raise Exception("A user is required to register which user is authoring a case study")
+        # TODO !!!!NEW CODE, ADDED TO SUPPORT NEEDED FUNCTIONALITY. NEEDS BETTER CODING!!!!
+        restart = not recover_previous_state if uuid_ else True
+        if not restart:
+            self._session = ws
+        else:
+            self._session = CaseStudyVersionSession()
+            self._session.version = vs
+            self._session.who = usr
+            self._session.restarts = True
         # If the Version existed, define "restarts" according to parameter "recover_previous_state"
         # ElseIf it is the first Session -> RESTARTS=True
-        self._session.restarts = not recover_previous_state if uuid_ else True
-        self._session.who = usr
 
         session.close()
         # session.expunge_all()
         self._sess_factory.remove()
 
-    def save(self, from_web_service=False):
+    def update_current_version_state(self, lst_cmds):
+        """ Designed to work using the REST interface. TEST in direct use. """
+        # Version
+        # v = self._session.version
+        # Serialize state
+        st = serialize_state(self._isess._state)
+        # v.state = st
+        # Open DB session
+        session = self._sess_factory()
+        # Load version and change its state
+        v = session.query(CaseStudyVersion).get(self._session.version_id)
+        v.state = st
+        session.add(v)
+        for c in lst_cmds:
+            c2 = session.query(CommandsContainer).get(c.id)
+            c2.execution_start = c.execution_start
+            c2.execution_end = c.execution_end
+            session.add(c2)
+        session.commit()
+        self._sess_factory.remove()
+
+    def save(self, from_web_service=False, cs_uuid=None, cs_name=None):
         if not self._allow_saving:
             raise Exception("The ReproducibleSession was opened disallowing saving. Please close it and reopen it with the proper value")
         # Serialize state
         st = serialize_state(self._isess._state)
         self._session.version.state = st
         self._session.state = st
+        ws = self._session
+
         # Open DB session
         session = self._sess_factory()
-        ws = self._session
+        # Change the case study
+        if cs_uuid:
+            # Load case study
+            cs = session.query(CaseStudy).filter(CaseStudy.uuid == cs_uuid).first()
+            if cs:
+                ws.version.case_study = cs
+            else:
+                raise Exception("The case study UUID '"+cs_uuid+"' was not found")
         # Append commands, self._session, the version and the case_study
         if not from_web_service:
             for c in self._session.commands:
@@ -594,18 +687,39 @@ class ReproducibleSession:
             session.add(ws.version.case_study)
         else:
             ws.who = session.merge(ws.who)
-            if ws.version.case_study.id:
-                ws.version.case_study = session.merge(ws.version.case_study)
+            cs_id = ws.version.case_study.id
+            vs_id = ws.version.id
+            if cs_id and not vs_id:
+                ws.version.case_study = None
+            if vs_id:
+                ws.version = None
+
+            if cs_id:
+                cs = session.query(CaseStudy).get(cs_id)
             else:
-                session.add(ws.version.case_study)
-            if ws.version.id:
-                ws.version = session.merge(ws.version)
+                cs = ws.version.case_study
+                session.add(cs)
+
+            if vs_id:
+                vs = session.query(CaseStudyVersion).get(vs_id)
+                ws.version = vs
             else:
-                session.add(ws.version)
+                ws.version.case_study = cs
+                vs = ws.version
+                session.add(vs)
+
             ws.close_instant = datetime.datetime.utcnow()
             session.add(ws)
             for c in self._session.commands:
                 session.add(c)
+        if cs_name:
+            ws.version.name = cs_name
+
+        # Assure that the version has a creation date (it should not happen)
+        if not vs.creation_instant:
+            print("Fecha de creacion de version establecida de modo tardio")
+            vs.creation_instant = datetime.datetime.utcnow()
+
         # Commit DB session
         session.commit()
         force_load(self._session)
@@ -629,11 +743,13 @@ class ReproducibleSession:
     def execute_command_generator(self, cmd: CommandsContainer, pass_case_study=False):
         if pass_case_study:  # CaseStudy can be modified by Metadata command, pass a reference to it
             self._isess._state.set("_case_study", self._session.version.case_study)
+            self._isess._state.set("_case_study_version", self._session.version)
 
         ret = execute_command_container(self._isess._state, cmd)
 
         if pass_case_study:
             self._isess._state.set("_case_study", None)
+            self._isess._state.set("_case_study_version", None)
 
         return ret
 
@@ -643,6 +759,10 @@ class ReproducibleSession:
 
     def set_sf(self, session_factory):
         self._sess_factory = session_factory
+
+    @property
+    def commands(self):
+        self._session.commands
 
     @property
     def case_study(self):
@@ -658,6 +778,10 @@ class ReproducibleSession:
 
 
 if __name__ == '__main__':
+    import jsonpickle
+    with open("/home/rnebot/pickled_state", "r") as f:
+        s = f.read()
+    o = jsonpickle.decode(s)
     # Submit Worksheet as New Case Study
     isess = InteractiveSession()
     isess.quit()

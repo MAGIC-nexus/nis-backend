@@ -3,12 +3,8 @@ import traceback
 
 from backend.command_generators import basic_elements_parser
 from backend.command_generators.basic_elements_parser import ast_to_string
-from backend.model.memory.musiasem_concepts_helper import create_relation_observations
+from backend.models.musiasem_concepts_helper import create_relation_observations
 from backend.model_services import IExecutableCommand, State, get_case_study_registry_objects
-from backend.model.memory.musiasem_concepts import FactorType, Observer, FactorInProcessorType, \
-    Processor, \
-    Factor, FactorQuantitativeObservation, QualifiedQuantityExpression, \
-    FlowFundRoegenType, ProcessorsSet, HierarchiesSet, allowed_ff_types, ProcessorsRelationPartOfObservation
 
 
 class StructureCommand(IExecutableCommand):

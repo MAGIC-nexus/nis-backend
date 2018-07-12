@@ -3,11 +3,11 @@ import importlib
 from pyparsing import (ParserElement,
                        oneOf, srange, operatorPrecedence, opAssoc,
                        Forward, Regex, Suppress, Literal, Word,
-                       Optional, OneOrMore, ZeroOrMore, Or, alphanums,
+                       Optional, OneOrMore, ZeroOrMore, Or, alphanums, White,
                        Combine, Group, delimitedList, nums, quotedString, NotAny
                        )
 
-from backend.model.memory.musiasem_concepts import ExternalDataset
+from backend.models.musiasem_concepts import ExternalDataset
 
 # Number
 # Variable(key=expression, key=expression)[key=expression, key=expression]
@@ -189,6 +189,12 @@ time_expression = Or([(date + Optional(two_dates_separator.suppress()+date)
                                                  {'type': 'time',
                                                   'period': t[0]})
                       ])
+
+# RULES: "Relative to"
+factor_unit = (simple_h_name.setResultsName("factor") + Optional(Regex(".*").setResultsName("unparsed_unit"))).setParseAction(lambda _s, l, t:
+                                                                            {'type': 'factor_unit',
+                                                                             'factor': t.factor,
+                                                                             'unparsed_unit': t.unparsed_unit if t.unparsed_unit else ""})
 # #################################################################################################################### #
 
 # List of Global Functions

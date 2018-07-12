@@ -1,7 +1,7 @@
 import json
 
 from backend.command_generators.spreadsheet_command_parsers.specification import ref_prof
-from backend.model.memory.musiasem_concepts import Reference
+from backend.models.musiasem_concepts import Reference
 from backend.model_services import IExecutableCommand, get_case_study_registry_objects
 
 

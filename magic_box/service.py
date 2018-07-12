@@ -34,14 +34,9 @@ import json
 
 
 import os
-import urllib
-import sqlalchemy.orm
-import sqlalchemy.schema
-from flask import Flask, jsonify, abort, Response,  redirect, url_for, request, send_file, send_from_directory, render_template
+from flask import abort, Response, url_for, request, send_from_directory, render_template
 from flask.helpers import get_root_path, safe_join
-import werkzeug
 from werkzeug.debug import get_current_traceback
-from werkzeug.utils import secure_filename
 import io
 import magic  # Detect file type or content type
 
@@ -49,7 +44,7 @@ if __name__ == '__main__':
     print("Executing locally!")
     os.environ["MAGIC_SERVICE_CONFIG_FILE"] = "./itc.conf"
 
-from backend.model.persistent_db.persistent import *
+from backend.models.musiasem_methodology_support import *
 from backend.common.create_database import create_pg_database_engine, create_monet_database_engine
 #from magic_box.model import DBSession, ORMBase
 from magic_box.file_processing import process_file

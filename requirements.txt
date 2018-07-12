@@ -9,31 +9,32 @@ psycopg2==2.7.3.2
 pymonetdb==1.1.1
 SQLAlchemy==1.2.0b3
 sqlalchemy_monetdb==0.9.3
-redis
+redis==2.10.6
 pyparsing==2.2.0
-numpy==1.14.0
+numpy==1.14.3
 pandas==0.22.0
-pandas_datareader
+pandas_datareader==0.6.0
 pandaSDMX==0.8.2
-sdmx
-regex==2017.9.23
+sdmx==0.2.10
+regex==2017.11.9
 chardet==3.0.4
 aadict==0.2.3
 anytree==2.2.2
-networkx
+networkx==2.0
 multidict==3.3.2
 xmltodict==0.11.0
 cubes==1.1
 Pint==0.8.1
 uncertainties==3.0.1
-sympy
+sympy==1.1.1
 xlrd==1.1.0
-openpyxl==2.5.0b1
+#openpyxl==2.5.0b1
+openpyxl==2.4.8
+xlsxwriter==1.0.4
 koala2==0.0.17
-lxml
-jsonpickle==0.9.5
-xmltodict==0.11.0
-matplotlib==2.1.0rc1  # To be removed, used only by a test, module "faomap"
+lxml==4.1.0
+jsonpickle==0.9.6
+matplotlib==2.1.0  # To be removed, used only by a test, module "faomap"
 python_magic==0.4.13  # To be removed, it is used only by the Magic Box file type detection
 #cachier==1.2.2
 #tablib <- dictmapper (convert nested dict's to CSV)

@@ -5,7 +5,7 @@ from openpyxl.chart import reference
 import math
 
 from backend.model_services import IExecutableCommand, State, get_case_study_registry_objects
-from backend.model.memory.musiasem_concepts import Observer, Processor, Factor, \
+from backend.models.musiasem_concepts import Observer, Processor, Factor, \
     ProcessorsRelationUndirectedFlowObservation, ProcessorsRelationPartOfObservation, \
     ProcessorsRelationUpscaleObservation, \
     FactorsRelationDirectedFlowObservation, FactorQuantitativeObservation, ProcessorsSet
@@ -102,6 +102,13 @@ class UpscaleCommand(IExecutableCommand):
         # Execute the upscale for each
         cached_processors = {}
         for sc_dict in scales:
+            try:
+                non_zero_weight = math.fabs(float(sc_dict["weight"])) > 1e-6
+            except:
+                non_zero_weight = True
+            if not non_zero_weight:
+                continue
+
             codes = sc_dict["codes"]
             # Find parent processor
             parent_dict = {attr: codes[i] for attr, i in parent_attrs}
@@ -147,10 +154,6 @@ class UpscaleCommand(IExecutableCommand):
 
             # Clone child processor (and its descendants) and add an upscale relation between "parent" and the clone
             if parent and child:
-                try:
-                    non_zero_weight = math.fabs(float(sc_dict["weight"])) > 1e-6
-                except:
-                    non_zero_weight = True
                 if non_zero_weight:
                     # Clone the child processor
                     cloned_child = child.clone(glb_idx)

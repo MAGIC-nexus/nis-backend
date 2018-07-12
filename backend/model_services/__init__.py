@@ -2,14 +2,9 @@ import base64
 import uuid
 from abc import ABCMeta, abstractmethod  # Abstract Base Class
 
-import pandas as pd
 import logging
 
 from backend.common.helper import create_dictionary, PartialRetrievalDictionary
-from backend.model.persistent_db.persistent import (
-                                                      serialize_from_object,
-                                                      deserialize_to_object
-                                                      )
 
 logger = logging.getLogger(__name__)
 

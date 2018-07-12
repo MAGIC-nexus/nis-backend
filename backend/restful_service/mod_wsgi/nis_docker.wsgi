@@ -18,9 +18,12 @@ if code_path not in sys.path:
     sys.path.insert(0, code_path)
 print(sys.path)
 
-import backend.restful_service.mod_wsgi.monitor as monitor
-monitor.start(interval=1.0)
-monitor.track(os.path.join(os.path.dirname(__file__), 'site.cf'))
+# TODO Disable if deployed in Docker container. The Docker container should be immutable, so no changes to source code
+# TODO expected. If any, do a Stop -> Start cycle.
+
+# import backend.restful_service.mod_wsgi.monitor as monitor
+# monitor.start(interval=1.0)
+# monitor.track(os.path.join(os.path.dirname(__file__), 'site.cf'))
 
 import backend.restful_service.service_main
 from backend.restful_service import app as application

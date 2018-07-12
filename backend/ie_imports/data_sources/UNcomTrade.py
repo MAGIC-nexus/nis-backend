@@ -14,8 +14,8 @@ import datetime
 import sys
 import logging
 
-from backend.ie_imports.rdb_model import Dataset
-from backend.ie_imports.data_source_manager import IDataSourceManager, filter_dataset_into_dataframe
+from backend.models.statistical_datasets import Dataset
+from backend.ie_imports.data_source_manager import IDataSourceManager
 
 
 class UNcomTrade(IDataSourceManager):

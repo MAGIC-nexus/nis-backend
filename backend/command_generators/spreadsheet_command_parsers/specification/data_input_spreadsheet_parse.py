@@ -6,7 +6,7 @@ from backend.command_generators.basic_elements_parser import simple_ident
 from backend.common.helper import create_dictionary, case_sensitive
 from backend import ureg
 from backend.command_generators import basic_elements_parser
-from backend.model.memory.musiasem_concepts import allowed_ff_types
+from backend.models.musiasem_concepts import allowed_ff_types
 
 """
 User Interface. There will be a special page for command_executors reference.
@@ -60,7 +60,7 @@ def parse_data_input_command(sh, area, processors_type, state):
     known_columns = [(r"Name|Processor[_ ]name", "processor", False),
                      (r"Level", "level", False),
                      (r"Parent", "parent", False),
-                     (r"FF[_ ]type", "ff_type", False),
+                     (r"FF[_ ]type", "ff_type", True),
                      (r"Var|Variable", "factor", True),
                      (r"Value|NUSAP\.N", "value", False),  # If value is not specified, then just declare the Factor
                      (r"Unit|NUSAP\.U", "unit", True),  # If blank, a dimensionless amount is assumed
@@ -69,11 +69,13 @@ def parse_data_input_command(sh, area, processors_type, state):
                      (r"Assessment|NUSAP\.A", "assessment", False),
                      (r"Pedigree[_ ]matrix|NUSAP\.PM", "pedigree_matrix", False),
                      (r"Pedigree|NUSAP\.P", "pedigree", False),
-                     (r"Time", "time", False),
+                     (r"Time|Date", "time", False),
                      (r"Geo|Geolocation", "geolocation", False),
                      (r"Source", "source", False),
                      (r"Comment|Comments", "comments", False)
                      ]
+
+    label = "Processors " + processors_type
 
     # First, examine columns, to know which fields are being specified
     # Special cases:
@@ -132,6 +134,8 @@ def parse_data_input_command(sh, area, processors_type, state):
 
     # TODO There could be combinations of columns which change the character of mandatory of some columns
     # TODO For instance, if we are only specifying structure, Value would not be needed
+    print("BORRAME - "+str(known_columns))
+    print("BORRAME 2 - "+str(standard_cols))
     for kc in known_columns:
         # "kc[2]" is the flag indicating if the column is mandatory or not
         # col_map contains standard column names present in the worksheet
@@ -141,7 +145,7 @@ def parse_data_input_command(sh, area, processors_type, state):
 
     # If there are errors, do not continue
     if some_error:
-        return None, issues
+        return issues, label, None
 
     processor_attribute_exclusions = create_dictionary()
     processor_attribute_exclusions["scale"] = None  # Exclude these attributes when characterizing the processor
@@ -406,7 +410,6 @@ def parse_data_input_command(sh, area, processors_type, state):
 
         lst_observations.append(row)
 
-    label = "Processors " + processors_type
     content = {"factor_observations": lst_observations,
                "processor_attributes": processor_attributes,
                "processors": [k for k in set_processors],

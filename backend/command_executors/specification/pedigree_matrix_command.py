@@ -1,6 +1,6 @@
 import json
 
-from backend.model.memory.musiasem_concepts import PedigreeMatrix
+from backend.models.musiasem_concepts import PedigreeMatrix
 from backend.model_services import IExecutableCommand, get_case_study_registry_objects
 
 
@@ -33,6 +33,9 @@ class PedigreeMatrixCommand(IExecutableCommand):
 
         # Insert the PedigreeMatrix object into the state
         glb_idx.put(pm.key(), pm)
+        import jsonpickle
+        s = jsonpickle.encode(pm)
+        pm2 = jsonpickle.decode(s)
 
         return None, None
 

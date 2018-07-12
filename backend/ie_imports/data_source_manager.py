@@ -1,12 +1,10 @@
-import json
 from abc import ABCMeta, abstractmethod
 from typing import List, Union
 import pandas as pd
-import datetime
 
-from backend.common.helper import create_dictionary, Memoize2, strcmp, obtain_dataset_source
-from backend.ie_imports.rdb_model import DataSource, Database, Dataset
-from backend.model.persistent_db.persistent import force_load
+from backend.common.helper import create_dictionary, Memoize2, obtain_dataset_source
+from backend.models.statistical_datasets import DataSource, Database, Dataset
+from backend.models.musiasem_methodology_support import force_load
 
 
 class IDataSourceManager(metaclass=ABCMeta):
@@ -244,14 +242,19 @@ def filter_dataset_into_dataframe(in_df, filter_dict, eurostat_postprocessing=Fa
                 lst = [lst]
             if len(lst) > 0:
                 if cond_acum is not None:
-                    cond_acum &= in_df.index.isin([l.lower() for l in lst], i)
+                    cond_acum &= in_df.index.isin([str(l).lower() for l in lst], i)
                 else:
-                    cond_acum = in_df.index.isin([l.lower() for l in lst], i)
+                    cond_acum = in_df.index.isin([str(l).lower() for l in lst], i)
             else:
                 if cond_acum is not None:
                     cond_acum &= in_df[in_df.columns[0]] == in_df[in_df.columns[0]]
                 else:
                     cond_acum = in_df[in_df.columns[0]] == in_df[in_df.columns[0]]
+    # Remove non existent index values
+    for v in columns.copy():
+        if v not in in_df.columns:
+            columns.remove(v)
+
     if cond_acum is not None:
         tmp = in_df[columns][cond_acum]
     else:

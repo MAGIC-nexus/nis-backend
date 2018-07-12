@@ -34,7 +34,7 @@ def parse_structure_command(sh, area):
 
     # Scan the sheet, the first column must be one of the keys of "k_list", following
     # columns can contain repeating values
-    col_names = {("origin",): "origin",
+    col_names = {("origin", "name"): "origin",
                  ("relation", "default relation"): "default_relation",
                  ("destination", "destinations"): "destinations",
                  ("origin label", "label"): "description"

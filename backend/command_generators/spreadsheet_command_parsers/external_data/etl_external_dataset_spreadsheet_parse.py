@@ -52,7 +52,8 @@ def parse_etl_external_dataset_command(sh, area, dataset_name, state):
                 strcmp(mappings[m].dataset, dataset_name) and \
                 mappings[m].origin in dims:
             # Add a dictionary entry for the new dimension, add also the codes present in the map
-            cl[mappings[m].destination] = set([t[1] for t in mappings[m].map])
+            tmp = [to["d"] for o in mappings[m].map for to in o["to"] if to["d"]]
+            cl[mappings[m].destination] = set(tmp)  # [t[1] for t in mappings[m].map]
 
     # Scan columns for Dimensions, Measures and Aggregation.
     # Pivot Table is a Visualization, so now it is not in the command, there will be a command aside.
@@ -73,6 +74,8 @@ def parse_etl_external_dataset_command(sh, area, dataset_name, state):
         if col_name.lower().strip() in ["dimensions_kept", "dims", "dimensions"]:  # "GROUP BY"
             lst = obtain_column(c, area[0] + 1, area[1])
             for d in lst:
+                if not d:
+                    continue
                 if d not in cl:
                     issues.append((3, "The dimension specified for output, '"+d+"' is neither a dataset dimension nor a mapped dimension. ["+', '.join([d2 for d2 in cl])+"]"))
                 else:
@@ -80,6 +83,8 @@ def parse_etl_external_dataset_command(sh, area, dataset_name, state):
         elif col_name.lower().strip() in ["aggregation_function", "aggfunc", "agg_func"]:  # "SELECT AGGREGATORS"
             lst = obtain_column(c, area[0] + 1, area[1])
             for f in lst:
+                if not f:
+                    continue
                 if f.lower() not in ["sum", "average", "avg"]:
                     issues.append((3, "The specified aggregation function, '"+f+"' is not one of the supported ones: 'sum' or 'average'"))
                 else:
@@ -89,6 +94,8 @@ def parse_etl_external_dataset_command(sh, area, dataset_name, state):
             # Check for measures
             # TODO (and attributes?)
             for m in lst:
+                if not m:
+                    continue
                 if m not in meas:
                     issues.append((3, "The specified measure, '"+m+"' is not a measure available in the dataset. ["+', '.join([m2 for m2 in measures])+"]"))
                 else:
@@ -97,7 +104,9 @@ def parse_etl_external_dataset_command(sh, area, dataset_name, state):
             # Check codes, and add them to the "filter"
             lst = obtain_column(c, area[0] + 1, area[1])
             for cd in lst:
-                if cd.lower() not in cl[col_name]:
+                if not cd:
+                    continue
+                if str(cd).lower() not in cl[col_name]:
                     issues.append((3, "The code '"+cd+"' is not present in the codes declared for dimension '"+col_name+"'. Please, check them."))
                 else:
                     if col_name not in filter_:

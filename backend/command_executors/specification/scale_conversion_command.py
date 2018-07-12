@@ -1,8 +1,8 @@
 import json
 
 from backend.common.helper import create_dictionary
-from backend.model.memory.musiasem_concepts import FactorTypesRelationUnidirectionalLinearTransformObservation, Observer
-from backend.model.memory.musiasem_concepts_helper import find_or_create_observable
+from backend.models.musiasem_concepts import FactorTypesRelationUnidirectionalLinearTransformObservation, Observer
+from backend.models.musiasem_concepts_helper import find_or_create_observable
 from backend.model_services import IExecutableCommand, get_case_study_registry_objects
 
 

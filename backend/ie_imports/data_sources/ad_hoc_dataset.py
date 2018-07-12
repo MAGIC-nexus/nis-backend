@@ -1,5 +1,5 @@
 from backend.ie_imports.data_source_manager import IDataSourceManager
-from backend.ie_imports.rdb_model import Dataset
+from backend.models.statistical_datasets import Dataset
 
 
 class AdHocDataset(IDataSourceManager):
