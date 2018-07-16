@@ -6,6 +6,7 @@ import urllib
 import openpyxl
 import redis
 import logging
+import pandas as pd
 from pathlib import Path
 import sqlalchemy.schema
 from openpyxl.writer.excel import save_virtual_workbook
@@ -50,6 +51,7 @@ from backend.restful_service import nis_api_base, nis_client_base, nis_external_
 from backend.restful_service.serialization import serialize, deserialize, serialize_state, deserialize_state
 from backend.solving.flows_graph import BasicQuery, construct_flow_graph
 from backend.solving.processors_graph import construct_processors_graph
+from backend.models.musiasem_concepts import Taxon, Hierarchy
 
 from backend.ie_imports.data_source_manager import DataSourceManager
 from backend.ie_imports.data_sources.eurostat_bulk import Eurostat
@@ -965,6 +967,7 @@ def reproducible_session_query_state_list_datasets():  # Query list of datasets 
             r = build_json_response({"datasets":
                                          [dict(name=k,
                                                nelements=datasets[k].data.size,
+                                               nrows=datasets[k].data.shape[0],
                                                size=datasets[k].data.memory_usage(True).sum()) for k in datasets
                                           ]
                                      },
@@ -1021,6 +1024,27 @@ def reproducible_session_query_state_get_dataset(name, format):  # Query list of
                     schema = dict(model=dict(fields=fields), cube=dict(dimensions=dimensions, measures=measures))
                     r = build_json_response(dict(data=data, schema=schema), 200)
                 elif format == "xlsx":
+                    # TODO Merge with Taxonomies IF some column appear
+                    if True:
+                        # Taxonomy definitions
+                        hs = glb_idx.get(Hierarchy.partial_key())
+                        # Hierarchies of Categories (not of Processors or of FactorTypes)
+                        hset = set([h.name.lower() for h in hs if h.hierarchy_type == Taxon])  # CSens?
+                        for col in ds2.columns:
+                            if col in hset:  # CSens ?
+                                for h in hs:
+                                    if h.hierarchy_type == Taxon:
+                                        if h.name.lower() == col:
+                                            nodes = h.get_all_nodes()
+                                            tmp = []
+                                            for nn in nodes:
+                                                t = nodes[nn]
+                                                tmp.append([t[0].lower(), t[1]])  # CSens
+                                            # Dataframe of codes and descriptions
+                                            df_dst = pd.DataFrame(tmp, columns=['sou_rce', col + "_desc"])
+                                            ds2 = pd.merge(ds2, df_dst, how='left', left_on=col, right_on='sou_rce')
+                                            del ds2['sou_rce']
+
                     # Generate XLSX from data & return it
                     output = io.BytesIO()
                     ds2.to_excel(output, sheet_name=name, index=False, engine="xlsxwriter")

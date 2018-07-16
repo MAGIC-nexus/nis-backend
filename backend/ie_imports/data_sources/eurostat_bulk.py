@@ -214,7 +214,7 @@ class Eurostat(IDataSourceManager):
                     # TODO ISOLATE STATUS FLAGS INTO ANOTHER COLUMN
                     # TODO ":" -> "NaN\t",
                     # TODO ([-+]?[0-9]*\.?[0-9]+([eE][-+]?[0-9]+)?)(.*) -> (1)\t(2)
-                    pattern = re.compile("(\\:)|( [b-fnpruz]+)")
+                    pattern = re.compile("(\\:)|( [b-fnpruzscde]+)")
                     st = pattern.sub(lambda m: "NaN" if m.group(0) == ":" else "", gz.read().decode("utf-8"))
 
                     # st = multi_replace(gz.read().decode("utf-8"),

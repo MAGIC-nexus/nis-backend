@@ -96,14 +96,14 @@ def parse_mapping_command(sh, area, origin, destination):
         except:
             exp_value = 1.0  # If undefined -> Many to One
 
-        if not o_value or not d_value:
+        if not o_value and not d_value:
+            # issues.append((2, "Row " + str(r) + ": Origin and Destination are not defined. Row skipped."))
+            continue
+        elif not o_value or not d_value:
             if not o_value and d_value:
                 issues.append((2, "Row "+str(r)+": Origin not defined. Row skipped."))
             else:
                 issues.append((2, "Row " + str(r) + ": Destination not defined. Row skipped."))
-            continue
-        elif not o_value and not d_value:
-            issues.append((2, "Row " + str(r) + ": Origin and Destination are not defined. Row skipped."))
             continue
 
         o_value = str(o_value).lower()

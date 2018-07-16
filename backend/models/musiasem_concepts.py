@@ -52,6 +52,7 @@ An interesting paper: "A survey of RDB to RDF translation approaches and tools"
 import collections
 
 import json
+from collections import OrderedDict
 from enum import Enum
 from typing import *  # Type hints
 import pint  # Physical Units management
@@ -127,7 +128,7 @@ class HierarchyNode:
 
     def get_children(self, hierarchy=None):
         if hierarchy not in self._children:
-            return None
+            return []
         else:
             return self._children[hierarchy]
 
@@ -462,6 +463,24 @@ class Hierarchy(Nameable, Identifiable):
         """
         return {"_t": "h", "_ht": self.hierarchy_type.__name__, "_n": self.name, "__id": self.ident}
 
+    def get_all_nodes(self):
+        """
+        Starting with roots, obtain a collection of all members of the hierarchy
+
+        :return:
+        """
+        def recurse_node(n):
+                if n.ident not in d:
+                    d[n.ident] = (n.name, n._description)
+                    for c in n.get_children():
+                        recurse_node(c)
+
+        d = OrderedDict()
+        for r in self.roots:
+            if isinstance(r, Taxon):
+                recurse_node(r)
+        return d
+
 
 class HierarchyExpression:
     def __init__(self, expression: QualifiedQuantityExpression=None):
@@ -482,11 +501,12 @@ class HierarchyExpression:
 
 class Taxon(Identifiable, Nameable, HierarchyNode, HierarchyExpression):
     """ For categories in a taxonomy. A taxonomy  """
-    def __init__(self, name, parent=None, hierarchy=None, expression=None):
+    def __init__(self, name, parent=None, hierarchy=None, expression=None, description=None):
         Identifiable.__init__(self)
         Nameable.__init__(self, name)
         HierarchyNode.__init__(self, parent, hierarchy)
         HierarchyExpression.__init__(self, expression)
+        self._description = description
 
     @staticmethod
     def partial_key(name: str=None, ident: str=None):

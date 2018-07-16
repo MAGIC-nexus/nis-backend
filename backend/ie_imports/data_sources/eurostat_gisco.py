@@ -1,7 +1,7 @@
 import requests
 
 base_url_v2 = "http://ec.europa.eu/eurostat/cache/GISCO/distribution/v2/"
-base_url_v1 = "http://ec.europa.eu/eurostat/cache/GISCO/distribution/v1/"
+base_url_v1 = "http://ec.europa.eu/eurostat/cache/GISCO/distribution/v2/"
 
 # List of datasets available for each version
 # base_url_v2+"/nuts/datasets.json"

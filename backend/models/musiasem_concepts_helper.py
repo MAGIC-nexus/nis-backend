@@ -864,7 +864,7 @@ def _build_hierarchy(name, type_name, registry: PartialRetrievalDictionary, h: d
             # If not, create it
             n = registry.get(Taxon.partial_key(name=acum_name2))
             if not n:
-                n = Taxon(acum_name2, parent=parent, hierarchy=hie, expression=exp)
+                n = Taxon(acum_name2, parent=parent, hierarchy=hie, expression=exp, description=desc)
                 for alt_name in hierarchical_name_variants(acum_name2):
                     t_key = Taxon.partial_key(alt_name, n.ident)
                     registry.put(t_key, n)

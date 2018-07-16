@@ -55,7 +55,7 @@ def parse_hierarchy_command(sh, area, name: str, n_type: str):
                     # already satified, replace it...
                     if len(levels) > 0:
                         tmp = levels[-1]
-                        levels[-1] = (tmp[0], c) # Code, Description
+                        levels[-1] = (tmp[0], c)  # Code, Description
                 break
 
     # Now, scan rows.

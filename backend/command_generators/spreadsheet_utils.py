@@ -66,7 +66,7 @@ def binary_mask_from_worksheet(sh_in, only_numbers=True):
     return m
 
 
-def obtain_rectangular_submatrices(mask, region=None):
+def obtain_rectangular_submatrices(mask, region=None, only_remove_empty_bottom=False):
     """
     Obtain rectangular submatrices of mask
     IMPORTANT: currently it only obtains ONE region
@@ -97,8 +97,13 @@ def obtain_rectangular_submatrices(mask, region=None):
     # Ranges
     rs = nonzero_sequences(row_sum.flatten())
     cs = nonzero_sequences(col_sum.flatten())
-    if len(rs) > 0:
-        lst.append((rs[0][0], rs[0][1], cs[0][0], cs[0][1]))
+    if only_remove_empty_bottom:
+        if len(rs) > 0:
+            lst.append((rs[0][0], rs[-1][1], cs[0][0], cs[-1][1]))
+    else:
+        # Take the first rectangle
+        if len(rs) > 0:
+            lst.append((rs[0][0], rs[0][1], cs[0][0], cs[0][1]))
 
     return lst
 

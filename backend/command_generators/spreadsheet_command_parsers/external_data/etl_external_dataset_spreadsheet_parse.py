@@ -64,6 +64,7 @@ def parse_etl_external_dataset_command(sh, area, dataset_name, state):
     measures = []
     out_dims = []
     agg_funcs = []
+    measures_as = []
     filter_ = {}  # Cannot use "create_dictionary()" because CaseInsensitiveDict is NOT serializable (which is a requirement)
     result_name = None  # By default, no name for the result. It will be dynamically obtained
     for c in range(area[2], area[3]):
@@ -83,10 +84,8 @@ def parse_etl_external_dataset_command(sh, area, dataset_name, state):
         elif col_name.lower().strip() in ["aggregation_function", "aggfunc", "agg_func"]:  # "SELECT AGGREGATORS"
             lst = obtain_column(c, area[0] + 1, area[1])
             for f in lst:
-                if not f:
-                    continue
-                if f.lower() not in ["sum", "average", "avg"]:
-                    issues.append((3, "The specified aggregation function, '"+f+"' is not one of the supported ones: 'sum' or 'average'"))
+                if f.lower() not in ["sum", "avg", "count", "sumna", "countav", "avgna"]:
+                    issues.append((3, "The specified aggregation function, '"+f+"' is not one of the supported ones: 'sum', 'avg', 'count', 'sumna', 'avgna', 'countav'"))
                 else:
                     agg_funcs.append(f)
         elif col_name.lower().strip() in ["measures"]:  # "SELECT"
@@ -100,6 +99,10 @@ def parse_etl_external_dataset_command(sh, area, dataset_name, state):
                     issues.append((3, "The specified measure, '"+m+"' is not a measure available in the dataset. ["+', '.join([m2 for m2 in measures])+"]"))
                 else:
                     measures.append(m)
+        elif col_name.lower().strip() in ["measuresas"]:  # "AS <name>"
+            lst = obtain_column(c, area[0] + 1, area[1])
+            for m in lst:
+                measures_as.append(m)
         elif col_name in cl:  # A dimension -> "WHERE"
             # Check codes, and add them to the "filter"
             lst = obtain_column(c, area[0] + 1, area[1])
@@ -139,11 +142,13 @@ def parse_etl_external_dataset_command(sh, area, dataset_name, state):
 
     content = {"dataset_source": source,
                "dataset_name": dataset_name,
+               "dataset_datetime": None,
                "where": filter_,
                "dimensions": [d for d in dims],
                "group_by": out_dims,
                "measures": measures,
                "agg_funcs": agg_funcs,
+               "measures_as": measures_as,
                "result_name": result_name
                }
     return issues, None, content

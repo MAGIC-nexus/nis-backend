@@ -7,7 +7,7 @@ import numpy as np
 import pandas as pd
 
 __version__ = '0.1.0'
-__fao_url__ = 'http://data.fao.org/developers/api/resources'  # 'api/v1/en/resources'
+__fao_url__ = 'http://data.fao.org/developers/api/resources'  # 'api/v2/en/resources'
 
 # Elaborated from technical reference at: http://api.data.fao.org/1.0/esb-rest/resources/resourcesAPI.html
 

@@ -1,5 +1,5 @@
 import json
-
+from collections import OrderedDict
 
 import pandas as pd
 import numpy as np
@@ -94,11 +94,13 @@ class ETLExternalDatasetCommand(IExecutableCommand):
         # Join with mapped dimensions (augment it)
         # TODO Prepare an "m" containing ALL the mappings affecting "df"
         # TODO df2 = augment_dataframe_with_mapped_columns(df, m, ["value"])
+        # TODO Does it allow adding the new column for the dimension, in case it is requested? Probably yes, but test it
         for m in mappings:
             if strcmp(mappings[m].source, source) and \
                     strcmp(mappings[m].dataset, dataset_name) and \
                     mappings[m].origin in dims:
-                # TODO Change by n-to-m mapping
+                # TODO Change by many-to-many mapping
+                # TODO augment_dataframe_with_mapped_columns(df, maps, measure_columns)
                 # Elaborate a many to one mapping
                 tmp = []
                 for el in mappings[m].map:
@@ -119,16 +121,33 @@ class ETLExternalDatasetCommand(IExecutableCommand):
             # Column names where data is
             # HACK: for the case where the measure has been named "obs_value", use "value"
             values = [m.lower() if m.lower() != "obs_value" else "value" for m in self._content["measures"]]
+            out_names = self._content["measures_as"]
             rows = [v.lower() for v in self._content["group_by"]]  # Group by dimension names
             aggs = []  # Aggregation functions
+            agg_names = {}
             for f in self._content["agg_funcs"]:
                 if f.lower() in ["avg", "average"]:
                     aggs.append(np.average)
+                    agg_names[np.average] = "avg"
                 elif f.lower() in ["sum"]:
                     aggs.append(np.sum)
+                    agg_names[np.sum] = "sum"
+                elif f.lower() in ["count"]:
+                    aggs.append(np.size)
+                    agg_names[np.size] = "count"
+                elif f.lower() in ["sumna"]:
+                    aggs.append(np.nansum)
+                    agg_names[np.nansum] = "sumna"
+                elif f.lower() in ["countav"]:
+                    aggs.append("count")
+                    agg_names["count"] = "countav"
+                elif f.lower() in ["avgna"]:
+                    aggs.append(np.nanmean)
+                    agg_names[np.nanmean] = "avgna"
+
             # Calculate Pivot Table. The columns are a combination of values x aggregation functions
-            # For instance, if two values ["v1", "v2"] and two agg. functions ["avg", "sum"] are provided
-            # The columns will be: [["average", "v1"], ["average", "v2"], ["sum", "v1"], ["sum", "v2"]]
+            # For instance, if two values ["v2", "v2"] and two agg. functions ["avg", "sum"] are provided
+            # The columns will be: [["average", "v2"], ["average", "v2"], ["sum", "v2"], ["sum", "v2"]]
             try:
                 # Check that all "rows" on which pivot table aggregates are present in the input "df"
                 # If not either synthesize them (only if there is a single filter value) or remove (if not present
@@ -147,16 +166,50 @@ class ETLExternalDatasetCommand(IExecutableCommand):
                         if not found:
                             rows.remove(r)
                             issues((2, "Dimension '" + r + "' removed from the list of dimensions because it is not present in the raw input dataset."))
-                # Pivot table
-                df2 = pd.pivot_table(df,
-                                     values=values,
-                                     index=rows,
-                                     aggfunc=[aggs[0]], fill_value=np.NaN, margins=False,
-                                     dropna=True)
-                # Remove the multiindex in columns
-                df2.columns = [col[-1] for col in df2.columns.values]
-                # Remove the index
-                df2.reset_index(inplace=True)
+                # Pivot table using Group by
+                if True:
+                    groups = df.groupby(by=rows, as_index=False)  # Split
+                    d = OrderedDict([])
+                    lst_names = []
+                    if len(values) == len(aggs):
+                        for i, t in enumerate(zip(values, aggs)):
+                            v, agg = t
+                            if len(out_names) == len(values):
+                                if out_names[i]:
+                                    lst_names.append(out_names[i])
+                                else:
+                                    lst_names.append(agg_names[agg] + "_" + v)
+                            else:
+                                lst_names.append(agg_names[agg] + "_" +v)
+                            lst = d.get(v, [])
+                            lst.append(agg)
+                            d[v] = lst
+                    else:
+                        for v in values:
+                            lst = d.get(v, [])
+                            for agg in aggs:
+                                lst.append(agg)
+                                lst_names.append(agg_names[agg] + "_" +v)
+                            d[v] = lst
+                    # Print NaN values for each value column
+                    for v in set(values):
+                        cnt = df[v].isnull().sum()
+                        print("NA count for col '"+v+"': "+str(cnt)+" of "+str(df.shape[0]))
+
+                    df2 = groups.agg(d)
+                    # Rename the aggregated columns
+                    df2.columns = rows + lst_names
+                else:
+                    # Pivot table
+                    df2 = pd.pivot_table(df,
+                                         values=values,
+                                         index=rows,
+                                         aggfunc=[aggs[0]], fill_value=np.NaN, margins=False,
+                                         dropna=True)
+                    # Remove the multiindex in columns
+                    df2.columns = [col[-1] for col in df2.columns.values]
+                    # Remove the index
+                    df2.reset_index(inplace=True)
                 # The result, all columns (no index), is stored for later use
                 ds.data = df2
             except Exception as e:

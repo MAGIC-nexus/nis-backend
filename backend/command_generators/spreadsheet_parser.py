@@ -60,6 +60,7 @@ Comando
 
     # Regular expressions for the different commands
     flags = re.IGNORECASE
+    optional_alphanumeric = "([ a-zA-Z0-9_-]*)?"  # Whitespace also allowed
     re_metadata = re.compile(r"^Metadata", flags=flags)
     re_processors = re.compile(r"(Processors|Proc)[ _]+" + var_name, flags=flags)
     re_hierarchy = re.compile(r"(Taxonomy|Tax|Composition|Comp)[ _]([cpf])[ ]" + var_name, flags=flags)
@@ -68,15 +69,30 @@ Comando
     re_transform = re.compile(r"(Transform|Tx)[ _]" + var_name + "[ _]" + var_name, flags=flags)
     re_pedigree_template = re.compile(r"(Pedigree|Ped|NUSAP\.PM)[ _]+" + var_name, flags=flags)
     re_references = re.compile(r"(References|Ref)[ _]" + var_name, flags=flags)
-    re_parameters = re.compile(r"(Parameters|Params)([ _]" + var_name + ")?", flags=flags)
+    re_parameters = re.compile(r"(Parameters|Params)" + optional_alphanumeric, flags=flags)  # Shared by v1 and v2 (not used, so v2 directly)
     re_scale_conversion = re.compile(r"Scale", flags=flags)
-
     re_enum = re.compile(r"(Dataset|DS)[ _]" + var_name + "[ _](Enumerate|Enum)", flags=flags)
     re_meta = re.compile(r"(Metadata|MD)[ _]" + var_name, flags=flags)
     re_data = re.compile(r"(Dataset|DS)[ _]" + hvar_name, flags=flags)
     re_mapping = re.compile(r"^(Mapping|Map)([ _]" + cplex_var + "[ _]" + cplex_var + ")?", flags=flags)
-
     re_indicators = re.compile(r"(Indicators|KPI)([ _]" + var_name + ")?", flags=flags)
+
+    # Version 2 commands
+
+    re_reused_elements = re.compile(r"ReusedElements" + optional_alphanumeric, flags=flags)
+    re_hierarchies = re.compile(r"Hierarchies" + optional_alphanumeric, flags=flags)  # Hierarchies for categories (formerly "Taxonomy_C")
+    re_attributes = re.compile(r"Attributes" + optional_alphanumeric, flags=flags)  # Declaration of attributes used in different elements
+    re_hierarchies_mapping = re.compile(r"HierarchiesMapping" + optional_alphanumeric, flags=flags)
+    re_hierarchies_mapping_detail = re.compile(r"HierarchiesMappingDetail" + optional_alphanumeric, flags=flags)
+    re_datasetqry = re.compile(r"DatasetQry" + optional_alphanumeric, flags=flags)
+    re_refsource = re.compile(r"RefSource" + optional_alphanumeric, flags=flags)
+    re_refgeographical = re.compile(r"RefGeographical" + optional_alphanumeric, flags=flags)
+    re_refprovenance = re.compile(r"RefProvenance" + optional_alphanumeric, flags=flags)
+    re_refbibliographic = re.compile(r"RefBibliographic" + optional_alphanumeric, flags=flags)
+    re_pedigree_matrices = re.compile(r"PedigreeMatrices" + optional_alphanumeric, flags=flags)
+
+
+    detected_workbook_version = None
 
     # For each worksheet, get the command type, convert into primitive JSON
     for c, sh_name in enumerate(xl_in.sheetnames):
@@ -88,17 +104,19 @@ Comando
         c_label = None
         c_content = None
 
+        name = sh_in.title
+
         # Extract worksheet matrices
         m = binary_mask_from_worksheet(sh_in, False)
-        t = obtain_rectangular_submatrices(m)
+        t = obtain_rectangular_submatrices(m, only_remove_empty_bottom=True)
         if len(t) == 0:  # No data
             continue
 
         t = t[0]  # Take just the first element, a tuple (top, bottom, left, right) representing a rectangular region
-        t = (t[0]+1, t[1]+1, t[2]+1, t[3]+1)  # Indices start at 1
+        t = (t[0] + 1, t[1] + 1, t[2] + 1, t[3] + 1)  # Indices start at 1
+
         # v = worksheet_to_numpy_array(sh_in)
 
-        name = sh_in.title
         # EXTERNAL DATASETS
         if re_enum.search(name):
             datasource = re_enum.search(name).group(1)

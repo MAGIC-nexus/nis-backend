@@ -539,7 +539,7 @@ if __name__ == '__main__':
     s.set("param2", 0.9)
     s.set("param3", 0.96)
     examples = [
-        "EN(p1=1.5, p2=2.3)[d1='C11', d2='C21'].v1",  # Simply sliced Variable Dataset (function call)
+        "EN(p1=1.5, p2=2.3)[d1='C11', d2='C21'].v2",  # Simply sliced Variable Dataset (function call)
         "a_function(p1=2, p2='cc', p3=1.3*param3)",
         "-5+4*2",  # Simple expression #1
         "HH",  # Simple name
@@ -555,7 +555,7 @@ if __name__ == '__main__':
         "EN[d1='C11', d2='C21'].d1",  # Simple Dataset slice
         "b.a_function(p1=2, p2='cc', p3=1.3*param3)",
         "b.EN[d1='C11', d2='C21'].d1",  # Hierachical Dataset slice
-        "tns::EN(p1=1.5+param2, p2=2.3 * 0.3)[d1='C11', d2='C21'].v1",  # Simply sliced Variable Dataset (function call)
+        "tns::EN(p1=1.5+param2, p2=2.3 * 0.3)[d1='C11', d2='C21'].v2",  # Simply sliced Variable Dataset (function call)
     ]
     for example in examples:
         print(example)
