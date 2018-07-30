@@ -29,6 +29,13 @@ def obtain_reverse_codes(mapped, dst):
     return list(src)  # list(set([k[0].lower() for k in mapped if k[1].lower() in dest_set]))
 
 
+def pctna(x):
+    """
+    Aggregation function computing the percentage of NaN values VS total number of elements, in a group "x"
+    """
+    return 100.0 * np.count_nonzero(np.isnan(x)) / x.size
+
+
 class ETLExternalDatasetCommand(IExecutableCommand):
     def __init__(self, name: str):
         self._name = name
@@ -144,6 +151,9 @@ class ETLExternalDatasetCommand(IExecutableCommand):
                 elif f.lower() in ["avgna"]:
                     aggs.append(np.nanmean)
                     agg_names[np.nanmean] = "avgna"
+                elif f.lower() in ["pctna"]:
+                    aggs.append(pctna)
+                    agg_names[pctna] = "pctna"
 
             # Calculate Pivot Table. The columns are a combination of values x aggregation functions
             # For instance, if two values ["v2", "v2"] and two agg. functions ["avg", "sum"] are provided
@@ -195,8 +205,9 @@ class ETLExternalDatasetCommand(IExecutableCommand):
                     for v in set(values):
                         cnt = df[v].isnull().sum()
                         print("NA count for col '"+v+"': "+str(cnt)+" of "+str(df.shape[0]))
-
+                    # AGGREGATE !!
                     df2 = groups.agg(d)
+
                     # Rename the aggregated columns
                     df2.columns = rows + lst_names
                 else:

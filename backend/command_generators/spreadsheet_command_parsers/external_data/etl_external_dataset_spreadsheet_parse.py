@@ -1,3 +1,5 @@
+from backend.command_generators import basic_elements_parser
+from backend.command_generators.basic_elements_parser import simple_ident
 from backend.common.helper import obtain_dataset_source, obtain_dataset_metadata, create_dictionary, strcmp
 from backend.model_services import get_case_study_registry_objects
 
@@ -84,8 +86,8 @@ def parse_etl_external_dataset_command(sh, area, dataset_name, state):
         elif col_name.lower().strip() in ["aggregation_function", "aggfunc", "agg_func"]:  # "SELECT AGGREGATORS"
             lst = obtain_column(c, area[0] + 1, area[1])
             for f in lst:
-                if f.lower() not in ["sum", "avg", "count", "sumna", "countav", "avgna"]:
-                    issues.append((3, "The specified aggregation function, '"+f+"' is not one of the supported ones: 'sum', 'avg', 'count', 'sumna', 'avgna', 'countav'"))
+                if f.lower() not in ["sum", "avg", "count", "sumna", "countav", "avgna", "pctna"]:
+                    issues.append((3, "The specified aggregation function, '"+f+"' is not one of the supported ones: 'sum', 'avg', 'count', 'sumna', 'avgna', 'countav', 'pctna'"))
                 else:
                     agg_funcs.append(f)
         elif col_name.lower().strip() in ["measures"]:  # "SELECT"
@@ -128,6 +130,11 @@ def parse_etl_external_dataset_command(sh, area, dataset_name, state):
             lst = obtain_column(c, area[0] + 1, area[1])
             if len(lst) > 0:
                 result_name = lst[0]
+                try:
+                    basic_elements_parser.string_to_ast(simple_ident, result_name)
+                except:
+                    issues.append(
+                        (3, "Column '" + col_name + "' has an invalid dataset name '" + result_name + "'"))
 
     if len(measures) == 0:
         issues.append((3, "At least one measure should be specified"))
