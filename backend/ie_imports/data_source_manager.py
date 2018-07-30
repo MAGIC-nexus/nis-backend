@@ -276,7 +276,7 @@ def filter_dataset_into_dataframe(in_df, filter_dict, eurostat_postprocessing=Fa
                 if l == "value":
                     lst[-1], lst[i] = lst[i], lst[-1]
                     break
-            in_df = in_df.reindex_axis(lst, axis=1)
+            in_df = in_df.reindex(lst, axis=1)
             return in_df
         else:
             return None
