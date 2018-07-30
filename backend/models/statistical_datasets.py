@@ -1,81 +1,20 @@
 import json
 from collections import namedtuple
 from typing import List
+
+from attr import attrs, attrib
 from sqlalchemy import Column, Integer, String, Unicode, Boolean, ForeignKey
 from sqlalchemy import orm, event
 from sqlalchemy.orm import relationship, backref
 
 from backend.common.helper import create_dictionary
-from backend.common.namedlist import namedlist
+from backend.models import CodeImmutable
+from backend.models.musiasem_concepts import Hierarchy
 from backend.models.musiasem_methodology_support import ORMBase
 
-# Ad-hoc structures
-ConceptImmutable = namedtuple("ConceptTuple", "name istime description attributes code_list")
-CodeImmutable = namedtuple("CodeTuple", "code description level children")
-CodeMutable = namedlist("Code", ["code", "description", "level", "children", "parents"])
-
-
-class CodeListInMemory:
-    """
-    Stores a code list
-    """
-    def __init__(self):
-        self._name = None
-        self._description = None
-        self._levels = None
-        self._codes = None
-
-    @staticmethod
-    def construct_from_dict(d):
-        """
-        Dictioanry with keys: "name", "description", "levels", "codes"
-        "codes" contains the first level codes, which can successively contain
-        :param d:
-        :return:
-        """
-        return CodeListInMemory.construct(d["name"], d["description"], d["levels"], [CodeImmutable(**i) for i in d["codes"].values])
-
-    @staticmethod
-    def construct(name: str, description: str, levels: List[str], codes: List[CodeImmutable]):
-        """
-
-        :param name: Name of the Code List
-        :param description: Description of the Code List
-        :param levels: Names of the levels
-        :param codes: List of codes, including in each the following tuple: CodeImmutable = namedtuple("CodeTuple", "code description level children")
-        :return:
-        """
-        cl = CodeListInMemory()
-        cl._name = name
-        cl._description = description
-        cl._levels = {l: {} for l in levels}  # Level name: list of codes in the level
-        cl._codes = {}  # Flat dictionary of CodeMutable by code, with children and parents
-        children = {}
-        for i in codes:
-            cl._levels[i.level].append(i)
-            for c in i.children:
-                children[c] = i.code  # Child "c" mentioned by parent "i["code"]"
-                if c not in cl._codes:
-                    cl._codes[i.code] = CodeMutable(code=i.code, parents=[])
-                code = cl._codes[i.code]
-                # Add a parent to code
-                code.parents.append(i.code)
-            if i["code"] not in cl._codes:
-                cl._codes[i.code] = CodeMutable(code=i.code, parents=[])
-            code = cl._codes[i.code]
-            code.children = i.children
-            code.level = i.level
-            code.description = i.description
-
-        # Check all children are in cl._codes.
-        s1 = set([c for c in children])
-        s2 = set([c for c in cl._codes])
-        sdiff = s1 - s2
-        if len(sdiff) > 0:
-            s = ["Code '"+children[c]+"' mentions '"+c+"' as child, but '"+c+"' was not detailed" for c in sdiff]
-            raise Exception("; ".join(s))
-
-        return cl
+# ######################################################################################################################
+# MODEL FOR PERSISTENCE
+# ######################################################################################################################
 
 
 class CodeList(ORMBase):
@@ -85,13 +24,10 @@ class CodeList(ORMBase):
     code = Column(String(32))
     description = Column(String(1024))
 
-    def __init__(self):
-        # NOTE: If needed, use CodeListInMemory.construct to initialize .code_list
-        self.code_list = None  # type: CodeListInMemory
-
     @orm.reconstructor
     def init_on_load(self):
-        self.code_list = None
+        pass
+        # self.code_list = None
 
     def get_codes(self):
         return self.to_dict().items()
@@ -188,8 +124,8 @@ def code_before_insert(mapper, connection, target):
 
 @event.listens_for(Code, "load")
 def code_after_load(target, context):
-    target.parents = json.loads(target.parents) if target.parents else {}
-    target.children = json.loads(target.children) if target.children else {}
+    target.parents = json.loads(target.parents) if target.parents else []
+    target.children = json.loads(target.children) if target.children else []
 
 
 class Concept(ORMBase):  # Concepts are independent of datasets
@@ -297,7 +233,7 @@ class Dataset(ORMBase): # A database has many datasets
             lst.append(self.database)
             if self.database.data_source:
                 lst.append(self.database.data_source)
-        # TODO Append "Concept" related to each dimension? (a Concept may be related
+        # TODO Append "Concept" related to each dimension?
         for d in self.dimensions:
             lst.append(d)
             if d.code_list:
@@ -306,11 +242,39 @@ class Dataset(ORMBase): # A database has many datasets
                     lst.append(l)
                     for c in l.codes:
                         lst.append(c)
+            # if d.get_hierarchy():
+            #     # ADD: Hierarchy, HierarchyLevel(s), HierarchyNode(s), HierarchySource (if defined),
+            #     #      HierarchyGroup (if defined). Referred HierarchyNode, Hierarchy
+            #     h = d.get_hierarchy()
+            #     lst.append(h)
+            #     if h.hierarchy_group:
+            #         lst.append(h.hierarchy_group)
+            #         if h.hierarchy_group.hierarchy_source:
+            #             lst.append(h.hierarchy_group.hierarchy_source)
+            #     levels = set()
+            #     other_hierarchies = set()
+            #     for code in h.codes:
+            #         lst.append(code)
+            #         if code.referred_node:
+            #             lst.append(code.referred_node)
+            #             if code.referred_code.hierarchy not in other_hierarchies:
+            #                 other_hierarchies.add(code.referred_code.hierarchy)
+            #
+            #         if code.level and code.level not in levels:
+            #             levels.add(code.level)
+            #
+            #     for level in levels:
+            #         lst.append(level)
+            #     for hierarchy in other_hierarchies:
+            #         lst.append(hierarchy)
+
         return lst
 
     @orm.reconstructor
     def init_on_load(self):
         self.data = None
+        self.attributes = json.loads(self.attributes) if self.attributes else {}
+        self.data_dictionary = json.loads(self.data_dictionary) if self.data_dictionary else {}
 
 
 @event.listens_for(Dataset, 'before_insert')
@@ -319,10 +283,11 @@ def dataset_before_insert(mapper, connection, target):
     target.attributes = json.dumps(target.attributes) if target.attributes else None
 
 
-@event.listens_for(Dataset, "load")
-def dataset_after_load(target, context):
-    target.attributes = json.loads(target.attributes) if target.attributes else {}
-    target.data_dictionary = json.loads(target.data_dictionary) if target.data_dictionary else {}
+# Replaced by the "@orm.reconstructor" (equivalent)
+# @event.listens_for(Dataset, "load")
+# def dataset_after_load(target, context):
+#     target.attributes = json.loads(target.attributes) if target.attributes else {}
+#     target.data_dictionary = json.loads(target.data_dictionary) if target.data_dictionary else {}
 
 
 class Dimension(ORMBase):  # A dimension is a concept linked to a dataset. It can be a Measure (a Measure is a kind of Dimension)
@@ -333,31 +298,50 @@ class Dimension(ORMBase):  # A dimension is a concept linked to a dataset. It ca
     description = Column(String(1024))
     is_time = Column(Boolean, default=False)
     is_measure = Column(Boolean, default=False)
-    attributes = Column(Unicode) # postgresql.JSONB)
+    attributes = Column(Unicode)  # postgresql.JSONB)
 
     dataset_id = Column(Integer, ForeignKey(Dataset.id))
     dataset = relationship(Dataset, lazy='subquery', backref=backref("dimensions", cascade="all, delete-orphan"))
 
     # Zero or one Concept
-    concept_id = Column(Integer, ForeignKey(Concept.id))  # The concept will contain the full code list
-    concept = relationship(Concept)
+    # concept_id = Column(Integer, ForeignKey(Concept.id))  # The concept will contain the full code list
+    # concept = relationship(Concept)
 
-    code_list_emb = Column(Unicode) # postgresql.JSONB)  # A reduced code list of the concept, if it exists
+    code_list_emb = Column(Unicode)  # postgresql.JSONB)  # A reduced code list of the concept, if it exists
     # Zero or one Code List, this contains the reduced Code List
     code_list_id = Column(Integer, ForeignKey(CodeList.id))
     code_list = relationship(CodeList, backref=backref("dimension", cascade="all, delete-orphan"))
+
+    def __init__(self):
+        self.hierarchy = None  # type: Hierarchy
+
+    @orm.reconstructor
+    def init_on_load(self):
+        self.attributes = json.loads(self.attributes) if self.attributes else {}
+        self.code_list_emb = json.loads(self.code_list_emb) if self.code_list_emb else {}
+        # Because "get_hierarchy()" method call the conversion in case of need there is no need of initialization here
+        # It is an "on-demand" strategy
+        self.hierarchy = None
+
+    def get_hierarchy(self) -> Hierarchy:
+        if not self.hierarchy and self.code_list:
+            from backend.models.musiasem_concepts_helper import convert_code_list_to_hierarchy  # Local import to avoid circular imports (musiasem_concepts_helper imports statistical_datasets)
+            self.hierarchy = convert_code_list_to_hierarchy(self.code_list)
+        return self.hierarchy
 
 
 @event.listens_for(Dimension, 'before_insert')
 def dimension_before_insert(mapper, connection, target):
     target.code_list_emb = json.dumps(target.code_list_emb) if target.code_list_emb else None
     target.attributes = json.dumps(target.attributes) if target.attributes else None
+    # TODO Convert Hierarchy to CodeList, if it makes sense (Hierarchy has more expresivity)
 
 
-@event.listens_for(Dimension, "load")
-def dimension_after_load(target, context):
-    target.attributes = json.loads(target.attributes) if target.attributes else {}
-    target.code_list_emb = json.loads(target.code_list_emb) if target.code_list_emb else {}
+# Replaced by the "@orm.reconstructor" (equivalent)
+# @event.listens_for(Dimension, "load")
+# def dimension_after_load(target, context):
+#     target.attributes = json.loads(target.attributes) if target.attributes else {}
+#     target.code_list_emb = json.loads(target.code_list_emb) if target.code_list_emb else {}
 
 
 class Store(ORMBase): # Location for one or more datasets. Datasets point to Stores, also a dataset can be in multiple locations

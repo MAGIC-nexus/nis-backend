@@ -59,9 +59,13 @@ import pint  # Physical Units management
 import pandas as pd
 import logging
 
-from backend.common.helper import create_dictionary, strcmp, PartialRetrievalDictionary, case_sensitive
+from attr import attrs, attrib
+
+from backend.common.helper import create_dictionary, strcmp, PartialRetrievalDictionary, \
+    case_sensitive
 from backend.models import ureg
 from backend.model_services import State, get_case_study_registry_objects, LocallyUniqueIDManager
+from backend.models import CodeImmutable
 from backend.restful_service import log_level
 
 logger = logging.getLogger(__name__)
@@ -86,55 +90,6 @@ allowed_ff_types = ["int_in_flow",  "int_in_fund",  "ext_in_fund", "int_out_flow
 # #################################################################################################################### #
 # BASE CLASSES
 # #################################################################################################################### #
-
-
-class HierarchyNode:
-    """ Taxon, Processor and Factor
-        A hierarchy node can be a member of several hierarchies ¿what's the name of this property?
-        A hierarchy can be flat, so a hierarchy node can be member of a simple list
-    """
-    def __init__(self, parent=None, hierarchy=None):
-        self._parent = {}
-        self._children = {hierarchy: []}
-        self.set_parent(parent, hierarchy)
-
-    @property
-    def parent(self):
-        """ Return the parent. It works when the node is involved in at most one hierarchy """
-        if len(self._parent) == 1:
-            return self._parent[next(iter(self._parent))]
-        elif len(self._parent) == 0:
-            return None
-        else:
-            raise Exception("The node is involved in '"+str(len(self._parent))+"' hierarchies.")
-
-    def get_parent(self, hierarchy=None):
-        if hierarchy not in self._parent:
-            return None
-        else:
-            return self._parent[hierarchy]
-
-    def set_parent(self, p: "HierarchyNode", hierarchy=None):
-        # Check that parent has the same type
-        if p and type(p) is not self.__class__:
-            raise Exception("The hierarchy node class is '" + str(self.__class__) +
-                            "' while the type of the parent is '" + str(type(p)) + "'.")
-
-        self._parent[hierarchy] = p
-        if p:
-            if hierarchy not in p._children:
-                p._children[hierarchy] = []
-            p._children[hierarchy].append(self)
-
-    def get_children(self, hierarchy=None):
-        if hierarchy not in self._children:
-            return []
-        else:
-            return self._children[hierarchy]
-
-    @staticmethod
-    def hierarchically_related(p1: "HierarchyNode", p2: "HierarchyNode", h: "Hierarchy" =None):
-        return p1.get_parent(h) == p2 or p2.get_parent(h) == p1
 
 
 class Identifiable:
@@ -217,13 +172,24 @@ class Automatable:
         self._generation_reason = reason
 
 
+@attrs
+class EntityAttributeType:  # Defines an attribute type, which may be used in different entity types and instances of these types
+    name = attrib()
+    atype = attrib()  # One of: Number, Boolean, URL, UUID, Date, String, Category
+    element_types = attrib()  # A list of elements to which it can be applied: Parameter, Processor, InterfaceType, Interface, ... If empty, can be applied to any type
+    domain = attrib()  # Possible values for the attribute
+    description = attrib(default=None)
+
+
 class Qualifiable:
     """ A concept with a dictionary of Attributes """
     def __init__(self, attributes=None):
-        self._attributes = create_dictionary()
+        self._attributes = create_dictionary()  # name property of EntitytAttributeType to Value
+        self._name_to_attribute_type = create_dictionary()  # name property of EntityAttributeType to EntityAttributeType
         if attributes:
             for k in attributes:
                 self.attributes_append(k, attributes[k])
+                # TODO From the attribute name obtain the EntityAttributeType (in the global registry)
 
     @property
     def attributes(self):
@@ -254,6 +220,79 @@ class Observable:
             lst = [observation]
 
         self._observations.extend(lst)
+
+
+class HierarchyNode(Nameable):
+    """ Taxon, Processor and Factor
+        A hierarchy node can be a member of several hierarchies ¿what's the name of this property?
+        A hierarchy can be flat, so a hierarchy node can be member of a simple list
+    """
+
+    def __init__(self, name, parent=None, parent_weight=1.0, hierarchy=None, label=None, description=None, referred_node=None):
+        Nameable.__init__(self, name)
+        self._parents = []
+        self._parents_weights = []
+        self._referred_node = referred_node
+        self._children = set()  # HierarchyNode in the same "hierarchy"
+        self._level = None  # HierarchyLevel
+        self._hierarchy = hierarchy
+        if parent:
+            self.set_parent(parent, parent_weight)
+
+        self._label = label
+        self._description = description
+
+    @property
+    def parent(self):
+        """ Return the parent. It works when the node has only one parent """
+        if len(self._parents) == 1:
+            return self._parents[0]
+            # return self._parents[next(iter(self._parents))]
+        elif len(self._parents) == 0:
+            return None
+        else:
+            raise Exception("The node has '" + str(len(self._parents)) + "' parents.")
+
+    def set_parent(self, p: "HierarchyNode", weight=1.0):
+        # Check that parent has the same type
+        if p and type(p) is not self.__class__:
+            raise Exception("The hierarchy node class is '" + str(self.__class__) +
+                            "' while the type of the parent is '" + str(type(p)) + "'.")
+
+        self._parents.append(p)
+        if not weight:
+            weight = 1.0
+        self._parents_weights.append(weight)
+
+        if p:
+            p._children.add(self)
+
+    def get_children(self):
+        return self._children
+
+    @staticmethod
+    def hierarchically_related(p1: "HierarchyNode", p2: "HierarchyNode", h: "Hierarchy" = None):
+        return p1.parent == p2 or p2.parent == p1
+
+    @property
+    def description(self):
+        return self._description
+
+    @property
+    def level(self):
+        return self._level
+
+    @level.setter
+    def level(self, level: "HierarchyLevel"):
+        self._level = level
+
+    @property
+    def referred_node(self):
+        return self._referred_node
+
+    @property
+    def hierarchy(self):
+        return self._hierarchy
 
 # #################################################################################################################### #
 # VALUE OBJECTS for SPACE, TIME and QUALIFIED QUANTIFICATION
@@ -371,18 +410,88 @@ class QualifiedQuantityExpression:
 # #################################################################################################################### #
 
 
-class Hierarchy(Nameable, Identifiable):
-    """ A list or a taxonomy, made of "Taxon" instances """
-    def __init__(self, name=None, roots=None, type_name=None):
+class HierarchySource(Nameable, Identifiable):  # Organization defining the Hierarchy "vocabulary" and meanings
+    def __init(self, name):
         Identifiable.__init__(self)
         Nameable.__init__(self, name)
-        self._roots = []  # List of root "IHierarchyNode" nodes (the object serves to represent a list)
+
+    @staticmethod
+    def partial_key(name: str=None, ident: str=None):
+        d = dict(_t="hs")
+        if name:
+            d["_n"] = name
+        if ident:
+            d["__id"] = ident
+        return d
+
+    def key(self):
+        return {"_t": "hs", "_n": self.name, "__id": self.ident}
+
+
+# Also Hierarchical Code List (HCL). "Contains" one or more Hierarchy.
+# If the HierarchyGroup has a single element named equally, it is a Code List
+class HierarchyGroup(Nameable, Identifiable):
+    def __init(self, name):
+        Identifiable.__init__(self)
+        Nameable.__init__(self, name)
+        self._hierarchies = []  # A group can have several "Hierarchy"
+        self._hierarchy_source = None  # type: HierarchySource
+
+    @staticmethod
+    def partial_key(name: str=None, ident: str=None):
+        d = dict(_t="hg")
+        if name:
+            d["_n"] = name
+        if ident:
+            d["__id"] = ident
+        return d
+
+    def key(self):
+        return {"_t": "hg", "_n": self.name, "__id": self.ident}
+
+    @property
+    def hierarchy_source(self):
+        return self._hierarchy_source
+
+
+class HierarchyLevel(Nameable):  # Levels in a View. Code Lists do not have levels in SDMX, although it is allowed here
+    def __init__(self, name, hierarchy):
+        Nameable.__init__(self, name)
+        self._hierarchy = hierarchy
+        self._codes = set()  # HierarchyCodes in the level
+        # hierarchy._level_names.append(name)
+        # hierarchy._levels.append(hierarchy)
+
+    @property
+    def codes(self):
+        return self._codes
+
+    @property
+    def hierarchy(self):
+        return self._hierarchy
+
+
+class Hierarchy(Nameable, Identifiable):
+    """ A list or a taxonomy, made of "Taxon" instances (prepared for "Processor" and "FactorType" instances) """
+    def __init__(self, name: str=None, roots: List[HierarchyNode]=None, hierarchy_group: HierarchyGroup=None, type_name=None):
+        Identifiable.__init__(self)
+        Nameable.__init__(self, name)
+        # List of root "HierarchyNode" nodes (the object serves to represent a list)
+        self._roots = []  # type: List[HierarchyNode]
+        if roots:
+            self.roots_append(roots)
         # The hierarchy should be of a single type
         # If not set here, the first element of the hierarchy sets the type, and new elements must be of the same type
         self._type = Hierarchy.__get_hierarchy_type(type_name)
-        self._level_names = None # Each level of the hierarchy can have a name. This list register these names, from root to leaves
-        if roots:
-            self.roots_append(roots)
+        # Each level of the hierarchy can have a name. This list register these names, from root to leaves
+        self._level_names = [] # type: List[str]
+
+        # All HierarchyNodes contained by the Hierarchy
+        self._codes = set()  # type: Set[HierarchyNode]
+        self._hierarchy_group = hierarchy_group  # type: HierarchyGroup
+        # List (ordered) of HierarchyLevels, from top to bottom
+        self._levels = []  # type: List[HierarchyLevel]
+        self._description = None
 
     @staticmethod
     def __get_hierarchy_type(type_name: Union[str, type]):
@@ -398,6 +507,8 @@ class Hierarchy(Nameable, Identifiable):
             elif isinstance(type_name, type):
                 if type_name in [Processor, FactorType, Taxon]:
                     ret = type_name
+        else:
+            ret = Taxon
         return ret
 
     @property
@@ -406,6 +517,8 @@ class Hierarchy(Nameable, Identifiable):
 
     def roots_append(self, root):
         if isinstance(root, (list, set)):
+            if len(root) == 0:
+                return
             first = root[0]
             lst = root
         else:
@@ -420,6 +533,10 @@ class Hierarchy(Nameable, Identifiable):
     @property
     def hierarchy_type(self):
         return self._type
+
+    @property
+    def levels(self):
+        return self._levels
 
     @property
     def level_names(self):
@@ -444,6 +561,14 @@ class Hierarchy(Nameable, Identifiable):
             return None
 
         return recursive_get_node(self._roots)
+
+    @property
+    def codes(self):
+        return self._codes
+
+    @property
+    def hierarchy_group(self):
+        return self._hierarchy_group
 
     @staticmethod
     def partial_key(name: str=None, hierarchy_type: Union[str, type]=None):
@@ -481,6 +606,61 @@ class Hierarchy(Nameable, Identifiable):
                 recurse_node(r)
         return d
 
+    #####
+
+    def get_codes(self):
+        return self.to_dict().items()
+
+    def to_dict(self):
+        d = {}
+        for c in self._codes:
+            d[c._name] = c._description
+        return d
+
+    @staticmethod
+    def construct_from_dict(d):
+        return Hierarchy.construct(d["name"], d["description"], d["levels"], [CodeImmutable(**i) for i in d["codes"].values])
+
+    @staticmethod
+    def construct(name: str, description: str, levels: List[str], codes: List[CodeImmutable]):
+        """
+
+        :param name: Name of the Hierarchy
+        :param description: Description of the Hierarchy
+        :param levels: Names of the levels
+        :param codes: List of codes, including in each the following tuple: CodeImmutable = namedtuple("CodeTuple", "code description level children")
+        :return:
+        """
+
+        h = Hierarchy(name, roots=None)
+        h._description = description
+        # Levels
+        levels_dict = create_dictionary()
+        for l in levels:
+            hl = HierarchyLevel(l, h)
+            h._level_names.append(l)
+            h._levels.append(hl)
+            levels_dict[l] = hl
+        # Codes
+        codes_dict = create_dictionary()
+        for ct in codes:
+            hn = Taxon(ct.code, hierarchy=h, label=ct.description, description=ct.description)
+            h.codes.add(hn)
+            hn.level = levels_dict.get(ct.level, None)  # Point to the containing HierarchyLevel
+            if hn.level:
+                hn.level._codes.add(hn)
+            codes_dict[ct.code] = hn
+
+        # Set children & parents
+        for ct in codes:
+            for ch in ct.children:
+                if ch in codes_dict:
+                    hn._children.add(codes_dict[ch])
+                    codes_dict[ch]._parents.append(hn)
+                    codes_dict[ch]._parents_weights.append(1.0)
+
+        return h
+
 
 class HierarchyExpression:
     def __init__(self, expression: QualifiedQuantityExpression=None):
@@ -499,13 +679,13 @@ class HierarchyExpression:
         self._expression = e
 
 
-class Taxon(Identifiable, Nameable, HierarchyNode, HierarchyExpression):
+class Taxon(Identifiable, HierarchyNode, HierarchyExpression, Qualifiable):
     """ For categories in a taxonomy. A taxonomy  """
-    def __init__(self, name, parent=None, hierarchy=None, expression=None, description=None):
+    def __init__(self, name, parent=None, bottom_up_split=1.0, hierarchy=None, expression=None, label=None, description=None, attributes=None):
         Identifiable.__init__(self)
-        Nameable.__init__(self, name)
-        HierarchyNode.__init__(self, parent, hierarchy)
+        HierarchyNode.__init__(self, name, parent, bottom_up_split, hierarchy=hierarchy, label=label, description=description)
         HierarchyExpression.__init__(self, expression)
+        Qualifiable.__init__(self, attributes)
         self._description = description
 
     @staticmethod
@@ -519,36 +699,6 @@ class Taxon(Identifiable, Nameable, HierarchyNode, HierarchyExpression):
 
     def key(self):
         return {"_t": "t", "_n": self.name, "__id": self.ident}
-
-
-class HierarchiesSet(Nameable):
-    """ A set of Hierachies """
-    def __init__(self, name):
-        Nameable.__init__(name)
-        self._hs = create_dictionary()
-
-    def append(self, h: str, member: Union[str, List[str]]):
-        # Look for hierarchy "h"
-        if h not in self._hs:
-            self._hs[h] = Hierarchy(h)
-        # Insert "member" in hierarchy "h"
-        self._hs[h].roots_append(member)
-
-    def search(self, h: str, member: str):
-        """ Returns the hierarchy/ies containing "member" """
-        lst = []
-        if not h and member:  # Hierarchy "h" not specified, look for "member" in ALL hierarchies
-            for h2 in self._hs:
-                if self._hs[h2].get_node(member):
-                    lst.append(h2)
-        elif h and not member:  # Only hierarchy "h" specified, return "h" if it exists
-            if h in self._hs:
-                lst.append(h)
-        else:
-            if h in self._hs and self._hs[h].get_node(member):
-                lst.append(h)
-
-        return lst
 
 # #################################################################################################################### #
 # Entities
@@ -624,14 +774,13 @@ class Observer(Identifiable, Nameable):
         return {"_t": "o", "_n": self.name, "__id": self.ident}
 
 
-class FactorType(Identifiable, Nameable, HierarchyNode, HierarchyExpression, Taggable, Qualifiable):  # Flow or fund type (not attached to a Processor)
+class FactorType(Identifiable, HierarchyNode, HierarchyExpression, Taggable, Qualifiable):  # Flow or fund type (not attached to a Processor)
     """ A Factor as type, in a hierarchy, a Taxonomy """
     def __init__(self, name, parent=None, hierarchy=None,
                  tipe: FlowFundRoegenType=FlowFundRoegenType.flow,
                  tags=None, attributes=None, expression=None):
         Identifiable.__init__(self)
-        Nameable.__init__(self, name)
-        HierarchyNode.__init__(self, parent, hierarchy)
+        HierarchyNode.__init__(self, name, parent, hierarchy=hierarchy)
         Taggable.__init__(self, tags)
         Qualifiable.__init__(self, attributes)
         HierarchyExpression.__init__(self, expression)
@@ -640,7 +789,7 @@ class FactorType(Identifiable, Nameable, HierarchyNode, HierarchyExpression, Tag
         self._default_unit_str = None  # TODO A string representing the unit, compatible with the physical type
         self._factors = []
 
-    def full_hierarchy_name(self, hierarchy=None):
+    def full_hierarchy_name(self):
         """
         Obtain the full hierarchy name of the current FactorType
 
@@ -650,9 +799,9 @@ class FactorType(Identifiable, Nameable, HierarchyNode, HierarchyExpression, Tag
         lst = []
         while p:
             lst.insert(0, p.name)
-            par = getattr(p, "get_parent", None)
+            par = getattr(p, "parent", None)
             if par:
-                p = p.get_parent(hierarchy)
+                p = p.parent
             else:
                 p = None
         return ".".join(lst)
@@ -1858,6 +2007,7 @@ class Mapping:
 
 # TODO Currently ExternalDataset is used only in evaluation of expressions. It may be removed because
 # TODO expressions can refer dirctly to State -> datasets
+
 class ExternalDataset:
     def __init__(self, name, ds: pd.DataFrame):
         self._name = name

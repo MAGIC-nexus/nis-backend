@@ -422,7 +422,12 @@ class PartialRetrievalDictionary:
         :return: A list of matching elements
         """
         if True:
-            key2 = {k.lower(): v if k.startswith("__") else v.lower() for k, v in key.items()}
+            # Lower case values
+            # Keys can be all lower case, because they will be internal Key components, not specified by users
+            if case_sensitive:
+                key2 = {k.lower(): v for k, v in key.items()}
+            else:
+                key2 = {k.lower(): v if k.startswith("__") else v.lower() for k, v in key.items()}
         else:
             key2 = key
 
@@ -460,9 +465,14 @@ class PartialRetrievalDictionary:
         :param value:
         :return:
         """
-        ptype = 'i'  # 'i', 'u', 'ups'
+        ptype = 'i'  # 'i', 'u', 'ups' (Insert, Update, Upsert)
         if True:
-            key2 = {k.lower(): v if k.startswith("__") else v.lower() for k, v in key.items()}
+            # Lower case values
+            # Keys can be all lower case, because they will be internal Key components, not specified by users
+            if case_sensitive:
+                key2 = {k.lower(): v for k, v in key.items()}
+            else:
+                key2 = {k.lower(): v if k.startswith("__") else v.lower() for k, v in key.items()}
         else:
             key2 = key
         # Arrays containing key: values "not-present" and "present"
@@ -522,7 +532,12 @@ class PartialRetrievalDictionary:
     def delete(self, key):
         def delete_single(key):
             if True:
-                key2 = {k.lower(): v if k.startswith("__") else v.lower() for k, v in key.items()}
+                # Lower case values
+                # Keys can be all lower case, because they will be internal Key components, not specified by users
+                if case_sensitive:
+                    key2 = {k.lower(): v for k, v in key.items()}
+                else:
+                    key2 = {k.lower(): v if k.startswith("__") else v.lower() for k, v in key.items()}
             else:
                 key2 = key
 
@@ -587,8 +602,8 @@ def get_statistical_dataset_structure(source, dset_name):
             meas[dim.code] = None
         else:
             # Convert the code list to a dictionary
-            if dim.code_list:
-                cl = dim.code_list.to_dict()
+            if dim.get_hierarchy():
+                cl = dim.get_hierarchy().to_dict()
             else:
                 cl = None
             dims[dim.code] = SDMXConcept("dimension", dim.code, dim.is_time, "", cl)
@@ -605,8 +620,8 @@ def get_statistical_dataset_structure(source, dset_name):
             lst_dim.append((dims[l].name, lst_dim_codes))
 
         if dims[l].code_list:
-            for c in dims[l].code_list:
-                lst_dim_codes.append((c, dims[l].code_list[c]))
+            for c, description in dims[l].code_list.items():
+                lst_dim_codes.append((c, description))
 
     if time_dim:
         lst_dim.append(("startPeriod", None))

@@ -1,17 +1,119 @@
 from typing import Union, List, Tuple, Optional
 
+import jsonpickle
+
 from backend import ureg
 from backend.command_generators import basic_elements_parser
 from backend.command_generators.basic_elements_parser import ast_to_string
-from backend.common.helper import PartialRetrievalDictionary, strcmp
+from backend.common.helper import PartialRetrievalDictionary, create_dictionary
 from backend.model_services import State, get_case_study_registry_objects
 from backend.models.musiasem_concepts import \
-    FlowFundRoegenType, FactorInProcessorType, RelationClassType, allowed_ff_types, \
+    FlowFundRoegenType, FactorInProcessorType, RelationClassType, \
     Processor, FactorType, Observer, Factor, \
     ProcessorsRelationPartOfObservation, ProcessorsRelationUndirectedFlowObservation, \
     ProcessorsRelationUpscaleObservation, \
     FactorsRelationDirectedFlowObservation, Hierarchy, Taxon, QualifiedQuantityExpression, \
-    FactorQuantitativeObservation
+    FactorQuantitativeObservation, HierarchyLevel
+from backend.models.statistical_datasets import CodeList, CodeListLevel, Code
+
+
+def serialize_hierarchy(h: Hierarchy) -> str:
+    return jsonpickle.encode(h)
+
+
+def deserialize_hierarchy(s: str) -> Hierarchy:
+    return jsonpickle.decode(s)
+
+
+def convert_code_list_to_hierarchy(cl: CodeList) -> Hierarchy:
+    """
+    It receives a CodeList and elaborates an equivalent Hierarchy, returning it
+
+    :param cl: The input CodeList
+    :return: The equivalent Hierarchy
+    """
+    h = Hierarchy(name=cl.code)
+    h._description = cl.description
+    # CodeList is organized in levels. Create all Levels and all Nodes (do not interlink Nodes)
+    levels_dict = create_dictionary()
+    code_node_dict = {}  # Maps a Code to the corresponding HierarchyNode
+    for cll in cl.levels:
+        hl = HierarchyLevel(cll.code, h)
+        h.level_names.append(cll.code)
+        h.levels.append(hl)
+        levels_dict[cll.code] = hl
+        for ct in cll.codes:
+            hn = Taxon(ct.code, hierarchy=h, label=ct.description, description=ct.description)
+            h.codes.add(hn)
+            code_node_dict[ct] = hn
+            hn.level = levels_dict.get(ct.level.code, None)  # Point to the containing HierarchyLevel
+            if hn.level:
+                hn.level.codes.add(hn)
+
+    # Set children & parents
+    for ct in code_node_dict:
+        for ch in ct.children:
+            ct._children.add(ch)
+            ch._parents.append(ct)
+            ch._parents_weights.append(1.0)
+
+    # Finally, set "roots" to HierarchyNodes without "parents"
+    tmp = []
+    for c in h.codes:
+        if len(c._parents) == 0:
+            tmp.append(c)
+    h.roots_append(tmp)
+
+    return h
+
+
+def convert_hierarchy_to_code_list(h: Hierarchy) -> CodeList:
+    """
+    It receives a Hierarchy and elaborates an equivalent CodeList, returning it
+
+    NOTE: It does not support references to other Codes. Which means Codes member of multiple hierarchies.
+          It does not support Codes with multiple parents and different weights.
+          It does not support code lists with no levels. At least a level "" has to be defined (but this means it is a pure CodeList)
+
+    :param h: The input Hierarchy
+    :return: The equivalent CodeList
+    """
+    cl = CodeList()
+    cl.code = h.name
+    cl.description = h._description
+    levels_map = {}
+    # Levels
+    for hl in h.levels:
+        cll = CodeListLevel()
+        cll.code_list = cl
+        cll.code = hl.name
+        levels_map[hl] = cll
+
+    dummy_level = None
+
+    # Codes
+    codes_map = {}
+    for hn in h.codes:
+        c = Code()
+        c.code = hn.name
+        c.description = hn.description
+        if hn.level:
+            c.level = levels_map[hn.level]
+        else:  # No level defined, assign a "dummy_level"
+            if not dummy_level:
+                dummy_level = CodeListLevel()
+                dummy_level.code_list = cl
+                dummy_level.code = ""
+            c.level = dummy_level
+        codes_map[hn] = c
+
+    # Links between nodes
+    for hn in h._codes:
+        for ch in hn._children:
+            codes_map[hn].children.append(codes_map[ch])
+            codes_map[ch].parents.append(hn)
+
+    return cl
 
 
 def hierarchical_name_variants(h_name: str):

@@ -2559,12 +2559,11 @@ def data_source_database_dataset_detail(source_id, database_id, dataset_id):
     dims = []
     for d in ds.dimensions:
         cl = []
-        if d.code_list:
+        if d.get_hierarchy():
             # CodeList has one or more levels ".levels" property
             # CodeListLevel has zero or more Codes ".codes" property
-            for level in d.code_list.levels:
-                for code in level.codes:
-                    cl.append(dict(code=code.code, description=code.description, level=level.code))
+            for code in d.get_hierarchy().codes:
+                cl.append(dict(code=code.name, description=code.description, level=code.level.name if code.level else None))
 
         dims.append(dict(code=d.code, description=d.description, is_time=d.is_time, is_measure=d.is_measure, attributes=d.attributes, code_list=cl))
 
