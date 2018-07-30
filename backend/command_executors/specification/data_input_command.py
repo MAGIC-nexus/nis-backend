@@ -237,11 +237,10 @@ class DataInputCommand(IExecutableCommand):
                         else:
                             fixed_dict[k] = r[k]  # Special
                 # Check that the # names are in the Dataset
-
                 diff = set([v.lower() for v in list(var_dict.values())+list(var_taxa_dict.values())]).difference(set(ds.data.columns))
                 if diff:
                     # There are request fields in var_dict NOT in the input dataset "ds.data"
-                    issues.append((3, "'"+', '.join(diff)+"' are not present in the requested dataset '"+r["_referenced_dataset"]+"'. Row " + str(i+1)))
+                    issues.append((3, "'"+', '.join(diff)+"' are not present in the requested dataset '"+r["_referenced_dataset"]+"'. Columns are: "+', '.join(ds.data.columns)+". Row " + str(i+1)))
                 else:
                     # Iterate the dataset (a pd.DataFrame), row by row
                     for r_num, r2 in ds.data.iterrows():
