@@ -80,9 +80,9 @@ Comando
     # Version 2 commands
 
     re_reused_elements = re.compile(r"ReusedElements" + optional_alphanumeric, flags=flags)
-    re_hierarchies = re.compile(r"Hierarchies" + optional_alphanumeric, flags=flags)  # Hierarchies for categories (formerly "Taxonomy_C")
+    re_hierarchies = re.compile(r"CatHierarchies" + optional_alphanumeric, flags=flags)  # Hierarchies for categories (formerly "Taxonomy_C")
     re_attributes = re.compile(r"Attributes" + optional_alphanumeric, flags=flags)  # Declaration of attributes used in different elements
-    re_hierarchies_mapping = re.compile(r"HierarchiesMapping" + optional_alphanumeric, flags=flags)
+    re_hierarchies_mapping = re.compile(r"CatHierarchiesMapping" + optional_alphanumeric, flags=flags)
     re_hierarchies_mapping_detail = re.compile(r"HierarchiesMappingDetail" + optional_alphanumeric, flags=flags)
     re_datasetqry = re.compile(r"DatasetQry" + optional_alphanumeric, flags=flags)
     re_refsource = re.compile(r"RefSource" + optional_alphanumeric, flags=flags)

@@ -1,6 +1,6 @@
 import pint
-
 from collections import namedtuple
+from attr import attrs, attrib
 
 # GLOBAL VARIABLES
 
@@ -63,4 +63,28 @@ metadata_fields = [("Case study name", "title", False, False, "case_study_name")
                    ("Restriction level", None, True, True, "restriction_level"),
                    ("Version", None, True, False, "version")
                    ]
+
+# ##################################
+# Commands
+
+
+@attrs
+class CommandField:
+    # Allowed names for the column
+    allowed_names = attrib()  # type: list[str]
+    # Internal name used during the parsing
+    name = attrib()  # type: str
+    # Flag indicating if the column is mandatory or optional
+    mandatory = attrib()  # type: bool
+    # Parser for the column
+    parser = attrib()
+    # Some columns have a predefined set of allowed strings
+    allowed_values = attrib(default=None)  # type: list[str]
+    # Many values or just one
+    many_values = attrib(default=True)
+    # Many appearances (the field can appear multiple times). A convenience to define a list
+    many_appearances = attrib(default=False)
+    # Compiled regex
+    regex_allowed_names = attrib(default=None)
+
 

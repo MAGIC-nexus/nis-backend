@@ -38,6 +38,8 @@ real = (Combine(Word(nums) + Optional("." + Word(nums))
         ).setParseAction(lambda _s, l, t:
                          {'type': 'float', 'value': float(t[0])}
                          )
+unquoted_string = Word(srange("."))
+alphanums_string = Word(alphanums)
 string = quotedString.setParseAction(lambda t: {'type': 'str', 'value': t[0]})
 
 # RULES: reference, namespace, parameter list, function call, dataset variable, hierarchical var name
@@ -48,8 +50,13 @@ reference = (lbracket + simple_ident.setResultsName("ident") + rbracket
                               )
 namespace = simple_ident + Literal("::").suppress()
 expression = Forward()
-expression_with_parameters = Forward()
+expression_with_parameters = Forward()  # TODO Parameter value definition. An expression potentially referring to other parameters. Boolean operators. Simulation of IF ELIF ELSE or SWITCH
 hierarchy_expression = Forward()
+hierarchy_expression_v2 = Forward()
+key_value = Forward()  # TODO key "=" value. Key is a simple_ident; "Value" can be an expression referring to parameters
+key_value_list = Forward()  # TODO
+parameter_domain = Forward()  # TODO Parameter Domain. Either a Category Hierarchy name or a numeric interval (with open closed)
+parameter_value = Forward()  # TODO Parameter Value. Could be "expression_with_parameters"
 indicator_expression = Forward()
 named_parameter = Group(simple_ident + equals.suppress() + expression).setParseAction(lambda t: {'type': 'named_parameter', 'param': t[0][0], 'value': t[0][1]})
 named_parameters_list = delimitedList(named_parameter, ",")
@@ -155,6 +162,15 @@ relation_expression = (Optional(expression_with_parameters).setResultsName("weig
                                                           'weight': t.weight
                                                           }
                                         )
+
+# RULES: Expression type 5. For hierarchies (version 2). Can mention quoted strings (for codes), parameters and numbers
+hierarchy_expression_v2 << operatorPrecedence(Or([real, integer, quotedString, named_parameter]),  # Operand types
+                                           [(signop, 1, opAssoc.RIGHT, lambda _s, l, t: {'type': 'u'+t.asList()[0][0], 'terms': [0, t.asList()[0][1]], 'ops': ['u'+t.asList()[0][0]]}),
+                                            (multop, 2, opAssoc.LEFT, lambda _s, l, t: {'type': 'multipliers', 'terms': t.asList()[0][0::2], 'ops': t.asList()[0][1::2]}),
+                                            (plusop, 2, opAssoc.LEFT, lambda _s, l, t: {'type': 'adders', 'terms': t.asList()[0][0::2], 'ops': t.asList()[0][1::2]}),
+                                            ],
+                                           lpar=lparen.suppress(),
+                                           rpar=rparen.suppress())
 
 # RULES: Level name
 level_name = (simple_ident + Optional(plusop+integer)
