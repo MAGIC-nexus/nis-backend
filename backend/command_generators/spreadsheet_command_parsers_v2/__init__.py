@@ -1,7 +1,7 @@
 from attr import attrs, attrib
 from typing import List, Tuple
 from backend import CommandField
-from backend.command_definitions import commands
+from backend.command_field_definitions import commands
 from backend.command_generators import Issue, basic_elements_parser
 
 

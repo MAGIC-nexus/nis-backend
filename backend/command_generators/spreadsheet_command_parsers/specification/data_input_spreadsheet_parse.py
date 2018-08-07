@@ -37,7 +37,7 @@ OUTPUT COMMANDS
 """
 
 
-def parse_data_input_command(sh, area, processors_type, state):
+def parse_data_input_command(sh, area, processors_type, state=None):
     """
     Scans the "area" of input worksheet "sh" where it is assumed a "data input" command
     is present.

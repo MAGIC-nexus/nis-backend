@@ -308,6 +308,35 @@ def get_case_study_registry_objects(state, namespace=None):
     return glb_idx, p_sets, hh, datasets, mappings
 
 
+class LocallyUniqueIDManager:
+    """
+    Obtains UUID but encoded in base85, which still is ASCII, but is more compact than the UUID standard hexadecimal
+    representation
+    """
+    class __LocallyUniqueIDManager:
+        def __init__(self, c: int = 0):
+            self.val = c
+
+        def get_new_id(self, inc):
+            return base64.a85encode(uuid.uuid1().bytes).decode("ascii")
+
+        def __str__(self):
+            return repr(self) + self.val
+    instance = None
+
+    def __init__(self, arg=0):
+        if not LocallyUniqueIDManager.instance:
+            LocallyUniqueIDManager.instance = LocallyUniqueIDManager.__LocallyUniqueIDManager(arg)
+        else:
+            LocallyUniqueIDManager.instance.val = arg
+
+    def get_new_id(self, inc: int = 1):
+        return self.instance.get_new_id(inc)
+
+    def __getattr__(self, name):
+        return getattr(self.instance, name)
+
+
 """
 
 API
@@ -374,9 +403,9 @@ USE CASES
 
 """
 Module containing high level function calls, controlling the different use cases
-These function are called by the RESTful interface, which is the gate for the different other clients: R client, Web,...
+These functions are called by the RESTful interface, which is the gate for the different other clients: R client, Web,...
 
-The function allow a user to start a Work Session on a Case Study. All work is in memory. Specific functions allow
+The functions allow a user to start a Work Session on a Case Study. All work is in memory. Specific functions allow
 storing in database or in file.
 
 A Work Session has a memory state related to one or more case studies, and a user. To shorten command_executors, there will be a
@@ -472,7 +501,6 @@ Modes of work
 * exploratory elaboration of a version of a case study
 * review of a version. READ ONLY command_executors, not added to the case study itself
 * continue elaborating version of a case study (is a new version?)
-* 
 
 Commands. A case study is evolved through command_executors which produce MuSIASEM primitives and provoke moving them, by ETL, by solving, output, etc.
 Commands need to be adapted to the different interfaces, like Spreadsheet file or R scripts
@@ -489,7 +517,6 @@ Pre-steps (in no particular order)
 * Categories, taxonomies
 * Mappings
 * Dataset
-*
 
 Steps
 * Identify compartments
@@ -566,23 +593,3 @@ swagger r
 list command_executors, find an Excel expression
 
 """
-
-
-class LocallyUniqueIDManager:
-    class __LocallyUniqueIDManager:
-        def __init__(self, c: int = 0):
-            self.val = c
-        def get_new_id(self, inc):
-            return base64.a85encode(uuid.uuid1().bytes).decode("ascii")
-        def __str__(self):
-            return repr(self) + self.val
-    instance = None
-    def __init__(self, arg=0):
-        if not LocallyUniqueIDManager.instance:
-            LocallyUniqueIDManager.instance = LocallyUniqueIDManager.__LocallyUniqueIDManager(arg)
-        else:
-            LocallyUniqueIDManager.instance.val = arg
-    def get_new_id(self, inc: int = 1):
-        return self.instance.get_new_id(inc)
-    def __getattr__(self, name):
-        return getattr(self.instance, name)

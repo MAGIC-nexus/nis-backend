@@ -50,19 +50,20 @@ An interesting paper: "A survey of RDB to RDF translation approaches and tools"
 """
 
 import collections
-
 import json
+import urllib
 from collections import OrderedDict
 from enum import Enum
 from typing import *  # Type hints
+from uuid import UUID
 import pint  # Physical Units management
 import pandas as pd
 import logging
-
 from attr import attrs, attrib
 
 from backend.common.helper import create_dictionary, strcmp, PartialRetrievalDictionary, \
-    case_sensitive
+    case_sensitive, is_boolean, is_integer, is_float, is_datetime, is_url, is_uuid, to_datetime, to_integer, to_float, \
+    to_url, to_uuid, to_boolean, to_category, to_str, is_category, is_str, is_geo, to_geo
 from backend.models import ureg
 from backend.model_services import State, get_case_study_registry_objects, LocallyUniqueIDManager
 from backend.models import CodeImmutable
@@ -94,7 +95,8 @@ allowed_ff_types = ["int_in_flow",  "int_in_fund",  "ext_in_fund", "int_out_flow
 
 class Identifiable:
     """
-    A concept with a unique ID. Which makes it an unambiguously addressed Entity
+    A concept with a unique ID (UUID). Which makes it an unambiguously addressed Entity
+    The UUID is obtained in base 85 (a more compact ASCII representation)
     """
     def __init__(self):
         self._id = LocallyUniqueIDManager().get_new_id()
@@ -145,7 +147,7 @@ class Automatable:
     def __init__(self):
         self._automatically_generated = False
         self._producer = None  # Object (instance) responsible of the production
-        self._generation_reason = None  # Clone, automatic reasoning, solving
+        self._generation_reason = None  # Clone, automatic reasoning, solving, ...
 
     @property
     def automatically_generated(self):
@@ -172,31 +174,77 @@ class Automatable:
         self._generation_reason = reason
 
 
-@attrs
-class EntityAttributeType:  # Defines an attribute type, which may be used in different entity types and instances of these types
-    name = attrib()
-    atype = attrib()  # One of: Number, Boolean, URL, UUID, Date, String, Category
-    element_types = attrib()  # A list of elements to which it can be applied: Parameter, Processor, InterfaceType, Interface, ... If empty, can be applied to any type
-    domain = attrib()  # Possible values for the attribute
-    description = attrib(default=None)
+attribute_types = [("Boolean", is_boolean, to_boolean),
+                   ("Integer", is_integer, to_integer),
+                   ("Float", is_float, to_float),
+                   ("Datetime", is_datetime, to_datetime),
+                   ("URL", is_url, to_url),
+                   ("Geo", is_geo, to_geo),
+                   ("UUID", is_uuid, to_uuid),
+                   ("Category", is_category, to_category),
+                   ("String", is_str, to_str)
+                   ]
+
+
+class AttributeType(Nameable, Identifiable):
+    """
+    Defines an attribute type, which may be used in different entity types and instances of these types
+    """
+    def __init(self, name, atype: str, description: str=None, domain: str=None, element_types: List[str]=None):
+        Identifiable.__init__(self)
+        Nameable.__init__(self, name)
+        self._atype = atype  # One of "attribute_types": Number, Boolean, URL, UUID, Datetime, String, Category
+        self._element_types = element_types  # A list of elements to which it can be applied: Parameter, Processor, InterfaceType, Interface, ... If empty, can be applied to any type
+        self._domain = domain  # Formal definition of possible values for the attribute
+        self._description = description
+
+    @staticmethod
+    def partial_key(name: str=None, ident: str=None):
+        d = dict(_t="at")
+        if name:
+            d["_n"] = name
+        if ident:
+            d["__id"] = ident
+        return d
+
+    def key(self):
+        return {"_t": "at", "_n": self.name, "__id": self.ident}
+
+
+def convert_and_infer_attribute_type(v: str):
+    """
+    Given a string obtain the type and the value in that type
+
+    :param v:
+    :return: tuple composed by the value and the value type
+    """
+    v = v.strip()
+    for t in attribute_types:
+        if t[1](v):
+            return t[2](v), t[0]
 
 
 class Qualifiable:
-    """ A concept with a dictionary of Attributes """
+    """ An entity with a dictionary of Attributes """
     def __init__(self, attributes=None):
-        self._attributes = create_dictionary()  # name property of EntitytAttributeType to Value
-        self._name_to_attribute_type = create_dictionary()  # name property of EntityAttributeType to EntityAttributeType
+        # "name" property of AttributeType -> to Value
+        self._attributes = create_dictionary()  # type: Dict[str, object]
+        # "name" property of AttributeType -> to AttributeType
+        self._name_to_attribute_type = create_dictionary()  # type: Dict[str, AttributeType]
         if attributes:
             for k in attributes:
                 self.attributes_append(k, attributes[k])
-                # TODO From the attribute name obtain the EntityAttributeType (in the global registry)
+                # TODO From the attribute name obtain the AttributeType (in the global registry)
 
     @property
     def attributes(self):
         return self._attributes
 
-    def attributes_append(self, name, value):
-        self._attributes[name] = value
+    def attributes_append(self, name, value, attribute_type=None):
+        if value:
+            self._attributes[name] = value
+        if attribute_type:
+            self._name_to_attribute_type[name] = attribute_type
 
 
 class Observable:
@@ -699,6 +747,70 @@ class Taxon(Identifiable, HierarchyNode, HierarchyExpression, Qualifiable):
 
     def key(self):
         return {"_t": "t", "_n": self.name, "__id": self.ident}
+
+
+# #################################################################################################################### #
+# CONTEXTS and REFERENCES. Both are to contain dictionaries of Attributes.
+
+# References restrict possible attributes depending on the profile: bibliography, geography
+# #################################################################################################################### #
+
+class Context(Identifiable, Nameable, Qualifiable):
+    """
+    A context is just a named container for attribute sets (Qualifiable)
+
+    Parameters, ScaleChangers, Instantiators -and other possible adaptive MuSIASEM elements-, can take into account how
+    the attributes of base MuSIASEM elements: Processors, Interfaces, Hierarchies of Categories, InterfaceTypes, MATCH
+    before applying specific coefficients.
+    """
+    def __init__(self, name, attributes):
+        Identifiable.__init__(self)
+        Nameable.__init__(self, name)
+        Qualifiable.__init__(self, attributes)
+
+    @staticmethod
+    def partial_key(name: str=None, ident: str=None):
+        d = dict(_t="ctx")
+        if name:
+            d["_n"] = name
+        if ident:
+            d["__id"] = ident
+        return d
+
+    def key(self):
+        return {"_t": "ctx", "_n": self.name, "__id": self.ident}
+
+
+class Reference(Nameable, Identifiable, Qualifiable):
+    """ A dictionary containing a set of key-value pairs
+        with some validation schema (search code for "ref_prof" global variable)
+    """
+    def __init__(self, name, ref_type, content):
+        """
+
+        :param name:
+        :param ref_type: One of the elements declared in "ref_prof"
+        :param content:
+        """
+        Identifiable.__init__(self)
+        Nameable.__init__(self, name)
+        Qualifiable.__init__(self, content)
+        self._ref_type = ref_type
+
+    # TODO A method to validate that attributes
+
+    @staticmethod
+    def partial_key(name: str=None, ref_type: str=None):
+        d = dict(_t="r")
+        if name:
+            d["_n"] = name
+        if ref_type:
+            d["_rt"] = ref_type
+        return d
+
+    def key(self):
+        return {"_t": "r", "_n": self.name, "_rt": self._ref_type, "__o": self.ident}
+
 
 # #################################################################################################################### #
 # Entities
@@ -1435,12 +1547,35 @@ class ProcessorsRelationObservation(RelationObservation):  # Just base of Proces
     pass
 
 
-class FactorTypesRelationObservation(RelationObservation):  # Just base of ProcessorRelations
+class FactorTypesRelationObservation(RelationObservation):  # Just base of FactorTypesRelations
     pass
 
 
 class FactorsRelationObservation(RelationObservation):  # Just base of FactorRelations
     pass
+
+
+class FactorTypesLT_Specific:
+    def __init__(self, alpha: Union[float, str], origin_unit: str=None, dest_unit: str=None,
+                 src_proc_context_qry: str=None, dst_proc_context_qry: str=None,
+                 observer: Observer=None):
+        """
+        A specific "alpha" to perform a linear change of scale between an origin FactorType and a destination FactorType
+        It can contain the context where this "alpha" can be applied. The context -for now- is relative to the known FactorType:
+        *
+        :param alpha:
+        :param origin_unit:
+        :param dest_unit:
+        :param src_proc_context_qry:
+        :param dst_proc_context_qry:
+        :param observer:
+        """
+        self.alpha = alpha
+        self.origin_unit = origin_unit
+        self.dest_unit = dest_unit
+        self.src_proc_context_qry = src_proc_context_qry
+        self.dst_proc_context_qry = dst_proc_context_qry
+        self.observer = observer
 
 
 class FactorTypesRelationUnidirectionalLinearTransformObservation(FactorTypesRelationObservation):
@@ -1450,10 +1585,15 @@ class FactorTypesRelationUnidirectionalLinearTransformObservation(FactorTypesRel
     This relation will be applied to Factors which are instances of the origin FactorTypes, to obtain destination
     FactorTypes
     """
-    def __init__(self, origin: FactorType, destination: FactorType, weight: Union[float, str], observer: Observer=None, tags=None, attributes=None):
+    def __init__(self, origin: FactorType, destination: FactorType, generate_back_flow: bool=False, weight: Union[float, str]=None, observer: Observer=None, tags=None, attributes=None):
         Taggable.__init__(self, tags)
         Qualifiable.__init__(self, attributes)
         Automatable.__init__(self)
+        # TODO Back flow with proportional weight?? or weight "1.0"?
+        self._generate_back_flow = generate_back_flow  # True: generate a FactorsRelationDirectedFlowObservation in the opposite direction, if not already existent
+        self._scales = []  # type: List[FactorTypesLT_Specific]
+        if weight:
+            tmp = FactorTypesLT_Specific(weight, origin_unit=None, dest_unit=None, )
         self._origin = origin
         self._destination = destination
         self._weight = weight
@@ -1877,31 +2017,6 @@ class PedigreeMatrix(Nameable, Identifiable):
 
 
 # #################################################################################################################### #
-# REFERENCES (containers of key-value pairs with some validation schema (search code for "ref_prof" global variable)
-# #################################################################################################################### #
-
-class Reference(Nameable, Identifiable):
-    """ A dictionary containing a set of key-value pairs """
-    def __init__(self, name, ref_type, content):
-        Identifiable.__init__(self)
-        Nameable.__init__(self, name)
-        self._ref_type = ref_type
-        self._content = content
-
-    @staticmethod
-    def partial_key(name: str=None, ref_type: str=None):
-        d = dict(_t="r")
-        if name:
-            d["_n"] = name
-        if ref_type:
-            d["_rt"] = ref_type
-        return d
-
-    def key(self):
-        return {"_t": "r", "_n": self.name, "_rt": self._ref_type, "__o": self.ident}
-
-
-# #################################################################################################################### #
 # PARAMETERS, BENCHMARKS, INDICATORS
 # #################################################################################################################### #
 
@@ -1993,13 +2108,15 @@ class Mapping:
     Transcription of information specified by a mapping command
     """
     def __init__(self, name, source, dataset, origin, destination, the_map: List[Tuple]):
+        self.name = origin + " -> " + destination
+        Weight
         self.name = name
         self.source = source
         self.dataset = dataset
         self.origin = origin  # Dimension
         self.destination = destination # Destination Dimension
         # the_map is of the form:
-        # [{"o": "", "to": [{"d": "", "w": ""}]}]
+        # [{"o": "", "to": [{"d": "", "w": "", "ctx": <id>}]}]
         # [ {o: origin category, to: [{d: destination category, w: weight assigned to destination category}] } ]
         # It is used by the ETL load dataset command
         self.map = the_map  # List of tuples (pairs) source code, destination code[, expression]

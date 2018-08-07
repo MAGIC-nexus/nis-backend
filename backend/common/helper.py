@@ -7,7 +7,9 @@ import itertools
 # from numba import jit
 import ast
 import json
+import urllib
 from typing import IO
+from uuid import UUID
 
 import pandas as pd
 import numpy as np
@@ -23,6 +25,7 @@ from backend import case_sensitive, \
 # #####################################################################################################################
 # >>>> CASE SeNsItIvE or INSENSITIVE names (flows, funds, processors, ...) <<<<
 # #####################################################################################################################
+from backend.models.musiasem_concepts import Taxon
 
 
 class CaseInsensitiveDict(collections.MutableMapping):
@@ -875,6 +878,105 @@ def augment_dataframe_with_mapped_columns(df, maps, measure_columns):
     return tmp
 
 
+def is_boolean(v):
+    return v.lower() in ["true", "false"]
+
+
+def to_boolean(v):
+    return v.lower() == "true"
+
+
+def is_integer(v):
+    try:
+        int(v)
+        return True
+    except ValueError:
+        return False
+
+
+def to_integer(v):
+    return int(v)
+
+
+def is_float(v):
+    try:
+        float(v)
+        return True
+    except ValueError:
+        return False
+
+
+def to_float(v):
+    return float(v)
+
+
+def is_datetime(v):
+    try:
+        from dateutil.parser import parse
+        parse(v)
+        return True
+    except ValueError:
+        return False
+
+
+def to_datetime(v):
+    from dateutil.parser import parse
+    return parse(v)
+
+
+def is_url(v):
+    """
+    From https://stackoverflow.com/a/36283503
+    """
+    min_attributes = ('scheme', 'netloc')
+    qualifying = min_attributes
+    token = urllib.parse.urlparse(v)
+    return all([getattr(token, qualifying_attr) for qualifying_attr in qualifying])
+
+
+def to_url(v):
+    return urllib.parse.urlparse(v)
+
+
+def is_uuid(v):
+    try:
+        UUID(v, version=4)
+        return True
+    except ValueError:
+        return False
+
+
+def to_uuid(v):
+    return UUID(v, version=4)
+
+
+def is_category(v):
+    # TODO Get all hierarchies, get all categories from all hierarchies, find if "v" is one of them
+    return False
+
+
+def to_category(v):
+    # TODO
+    return Taxon  # Return some Taxon
+
+
+def is_geo(v):
+    # TODO Check if "v" is a GeoJSON, or a reference to a GeoJSON
+    return None
+
+
+def to_geo(v):
+    return None
+
+
+def is_str(v):
+    return True
+
+
+def to_str(v):
+    return str(v)
+
+
 if __name__ == '__main__':
     import random
     import string
@@ -936,3 +1038,4 @@ if __name__ == '__main__':
 
 def str2bool(v: str):
     return str(v).lower() in ("yes", "true", "t", "1")
+

@@ -114,13 +114,15 @@ def persistable_to_executable_command(p_cmd: CommandsContainer, limit=1000):
     :param p_cmd:
     :return: A list of IExecutableCommand
     """
-    # Generator factory (from generator_type and file_type)
-    # Generator has to call "yield" whenever an ICommand is generated
+    # Create commands generator from factory (from generator_type and file_type)
+    state = State()
+    commands_generator = commands_container_parser_factory(p_cmd.generator_type, p_cmd.file_type, p_cmd.file, state)
+
+    # Loop over the IExecutableCommand instances
     issues_aggreg = []
     outputs = []
-    state = State()
     count = 0
-    for cmd, issues in commands_container_parser_factory(p_cmd.generator_type, p_cmd.file_type, p_cmd.file, state):
+    for cmd, issues in commands_generator:
         # If there are syntax ERRORS, STOP!!!
         stop = False
         if issues and len(issues) > 0:
@@ -147,22 +149,27 @@ def execute_command_container(state, p_cmd: CommandsContainer):
 
 def execute_command_container_file(state, generator_type, file_type: str, file):
     """
-    Creates a generator parser, then it feeds the file type and the file
-    The generator parser has to parse the file and to generate command_executors as a Python generator
+    This could be considered the MAIN method of the processing.
+    1) Assuming an initial "state" (that can be clean or not),
+    2) loops over the commands represented in a "file" of some of the supported types (JSON, Spreadsheet)
+       2.1) Parses each command, returning an IExecutableCommand instance (containing the JSON definition inside)
+       2.2) Executes each command, if there are no error issues. Command execution can reads and modifies "state"
 
-    :param generator_type:
-    :param file_type:
-    :param file:
-    :return: Issues and outputs (still not defined) -TODO-
+    :param generator_type: Which commands generator (parser + constructor of IExecutableCommand instances) is used
+    :param file_type: The file format
+    :param file: The file contents
+    :return: Issues and outputs (no outputs still required, probably won't be needed)
     """
-    # Generator factory (from generator_type and file_type)
-    # Generator has to call "yield" whenever an ICommand is generated
+    # Create commands generator from factory (from generator_type and file_type)
+    commands_generator = commands_container_parser_factory(generator_type, file_type, file, state)
+
+    # Loop over the IExecutableCommand instances
     issues_aggreg = []
     outputs = []
     cont = 0
-    for cmd, issues in commands_container_parser_factory(generator_type, file_type, file, state):
+    for cmd, issues in commands_generator:
         cont += 1  # Command counter
-        # If there are syntax ERRORS, STOP!!!
+        # If there are ERRORS, STOP!!!
         stop = False
         if issues and len(issues) > 0:
             for t in issues:
@@ -179,13 +186,16 @@ def execute_command_container_file(state, generator_type, file_type: str, file):
         if stop:
             break
 
+        # ## COMMAND EXECUTION ## #
         issues, output = execute_command(state, cmd)
+
         if issues:
             stop = False
             # Process the new issues
             for i in issues:
                 if i[0] == 3:
                     stop = True
+                # TODO Issue fields for the location of issues should depend on the file format
                 issue = {"sheet_number": cont,
                          "sheet_name": cmd._source_block_name if hasattr(cmd, "_source_block_name") else "",
                          "c_type": cmd._serialization_type,
@@ -214,12 +224,14 @@ def convert_generator_to_native(generator_type, file_type: str, file):
     :param file:
     :return: Issues and output file
     """
-    # Generator factory (from generator_type and file_type)
-    # Generator has to call "yield" whenever an ICommand is generated
+
     output = []
     if generator_type.lower() not in ["json", "native", "primitive"]:
+        # Create commands generator from factory (from generator_type and file_type)
         state = State()
-        for cmd, issues in commands_container_parser_factory(generator_type, file_type, file, state):
+        commands_generator = commands_container_parser_factory(generator_type, file_type, file, state)
+        # Loop over the IExecutableCommand instances
+        for cmd, issues in commands_generator:
             # If there are syntax ERRORS, STOP!!!
             stop = False
             if issues and len(issues) > 0:

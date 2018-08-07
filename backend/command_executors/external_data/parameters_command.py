@@ -4,6 +4,7 @@ from backend.models.musiasem_concepts import Parameter
 from backend.model_services import IExecutableCommand, get_case_study_registry_objects
 
 
+# TODO Created for V1 commands, it passes directly to V2 because it has been sparsely used
 class ParametersCommand(IExecutableCommand):
     def __init__(self, name: str):
         self._name = name

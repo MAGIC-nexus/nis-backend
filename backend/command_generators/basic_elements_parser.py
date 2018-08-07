@@ -4,8 +4,8 @@ from pyparsing import (ParserElement,
                        oneOf, srange, operatorPrecedence, opAssoc,
                        Forward, Regex, Suppress, Literal, Word,
                        Optional, OneOrMore, ZeroOrMore, Or, alphanums, White,
-                       Combine, Group, delimitedList, nums, quotedString, NotAny
-                       )
+                       Combine, Group, delimitedList, nums, quotedString, NotAny,
+                       Keyword)
 
 from backend.models.musiasem_concepts import ExternalDataset
 
@@ -20,6 +20,8 @@ quote = oneOf('" ''')
 signop = oneOf('+ -')
 multop = oneOf('* / // %')
 plusop = oneOf('+ -')
+true = Keyword("True")
+false = Keyword("False")
 processor_factor_separator = Literal(":")
 simple_ident = Word(srange("[a-zA-Z]"), srange("[a-zA-Z0-9_]"))  # Start in letter, then "_" + letters + numbers
 # Relation types
@@ -41,6 +43,10 @@ real = (Combine(Word(nums) + Optional("." + Word(nums))
 unquoted_string = Word(srange("."))
 alphanums_string = Word(alphanums)
 string = quotedString.setParseAction(lambda t: {'type': 'str', 'value': t[0]})
+boolean = Or([true, false])
+
+# TODO For arithmetic AND boolean expressions:
+# TODO https://gist.github.com/cynici/5865326
 
 # RULES: reference, namespace, parameter list, function call, dataset variable, hierarchical var name
 reference = (lbracket + simple_ident.setResultsName("ident") + rbracket

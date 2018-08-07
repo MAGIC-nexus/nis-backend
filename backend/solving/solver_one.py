@@ -3,6 +3,7 @@ import networkx as nx
 # ######################################################################################################################
 # GRAPH PARTITIONING - SCENARIO (PARAMETERS), SINGLE SCENARIO PARTITION CATEGORIES, IN-SCENARIO OBSERVATIONS VARIATION
 # ######################################################################################################################
+from backend.model_services import get_case_study_registry_objects
 
 
 def get_parameters(objects):
@@ -227,46 +228,51 @@ def solve(g):
     :return:
     """
     #
-    # Elaborate a square
+    # Elaborate square matrix?
 
 
-def solver_one(parse_execution_results):
+def solver_one(state):
     """
     Solves a MuSIASEM case study AND computes/collects indicators
 
     Receives as input a registry of parsed/elaborated MuSIASEM objects
 
-    :param parse_execution_results:
-    :return: An indicators structure with all the results
+    STORES in "state" an indicators structure (a Dataset?) with all the results
+
+    :param state:
+    :return: A list of issues
     """
 
+    # Obtain the different state elements
+    glb_idx, p_sets, hh, datasets, mappings = get_case_study_registry_objects(state)
+
     # Obtain parameters and their variation ranges (initially decoupled)
-    params_list = get_parameters(parse_execution_results)
+    params_list = get_parameters(state)
 
     # Map params to the objects where they appear
-    map_parameters(params_list, parse_execution_results)  # Modifies "params_list"
+    map_parameters(params_list, state)  # Modifies "params_list"
 
     # Obtain "partition" categories
     # Partition categories are categories provoking totally decoupled systems. The most important one is GEO
-    partition_categories = get_graph_partitioning_categories(parse_execution_results)
+    partition_categories = get_graph_partitioning_categories(state)
 
     # Obtain "observation variation" categories
     # Observation variation categories are those which for a given scenario and partition (i.e., fixed subsystem)
     # produce variation in quantitative observations, not in the system structure. The most important are TIME and OBSERVER
-    obs_variation_categories = get_observation_variation_categories(parse_execution_results)
+    obs_variation_categories = get_observation_variation_categories(state)
 
     # Empty indicators collector
     indicators = get_empty_indicators_collector()
 
-    for scenario in get_scenario_generator(params_list, parse_execution_results):
+    for scenario in get_scenario_generator(params_list, state):
         # "scenario" contains a list of parameters and their values
-        for partition in get_partition_generator(scenario, partition_categories, parse_execution_results):
+        for partition in get_partition_generator(scenario, partition_categories, state):
             # "partition" contains a list of categories and their specific values
             # Build MSM for the partition categories
-            msm = build_msm_from_parsed(scenario, partition, parse_execution_results)
+            msm = build_msm_from_parsed(scenario, partition, state)
             # TODO Remove processors not in the calculations (unit processors)
             cleanup_unused_processors(msm)  # Modify "msm"
-            for obs_variation in get_obs_variation_generator(obs_variation_categories, parse_execution_results):
+            for obs_variation in get_obs_variation_generator(obs_variation_categories, state):
                 # TODO "obs_variation" contains a list of categories and their specific values
                 # TODO Build flow graph with observations filtered according to "obs_variation".
                 # Nodes keep link to interface AND a value if there is one.

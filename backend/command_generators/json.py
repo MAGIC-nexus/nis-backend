@@ -13,6 +13,8 @@ from backend.command_executors.specification.references_command import Reference
 from backend.command_executors.specification.scale_conversion_command import ScaleConversionCommand
 from backend.command_executors.specification.structure_command import StructureCommand
 from backend.command_executors.specification.upscale_command import UpscaleCommand
+from backend.command_executors.version2.hierarchy_categories_command import HierarchyCategoriesCommand
+from backend.command_executors.version2.hierarchy_mapping_command import HierarchyMappingCommand
 
 
 def create_command(cmd_type, name, json_input, source_block=None):
@@ -27,19 +29,41 @@ def create_command(cmd_type, name, json_input, source_block=None):
     :return: The instance of the command and the issues creating it
     :raise
     """
-    cmds = {"dummy":            DummyCommand,  # Simple assignation of a string to a variable. Useful to test things
-            "metadata":         MetadataCommand,
-            "mapping":          MappingCommand,
-            "data_input":       DataInputCommand,
-            "structure":        StructureCommand,
-            "upscale":          UpscaleCommand,
-            "hierarchy":        HierarchyCommand,
-            "etl_dataset":      ETLExternalDatasetCommand,
-            "parameters":       ParametersCommand,
-            "indicators":       IndicatorsCommand,
-            "references":       ReferencesCommand,
-            "pedigree_matrix":  PedigreeMatrixCommand,
-            "scale_conversion": ScaleConversionCommand,
+    cmds = {"dummy":                 DummyCommand,  # Simple assignation of a string to a variable. Useful to test things
+            "metadata":              MetadataCommand,
+            "mapping":               MappingCommand,
+            "data_input":            DataInputCommand,
+            "structure":             StructureCommand,
+            "upscale":               UpscaleCommand,
+            "hierarchy":             HierarchyCommand,
+            "etl_dataset":           ETLExternalDatasetCommand,
+            "references":            ReferencesCommand,
+            "pedigree_matrix":       PedigreeMatrixCommand,
+            "scale_conversion":      ScaleConversionCommand,
+            # V2 commands
+            "cat_hierarchies":       HierarchyCategoriesCommand,
+            "cat_hier_mapping":      HierarchyMappingCommand,
+            "attribute_types":       AttributeTypesCommand,
+            "datasetdef":            DatasetDefCommand,
+            "datasetdata":           DatasetDataCommand,
+            "attribute_sets":        AttributeSetsCommand,
+            "parameters":            ParametersCommand,
+            "datasetqry":            DatasetQryCommand,
+            "interface_types":       InterfaceTypesCommand,
+            "processors":            ProcessorsCommand,
+            "interfaces_and_qq":     InterfacesAndQualifiedQuantitiesCommand,
+            "relationships":         RelationshipsCommand,
+            "instantiations":        InstantiationsCommand,
+            "scale_conversion_v2":   ScaleConversionV2Command,
+            "shared_elements":       ExportableElementsCommand,
+            "reused_elements":       ImportElementsCommand,
+            "ref_pedigree_matrices": PedigreeMatricesReferencesCommand,
+            # "ref_bibliographic":     BibliographicReferencesCommand,
+            # "ref_source":            SourceReferencesCommand,
+            # "ref_geographical":      GeographicalReferencesCommand,
+            # "ref_provenance":        ProvenanceReferencesCommand,
+            "indicators":            IndicatorsCommand,
+            "problem_statement":     ProblemSolvingCommand
             }
     if cmd_type in cmds:
         tmp = cmds[cmd_type](name)  # Reflective CALL to construct the empty command instance

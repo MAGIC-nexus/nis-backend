@@ -1,13 +1,17 @@
+from backend.common.helper import create_dictionary
 from backend.ie_imports.data_source_manager import IDataSourceManager
 from backend.models.statistical_datasets import Dataset
 
 
-class AdHocDataset(IDataSourceManager):
+class AdHocDatasets(IDataSourceManager):
     """
-    A dataset in a file (external, or the file currently being analyzed)
+    Datasets in a file (external, or the file currently being analyzed) with format defined by Magic project
     """
-    def __init__(self, location):
-        self._location = location
+    def __init__(self):
+        self._registry = create_dictionary()
+
+    def register_dataset(self, name, location):
+        self._registry[name] = location
 
     def get_name(self) -> str:
         """ Source name """
@@ -21,7 +25,7 @@ class AdHocDataset(IDataSourceManager):
         """ List of datasets in a database, or in all the datasource (if database==None)
             Return a list of tuples (database, dataset)
         """
-        return []
+        return [k for k in self._registry]
 
     def get_dataset_structure(self, dataset) -> Dataset:
         """ Obtain the structure of a dataset: concepts, dimensions, attributes and measures """
