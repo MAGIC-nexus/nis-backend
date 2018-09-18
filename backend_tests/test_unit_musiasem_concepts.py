@@ -98,6 +98,7 @@ class ModelBuildingHierarchies(unittest.TestCase):
     # ###########################################################
 
     def test_001_hierarchy(self):
+        # TODO INVALID. Adapt to the new way of building Taxonomic hierarchies
         h = Hierarchy("Test")
         t1 = Taxon("T1", None, h)
         t2 = Taxon("T2", t1, h)
@@ -118,6 +119,7 @@ class ModelBuildingHierarchies(unittest.TestCase):
         self.assertEqual(len(h.roots), 2)
 
     def test_003_hierarchy_of_factors(self):
+        # TODO INVALID. Adapt to the new way of building FactorType hierarchies
         h = Hierarchy("Test2")
         f1 = FactorType("F1", None, h)
         f2 = FactorType("F2", f1, h)

@@ -1,6 +1,6 @@
 import openpyxl
 
-from backend.command_generators.spreadsheet_utils import obtain_rectangular_submatrices, binary_mask_from_worksheet
+from backend.command_generators.parser_spreadsheet_utils import obtain_rectangular_submatrices, binary_mask_from_worksheet
 
 
 def parse_upscale_command(sh, area):

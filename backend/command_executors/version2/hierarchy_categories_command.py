@@ -4,7 +4,8 @@ from backend.command_generators import Issue
 from backend.command_generators.spreadsheet_command_parsers_v2 import IssueLocation
 from backend.common.helper import strcmp
 from backend.model_services import IExecutableCommand, get_case_study_registry_objects
-from backend.models.musiasem_concepts import HierarchySource, HierarchyGroup, Hierarchy, HierarchyLevel, HierarchyCode
+from backend.models.musiasem_concepts import HierarchySource, HierarchyGroup, Hierarchy, HierarchyLevel, HierarchyNode, \
+    Taxon
 
 
 class HierarchyCategoriesCommand(IExecutableCommand):
@@ -18,7 +19,7 @@ class HierarchyCategoriesCommand(IExecutableCommand):
 
     def execute(self, state: "State"):
         """
-        Create a Hierarchy. The exact form of this hierarchy is different depending on the concept:
+        Create a Hierarchy of Taxon. The exact form of this hierarchy is different depending on the concept:
         * FactorTypes and Categories use Hierarchies, which are intrinsic.
             The hierarchy name is passed to the containing Hierarchy object
         * Processors use Part-Of Relations. In this case, the hierarchy name is lost
@@ -32,10 +33,7 @@ class HierarchyCategoriesCommand(IExecutableCommand):
         name = self._content["command_name"]
 
         # Process parsed information
-        for r, item in enumerate(self._content["lines"]):
-            # hsource,         hg,             h,         level,          pcode, ref_code, c
-            # HierarchySource, HierarchyGroup, Hierarchy, HierarchyLevel, HierarchyCode
-
+        for r, item in enumerate(self._content["items"]):
             # HierarchySource (Optional)
             hsource = item.get("source", None)  # Code of entity defining the Hierarchy
             if hsource:
@@ -57,7 +55,7 @@ class HierarchyCategoriesCommand(IExecutableCommand):
                 is_code_list = True  # Hierarchy group for the Code List, with the same name
                 hg = hname
 
-            # Check if the hierarchy group is defined. YES, get it; NO, create it
+            # Check if the hierarchy Group is defined. YES, get it; NO, create it
             tmp = hg
             hg = glb_idx.get(HierarchyGroup.partial_key(name=hg))
             if len(hg) == 0:
@@ -66,7 +64,7 @@ class HierarchyCategoriesCommand(IExecutableCommand):
             else:
                 hg = hg[0]
 
-            # Check if the hierarchy is defined. YES, get it; NO, create it
+            # Check if the Hierarchy is defined. YES, get it; NO, create it
             tmp = hname
             h = glb_idx.get(Hierarchy.partial_key(name=hname))
             if len(h) == 0:
@@ -139,12 +137,16 @@ class HierarchyCategoriesCommand(IExecutableCommand):
             c = h.codes.get(code, None)
             if c:
                 issues.append(Issue(itype=3,
-                                    description="Code '" + code + "' in hierarchy '" + h.name + "' redefined. Skipped.",
+                                    description="Code '" + code + "' in hierarchy '" + h.name + "' redefined.",
                                     location=IssueLocation(sheet_name=name, row=r + 1, column=None)))
                 continue
 
             # Finally, create the HierarchyCode with all the gathered attributes, then weave it to other
-            c = HierarchyCode(code=code, label=label, description=description, expression=expression, level=level, referred_code=ref_code, parent_code=pcode, attributes=attributes)
+            # (name, label=None, description=None, referred_node=None, parent=None, parent_weight=1.0, hierarchy=None)
+            c = Taxon(name=code, hierarchy=h, level=level,
+                      referred_taxon=ref_code, parent=pcode,
+                      label=label, description=description,
+                      attributes=attributes, expression=expression)
             # Add code to hierarchy
             h.codes[code] = c
             # Add code to level

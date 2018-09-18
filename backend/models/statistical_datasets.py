@@ -13,7 +13,7 @@ from backend.models.musiasem_concepts import Hierarchy
 from backend.models.musiasem_methodology_support import ORMBase
 
 # ######################################################################################################################
-# MODEL FOR PERSISTENCE
+# PERSISTENT STATISTICAL DATASET
 # ######################################################################################################################
 
 
@@ -203,7 +203,7 @@ def database_after_load(target, context):
     target.data_dictionary = json.loads(target.data_dictionary) if target.data_dictionary else {}
 
 
-class Dataset(ORMBase): # A database has many datasets
+class Dataset(ORMBase):  # A database has many datasets
     __tablename__ = "dc_datasets"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
@@ -368,4 +368,3 @@ def store_after_load(target, context):
 Consider also caching and refresh policy
 Consider dimensions defined in MuSIASEM, and mappings
 """
-

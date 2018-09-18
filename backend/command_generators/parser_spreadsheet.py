@@ -4,6 +4,7 @@ import io
 # import koala # An Excel files parser elaborating a graph allowing automatic evaluation
 import regex as re  # Improvement over standard "re"
 from backend import Issue
+import backend
 from backend.command_executors.analysis.indicators_command import IndicatorsCommand
 from backend.command_executors.external_data.etl_external_dataset_command import ETLExternalDatasetCommand
 from backend.command_executors.external_data.mapping_command import MappingCommand
@@ -18,7 +19,9 @@ from backend.command_executors.specification.structure_command import StructureC
 from backend.command_executors.specification.upscale_command import UpscaleCommand
 from backend.command_executors.version2.hierarchy_categories_command import HierarchyCategoriesCommand
 from backend.command_executors.version2.hierarchy_mapping_command import HierarchyMappingCommand
-from backend.command_generators.json import create_command
+from backend.command_executors import create_command, DatasetDataCommand, DatasetQryCommand, AttributeTypesCommand, \
+    AttributeSetsCommand, InterfaceTypesCommand, ProcessorsCommand, InterfacesAndQualifiedQuantitiesCommand, \
+    RelationshipsCommand, InstantiationsCommand, ScaleConversionV2Command, DatasetDefCommand
 from backend.command_generators.spreadsheet_command_parsers.analysis.indicators_spreadsheet_parse import parse_indicators_command
 from backend.command_generators.spreadsheet_command_parsers.external_data.mapping_spreadsheet_parse import parse_mapping_command
 from backend.command_generators.spreadsheet_command_parsers.external_data.etl_external_dataset_spreadsheet_parse import parse_etl_external_dataset_command
@@ -34,7 +37,11 @@ from backend.command_generators.spreadsheet_command_parsers.specification.scale_
     parse_scale_conversion_command
 from backend.command_generators.spreadsheet_command_parsers.specification.upscale_spreadsheet_parse import parse_upscale_command
 from backend.command_generators.spreadsheet_command_parsers.specification.structure_spreadsheet_parser import parse_structure_command
-from backend.command_generators.spreadsheet_utils import binary_mask_from_worksheet, obtain_rectangular_submatrices
+from backend.command_generators.parser_spreadsheet_utils import binary_mask_from_worksheet, obtain_rectangular_submatrices
+from backend.command_generators.spreadsheet_command_parsers_v2.dataset_data_spreadsheet_parse import \
+    parse_dataset_data_command
+from backend.command_generators.spreadsheet_command_parsers_v2.dataset_qry_spreadsheet_parse import \
+    parse_dataset_qry_command
 from backend.command_generators.spreadsheet_command_parsers_v2.simple_parsers import parse_cat_hierarchy_command, \
     parse_hierarchy_mapping_command, parse_parameters_command_v2, parse_attribute_sets_command, \
     parse_attribute_types_command, parse_datasetdef_command, parse_interface_types_command, parse_processors_v2_command, \
@@ -96,7 +103,7 @@ Comando
 
     # WORKSHEET NAME REGULAR EXPRESSIONS
     re_metadata = re.compile(r"^(Metadata)" + optional_alphanumeric, flags=flags)  # Shared by V1 and V2
-    re_processors = re.compile(r"(V1Processors|Proc)[ _]+" + var_name, flags=flags)  # V1. Deprecated in V2 (use "re_interfaces")
+    re_processors = re.compile(r"(Processors|Proc)[ _]+" + var_name, flags=flags)  # V1. Deprecated in V2 (use "re_interfaces")
     re_hierarchy = re.compile(r"(Taxonomy|Tax|Composition|Comp)[ _]([cpf])[ ]" + var_name, flags=flags)  # V1. Deprecated in V2 (use "re_hierarchies"). SPECIAL
     re_upscale = re.compile(r"(Upscale|Up)[ _](" + var_name + "[ _]" + var_name + ")?", flags=flags)  # V1. Deprecated in V2 (use "re_instantiations")
     re_relations = re.compile(r"(Grammar|Structure|Relations|Rel)([ _]+" + var_name+")?", flags=flags)  # V1. Deprecated in V2 (use "re_relationships")
@@ -117,7 +124,7 @@ Comando
     # re_parameters
     re_datasetqry = re.compile(r"(DatasetQry)" + optional_alphanumeric, flags=flags)  # Dataset Query
     re_interfacetypes = re.compile(r"(InterfaceTypes)" + optional_alphanumeric, flags=flags)  # Declaration of Interface types and hierarchies
-    re_processors_v2 = re.compile(r"(Processors)" + optional_alphanumeric, flags=flags)  # It is NOT the next version of "re_processors" (which is "re_interfaces")
+    re_processors_v2 = re.compile(r"(Processors2)" + optional_alphanumeric, flags=flags)  # It is NOT the next version of "re_processors" (which is "re_interfaces")
     re_interfaces = re.compile(r"(Interfaces)" + optional_alphanumeric, flags=flags)  # Interfaces and data. V2 of "re_processors"
     re_relationships = re.compile(r"(Flows|Relationships)" + optional_alphanumeric, flags=flags)
     re_instantiations = re.compile(r"(Instantiations)" + optional_alphanumeric, flags=flags)
@@ -150,20 +157,20 @@ Comando
             (re_data, "etl_dataset", 0, ETLExternalDatasetCommand),
             (re_mapping, "mapping", 0, MappingCommand),
             # V2 commands
-            (re_hierarchies, "cat_hierarchies", parse_cat_hierarchy_command, 3, HierarchyCategoriesCommand),  # TODO (2***)
             (re_hierarchies_mapping, "cat_hier_mapping", parse_hierarchy_mapping_command, 3, HierarchyMappingCommand),  # TODO (2***)
-            (re_attributes, "attribute_types", parse_attribute_types_command, 2, ),  # TODO Attribute Types (1***)
-            (re_datasetdef, "datasetdef", parse_datasetdef_command, 2, ),  # TODO Dataset Metadata (3***)
-            (re_datasetdata, "datasetdata", 2, ),  # TODO Dataset Data   (3***)
-            (re_attribute_sets, "attribute_sets", parse_attribute_sets_command, 3),  # TODO (2***)
+            (re_hierarchies, "cat_hierarchies", parse_cat_hierarchy_command, 3, HierarchyCategoriesCommand),
+             (re_attributes, "attribute_types", parse_attribute_types_command, 2, AttributeTypesCommand),  # TODO Attribute Types (1***)
+             (re_attribute_sets, "attribute_sets", parse_attribute_sets_command, 3, AttributeSetsCommand),  # TODO (2***)
+            (re_datasetdef, "datasetdef", parse_datasetdef_command, 2, DatasetDefCommand),  # TODO Dataset Metadata (3***)
+            (re_datasetdata, "datasetdata", parse_dataset_data_command, 2, DatasetDataCommand),  # TODO Dataset Data   (3***)
             (re_parameters, "parameters", parse_parameters_command_v2, 3, ParametersCommand),  # The old function was "parse_parameters_command"
-            (re_datasetqry, "datasetqry", 2, ),  # TODO Dataset Query. Very similar to "etl_dataset" IExecutableCommand (3***)
-            (re_interfacetypes, "interface_types", parse_interface_types_command, 2, ),  # TODO (2***)
-            (re_processors_v2, "processors", parse_processors_v2_command, 2, ),  # TODO
-            (re_interfaces, "interfaces_and_qq", parse_interfaces_command, 2, ),  # TODO (evolution of "re_processors" "data_input")
-            (re_relationships, "relationships", parse_relationships_command, 2, ),  # TODO (evolution of "re_relations" "structure")
-            (re_instantiations, "instantiations", parse_instantiations_command, 2, ),  # TODO (evolution of "re_upscale" "upscale")
-            (re_scale_changers, "scale_conversion_v2", parse_scale_changers_command, 2, ),  # TODO Relations of conversion between interface types
+            (re_datasetqry, "datasetqry", parse_dataset_qry_command, 2, DatasetQryCommand),  # TODO Dataset Query. Very similar to "etl_dataset" IExecutableCommand (3***)
+            (re_interfacetypes, "interface_types", parse_interface_types_command, 2, InterfaceTypesCommand),  # TODO (2***)
+            (re_processors_v2, "processors", parse_processors_v2_command, 2, ProcessorsCommand),  # TODO (4***)
+            (re_interfaces, "interfaces_and_qq", parse_interfaces_command, 2, InterfacesAndQualifiedQuantitiesCommand),  # TODO (4***)(evolution of "re_processors" "data_input")
+            (re_relationships, "relationships", parse_relationships_command, 2, RelationshipsCommand),  # TODO (4***)(evolution of "re_relations" "structure")
+            (re_instantiations, "instantiations", parse_instantiations_command, 2, InstantiationsCommand),  # TODO (5***)(evolution of "re_upscale" "upscale")
+            (re_scale_changers, "scale_conversion_v2", parse_scale_changers_command, 2, ScaleConversionV2Command),  # TODO (5***)Relations of conversion between interface types
             (re_problem_statement, "problem_statement",),  # TODO
 
             (re_shared_elements, "shared_elements", parse_shared_elements_command, 2, ),  # TODO
@@ -213,6 +220,12 @@ Comando
                 issue = {"sheet_number": c, "sheet_name": sh_name, "c_type": c_type, "type": 3,
                          "message": "It seems there are no parameters for the dataset import command at worksheet '" + sh_name + "'"}
                 total_issues.append(issue)
+        elif re_datasetqry.search(name):
+            c_type = "datasetqry"
+            issues, c_label, c_content = parse_dataset_qry_command(sh_in, t, sh_name, state)
+        elif re_datasetdata.search(name):
+            c_type = "datasetdata"
+            issues, c_label, c_content = parse_dataset_data_command(sh_in, t, sh_name, state)
         elif re_mapping.search(name):
             c_type = "mapping"
             g = re_mapping.search(name).groups()
@@ -233,23 +246,28 @@ Comando
             h_type = res.group(2)
             c_label = res.group(3)
             issues, _, c_content = parse_hierarchy_command(sh_in, t, c_label, h_type)
-        else:
+        else:  # GENERIC command parser. Based on template of columns (fields)
             for cmd in cmds:
                 if cmd[0].search(name):
                     c_type = cmd[1]
-                    if cmd[3] == 2:
+                    if cmd[3] == 2:  # Call parser, TWO parameters: the worksheet & the rectangular area to parse
                         issues, c_label, c_content = cmd[2](sh_in, t)
-                    elif cmd[3] == 3:
-                        name = cmd[0].search(name).group(2)
-                        issues, c_label, c_content = cmd[2](sh_in, t, name)
+                    elif cmd[3] == 3:  # Call parser, THREE params: the worksheet, area to parse AND the worksheet Name
+                        name2 = cmd[0].search(name).group(2)
+                        issues, c_label, c_content = cmd[2](sh_in, t, name2)
 
         # Append issues
         errors = 0
         if len(issues) > 0:
             for i in issues:
-                if i[0] == 3:
-                    errors += 1
-                issue = {"sheet_number": c, "sheet_name": sh_name, "c_type": c_type, "type": i[0], "message": i[1]}
+                if isinstance(i, backend.command_generators.Issue):
+                    if i.itype == 3:
+                        errors += 1
+                    issue = {"sheet_number": c, "sheet_name": sh_name, "c_type": c_type, "type": i.itype, "message": i.description}
+                else:
+                    if i[0] == 3:
+                        errors += 1
+                    issue = {"sheet_number": c, "sheet_name": sh_name, "c_type": c_type, "type": i[0], "message": i[1]}
                 total_issues.append(issue)
         if errors == 0:
             try:
@@ -259,10 +277,16 @@ Comando
                 issues = [(3, "Could not create command of type '"+c_type+"'")]
             if issues:
                 for i in issues:
-                    issue = {"sheet_number": c, "sheet_name": sh_name, "c_type": c_type, "type": i[0], "message": i[1]}
+                    if isinstance(i, backend.command_generators.Issue):
+                        issue = {"sheet_number": c, "sheet_name": sh_name, "c_type": c_type, "type": i.itype,
+                                 "message": i.description}
+                    else:
+                        issue = {"sheet_number": c, "sheet_name": sh_name, "c_type": c_type, "type": i[0],
+                                 "message": i[1]}
+
                     total_issues.append(issue)
         else:
-            cmd, _ = create_command(c_type, c_label, {}, sh_name)
+            cmd = None  # cmd, _ = create_command(c_type, c_label, {}, sh_name)
 
         yield cmd, total_issues
     # yield from []  # Empty generator

@@ -26,7 +26,7 @@ import json
 # >>>>>>>>>> IMPORTANT <<<<<<<<<
 # For debugging in local mode, prepare an environment variable "MAGIC_NIS_SERVICE_CONFIG_FILE", with value "./nis_local.conf"
 # >>>>>>>>>> IMPORTANT <<<<<<<<<
-from backend.command_generators.spreadsheet_utils import rewrite_xlsx_file
+from backend.command_generators.parser_spreadsheet_utils import rewrite_xlsx_file
 
 if __name__ == '__main__':
     print("Executing locally!")
@@ -37,7 +37,7 @@ from backend.models.musiasem_methodology_support import *
 from backend.common.create_database import create_pg_database_engine, create_monet_database_engine
 from backend.restful_service import app
 import backend
-from backend.command_generators.json import create_command
+from backend.command_executors import create_command
 from backend.command_executors.specification.metadata_command import generate_dublin_core_xml
 from backend.model_services import State, get_case_study_registry_objects
 from backend.model_services.workspace import InteractiveSession, CreateNew, ReproducibleSession, \

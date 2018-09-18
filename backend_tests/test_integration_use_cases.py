@@ -3,7 +3,7 @@ import sqlalchemy
 
 # Memory
 from backend.model_services.workspace import InteractiveSession, CreateNew
-from backend.command_generators.json import create_command
+from backend.command_executors import create_command
 from backend.restful_service import tm_default_users, \
     tm_authenticators, \
     tm_object_types, \

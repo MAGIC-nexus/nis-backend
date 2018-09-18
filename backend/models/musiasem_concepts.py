@@ -190,7 +190,7 @@ class AttributeType(Nameable, Identifiable):
     """
     Defines an attribute type, which may be used in different entity types and instances of these types
     """
-    def __init(self, name, atype: str, description: str=None, domain: str=None, element_types: List[str]=None):
+    def __init__(self, name, atype: str, description: str=None, domain: str=None, element_types: List[str]=None):
         Identifiable.__init__(self)
         Nameable.__init__(self, name)
         self._atype = atype  # One of "attribute_types": Number, Boolean, URL, UUID, Datetime, String, Category
@@ -276,13 +276,13 @@ class HierarchyNode(Nameable):
         A hierarchy can be flat, so a hierarchy node can be member of a simple list
     """
 
-    def __init__(self, name, parent=None, parent_weight=1.0, hierarchy=None, label=None, description=None, referred_node=None):
+    def __init__(self, name, parent=None, parent_weight=1.0, hierarchy=None, level=None, label=None, description=None, referred_node=None):
         Nameable.__init__(self, name)
         self._parents = []
         self._parents_weights = []
         self._referred_node = referred_node
         self._children = set()  # HierarchyNode in the same "hierarchy"
-        self._level = None  # HierarchyLevel
+        self._level = level  # HierarchyLevel
         self._hierarchy = hierarchy
         if parent:
             self.set_parent(parent, parent_weight)
@@ -459,7 +459,7 @@ class QualifiedQuantityExpression:
 
 
 class HierarchySource(Nameable, Identifiable):  # Organization defining the Hierarchy "vocabulary" and meanings
-    def __init(self, name):
+    def __init__(self, name):
         Identifiable.__init__(self)
         Nameable.__init__(self, name)
 
@@ -479,11 +479,11 @@ class HierarchySource(Nameable, Identifiable):  # Organization defining the Hier
 # Also Hierarchical Code List (HCL). "Contains" one or more Hierarchy.
 # If the HierarchyGroup has a single element named equally, it is a Code List
 class HierarchyGroup(Nameable, Identifiable):
-    def __init(self, name):
+    def __init__(self, name, source: HierarchySource=None):
         Identifiable.__init__(self)
         Nameable.__init__(self, name)
         self._hierarchies = []  # A group can have several "Hierarchy"
-        self._hierarchy_source = None  # type: HierarchySource
+        self._hierarchy_source = source
 
     @staticmethod
     def partial_key(name: str=None, ident: str=None):
@@ -535,7 +535,7 @@ class Hierarchy(Nameable, Identifiable):
         self._level_names = [] # type: List[str]
 
         # All HierarchyNodes contained by the Hierarchy
-        self._codes = set()  # type: Set[HierarchyNode]
+        self._codes = dict()  # type: Dict[HierarchyNode]
         self._hierarchy_group = hierarchy_group  # type: HierarchyGroup
         # List (ordered) of HierarchyLevels, from top to bottom
         self._levels = []  # type: List[HierarchyLevel]
@@ -661,7 +661,7 @@ class Hierarchy(Nameable, Identifiable):
 
     def to_dict(self):
         d = {}
-        for c in self._codes:
+        for c in self.codes.values():
             d[c._name] = c._description
         return d
 
@@ -693,7 +693,7 @@ class Hierarchy(Nameable, Identifiable):
         codes_dict = create_dictionary()
         for ct in codes:
             hn = Taxon(ct.code, hierarchy=h, label=ct.description, description=ct.description)
-            h.codes.add(hn)
+            h.codes[ct.code] = hn
             hn.level = levels_dict.get(ct.level, None)  # Point to the containing HierarchyLevel
             if hn.level:
                 hn.level._codes.add(hn)
@@ -729,9 +729,10 @@ class HierarchyExpression:
 
 class Taxon(Identifiable, HierarchyNode, HierarchyExpression, Qualifiable):
     """ For categories in a taxonomy. A taxonomy  """
-    def __init__(self, name, parent=None, bottom_up_split=1.0, hierarchy=None, expression=None, label=None, description=None, attributes=None):
+    def __init__(self, name, parent=None, bottom_up_split=1.0, hierarchy=None, level=None, referred_taxon=None, expression=None, label=None, description=None, attributes=None):
         Identifiable.__init__(self)
-        HierarchyNode.__init__(self, name, parent, bottom_up_split, hierarchy=hierarchy, label=label, description=description)
+        HierarchyNode.__init__(self, name, parent, bottom_up_split, hierarchy=hierarchy, referred_node=referred_taxon,
+                               label=label, description=description)
         HierarchyExpression.__init__(self, expression)
         Qualifiable.__init__(self, attributes)
         self._description = description
@@ -759,9 +760,9 @@ class Context(Identifiable, Nameable, Qualifiable):
     """
     A context is just a named container for attribute sets (Qualifiable)
 
-    Parameters, ScaleChangers, Instantiators -and other possible adaptive MuSIASEM elements-, can take into account how
-    the attributes of base MuSIASEM elements: Processors, Interfaces, Hierarchies of Categories, InterfaceTypes, MATCH
-    before applying specific coefficients.
+    Parameters, ScaleChangers, Instantiators, ETL or dataset transforms -and other possible adaptive
+    MuSIASEM elements-, can take into account how the attributes of base MuSIASEM elements: Processors, Interfaces,
+    Hierarchies of Categories, InterfaceTypes, MATCH before applying specific coefficients.
     """
     def __init__(self, name, attributes):
         Identifiable.__init__(self)
@@ -2109,21 +2110,20 @@ class Mapping:
     """
     def __init__(self, name, source, dataset, origin, destination, the_map: List[Tuple]):
         self.name = origin + " -> " + destination
-        Weight
         self.name = name
-        self.source = source
-        self.dataset = dataset
-        self.origin = origin  # Dimension
-        self.destination = destination # Destination Dimension
+        self.source = source  # Which Observer produced the mapping
+        self.dataset = dataset  # Optionally, a dataset containing the ORIGIN hierarchy
+        self.origin = origin  # Hierarchy (Dataset Dimensions are Hierarchies)
+        self.destination = destination  # Destination Hierarchy (Dataset Dimensions are Hierarchies)
         # the_map is of the form:
         # [{"o": "", "to": [{"d": "", "w": "", "ctx": <id>}]}]
         # [ {o: origin category, to: [{d: destination category, w: weight assigned to destination category}] } ]
         # It is used by the ETL load dataset command
         self.map = the_map  # List of tuples (pairs) source code, destination code[, expression]
 
-
 # TODO Currently ExternalDataset is used only in evaluation of expressions. It may be removed because
 # TODO expressions can refer dirctly to State -> datasets
+
 
 class ExternalDataset:
     def __init__(self, name, ds: pd.DataFrame):
@@ -2153,3 +2153,64 @@ class ExternalDataset:
         :return: The response
         """
         return None  # ExternalDataset(None, ds)
+
+# ######################################################################################################################
+# IN-MEMORY STATISTICAL DATASET
+# ######################################################################################################################
+
+
+class MConcept(Nameable, Qualifiable):
+    def __init__(self, name, attribute_type=None, dataset=None, attributes=None):
+        Nameable.__init__(self, name)
+        Qualifiable.__init__(self, attributes)
+        # Contains the type of the concept. Also the domain of the concept which in the case of a Dimension will be a Hierarchy
+        self._attribute_type = None  # type: AttributeType
+        self._dataset = None  # type: MDataset
+
+
+class MDimensionConcept(MConcept):
+    def __init__(self):
+        self._is_time = None
+
+
+class MMeasureConcept(MConcept):
+    def __init__(self, name, attributes):
+        MConcept.__init__(self, name, attributes)
+
+
+class MAttributeConcept(MConcept):
+    def __init__(self, name, attributes):
+        MConcept.__init__(self, name, attributes)
+
+
+class MDataSource(Nameable, Identifiable, Qualifiable):
+    def __init__(self, name, description=None, attributes=None):
+        Identifiable.__init__(self)
+        Nameable.__init__(self, name)
+        Qualifiable.__init__(self, attributes)
+        self._description = description
+        self._metadata = None  # Here is the place for metadata not in other fields. Not used for now.
+        self._databases = []  # type: List[MDatabase]
+
+
+class MDatabase(Nameable, Identifiable, Qualifiable):
+    def __init__(self, name, description=None, attributes=None):
+        Identifiable.__init__(self)
+        Nameable.__init__(self, name)
+        Qualifiable.__init__(self, attributes)
+        self._description = description
+        self._metadata = None  # Here is the place for metadata not in other fields. Not used for now.
+        self._data_source = None  # type: MDataSource
+        self._datasets = []  # type: List[MDataset]
+
+
+class MDataset(Nameable, Identifiable, Qualifiable):
+    def __init__(self, name, description=None, attributes=None):
+        Identifiable.__init__(self)
+        Nameable.__init__(self, name)
+        Qualifiable.__init__(self, attributes)
+        self._description = description
+        self._concepts_list = []  # type: List[MConcept]
+        self._database = None  # type: MDatabase
+        self._metadata = None  # Here is the place for metadata not in other fields. **Not used for now**
+        self._data = None  # type: pd.DataFrame

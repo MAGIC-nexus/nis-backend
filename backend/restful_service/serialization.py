@@ -124,8 +124,6 @@ def serialize_state(state: State):
     """
     Serialization prepared for a given organization of the state
 
-    !!! WARNING: It destroys "state"
-
     :return:
     """
 
@@ -143,6 +141,7 @@ def serialize_state(state: State):
         ns_ds[ns] = datasets
         state.set("_datasets", create_dictionary(), ns)  # Nullify datasets
 
+    # !!! WARNING: It destroys "state", so a DEEP COPY is performed !!!
     state2 = copy.deepcopy(state)
 
     # Iterate all namespaces
@@ -166,7 +165,7 @@ def serialize_state(state: State):
             lst2.append(tmp)  # Append the serialized DataFrame
             datasets[ds_name] = lst2
         state2.set("_datasets", datasets, ns)
-    tmp = serialize_from_object(state2)  # <<<<<<<< SLOWEST !!!!
+    tmp = serialize_from_object(state2)  # <<<<<<<< SLOWEST !!!! (when debugging)
     print("  serialize_state length: "+str(len(tmp))+" OUT")
 
     return tmp

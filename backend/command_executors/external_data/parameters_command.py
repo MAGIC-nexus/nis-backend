@@ -14,7 +14,7 @@ class ParametersCommand(IExecutableCommand):
         # Obtain global variables in state
         glb_idx, p_sets, hh, datasets, mappings = get_case_study_registry_objects(state)
 
-        for param in self._content:
+        for param in self._content["items"]:
             name = param["name"]
             p = Parameter(name)
             if "value" in param:

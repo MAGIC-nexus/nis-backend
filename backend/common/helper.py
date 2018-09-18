@@ -25,7 +25,7 @@ from backend import case_sensitive, \
 # #####################################################################################################################
 # >>>> CASE SeNsItIvE or INSENSITIVE names (flows, funds, processors, ...) <<<<
 # #####################################################################################################################
-from backend.models.musiasem_concepts import Taxon
+# from backend.models.musiasem_concepts import Taxon  IMPORT LOOP !!!!! AVOID !!!!
 
 
 class CaseInsensitiveDict(collections.MutableMapping):
@@ -523,7 +523,7 @@ class PartialRetrievalDictionary:
                 s.add(oid)
         else:
             if ptype == 'i':
-                raise Exception("Key already exists")
+                raise Exception("Key '+"+str(key2)+"' already exists")
             # Update
             # Find the ID for the key
             res = self.get(key, just_oid=True)
@@ -957,7 +957,7 @@ def is_category(v):
 
 def to_category(v):
     # TODO
-    return Taxon  # Return some Taxon
+    return None #  Taxon  # Return some Taxon
 
 
 def is_geo(v):

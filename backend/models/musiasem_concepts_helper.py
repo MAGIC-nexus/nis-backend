@@ -44,7 +44,7 @@ def convert_code_list_to_hierarchy(cl: CodeList) -> Hierarchy:
         levels_dict[cll.code] = hl
         for ct in cll.codes:
             hn = Taxon(ct.code, hierarchy=h, label=ct.description, description=ct.description)
-            h.codes.add(hn)
+            h.codes[ct.code] = hn
             code_node_dict[ct] = hn
             hn.level = levels_dict.get(ct.level.code, None)  # Point to the containing HierarchyLevel
             if hn.level:
@@ -59,7 +59,7 @@ def convert_code_list_to_hierarchy(cl: CodeList) -> Hierarchy:
 
     # Finally, set "roots" to HierarchyNodes without "parents"
     tmp = []
-    for c in h.codes:
+    for c in h.codes.values():
         if len(c._parents) == 0:
             tmp.append(c)
     h.roots_append(tmp)
@@ -93,7 +93,7 @@ def convert_hierarchy_to_code_list(h: Hierarchy) -> CodeList:
 
     # Codes
     codes_map = {}
-    for hn in h.codes:
+    for hn in h.codes.values():
         c = Code()
         c.code = hn.name
         c.description = hn.description
@@ -108,7 +108,7 @@ def convert_hierarchy_to_code_list(h: Hierarchy) -> CodeList:
         codes_map[hn] = c
 
     # Links between nodes
-    for hn in h._codes:
+    for hn in h.codes.values():
         for ch in hn._children:
             codes_map[hn].children.append(codes_map[ch])
             codes_map[ch].parents.append(hn)

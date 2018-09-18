@@ -1,7 +1,7 @@
 import openpyxl
 
 from backend.command_generators import basic_elements_parser
-from backend.command_generators.spreadsheet_utils import obtain_rectangular_submatrices, binary_mask_from_worksheet
+from backend.command_generators.parser_spreadsheet_utils import obtain_rectangular_submatrices, binary_mask_from_worksheet
 from backend.common.helper import strcmp
 
 
@@ -86,10 +86,12 @@ def parse_scale_conversion_command(sh, area):
         for j, c in enumerate(range(t[2], t[3])):
             v = sh.cell(row=r, column=c).value
             if v:
+                if not isinstance(v, str):
+                    v = str(v)
                 # Origin factor
-                origin = subcol[j]
+                origin = subcol[i]
                 # Destination factor
-                destination = subrow[i]
+                destination = subrow[j]
                 if strcmp(origin, destination):
                     issues((3, "A change of scale to the same factor type ("+origin+") is not allowed"))
                 else:

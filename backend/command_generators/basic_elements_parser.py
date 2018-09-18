@@ -1,5 +1,6 @@
 import importlib
 
+import string
 from pyparsing import (ParserElement,
                        oneOf, srange, operatorPrecedence, opAssoc,
                        Forward, Regex, Suppress, Literal, Word,
@@ -40,8 +41,9 @@ real = (Combine(Word(nums) + Optional("." + Word(nums))
         ).setParseAction(lambda _s, l, t:
                          {'type': 'float', 'value': float(t[0])}
                          )
-unquoted_string = Word(srange("."))
+unquoted_string = Word(string.printable)
 alphanums_string = Word(alphanums)
+code_string = Word(alphanums+"_")
 string = quotedString.setParseAction(lambda t: {'type': 'str', 'value': t[0]})
 boolean = Or([true, false])
 

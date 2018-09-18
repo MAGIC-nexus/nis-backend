@@ -1,5 +1,5 @@
-from backend.command_generators.spreadsheet_parser import commands_generator_from_ooxml_file
-from backend.command_generators.json import commands_generator_from_native_json
+from backend.command_generators.parser_spreadsheet import commands_generator_from_ooxml_file
+from backend.command_generators.parser_json import commands_generator_from_native_json
 
 """
 - Parser

@@ -35,7 +35,7 @@ def check_columns(sh, name: str, area: Tuple, cols: List[CommandField], command_
     col_map = {}
     for c in range(area[2], area[3]):
         col_name = sh.cell(row=area[0], column=c).value.strip()
-        for i, col in enumerate(cols):
+        for col in cols:
             if col.regex_allowed_names.match(col_name):
                 # Column Name to Column Index
                 if not col.many_appearances:
@@ -47,7 +47,7 @@ def check_columns(sh, name: str, area: Tuple, cols: List[CommandField], command_
                 # Mandatory found (good)
                 if col.name in mandatory_not_found:
                     mandatory_not_found.discard(col.name)
-
+                break
         else:  # No match for the column "col_name"
             if not ignore_not_found:
                 issues.append(Issue(itype=3,
@@ -97,9 +97,12 @@ def parse_command(sh, area, name: str, cmd_name):
         # Each "field"
         for cname in col_map.keys():
             col = next(c for c in cols if c.name == cname)
-            value = sh.cell(row=r, column=col_map[cname]).value.strip()
-
-            if not value:
+            value = sh.cell(row=r, column=col_map[cname]).value
+            if value:
+                if not isinstance(value, str):
+                    value = str(value)
+                value = value.strip()
+            else:
                 continue
 
             if col.allowed_values:
@@ -133,4 +136,4 @@ def parse_command(sh, area, name: str, cmd_name):
         else:
             content.append(line)
 
-    return issues, None, {"lines": content, "command_name": name}
+    return issues, None, {"items": content, "command_name": name}

@@ -240,7 +240,11 @@ class DataInputCommand(IExecutableCommand):
                 diff = set([v.lower() for v in list(var_dict.values())+list(var_taxa_dict.values())]).difference(set(ds.data.columns))
                 if diff:
                     # There are request fields in var_dict NOT in the input dataset "ds.data"
-                    issues.append((3, "'"+', '.join(diff)+"' are not present in the requested dataset '"+r["_referenced_dataset"]+"'. Columns are: "+', '.join(ds.data.columns)+". Row " + str(i+1)))
+                    if len(diff) > 1:
+                        v = "is"
+                    else:
+                        v = "are"
+                    issues.append((3, "'"+', '.join(diff)+"' "+v+" not present in the requested dataset '"+r["_referenced_dataset"]+"'. Columns are: "+', '.join(ds.data.columns)+". Row " + str(i+1)))
                 else:
                     # Iterate the dataset (a pd.DataFrame), row by row
                     for r_num, r2 in ds.data.iterrows():
