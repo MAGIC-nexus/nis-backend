@@ -1,10 +1,16 @@
 from flask import Flask
-import logging
+
+import backend
+from backend.ie_imports.data_source_manager import DataSourceManager
+from backend.ie_imports.data_sources.eurostat_bulk import Eurostat
+from backend.ie_imports.data_sources.fadn import FADN
+from backend.ie_imports.data_sources.faostat import FAOSTAT
+from backend.ie_imports.data_sources.oecd import OECD
+from backend.models.musiasem_methodology_support import DBSession
 
 nis_api_base = "/nis_api"  # Base for all RESTful calls
 nis_client_base = "/nis_client"  # Base for the Angular2 client
 nis_external_client_base = "/nis_external"  # Base for the Angular2 client called from outside
-log_level = logging.DEBUG
 
 app = Flask(__name__)
 app.debug = True
@@ -70,3 +76,26 @@ tm_case_study_version_statuses = {  # CaseStudyStatus
 # "788065a7-d9f5-46fa-b8ba-8bc223d09331":
 # "38fb34f7-a952-4036-9b0b-4d6c59e8f8d4":
 # "0292821a-dd33-450a-bdd8-813b2b95c456":
+def register_external_datasources(cfg):
+    dsm2 = DataSourceManager(session_factory=DBSession)
+
+    # Eurostat
+    dsm2.register_datasource_manager(Eurostat())
+
+    # FAO
+    if 'FAO_DATASETS_DIR' in cfg:
+        fao_dir = cfg['FAO_DATASETS_DIR']
+    else:
+        fao_dir = "/home/rnebot/DATOS/FAOSTAT/"
+    dsm2.register_datasource_manager(FAOSTAT(datasets_directory=fao_dir,
+                                             metadata_session_factory=DBSession,
+                                             data_engine=backend.data_engine))
+
+    # OECD
+    dsm2.register_datasource_manager(OECD())
+
+    # FADN
+    dsm2.register_datasource_manager(FADN(metadata_session_factory=DBSession,
+                                          data_engine=backend.data_engine))
+    # sources = dsm2.get_supported_sources()
+    return dsm2

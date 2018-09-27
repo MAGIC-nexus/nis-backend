@@ -111,6 +111,8 @@ def parse_command(sh, area, name: str, cmd_name):
                     issues.append(Issue(itype=3,
                                         description="Field '" + col_header + "' of command '" + cmd_name + "' has as allowed values: "+", ".join(col.allowed_values)+". Entered: " + value,
                                         location=IssueLocation(sheet_name=name, row=r, column=col_map[cname])))
+                else:
+                    line[cname] = value
             else:
                 # Parse. Just check syntax
                 if col.parser:
@@ -120,7 +122,7 @@ def parse_command(sh, area, name: str, cmd_name):
                     except:
                         col_header = sh.cell(row=1, column=col_map[cname]).value
                         issues.append(Issue(itype=3,
-                                            description="The syntax in field '" + col_header + "' of command '" + cmd_name + "' is not syntactically correct. Entered: " + value,
+                                            description="The value in field '" + col_header + "' of command '" + cmd_name + "' is not syntactically correct. Entered: " + value,
                                             location=IssueLocation(sheet_name=name, row=r, column=col_map[cname])))
                 else:
                     line[cname] = value

@@ -35,29 +35,24 @@ if __name__ == '__main__':
 from backend.common.helper import generate_json, obtain_dataset_source, gzipped, str2bool
 from backend.models.musiasem_methodology_support import *
 from backend.common.create_database import create_pg_database_engine, create_monet_database_engine
-from backend.restful_service import app
+from backend.restful_service import app, register_external_datasources
 import backend
 from backend.command_executors import create_command
 from backend.command_executors.specification.metadata_command import generate_dublin_core_xml
 from backend.model_services import State, get_case_study_registry_objects
 from backend.model_services.workspace import InteractiveSession, CreateNew, ReproducibleSession, \
     execute_command_container, convert_generator_to_native
-from backend.restful_service import nis_api_base, nis_client_base, nis_external_client_base, log_level, \
-    tm_default_users, \
+from backend.restful_service import nis_api_base, nis_client_base, nis_external_client_base, tm_default_users, \
     tm_authenticators, \
     tm_object_types, \
     tm_permissions, \
     tm_case_study_version_statuses
+from backend.models import log_level
 from backend.restful_service.serialization import serialize, deserialize, serialize_state, deserialize_state
 from backend.solving.flows_graph import BasicQuery, construct_flow_graph
 from backend.solving.processors_graph import construct_processors_graph
 from backend.models.musiasem_concepts import Taxon, Hierarchy
 
-from backend.ie_imports.data_source_manager import DataSourceManager
-from backend.ie_imports.data_sources.eurostat_bulk import Eurostat
-from backend.ie_imports.data_sources.faostat import FAOSTAT
-from backend.ie_imports.data_sources.oecd import OECD
-from backend.ie_imports.data_sources.fadn import FADN
 
 # #####################################################################################################################
 # >>>> BOOT TIME. FUNCTIONS AND CODE <<<<
@@ -134,31 +129,6 @@ def initialize_databases():
     else:
         print("No data connection defined (DATA_CONNECTION_STRING), exiting now!")
         sys.exit(1)
-
-
-def register_external_datasources(cfg):
-    dsm2 = DataSourceManager(session_factory=DBSession)
-
-    # Eurostat
-    dsm2.register_datasource_manager(Eurostat())
-
-    # FAO
-    if 'FAO_DATASETS_DIR' in cfg:
-        fao_dir = cfg['FAO_DATASETS_DIR']
-    else:
-        fao_dir = "/home/rnebot/DATOS/FAOSTAT/"
-    dsm2.register_datasource_manager(FAOSTAT(datasets_directory=fao_dir,
-                                             metadata_session_factory=DBSession,
-                                             data_engine=backend.data_engine))
-
-    # OECD
-    dsm2.register_datasource_manager(OECD())
-
-    # FADN
-    dsm2.register_datasource_manager(FADN(metadata_session_factory=DBSession,
-                                          data_engine=backend.data_engine))
-    # sources = dsm2.get_supported_sources()
-    return dsm2
 
 
 def connect_redis():

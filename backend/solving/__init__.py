@@ -109,6 +109,23 @@ class BasicQuery(IQueryObjects):
         return requested
 
 
+def get_processor_names_to_processors_dictionary(state: PartialRetrievalDictionary):
+    """
+    Obtain a dictionary with all processor names (a processor may have multiple names) and
+    the corresponding Processor object
+
+    :param state:
+    :return:
+    """
+    ps = state.get(Processor.partial_key())
+    ps = set(ps)  # Avoid repeating Processor objects
+    d = create_dictionary()
+    for p in ps:
+        for n in p.full_hierarchy_names(state):
+            d[n] = p
+    return d
+
+
 def get_processor_id(p: Processor):
     return p.name.lower()
 

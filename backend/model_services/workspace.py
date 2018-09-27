@@ -11,16 +11,22 @@ import uuid
 from enum import Enum
 from typing import List
 
+import sqlalchemy
+
+import backend
 from backend.command_generators.parsers_factory import commands_container_parser_factory
 from backend.models.musiasem_methodology_support import (User,
                                                          CaseStudy,
                                                          CaseStudyVersion,
                                                          CaseStudyVersionSession,
                                                          CommandsContainer,
-                                                         force_load
-                                                         )
+                                                         force_load,
+                                                         DBSession, ORMBase, load_table, Authenticator, CaseStudyStatus,
+                                                         ObjectType, PermissionType)
 from backend.model_services import IExecutableCommand
 from backend.model_services import State
+from backend.restful_service import tm_default_users, tm_authenticators, tm_case_study_version_statuses, \
+    tm_object_types, tm_permissions
 from backend.restful_service.serialization import serialize_state, deserialize_state
 
 logger = logging.getLogger(__name__)
@@ -787,6 +793,63 @@ class ReproducibleSession:
         self._session = None
         self._allow_saving = None
         return id3
+
+
+def execute_file(file_name, generator_type):
+    if generator_type == "spreadsheet":
+        content_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        read_type = "rb"
+    elif generator_type == "native":
+        content_type = "application/json"
+        read_type = "r"
+
+    prepare_and_reset_database_for_tests()
+    isess = InteractiveSession(DBSession)
+    isess.identify({"user": "test_user"}, testing=True)  # Pass just user name.
+    isess.open_reproducible_session(case_study_version_uuid=None,
+                                    recover_previous_state=None,
+                                    cr_new=CreateNew.CASE_STUDY,
+                                    allow_saving=False)
+    with open(file_name, read_type) as f:
+        buffer = f.read()
+    ret = isess.register_andor_execute_command_generator(generator_type, content_type, buffer, False, True)
+    isess.close_reproducible_session()
+    isess.close_db_session()
+    return isess
+
+
+def prepare_and_reset_database_for_tests(prepare=False):
+    if prepare:
+        backend.engine = sqlalchemy.create_engine("sqlite://", echo=True)
+        backend.data_engine = sqlalchemy.create_engine("sqlite://", echo=True)
+
+        # global DBSession # global DBSession registry to get the scoped_session
+        DBSession.configure(bind=backend.engine)  # reconfigure the sessionmaker used by this scoped_session
+        tables = ORMBase.metadata.tables
+        connection = backend.engine.connect()
+        table_existence = [backend.engine.dialect.has_table(connection, tables[t].name) for t in tables]
+        connection.close()
+        if False in table_existence:
+            ORMBase.metadata.bind = backend.engine
+            ORMBase.metadata.create_all()
+
+    # Load base tables
+    load_table(DBSession, User, tm_default_users)
+    load_table(DBSession, Authenticator, tm_authenticators)
+    load_table(DBSession, CaseStudyStatus, tm_case_study_version_statuses)
+    load_table(DBSession, ObjectType, tm_object_types)
+    load_table(DBSession, PermissionType, tm_permissions)
+    # Create and insert a user
+    session = DBSession()
+    # Create test User, if it does not exist
+    u = session.query(User).filter(User.name == 'test_user').first()
+    if not u:
+        u = User()
+        u.name = "test_user"
+        u.uuid = "27c6a285-dd80-44d3-9493-3e390092d301"
+        session.add(u)
+        session.commit()
+    DBSession.remove()
 
 
 if __name__ == '__main__':

@@ -8,6 +8,7 @@ from pyparsing import (ParserElement,
                        Combine, Group, delimitedList, nums, quotedString, NotAny,
                        Keyword)
 
+from backend.common.helper import create_dictionary
 from backend.models.musiasem_concepts import ExternalDataset
 
 # Number
@@ -62,7 +63,7 @@ expression_with_parameters = Forward()  # TODO Parameter value definition. An ex
 hierarchy_expression = Forward()
 hierarchy_expression_v2 = Forward()
 key_value = Forward()  # TODO key "=" value. Key is a simple_ident; "Value" can be an expression referring to parameters
-key_value_list = Forward()  # TODO
+key_value_list = unquoted_string  # Forward()  # TODO
 parameter_domain = Forward()  # TODO Parameter Domain. Either a Category Hierarchy name or a numeric interval (with open closed)
 parameter_value = Forward()  # TODO Parameter Value. Could be "expression_with_parameters"
 indicator_expression = Forward()
@@ -524,14 +525,50 @@ def ast_to_string(exp):
     return val
 
 
+def clean_str(us):
+    # "En dash"                 character is replaced by minus (-)
+    # "Left/Right double quote" character is replaced by double quote (")
+    # "Left/Right single quote" character is replaced by single quote (')
+    return us.replace(u'\u2013', '-').\
+              replace(u'\u201d', '"').replace(u'\u201c', '"').\
+              replace(u'\u2018', "'").replace(u'\u2019', "'")
+
 def string_to_ast(rule: ParserElement, input_: str):
-    input_ = input_.replace(u'\u2013', '-')  # "En dash" character is replaced by minus
-    res = rule.parseString(input_, parseAll=True)
+    res = rule.parseString(clean_str(input_), parseAll=True)
     res = res.asList()[0]
     while isinstance(res, list):
         res = res[0]
     return res
 
+
+def dictionary_from_key_value_list(kvl):
+    """
+    From a string containing a list of keys and values, return a dictionary
+    Keys must be literals, values can be expressions, to be evaluated at a later moment
+
+    (syntactic validity of expressions is not checked here)
+
+    :param kvl: String containing the list of keys and values
+    :except If syntactic problems occur
+    :return: A dictionary
+    """
+    pairs = kvl.split(",")
+    d = create_dictionary()
+    for p in pairs:
+        k, v = p.split("=", maxsplit=1)
+        if not k:
+            raise Exception("Each key-value pair must be separated by '=' and key has to be defined, value can be empty: "+kvl)
+        else:
+            try:
+                k = k.strip()
+                v = v.strip()
+                string_to_ast(simple_ident, k)
+                if string_to_ast(quotedString, v):
+                    v = v[1:-1]
+                d[k] = v
+            except:
+                raise Exception("Key must be a string: "+k+" in key-value list: "+kvl)
+    return d
 
 if __name__ == '__main__':
     from backend.model_services import State

@@ -5,7 +5,7 @@ import jsonpickle
 from backend import ureg
 from backend.command_generators import basic_elements_parser
 from backend.command_generators.basic_elements_parser import ast_to_string
-from backend.common.helper import PartialRetrievalDictionary, create_dictionary
+from backend.common.helper import PartialRetrievalDictionary, create_dictionary, strcmp
 from backend.model_services import State, get_case_study_registry_objects
 from backend.models.musiasem_concepts import \
     FlowFundRoegenType, FactorInProcessorType, RelationClassType, \
@@ -151,7 +151,7 @@ def find_observable_by_name(name: str, idx: PartialRetrievalDictionary, processo
     res = None
     if isinstance(name, str):
         s = name.split(":")
-        if len(s) == 2:  # There is a ":"
+        if len(s) == 2:  # There is a ":", so either FactorType or Factor (FactorType if there is no Processor)
             p_name = s[0]
             f_name = s[1]
             if not p_name:  # Processor can be blank
@@ -197,6 +197,131 @@ def find_observable_by_name(name: str, idx: PartialRetrievalDictionary, processo
         res = name
 
     return res
+
+
+def find_processor_by_name(state: Union[State, PartialRetrievalDictionary], processor_name: str):
+    """
+    Find a processor by its name
+
+    The name can be:
+      * simple
+      * absolute hierarchical
+
+    The result can be:
+      * None: no Processor,
+      * a single Processor or
+      * Exception if more than one Processor matches the name
+
+    :param state:
+    :param processor_name:
+    :exception If more than one Processor can be found
+    :return:
+    """
+
+    # Decompose the name
+    p_names, _ = _obtain_name_parts(processor_name)
+
+    # Get registry object
+    if isinstance(state, PartialRetrievalDictionary):
+        glb_idx = state
+    else:
+        glb_idx, _, _, _, _ = get_case_study_registry_objects(state)
+
+    if len(p_names) > 0:
+        # Directly accessible
+        p = glb_idx.get(Processor.partial_key(p_names[0]))
+        if len(p) == 1:
+            p = p[0]
+            if len(p_names) == 1:
+                return p  # Found!
+            else:
+                # Look for children of "p" matching each piece
+                for partial_name in p_names[1:]:
+                    # Obtain part-of relationships whose parent is "p"
+                    pors = glb_idx.get(ProcessorsRelationPartOfObservation.partial_key(parent=p))
+                    if len(pors) == 0:
+                        return None
+                    else:
+                        # Find child Processors matching the name
+                        matches = []
+                        for por in pors:
+                            if strcmp(partial_name, por.child_processor.name):
+                                # Found a match
+                                matches.append(por.child_processor)
+                        if len(matches) == 0:
+                            return None
+                        elif len(matches) == 1:
+                            p = matches[0]
+                        else:
+                            raise Exception(str(len(matches))+" processors matched '"+partial_name+"' in '"+processor_name+"'")
+        else:  # The number of matching top level Processors is different from ONE
+            if len(p) == 0:
+                return None
+            else:
+                raise Exception(str(len(p)+" processors found matching '"+processor_name+"'"))
+    else:
+        raise Exception("No processor name specified: '"+processor_name+"'")
+
+
+def find_factortype_by_name(state: Union[State, PartialRetrievalDictionary], factortype_name: str):
+    """
+    Find FactorType by its name
+
+    The name can be:
+      * simple
+      * absolute hierarchical
+
+    The result can be:
+      * None: no Factortype,
+      * a single FactorType or
+      * Exception if more than one FactorType matches the name
+
+    :param state:
+    :param factortype_name:
+    :exception If more than one FactorType can be found
+    :return:
+    """
+
+    # Decompose the name
+    p_names, _ = _obtain_name_parts(factortype_name)
+
+    # Get registry object
+    if isinstance(state, PartialRetrievalDictionary):
+        glb_idx = state
+    else:
+        glb_idx, _, _, _, _ = get_case_study_registry_objects(state)
+
+    if len(p_names) > 0:
+        # Directly accessible
+        ft = glb_idx.get(FactorType.partial_key(p_names[0]))
+        if len(ft) == 1:
+            ft = ft[0]
+            if len(p_names) == 1:
+                return ft[0]  # Found!
+            else:
+                # Look for children of "p" matching each piece
+                for partial_name in p_names[1:]:
+                    if len(ft.get_children()) == 0:
+                        return None
+                    else:
+                        # Find child Processors matching the name
+                        matches = []
+                        for ftc in ft.get_children():
+                            if strcmp(partial_name, ftc.name):
+                                matches.append(ftc)
+                        if len(matches) == 0:
+                            return None
+                        elif len(matches) == 1:
+                            ft = matches[0]
+                        else:
+                            raise Exception(str(len(matches))+" InterfaceTypes matched '"+partial_name+"' in '"+factortype_name+"'")
+        else:  # The number of matching top level FactorType is different from ONE
+            if len(ft) == 0:
+                return None
+            else:
+                raise Exception(str(len(ft)+" InterfaceTypes found matching '"+factortype_name+"'"))
+    else:
+        raise Exception("No InterfaceType name specified: '"+factortype_name+"'")
 
 
 def find_or_create_observable(state: Union[State, PartialRetrievalDictionary],
@@ -285,6 +410,7 @@ def find_or_create_observable(state: Union[State, PartialRetrievalDictionary],
             if not p:
                 attrs = proc_attributes if last else None
                 location = proc_location if last else None
+                # Create processor
                 p = Processor(acum_name,
                               external=proc_external,
                               location=location,
@@ -409,14 +535,14 @@ def find_or_create_factor_type(state: Union[State, PartialRetrievalDictionary],
 
 def find_or_create_processor(state: Union[State, PartialRetrievalDictionary],
                              name: str,
-                             proc_aliases: str = None,
-                             proc_external: bool = None, proc_attributes: dict = None, proc_location=None):
+                             proc_external: bool = None,
+                             proc_attributes: dict = None,
+                             proc_location=None):
     """
     "name" has to be a Processor name
 
     :param state:
     :param name:
-    :param proc_aliases:
     :param proc_external:
     :param proc_attributes:
     :param proc_location:
@@ -425,8 +551,9 @@ def find_or_create_processor(state: Union[State, PartialRetrievalDictionary],
     p_names, f_names = _obtain_name_parts(name)
     if not f_names:
         p, _, _ = find_or_create_observable(state, name,
-                                            proc_aliases=proc_aliases, proc_external=proc_external,
-                                            proc_attributes=proc_attributes, proc_location=proc_location)
+                                            proc_external=proc_external,
+                                            proc_attributes=proc_attributes,
+                                            proc_location=proc_location)
         return p
     else:
         raise Exception("It has to be a Processor name, received '" + name + "'")
@@ -532,7 +659,7 @@ def create_quantitative_observation(state: Union[State, PartialRetrievalDictiona
             f = find_or_create_factor(glb_idx, p, ft,
                                       fact_external=None, fact_incoming=None, fact_location=None, fact_attributes=None)
 
-        # Create the observation
+        # Create the observation (and append it to the Interface)
         o = _create_quantitative_observation(factor,
                                              value, unit, spread, assessment, pedigree, pedigree_template,
                                              oer,
@@ -583,7 +710,19 @@ def create_relation_observations(state: Union[State, PartialRetrievalDictionary]
         glb_idx, _, _, _, _ = get_case_study_registry_objects(state)
 
     # Origin
-    p, ft, f = find_or_create_observable(glb_idx, origin)
+    if isinstance(origin, str):
+        p, ft, f = find_or_create_observable(glb_idx, origin)
+    elif isinstance(origin, Processor):
+        p = origin
+        ft = None
+        f = None
+    elif isinstance(origin, Factor):
+        p = origin.processor
+        ft = origin.taxon
+        f = origin
+    else:
+        raise Exception("'origin' parameter must be String, Processor or Interface")
+
     initial_origin_obj = get_requested_object(p, ft, f)
 
     rels = []
@@ -625,7 +764,19 @@ def create_relation_observations(state: Union[State, PartialRetrievalDictionary]
                 dst_obj = dst_obj[0]
 
         if not dst_obj:
-            p, ft, f = find_or_create_observable(glb_idx, dst[0])
+            if isinstance(dst[0], str):
+                p, ft, f = find_or_create_observable(glb_idx, dst[0])
+            elif isinstance(dst[0], Processor):
+                p = dst[0]
+                ft = None
+                f = None
+            elif isinstance(dst[0], Factor):
+                p = dst[0].processor
+                ft = dst[0].taxon
+                f = dst[0]
+            else:
+                raise Exception("'dst[0]' must be String, Processor or Interface")
+
             dst_obj = get_requested_object(p, ft, f)
             # If origin is Processor and destination is Factor, create Factor in origin (if it does not exist). Or viceversa
             if isinstance(origin_obj, Processor) and isinstance(dst_obj, Factor):

@@ -12,6 +12,7 @@ persistent (relational database) some are for memory (and they are persisted by 
 * MuSIASEM methodology support
 
 """
+import logging
 from collections import namedtuple
 
 import pint
@@ -21,3 +22,4 @@ ureg = pint.UnitRegistry()
 # CodeMutable = namedlist("Code", ["code", "description", "level", "children", "parents"])
 # ConceptImmutable = namedtuple("ConceptTuple", "name istime description attributes code_list")
 CodeImmutable = namedtuple("CodeTuple", "code description level children")
+log_level = logging.DEBUG

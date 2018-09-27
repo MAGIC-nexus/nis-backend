@@ -2,7 +2,7 @@ import unittest
 import sqlalchemy
 
 # Memory
-from backend.model_services.workspace import InteractiveSession, CreateNew
+from backend.model_services.workspace import InteractiveSession, CreateNew, prepare_and_reset_database_for_tests
 from backend.command_executors import create_command
 from backend.restful_service import tm_default_users, \
     tm_authenticators, \
@@ -125,29 +125,6 @@ def new_case_study(with_metadata_command=0):
     return uuid, isess
 
 
-def reset_database():
-    for tbl in reversed(ORMBase.metadata.sorted_tables):
-        backend.engine.execute(tbl.delete())
-
-    # Load base tables
-    load_table(DBSession, User, tm_default_users)
-    load_table(DBSession, Authenticator, tm_authenticators)
-    load_table(DBSession, CaseStudyStatus, tm_case_study_version_statuses)
-    load_table(DBSession, ObjectType, tm_object_types)
-    load_table(DBSession, PermissionType, tm_permissions)
-    # Create and insert a user
-    session = DBSession()
-    # Create test User, if it does not exist
-    u = session.query(User).filter(User.name == 'test_user').first()
-    if not u:
-        u = User()
-        u.name = "test_user"
-        u.uuid = "27c6a285-dd80-44d3-9493-3e390092d301"
-        session.add(u)
-        session.commit()
-    DBSession.remove()
-
-
 class TestHighLevelUseCases(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -179,7 +156,7 @@ class TestHighLevelUseCases(unittest.TestCase):
         self.assertEqual(ide, "test_user")
 
     def test_003_new_case_study_with_no_command(self):
-        reset_database()
+        prepare_and_reset_database_for_tests()
         uuid2, isess = new_case_study(with_metadata_command=0)
         isess.quit()
         self.assertIsNotNone(uuid2, "UUID should be defined after saving+closing the reproducible session")
@@ -191,7 +168,7 @@ class TestHighLevelUseCases(unittest.TestCase):
         session.close()
 
     def test_004_new_case_study_with_only_metadata_command(self):
-        reset_database()
+        prepare_and_reset_database_for_tests()
         uuid2, isess = new_case_study(with_metadata_command=1)  # 1 means "execute" (do not register)
         # Check State
         md = isess._state.get("_metadata")
@@ -207,7 +184,7 @@ class TestHighLevelUseCases(unittest.TestCase):
         session.close()
 
     def test_005_new_case_study_with_metadata_plus_dummy_command(self):
-        reset_database()
+        prepare_and_reset_database_for_tests()
         # ----------------------------------------------------------------------
         # Create case study, with one CommandsContainer
         uuid_, isess = new_case_study(with_metadata_command=3)

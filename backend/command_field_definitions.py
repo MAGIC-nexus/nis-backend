@@ -11,18 +11,25 @@ element_types = ["Parameter", "Processor", "InterfaceType", "Interface"]
 spheres = ["Biosphere", "Technosphere"]
 roegen_types = ["Flow", "Fund"]
 orientations = ["Input", "Output"]
+no_yes = ["No", "Yes"]
+processor_types = ["Local", "Environment", "External", "ExternalEnvironment"]
 functional_or_structural = ["Functional", "Structural"]
 instance_or_archetype = ["Instance", "Archetype"]
+copy_interfaces_mode = ["No", "ChildFromParent", "ParentFromChild", "Bidirectional"]
+source_cardinalities = ["One", "Zero", "ZeroOrOne", "ZeroOrMore", "OneOrMore"]
+target_cardinalities = source_cardinalities
 relation_types = [# Relationships between Processors
-                  "is-a",  # "Left" gets a copy of ALL "Right" interface types
-                  "as-a",  # Left must already have ALL interfaces from Right. Similar to "part-of" in the sense that ALL Right interfaces are connected from Left to Right
-                  "part-of", "|",  # The same thing. Left is inside Right. No assumptions on flows between child and parent.
-                  "aggregate", "compose",
-                  "association",
+                  "is_a", "IsA",  # "Left" gets a copy of ALL "Right" interface types
+                  "as_a", "AsA",  # Left must already have ALL interfaces from Right. Similar to "part-of" in the sense that ALL Right interfaces are connected from Left to Right
+                  "part_of", "|", "PartOf",  # The same thing. Left is inside Right. No assumptions on flows between child and parent.
+                  "aggregate", "aggregation",
+                  "compose",
+                  "associate", "association",
                   # Relationships between interfaces
-                  ">", "<"
+                  "flow", ">",
+                  "<"
                   ]
-instantiation_types = ["Upscale"]
+instantiation_types = ["Upscale", "Scale"]
 
 commands = {
     "CatHierarchies":
@@ -88,66 +95,88 @@ commands = {
      ],
     # "DatasetQry" needs a specialized parser
     "InterfaceTypes":
-    [CommandField(allowed_names=["InterfaceTypeHierarchyName"], name="interface_type_hierarchy_name", mandatory=False, allowed_values=None, parser=simple_ident),
-     CommandField(allowed_names=["InterfaceTypeName"], name="interface_type_name", mandatory=True, allowed_values=None, parser=simple_ident),
+    [CommandField(allowed_names=["InterfaceTypeHierarchy"], name="interface_type_hierarchy", mandatory=True, allowed_values=None, parser=simple_ident),
+     CommandField(allowed_names=["InterfaceType"], name="interface_type", mandatory=True, allowed_values=None, parser=simple_ident),
      CommandField(allowed_names=["Sphere"], name="sphere", mandatory=True, allowed_values=spheres, parser=simple_ident),
      CommandField(allowed_names=["RoegenType"], name="roegen_type", mandatory=True, allowed_values=roegen_types, parser=simple_ident),
-     CommandField(allowed_names=["Orientation"], name="orientation", mandatory=False, allowed_values=orientations, parser=simple_ident),
      CommandField(allowed_names=["ParentInterfaceType"], name="parent_interface_type", mandatory=False, allowed_values=None, parser=simple_ident),
-     CommandField(allowed_names=["Formula", "Expression"], name="formula", mandatory=False, allowed_values=None, parser=hierarchy_expression_v2),
+     CommandField(allowed_names=["Formula", "Expression"], name="formula", mandatory=False, allowed_values=None, parser=unquoted_string),
      CommandField(allowed_names=["Description"], name="description", mandatory=False, allowed_values=None, parser=unquoted_string),
      # TODO
      #CommandField(allowed_names=["Unit"], name="unit", mandatory=False, allowed_values=None, parser=unit_name),
+     CommandField(allowed_names=["Unit"], name="unit", mandatory=False, allowed_values=None, parser=unquoted_string),
      CommandField(allowed_names=["Attributes"], name="attributes", mandatory=False, allowed_values=None, parser=key_value_list),
      CommandField(allowed_names=["Attribute", "<attr_name>"], name="attribute", mandatory=False, allowed_values=None, parser=key_value)
      ],
     "Processors":
-    [CommandField(allowed_names=["ProcessorName"], name="processor_name", mandatory=True, allowed_values=None, parser=simple_ident),
-     CommandField(allowed_names=["ProcessorGroup"], name="processors_group", mandatory=False, allowed_values=None, parser=simple_ident),
+    [CommandField(allowed_names=["ProcessorType"], name="processor_type", mandatory=False, allowed_values=processor_types, parser=simple_ident),
+     CommandField(allowed_names=["ProcessorGroup"], name="processor_group", mandatory=False, allowed_values=None, parser=simple_ident),
+     CommandField(allowed_names=["Processor"], name="processor", mandatory=True, allowed_values=None, parser=simple_ident),
+     CommandField(allowed_names=["ParentProcessor"], name="parent_processor", mandatory=False, allowed_values=None, parser=simple_ident),
      CommandField(allowed_names=["FunctionalOrStructural"], name="functional_or_structural", mandatory=False, allowed_values=functional_or_structural, parser=simple_ident),
-     CommandField(allowed_names=["InstanceOrArchetype"], name="processors_group", mandatory=False, allowed_values=instance_or_archetype, parser=simple_ident),
-     CommandField(allowed_names=["ParentProcessorName"], name="parent_processor_name", mandatory=False, allowed_values=None, parser=simple_ident),
+     CommandField(allowed_names=["CopyInterfaces"], name="copy_interfaces_mode", mandatory=False, allowed_values=copy_interfaces_mode, parser=simple_ident),
+     CommandField(allowed_names=["InstanceOrArchetype"], name="instance_or_archetype", mandatory=False, allowed_values=instance_or_archetype, parser=simple_ident),
+     CommandField(allowed_names=["Stock"], name="stock", mandatory=False, allowed_values=no_yes, parser=simple_ident),
+     CommandField(allowed_names=["Alias"], name="alias", mandatory=False, allowed_values=None, parser=simple_ident),
+     CommandField(allowed_names=["CloneProcessor"], name="clone_processor", mandatory=False, allowed_values=None, parser=simple_ident),
+     CommandField(allowed_names=["Description"], name="description", mandatory=False, allowed_values=None, parser=unquoted_string),
      # TODO
      #CommandField(allowed_names=["Location"], name="location", mandatory=False, allowed_values=None, parser=geo_value),
+     CommandField(allowed_names=["Location"], name="location", mandatory=False, allowed_values=None, parser=simple_ident),
      CommandField(allowed_names=["Attributes"], name="attributes", mandatory=False, allowed_values=None, parser=key_value_list),
      CommandField(allowed_names=["Attribute", "<attr_name>"], name="attribute", mandatory=False, allowed_values=None, parser=key_value),
      ],
     "Interfaces":
-    [CommandField(allowed_names=["SpecificName"], name="specific_name", mandatory=False, allowed_values=None, parser=simple_ident),
+    [CommandField(allowed_names=["Alias"], name="alias", mandatory=False, allowed_values=None, parser=simple_ident),
      CommandField(allowed_names=["InterfaceType"], name="interface_type", mandatory=True, allowed_values=None, parser=simple_ident),
+     CommandField(allowed_names=["Interface"], name="interface", mandatory=False, allowed_values=None, parser=simple_ident),  # Processor:InterfaceType
      # TODO
      #CommandField(allowed_names=["Processor"], name="processor", mandatory=True, allowed_values=None, parser=processor_ident),
+     CommandField(allowed_names=["Processor"], name="processor", mandatory=True, allowed_values=None, parser=simple_ident),
      CommandField(allowed_names=["Sphere"], name="sphere", mandatory=False, allowed_values=spheres, parser=simple_ident),
      CommandField(allowed_names=["RoegenType"], name="roegen_type", mandatory=False, allowed_values=roegen_types, parser=simple_ident),
      CommandField(allowed_names=["Orientation"], name="orientation", mandatory=False, allowed_values=orientations, parser=simple_ident),
+     CommandField(allowed_names=["OppositeProcessorType"], name="opposite_processor_type", mandatory=False, allowed_values=processor_types, parser=simple_ident),
      CommandField(allowed_names=["InterfaceAttributes"], name="interface_attributes", mandatory=False, allowed_values=None, parser=key_value_list),
      CommandField(allowed_names=["InterfaceAttribute", "<attr_name>"], name="interface_attribute", mandatory=False, allowed_values=None, parser=key_value),
+     # Qualified Quantification
      CommandField(allowed_names=["Value"], name="value", mandatory=False, allowed_values=None, parser=None),
      # TODO
      #CommandField(allowed_names=["Unit"], name="unit", mandatory=False, allowed_values=None, parser=unit_name),
+     CommandField(allowed_names=["Unit"], name="unit", mandatory=False, allowed_values=None, parser=unquoted_string),
      CommandField(allowed_names=["Uncertainty"], name="uncertainty", mandatory=False, allowed_values=None, parser=unquoted_string),
      CommandField(allowed_names=["Assessment"], name="assessment", mandatory=False, allowed_values=None, parser=unquoted_string),
      # TODO
      #CommandField(allowed_names=["PedigreeMatrix"], name="pedigree_matrix", mandatory=False, allowed_values=None, parser=reference_name),
      #CommandField(allowed_names=["Pedigree"], name="pedigree", mandatory=False, allowed_values=None, parser=pedigree_code),
      #CommandField(allowed_names=["RelativeTo"], name="relative_to", mandatory=False, allowed_values=None, parser=simple_ident_plus_unit_name),
+     CommandField(allowed_names=["PedigreeMatrix"], name="pedigree_matrix", mandatory=False, allowed_values=None, parser=simple_ident),
+     CommandField(allowed_names=["Pedigree"], name="pedigree", mandatory=False, allowed_values=None, parser=unquoted_string),
+     CommandField(allowed_names=["RelativeTo"], name="relative_to", mandatory=False, allowed_values=None, parser=unquoted_string),
      CommandField(allowed_names=["Time"], name="time", mandatory=False, allowed_values=None, parser=time_expression),
-     #CommandField(allowed_names=["ProcessorLocation"], name="processor_location", mandatory=False, allowed_values=None, parser=geo_value),
+     #CommandField(allowed_names=["Location"], name="location", mandatory=False, allowed_values=None, parser=geo_value),
      #CommandField(allowed_names=["Source"], name="qq_source", mandatory=False, allowed_values=None, parser=reference_name_or_unquoted_string),
+     CommandField(allowed_names=["Location"], name="location", mandatory=False, allowed_values=None, parser=unquoted_string),
+     CommandField(allowed_names=["Source"], name="qq_source", mandatory=False, allowed_values=None, parser=unquoted_string),
      CommandField(allowed_names=["NumberAttributes"], name="number_attributes", mandatory=False, allowed_values=None, parser=key_value_list),
      CommandField(allowed_names=["NumberAttribute", "<attr_name>"], name="number_attribute", mandatory=False, allowed_values=None, parser=key_value),
      CommandField(allowed_names=["Comments"], name="comments", mandatory=False, allowed_values=None, parser=unquoted_string),
      ],
     "Relationships":
-    [CommandField(allowed_names=["SourceProcessor"], name="source_processor", mandatory=False, allowed_values=None, parser=simple_ident),
-     CommandField(allowed_names=["SourceInterface"], name="source_interface", mandatory=False, allowed_values=None, parser=simple_ident),
-     CommandField(allowed_names=["TargetProcessor"], name="target_processor", mandatory=False, allowed_values=None, parser=simple_ident),
-     CommandField(allowed_names=["TargetInterface"], name="target_interface", mandatory=False, allowed_values=None, parser=simple_ident),
+    [CommandField(allowed_names=["OriginProcessor"], name="source_processor", mandatory=False, allowed_values=None, parser=simple_ident),
+     CommandField(allowed_names=["OriginInterface"], name="source_interface", mandatory=False, allowed_values=None, parser=simple_ident),
+     CommandField(allowed_names=["TargetProcessor", "DestinationProcessor"], name="target_processor", mandatory=False, allowed_values=None, parser=simple_ident),
+     CommandField(allowed_names=["TargetInterface", "DestinationInterface"], name="target_interface", mandatory=False, allowed_values=None, parser=simple_ident),
+     CommandField(allowed_names=["Origin"], name="source", mandatory=False, allowed_values=None, parser=simple_ident),
+     CommandField(allowed_names=["Target", "Destination"], name="target", mandatory=False, allowed_values=None, parser=simple_ident),
      CommandField(allowed_names=["RelationType"], name="relation_type", mandatory=False, allowed_values=relation_types, parser=simple_ident),
      CommandField(allowed_names=["Weight"], name="flow_weight", mandatory=False, allowed_values=None, parser=expression_with_parameters),
      # TODO
      #CommandField(allowed_names=["SourceCardinality"], name="source_cardinality", mandatory=False, allowed_values=None, parser=cardinality),
      #CommandField(allowed_names=["TargetCardinality"], name="target_cardinality", mandatory=False, allowed_values=None, parser=cardinality)
+     CommandField(allowed_names=["SourceCardinality"], name="source_cardinality", mandatory=False, allowed_values=source_cardinalities, parser=simple_ident),
+     CommandField(allowed_names=["TargetCardinality"], name="target_cardinality", mandatory=False, allowed_values=target_cardinalities, parser=simple_ident),
+     CommandField(allowed_names=["Attributes"], name="attributes", mandatory=False, allowed_values=None, parser=key_value_list)
      ],
     "Instantiations":
     [CommandField(allowed_names=["InvokingProcessor"], name="invoking_processor", mandatory=False, allowed_values=None, parser=simple_ident),

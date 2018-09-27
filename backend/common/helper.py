@@ -202,8 +202,11 @@ def generate_json(o):
 # #####################################################################################################################
 
 
-class PartialRetrievalDictionary2:
-    """ The key is a dictionary, the value an object. Allows partial search.
+class PartialRetrievalDictionary2:  # DEPRECATED!!!: Use PartialRetrievalDictionary
+    """
+    Implementation using pd.DataFrame, very slow!!!
+
+    The key is a dictionary, the value an object. Allows partial search.
 
     >> IF "case_sensitive==False" -> VALUES are CASE INSENSITIVE <<<<<<<<<<<<<<<<<
 

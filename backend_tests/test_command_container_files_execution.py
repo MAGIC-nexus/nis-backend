@@ -2,10 +2,10 @@ import unittest
 
 import os
 
+import backend
 from backend.model_services import get_case_study_registry_objects
 from backend.restful_service.serialization import serialize_state, deserialize_state
-from backend_tests.test_integration_use_cases import reset_database
-from backend.model_services.workspace import InteractiveSession, CreateNew
+from backend.model_services.workspace import execute_file, prepare_and_reset_database_for_tests
 from backend.models.musiasem_concepts import Observer, \
     Processor, FactorType, Factor, \
     Hierarchy, \
@@ -14,30 +14,8 @@ from backend.models.musiasem_concepts import Observer, \
     FactorsRelationDirectedFlowObservation
 
 # Database (ORM)
-from backend.models.musiasem_methodology_support import *
-
-
-def execute_file(file_name, generator_type):
-    if generator_type == "spreadsheet":
-        content_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        read_type = "rb"
-    elif generator_type == "native":
-        content_type = "application/json"
-        read_type = "r"
-
-    reset_database()
-    isess = InteractiveSession(DBSession)
-    isess.identify({"user": "test_user"}, testing=True)  # Pass just user name.
-    isess.open_reproducible_session(case_study_version_uuid=None,
-                                    recover_previous_state=None,
-                                    cr_new=CreateNew.CASE_STUDY,
-                                    allow_saving=False)
-    with open(file_name, read_type) as f:
-        buffer = f.read()
-    ret = isess.register_andor_execute_command_generator(generator_type, content_type, buffer, False, True)
-    isess.close_reproducible_session()
-    isess.close_db_session()
-    return isess
+from backend.restful_service import register_external_datasources
+from backend.solving import get_processor_names_to_processors_dictionary
 
 
 class TestCommandFiles(unittest.TestCase):
@@ -222,8 +200,90 @@ class TestCommandFiles(unittest.TestCase):
         # Close interactive session
         isess.close_db_session()
 
+    def test_007_execute_file_v2_one(self):
+        """
+        Two connected Processors
+        Test parsing and execution of a file with basic commands, and only literals (very basic syntax)
+
+        :return:
+        """
+        file_path = os.path.dirname(os.path.abspath(__file__)) + "/z_input_files/v2/01_declare_two_connected_processors.xlsx"
+        isess = execute_file(file_path, generator_type="spreadsheet")
+        # Check State of things
+        glb_idx, p_sets, hh, datasets, mappings = get_case_study_registry_objects(isess.state)
+        # TODO Check things!!!
+        # self.assertEqual(len(p_sets), 3)
+        # Close interactive session
+        isess.close_db_session()
+
+    def test_008_execute_file_v2_two(self):
+        """
+        Processors from Soslaires
+        Test parsing and execution of a file with basic commands, and only literals (very basic syntax)
+
+        :return:
+        """
+        file_path = os.path.dirname(os.path.abspath(__file__)) + "/z_input_files/v2/02_declare_hierarchies_and_cloning_and_scaling.xlsx"
+        isess = execute_file(file_path, generator_type="spreadsheet")
+        # Check State of things
+        glb_idx, p_sets, hh, datasets, mappings = get_case_study_registry_objects(isess.state)
+        processor_dict = get_processor_names_to_processors_dictionary(glb_idx)
+        for p in processor_dict:
+            print(p)
+        # TODO Check things!!!
+        # self.assertEqual(len(p_sets), 3)
+        # Close interactive session
+        isess.close_db_session()
+
+    def test_009_execute_file_v2_three(self):
+        """
+        Soslaires, without parameters
+        With regard to the two previous, introduces the syntax of a Selector of many Processors
+
+        :return:
+        """
+        file_path = os.path.dirname(os.path.abspath(__file__)) + "/z_input_files/v2/03_Soslaires_no_parameters.xlsx"
+        isess = execute_file(file_path, generator_type="spreadsheet")
+        # Check State of things
+        glb_idx, p_sets, hh, datasets, mappings = get_case_study_registry_objects(isess.state)
+        # TODO Check things!!!
+        # self.assertEqual(len(p_sets), 3)
+        # Close interactive session
+        isess.close_db_session()
+
+    def test_010_execute_file_v2_four(self):
+        """
+        Brazilian oil case study
+
+        :return:
+        """
+        file_path = os.path.dirname(os.path.abspath(__file__)) + "/z_input_files/v2/04_brazilian_oil.xlsx"
+        isess = execute_file(file_path, generator_type="spreadsheet")
+        # Check State of things
+        glb_idx, p_sets, hh, datasets, mappings = get_case_study_registry_objects(isess.state)
+        # TODO Check things!!!
+        # self.assertEqual(len(p_sets), 3)
+        # Close interactive session
+        isess.close_db_session()
+
+    def test_011_execute_file_v2_five(self):
+        """
+        Dataset processing using old commands
+
+        :return:
+        """
+        file_path = os.path.dirname(os.path.abspath(__file__)) + "/z_input_files/v2/05_caso_energia_eu_old_commands.xlsx"
+        isess = execute_file(file_path, generator_type="spreadsheet")
+        # Check State of things
+        glb_idx, p_sets, hh, datasets, mappings = get_case_study_registry_objects(isess.state)
+        # TODO Check things!!!
+        # self.assertEqual(len(p_sets), 3)
+        # Close interactive session
+        isess.close_db_session()
+
 
 if __name__ == '__main__':
     i = TestCommandFiles()
-
-    i.test_006_execute_file_five()
+    prepare_and_reset_database_for_tests(prepare=True)
+    i.test_008_execute_file_v2_two()
+    #i.test_009_execute_file_v2_three()

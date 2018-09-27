@@ -1,0 +1,55 @@
+"""
+Serialize a model once it has been built
+Before solving. Clone operations executed. Scales not performed.
+
+It could be something like:
+
+Parameters:
+[
+ {
+ },
+],
+Categories:
+[
+ {
+ },
+],
+Observers:
+[
+ {
+ },
+],
+InterfaceTypes:
+[
+ {
+ },
+],
+InterfaceTypeConverts: (if conversions not done already)
+[
+ {
+ },
+],
+Processors:
+[
+ {
+  Interfaces:
+  [
+   {...,
+    Observations:
+    [
+     {
+     },
+    ]
+   }
+  ]
+ }
+],
+Relationships:
+[
+ {
+  Origin: {name, uuid}
+  Destination: {name, uuid}
+  Type
+ }
+]
+"""

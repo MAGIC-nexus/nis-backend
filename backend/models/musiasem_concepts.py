@@ -64,10 +64,9 @@ from attr import attrs, attrib
 from backend.common.helper import create_dictionary, strcmp, PartialRetrievalDictionary, \
     case_sensitive, is_boolean, is_integer, is_float, is_datetime, is_url, is_uuid, to_datetime, to_integer, to_float, \
     to_url, to_uuid, to_boolean, to_category, to_str, is_category, is_str, is_geo, to_geo
-from backend.models import ureg
+from backend.models import ureg, log_level
 from backend.model_services import State, get_case_study_registry_objects, LocallyUniqueIDManager
 from backend.models import CodeImmutable
-from backend.restful_service import log_level
 
 logger = logging.getLogger(__name__)
 logger.setLevel(log_level)
@@ -281,9 +280,11 @@ class HierarchyNode(Nameable):
         self._parents = []
         self._parents_weights = []
         self._referred_node = referred_node
-        self._children = set()  # HierarchyNode in the same "hierarchy"
-        self._level = level  # HierarchyLevel
-        self._hierarchy = hierarchy
+        self._children = set()  # type: HierarchyNode in the same "hierarchy"
+        self._level = level  # type: HierarchyLevel
+        self._hierarchy = hierarchy  # type: Hierarchy
+        if hierarchy:  # Add name to the hierarchy
+            hierarchy.codes[name] = self
         if parent:
             self.set_parent(parent, parent_weight)
 
@@ -520,7 +521,10 @@ class HierarchyLevel(Nameable):  # Levels in a View. Code Lists do not have leve
 
 
 class Hierarchy(Nameable, Identifiable):
-    """ A list or a taxonomy, made of "Taxon" instances (prepared for "Processor" and "FactorType" instances) """
+    """
+        A list or a forest of taxonomies (hierarchies), made of "Taxon" or "FactorType" instances
+        (prepared also for "Processor" instances, not used)
+    """
     def __init__(self, name: str=None, roots: List[HierarchyNode]=None, hierarchy_group: HierarchyGroup=None, type_name=None):
         Identifiable.__init__(self)
         Nameable.__init__(self, name)
@@ -532,10 +536,10 @@ class Hierarchy(Nameable, Identifiable):
         # If not set here, the first element of the hierarchy sets the type, and new elements must be of the same type
         self._type = Hierarchy.__get_hierarchy_type(type_name)
         # Each level of the hierarchy can have a name. This list register these names, from root to leaves
-        self._level_names = [] # type: List[str]
+        self._level_names = []  # type: List[str]
 
-        # All HierarchyNodes contained by the Hierarchy
-        self._codes = dict()  # type: Dict[HierarchyNode]
+        # All HierarchyNodes contained by the Hierarchy. "code" to HierarchyNode
+        self._codes = create_dictionary()  # type: Dict[HierarchyNode]
         self._hierarchy_group = hierarchy_group  # type: HierarchyGroup
         # List (ordered) of HierarchyLevels, from top to bottom
         self._levels = []  # type: List[HierarchyLevel]
@@ -548,7 +552,7 @@ class Hierarchy(Nameable, Identifiable):
             if isinstance(type_name, str):
                 if type_name.lower() == "processor":
                     ret = Processor
-                elif type_name.lower() == "factortype":
+                elif type_name.lower() in ["factortype", "interfacetype"]:
                     ret = FactorType
                 elif type_name.lower() == "taxon":
                     ret = Taxon
@@ -976,6 +980,7 @@ class Processor(Identifiable, Nameable, Taggable, Qualifiable, Automatable, Obse
         Observable.__init__(self, location)
 
         self._factors = []  # type: List[Factor]
+        self._relationships = []  # type: List[ProcessorsRelationObservation]
         self._local_indicators = []  # type: List[Indicator]
 
         self._type = None  # Environment, Society
@@ -1417,6 +1422,16 @@ class ProcessorsSet(Nameable):
     def clone(self):
         pass
 
+    @staticmethod
+    def partial_key(name: str=None):
+        d = dict(_t="ps")
+        if name:
+            d["_n"] = name
+        return d
+
+    def key(self):
+        return {"_t": "ps", "_n": self.name}
+
 
 ####################################################################################################
 # NOT USABLE RIGHT NOW!!!!!!!!!!!!!!!!!!!!!!!!!
@@ -1486,9 +1501,13 @@ class RelationClassType(Enum):
     pp_part_of = 1
     pp_undirected_flow = 2
     pp_upscale = 3
-    ff_directed_flow = 4
-    ff_reverse_directed_flow = 5
-    ft_directed_linear_transform = 6
+    pp_isa = 4
+    pp_aggregate = 5
+    pp_associate = 6
+
+    ff_directed_flow = 10
+    ff_reverse_directed_flow = 11
+    ft_directed_linear_transform = 12
 
 
 class FactorQuantitativeObservation(Taggable, Qualifiable, Automatable):
@@ -1641,6 +1660,60 @@ class FactorTypesRelationUnidirectionalLinearTransformObservation(FactorTypesRel
     def key(self):
         d = {"_t": RelationClassType.ft_directed_linear_transform.name,
              "__o": self._origin.ident, "__d": self._destination.ident}
+        if self._observer:
+            d["__oer"] = self._observer.ident
+        return d
+
+
+class ProcessorsRelationIsAObservation(ProcessorsRelationObservation):
+    def __init__(self, parent: Processor, child: Processor, observer: Observer=None, tags=None, attributes=None):
+        Taggable.__init__(self, tags)
+        Qualifiable.__init__(self, attributes)
+        Automatable.__init__(self)
+        self._parent = parent
+        self._child = child
+        self._observer = observer
+
+    @staticmethod
+    def create_and_append(parent: Processor, child: Processor, observer: Observer, tags=None, attributes=None):
+        o = ProcessorsRelationPartOfObservation(parent, child, observer, tags, attributes)
+        if parent:
+            parent.observations_append(o)
+        if child:
+            child.observations_append(o)
+        if observer:
+            observer.observables_append(parent)
+            observer.observables_append(child)
+        return o
+
+    @property
+    def parent_processor(self):
+        return self._parent
+
+    @property
+    def child_processor(self):
+        return self._child
+
+    @property
+    def observer(self):
+        return self._observer
+
+    @staticmethod
+    def partial_key(parent: Processor=None, child: Processor=None, observer: Observer=None):
+        d = {"_t": RelationClassType.pp_isa.name}
+        if child:
+            d["__c"] = child.ident
+
+        if parent:
+            d["__p"] = parent.ident
+
+        if observer:
+            d["__oer"] = observer.ident
+
+        return d
+
+    def key(self):
+        d = {"_t": RelationClassType.pp_isa.name, "__p": self._parent.ident, "__c": self._child.ident}
         if self._observer:
             d["__oer"] = self._observer.ident
         return d

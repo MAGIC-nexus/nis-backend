@@ -82,7 +82,7 @@ class HierarchyCategoriesCommand(IExecutableCommand):
                         level = l
                         break
                 else:
-                    level = HierarchyLevel(name=tmp, hierarchy=h)
+                    level = HierarchyLevel(name=level, hierarchy=h)
                     h.levels.append(level)
 
             code = item.get("code", None)
@@ -151,10 +151,11 @@ class HierarchyCategoriesCommand(IExecutableCommand):
             h.codes[code] = c
             # Add code to level
             if level:
-                level.codes.append(c)
+                level.codes.add(c)
             # Add child to parent code
-            if pcode:
-                pcode.children_codes.append(c)
+            # (DONE BY THE CONSTRUCTOR!!)
+            # if pcode:
+            #     pcode.children_codes.append(c)
 
         return issues, None  # Issues, Output
 

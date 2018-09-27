@@ -37,11 +37,14 @@ def create_estat_request():
     return r
 
 
-estat = create_estat_request()
+estat = None
 
 
 class Eurostat(IDataSourceManager):
     def __init__(self):
+        global estat
+        if not estat:
+            estat = create_estat_request()
         d = {"backend": "sqlite", "include_get_headers": True, "cache_name": tempfile.gettempdir() + "/eurostat_bulk_datasets"}
         requests_cache.install_cache(**d)
 

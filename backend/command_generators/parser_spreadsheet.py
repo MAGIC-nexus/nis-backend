@@ -101,12 +101,12 @@ Comando
     # * re_mapping - mapping
     # * re_hierarchy - hierarchy
 
-    # WORKSHEET NAME REGULAR EXPRESSIONS
+    # REGULAR EXPRESSIONS for WORKSHEET NAMES
     re_metadata = re.compile(r"^(Metadata)" + optional_alphanumeric, flags=flags)  # Shared by V1 and V2
     re_processors = re.compile(r"(Processors|Proc)[ _]+" + var_name, flags=flags)  # V1. Deprecated in V2 (use "re_interfaces")
     re_hierarchy = re.compile(r"(Taxonomy|Tax|Composition|Comp)[ _]([cpf])[ ]" + var_name, flags=flags)  # V1. Deprecated in V2 (use "re_hierarchies"). SPECIAL
     re_upscale = re.compile(r"(Upscale|Up)[ _](" + var_name + "[ _]" + var_name + ")?", flags=flags)  # V1. Deprecated in V2 (use "re_instantiations")
-    re_relations = re.compile(r"(Grammar|Structure|Relations|Rel)([ _]+" + var_name+")?", flags=flags)  # V1. Deprecated in V2 (use "re_relationships")
+    re_relations = re.compile(r"(Grammar|Structure)([ _]+" + var_name+")?", flags=flags)  # V1. Deprecated in V2 (use "re_relationships")
     re_scale_conversion = re.compile(r"Scale", flags=flags)  # V1. Deprecated in V2 (use "re_scale_changers")
     re_pedigree_template = re.compile(r"(Pedigree|Ped|NUSAP\.PM)[ _]+" + var_name, flags=flags)  # V1. Deprecated in V2 (use "re_pedigree_matrices") ???? TO BE SOLVED <<<<<<< MAYBE V1 is better option
     re_references = re.compile(r"(References|Ref)[ _]" + var_name, flags=flags)  # V1. Maybe valid also in V2 (if deprecated, use the different specialized "re_ref*" commands)
@@ -124,11 +124,11 @@ Comando
     # re_parameters
     re_datasetqry = re.compile(r"(DatasetQry)" + optional_alphanumeric, flags=flags)  # Dataset Query
     re_interfacetypes = re.compile(r"(InterfaceTypes)" + optional_alphanumeric, flags=flags)  # Declaration of Interface types and hierarchies
-    re_processors_v2 = re.compile(r"(Processors2)" + optional_alphanumeric, flags=flags)  # It is NOT the next version of "re_processors" (which is "re_interfaces")
+    re_processors_v2 = re.compile(r"(BareProcessors)" + optional_alphanumeric, flags=flags)  # It is NOT the next version of "re_processors" (which is "re_interfaces")
     re_interfaces = re.compile(r"(Interfaces)" + optional_alphanumeric, flags=flags)  # Interfaces and data. V2 of "re_processors"
     re_relationships = re.compile(r"(Flows|Relationships)" + optional_alphanumeric, flags=flags)
     re_instantiations = re.compile(r"(Instantiations)" + optional_alphanumeric, flags=flags)
-    re_scale_changers = re.compile(r"(ScaleChangers) + optional_alphanumeric", flags=flags)
+    re_scale_changers = re.compile(r"(ScaleChangeMap) + optional_alphanumeric", flags=flags)
     re_shared_elements = re.compile(r"(SharedElements)" + optional_alphanumeric, flags=flags)
     re_reused_elements = re.compile(r"(ReusedElements)" + optional_alphanumeric, flags=flags)
     re_pedigree_matrices = re.compile(r"PedigreeMatrices" + optional_alphanumeric, flags=flags)
@@ -157,18 +157,18 @@ Comando
             (re_data, "etl_dataset", 0, ETLExternalDatasetCommand),
             (re_mapping, "mapping", 0, MappingCommand),
             # V2 commands
-            (re_hierarchies_mapping, "cat_hier_mapping", parse_hierarchy_mapping_command, 3, HierarchyMappingCommand),  # TODO (2***)
-            (re_hierarchies, "cat_hierarchies", parse_cat_hierarchy_command, 3, HierarchyCategoriesCommand),
+            (re_hierarchies_mapping, "cat_hier_mapping", parse_hierarchy_mapping_command, 3, HierarchyMappingCommand),  # TODO Develop and Test (2***)
+            (re_hierarchies, "cat_hierarchies", parse_cat_hierarchy_command, 3, HierarchyCategoriesCommand),  # TODO Test
              (re_attributes, "attribute_types", parse_attribute_types_command, 2, AttributeTypesCommand),  # TODO Attribute Types (1***)
-             (re_attribute_sets, "attribute_sets", parse_attribute_sets_command, 3, AttributeSetsCommand),  # TODO (2***)
+             (re_attribute_sets, "attribute_sets", parse_attribute_sets_command, 3, AttributeSetsCommand),  # TODO Develop and Test (2***)
             (re_datasetdef, "datasetdef", parse_datasetdef_command, 2, DatasetDefCommand),  # TODO Dataset Metadata (3***)
             (re_datasetdata, "datasetdata", parse_dataset_data_command, 2, DatasetDataCommand),  # TODO Dataset Data   (3***)
             (re_parameters, "parameters", parse_parameters_command_v2, 3, ParametersCommand),  # The old function was "parse_parameters_command"
-            (re_datasetqry, "datasetqry", parse_dataset_qry_command, 2, DatasetQryCommand),  # TODO Dataset Query. Very similar to "etl_dataset" IExecutableCommand (3***)
-            (re_interfacetypes, "interface_types", parse_interface_types_command, 2, InterfaceTypesCommand),  # TODO (2***)
-            (re_processors_v2, "processors", parse_processors_v2_command, 2, ProcessorsCommand),  # TODO (4***)
-            (re_interfaces, "interfaces_and_qq", parse_interfaces_command, 2, InterfacesAndQualifiedQuantitiesCommand),  # TODO (4***)(evolution of "re_processors" "data_input")
-            (re_relationships, "relationships", parse_relationships_command, 2, RelationshipsCommand),  # TODO (4***)(evolution of "re_relations" "structure")
+            (re_datasetqry, "datasetqry", parse_dataset_qry_command, 2, DatasetQryCommand),  # TODO Develop and TestDataset Query. Very similar to "etl_dataset" IExecutableCommand (3***)
+            (re_interfacetypes, "interface_types", parse_interface_types_command, 2, InterfaceTypesCommand),  # TODO Test
+            (re_processors_v2, "processors", parse_processors_v2_command, 2, ProcessorsCommand),  # TODO Test
+            (re_interfaces, "interfaces_and_qq", parse_interfaces_command, 2, InterfacesAndQualifiedQuantitiesCommand),  # TODO Test
+            (re_relationships, "relationships", parse_relationships_command, 2, RelationshipsCommand),  # TODO Test
             (re_instantiations, "instantiations", parse_instantiations_command, 2, InstantiationsCommand),  # TODO (5***)(evolution of "re_upscale" "upscale")
             (re_scale_changers, "scale_conversion_v2", parse_scale_changers_command, 2, ScaleConversionV2Command),  # TODO (5***)Relations of conversion between interface types
             (re_problem_statement, "problem_statement",),  # TODO
@@ -255,6 +255,7 @@ Comando
                     elif cmd[3] == 3:  # Call parser, THREE params: the worksheet, area to parse AND the worksheet Name
                         name2 = cmd[0].search(name).group(2)
                         issues, c_label, c_content = cmd[2](sh_in, t, name2)
+                    break
 
         # Append issues
         errors = 0
