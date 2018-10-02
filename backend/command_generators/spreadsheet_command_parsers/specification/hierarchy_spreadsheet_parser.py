@@ -1,6 +1,6 @@
 import collections
 
-from backend.command_generators import basic_elements_parser
+from backend.command_generators import parser_field_parsers
 from backend.common.helper import strcmp, create_dictionary
 
 
@@ -77,7 +77,7 @@ def parse_hierarchy_command(sh, area, name: str, n_type: str):
         if found:
             # Value syntax. A simple identity name
             try:
-                basic_elements_parser.string_to_ast(basic_elements_parser.simple_ident, value)
+                parser_field_parsers.string_to_ast(parser_field_parsers.simple_ident, value)
             except:
                 issues.append((3, "The name of the category must be a simple name. Row "+str(r)))
             # Description
@@ -134,7 +134,7 @@ def parse_hierarchy_command(sh, area, name: str, n_type: str):
         code = n["code"]
         if "expression" in n:
             expression = n["expression"]
-            ast = basic_elements_parser.string_to_ast(basic_elements_parser.hierarchy_expression, expression)
+            ast = parser_field_parsers.string_to_ast(parser_field_parsers.hierarchy_expression, expression)
             for p in ast["terms"]:
                 if isinstance(p, str):
                     if p.lower() not in codes:

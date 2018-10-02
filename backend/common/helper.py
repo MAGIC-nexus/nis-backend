@@ -478,7 +478,7 @@ class PartialRetrievalDictionary:
             if case_sensitive:
                 key2 = {k.lower(): v for k, v in key.items()}
             else:
-                key2 = {k.lower(): v if k.startswith("__") else v.lower() for k, v in key.items()}
+                key2 = {k.lower(): v if k.startswith("__") else v.lower() if isinstance(v, str) else v for k, v in key.items()}
         else:
             key2 = key
         # Arrays containing key: values "not-present" and "present"

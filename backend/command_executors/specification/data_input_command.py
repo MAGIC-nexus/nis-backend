@@ -2,7 +2,7 @@ import json
 
 from backend.common.helper import create_dictionary
 from backend.model_services import IExecutableCommand, State, get_case_study_registry_objects
-from backend.command_generators import basic_elements_parser
+from backend.command_generators import parser_field_parsers
 from backend.models.musiasem_concepts_helper import create_quantitative_observation
 from backend.models.musiasem_concepts import FlowFundRoegenType, ProcessorsSet, PedigreeMatrix, Reference
 
@@ -102,7 +102,7 @@ class DataInputCommand(IExecutableCommand):
             # Source
             if "source" in row:
                 try:
-                    ast = basic_elements_parser.string_to_ast(basic_elements_parser.reference, row["source"])
+                    ast = parser_field_parsers.string_to_ast(parser_field_parsers.reference, row["source"])
                     ref_id = ast["ref_id"]
                     references = glb_idx.get(Reference.partial_key(ref_id), ref_type="provenance")
                     if len(references) == 1:
@@ -115,7 +115,7 @@ class DataInputCommand(IExecutableCommand):
             # Geolocation
             if "geolocation" in row:
                 try:
-                    ast = basic_elements_parser.string_to_ast(basic_elements_parser.reference, row["geolocation"])
+                    ast = parser_field_parsers.string_to_ast(parser_field_parsers.reference, row["geolocation"])
                     ref_id = ast["ref_id"]
                     references = glb_idx.get(Reference.partial_key(ref_id), ref_type="geographic")
                     if len(references) == 1:
@@ -187,7 +187,7 @@ class DataInputCommand(IExecutableCommand):
                 hh[h] = []
             hh[h].extend(self._content["code_lists"][h])
 
-        dataset_column_rule = basic_elements_parser.dataset_with_column
+        dataset_column_rule = parser_field_parsers.dataset_with_column
 
         processor_attributes = self._content["processor_attributes"]
 

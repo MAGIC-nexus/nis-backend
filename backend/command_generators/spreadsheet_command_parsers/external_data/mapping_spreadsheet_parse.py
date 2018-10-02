@@ -1,6 +1,6 @@
 from backend.common.helper import strcmp, obtain_dataset_source, obtain_dataset_metadata, \
                                       check_dataset_exists, create_dictionary
-from backend.command_generators import basic_elements_parser
+from backend.command_generators import parser_field_parsers
 
 
 def parse_mapping_command(sh, area, origin, destination):
@@ -71,7 +71,7 @@ def parse_mapping_command(sh, area, origin, destination):
 
     #  Destination name must be a simple identity
     try:
-        basic_elements_parser.simple_ident.parseString(destination, parseAll=True)
+        parser_field_parsers.simple_ident.parseString(destination, parseAll=True)
     except:
         some_error = True
         issues.append((3, "'" + destination + "' category name has to be a simple identifier"))

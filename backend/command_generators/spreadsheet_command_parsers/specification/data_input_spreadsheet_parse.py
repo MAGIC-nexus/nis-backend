@@ -2,10 +2,10 @@ import regex as re
 from uncertainties import ufloat_fromstr
 from pint.errors import UndefinedUnitError
 
-from backend.command_generators.basic_elements_parser import simple_ident
+from backend.command_generators.parser_field_parsers import simple_ident
 from backend.common.helper import create_dictionary, case_sensitive
 from backend import ureg
-from backend.command_generators import basic_elements_parser
+from backend.command_generators import parser_field_parsers
 from backend.models.musiasem_concepts import allowed_ff_types
 
 """
@@ -161,7 +161,7 @@ def parse_data_input_command(sh, area, processors_type, state=None):
     set_referenced_datasets = create_dictionary()  # Dictionary of datasets to be embedded into the result (it is a job of the execution part)
     processors_taxa = create_dictionary()  # Correspondence "processor" -> taxa (to avoid changes in this correspondence)
 
-    dataset_column_rule = basic_elements_parser.dataset_with_column
+    dataset_column_rule = parser_field_parsers.dataset_with_column
     values = [None]*area[3]
     # LOOP OVER EACH ROW
     for r in range(area[0] + 1, area[1]):  # Scan rows (observations)
@@ -184,7 +184,7 @@ def parse_data_input_command(sh, area, processors_type, state=None):
                     if col_allows_dataset[col_name]:
                         if not referenced_dataset:
                             try:
-                                ast = basic_elements_parser.string_to_ast(dataset_column_rule, value[1:])
+                                ast = parser_field_parsers.string_to_ast(dataset_column_rule, value[1:])
                                 if len(ast["parts"]) == 2:
                                     referenced_dataset = ast["parts"][0]
                                     # Remove the dataset variable. It will be stored in "_referenced_dataset"
@@ -201,7 +201,7 @@ def parse_data_input_command(sh, area, processors_type, state=None):
                                 issues.append((3, "Column '" + col_name + "' has an invalid dataset reference '" + value + "', in row " + str(r)))
                         else:
                             try:
-                                ast = basic_elements_parser.string_to_ast(simple_ident, value[1:])
+                                ast = parser_field_parsers.string_to_ast(simple_ident, value[1:])
                                 # Mark as processed
                                 already_processed[col_name] = None
                             except:
@@ -234,9 +234,9 @@ def parse_data_input_command(sh, area, processors_type, state=None):
             # Parse the value
             if c in ["processor", "factor"]:
                 # Check that it is a variable name, and allow hierarchical names
-                basic_elements_parser.string_to_ast(basic_elements_parser.simple_h_name, value)
+                parser_field_parsers.string_to_ast(parser_field_parsers.simple_h_name, value)
             elif c == "pedigree_matrix":
-                basic_elements_parser.string_to_ast(basic_elements_parser.simple_ident, value)
+                parser_field_parsers.string_to_ast(parser_field_parsers.simple_ident, value)
             elif c == "relative_to":
                 # Two elements, the first a hierarchical name, the second a unit name
                 s = value.split(" ")
@@ -245,7 +245,7 @@ def parse_data_input_command(sh, area, processors_type, state=None):
                     issues.append((3, "The Relative To value has to have two parts, factor name and unit, separated by a whitespace (specified '"+value+"'), in row "+str(r)))
                 else:
                     try:
-                        basic_elements_parser.string_to_ast(basic_elements_parser.simple_h_name, s[0])
+                        parser_field_parsers.string_to_ast(parser_field_parsers.simple_h_name, s[0])
                     except:
                         some_error = True
                         issues.append((3, "The name specified for the relative to factor '"+s[0]+"' is not valid, in row "+str(r)))
@@ -260,7 +260,7 @@ def parse_data_input_command(sh, area, processors_type, state=None):
             elif c == "level":
                 # A valid level name
                 try:
-                    basic_elements_parser.string_to_ast(basic_elements_parser.level_name, value)
+                    parser_field_parsers.string_to_ast(parser_field_parsers.level_name, value)
                 except:
                     some_error = True
                     issues.append((3, "The level '" + value + "' syntax is not valid, in row " + str(r)))
@@ -269,10 +269,10 @@ def parse_data_input_command(sh, area, processors_type, state=None):
                 # Check that value is a valid parent name. It can be either a list of tags OR
                 # a processor name, something defining a single processor
                 try:
-                    basic_elements_parser.string_to_ast(basic_elements_parser.simple_h_name, value)
+                    parser_field_parsers.string_to_ast(parser_field_parsers.simple_h_name, value)
                 except:
                     try:
-                        basic_elements_parser.string_to_ast(basic_elements_parser.named_parameters_list, value)
+                        parser_field_parsers.string_to_ast(parser_field_parsers.named_parameters_list, value)
                     except:
                         some_error = True
                         issues.append((3, "Could not parse '"+value+"' as 'parent' in row " + str(r)))
@@ -285,7 +285,7 @@ def parse_data_input_command(sh, area, processors_type, state=None):
                 if not isinstance(value, str):
                     value = str(value)
                 # Expression allowed. Check syntax only. It can refer to parameters.
-                ast = basic_elements_parser.string_to_ast(basic_elements_parser.expression, value)
+                ast = parser_field_parsers.string_to_ast(parser_field_parsers.expression, value)
                 # TODO Check existence of used variables
                 # TODO basic_elements_parser.ast_evaluator(ast, state, None, issues, "static")
             elif c == "unit":
@@ -320,11 +320,11 @@ def parse_data_input_command(sh, area, processors_type, state=None):
                 # A valid time specification. Possibilities: Year, Month-Year / Year-Month, Time span (two dates)
                 if not isinstance(value, str):
                     value = str(value)
-                ast = basic_elements_parser.string_to_ast(basic_elements_parser.time_expression, value)
+                ast = parser_field_parsers.string_to_ast(parser_field_parsers.time_expression, value)
             elif c == "geolocation":
                 # A reference to a geolocation
                 try:
-                    basic_elements_parser.string_to_ast(basic_elements_parser.reference, value)
+                    parser_field_parsers.string_to_ast(parser_field_parsers.reference, value)
                 except:
                     some_error = True
                     issues.append((3, "The geolocation must be a reference"))
@@ -354,7 +354,7 @@ def parse_data_input_command(sh, area, processors_type, state=None):
             try:
                 if not isinstance(value, str):
                     value = str(value)
-                basic_elements_parser.simple_ident.parseString(value, parseAll=True)
+                parser_field_parsers.simple_ident.parseString(value, parseAll=True)
             except:
                 value = None
                 some_error = True

@@ -23,17 +23,17 @@
   to be an OLAP repository.
 * Access to REDIS to persist temporarily open interactive sessions (needed because HTTP is stateless)
 * Web service for use from different domain (like official web site). Using CORS
+* Script automating the deployment of related Docker containers: Databases, Redis, Nextcloud
+  - Not published for now. It is called "run-data-management-tools.py", can be requested.
 
 **TO-DO**
 * Possibility to execute R scripts in a specialized Docker container, which provides a sandbox
   * Access to resources should be through URLs, not file system PATHs. Or standardized file system PATHs
 * MonetDB Docker used as data repository
 * Dockerized: a Dockerfile for NGinx, allowing the execution of Celery workers for long executions and background jobs
-* Angular Client, connected to the RESTful web service backend
 * OAuth2 tokens validation using third parties (Google)
 * WebDAV access to NextCloud to store files and prepare case studies in DMP format
 * Configuration file divided in sections, .INI file style.
-* Script automating the deployment of related Docker containers: Databases, Redis, Nextcloud
 
 ## Features useful for NIS construction
 

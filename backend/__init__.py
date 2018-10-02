@@ -22,8 +22,8 @@ case_sensitive = False
 # Create units registry
 ureg = pint.UnitRegistry()
 ureg.define("cubic_meter = m^3 = m3")
-ureg.define("euro = [] = EUR = Eur = eur = Euro = Euros ")
-ureg.define("dollar = [] = USD = Usd = usd = Dollar = Dollars")
+ureg.define("euro = [] = EUR = Eur = eur = Euro = Euros = €")
+ureg.define("dollar = [] = USD = Usd = usd = Dollar = Dollars = $")
 
 # Named tuples
 Issue = namedtuple("Issue",

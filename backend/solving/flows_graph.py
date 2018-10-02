@@ -2,10 +2,10 @@ import networkx as nx
 
 from backend.solving import *
 from backend import ureg
-from backend.command_generators.basic_elements_parser import ast_to_string
+from backend.command_generators.parser_ast_evaluators import ast_to_string
 from backend.models.musiasem_concepts_helper import find_or_create_observable
 from backend.restful_service.serialization import deserialize_state
-from backend.command_generators import basic_elements_parser
+from backend.command_generators import parser_field_parsers
 
 """
 IN DEVELOPMENT. NOT READY FOR INTEGRATION INTO THE DOCKER CONTAINER
@@ -200,7 +200,7 @@ def construct_flow_graph(state: State, query: IQueryObjects, filt: Union[str, di
         if "relative_to" in o.attributes and o.attributes["relative_to"]:
             # Parse "defining_factor", it can be composed of the factor name AND the unit
             defining_factor = o.attributes["relative_to"]
-            ast = basic_elements_parser.string_to_ast(basic_elements_parser.factor_unit, defining_factor)
+            ast = parser_field_parsers.string_to_ast(parser_field_parsers.factor_unit, defining_factor)
             factor_type = ast_to_string(ast["factor"])
             unit_name = ast["unparsed_unit"]
             ureg(unit_name)

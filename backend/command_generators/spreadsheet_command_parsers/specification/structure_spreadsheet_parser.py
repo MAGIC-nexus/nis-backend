@@ -5,7 +5,7 @@ Declaration of Observables and relations between Processors and/or Factors
 import collections
 import traceback
 
-from backend.command_generators import basic_elements_parser
+from backend.command_generators import parser_field_parsers
 
 
 def parse_structure_command(sh, area):
@@ -64,7 +64,7 @@ def parse_structure_command(sh, area):
             if k == "origin":  # Mandatory
                 # Check syntax
                 try:
-                    basic_elements_parser.string_to_ast(basic_elements_parser.core_concept_name, value)
+                    parser_field_parsers.string_to_ast(parser_field_parsers.factor_name, value)
                     item[k] = value
                 except:
                     some_error = True
@@ -81,10 +81,10 @@ def parse_structure_command(sh, area):
                 # Because the expression (weight relation p_f_name) and the simple p_f_name can collide syntactically,
                 # first try the simpler expression then the complex one
                 try:
-                    dummy = basic_elements_parser.string_to_ast(basic_elements_parser.core_concept_name, value)
+                    dummy = parser_field_parsers.string_to_ast(parser_field_parsers.factor_name, value)
                 except:
                     try:
-                        dummy = basic_elements_parser.string_to_ast(basic_elements_parser.relation_expression, value)
+                        dummy = parser_field_parsers.string_to_ast(parser_field_parsers.relation_expression, value)
                     except:
                         traceback.print_exc()
                         some_error = True

@@ -1,8 +1,8 @@
 import json
 import traceback
 
-from backend.command_generators import basic_elements_parser
-from backend.command_generators.basic_elements_parser import ast_to_string
+from backend.command_generators import parser_field_parsers
+from backend.command_generators.parser_ast_evaluators import ast_to_string
 from backend.models.musiasem_concepts_helper import create_relation_observations
 from backend.model_services import IExecutableCommand, State, get_case_study_registry_objects
 
@@ -49,10 +49,10 @@ class StructureCommand(IExecutableCommand):
             destinations = []
             for r in o["destinations"]:
                 try:
-                    result = basic_elements_parser.string_to_ast(basic_elements_parser.core_concept_name, r)
+                    result = parser_field_parsers.string_to_ast(parser_field_parsers.factor_name, r)
                 except:
                     try:
-                        result = basic_elements_parser.string_to_ast(basic_elements_parser.relation_expression, r)
+                        result = parser_field_parsers.string_to_ast(parser_field_parsers.relation_expression, r)
                     except:
                         traceback.print_exc()
                         some_error = True

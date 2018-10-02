@@ -5,8 +5,7 @@ from backend.models.musiasem_concepts import Processor, Observer, FactorType, Fa
     FactorQuantitativeObservation, FactorTypesRelationUnidirectionalLinearTransformObservation, \
     ProcessorsRelationPartOfObservation, ProcessorsRelationUndirectedFlowObservation, \
     ProcessorsRelationUpscaleObservation, FactorsRelationDirectedFlowObservation
-from backend.model_services import get_case_study_registry_objects
-from backend.model_services.workspace import State
+from backend.model_services import get_case_study_registry_objects, State
 from backend.common.helper import create_dictionary, PartialRetrievalDictionary
 
 

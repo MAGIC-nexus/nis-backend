@@ -3,8 +3,8 @@ from typing import Union, List, Tuple, Optional
 import jsonpickle
 
 from backend import ureg
-from backend.command_generators import basic_elements_parser
-from backend.command_generators.basic_elements_parser import ast_to_string
+from backend.command_generators import parser_field_parsers
+from backend.command_generators.parser_ast_evaluators import ast_to_string
 from backend.common.helper import PartialRetrievalDictionary, create_dictionary, strcmp
 from backend.model_services import State, get_case_study_registry_objects
 from backend.models.musiasem_concepts import \
@@ -651,7 +651,7 @@ def create_quantitative_observation(state: Union[State, PartialRetrievalDictiona
 
         # If "relative_to" is specified, maybe a FactorType needs to be created
         if relative_to:
-            ast = basic_elements_parser.string_to_ast(basic_elements_parser.factor_unit, relative_to)
+            ast = parser_field_parsers.string_to_ast(parser_field_parsers.factor_unit, relative_to)
             factor_type = ast_to_string(ast["factor"])
             unit_name = ast["unparsed_unit"]
             ureg(unit_name)
@@ -683,7 +683,8 @@ def create_relation_observations(state: Union[State, PartialRetrievalDictionary]
                                  origin: Union[str, Processor, Factor],
                                  destinations: List[Tuple[Union[str, Processor, Factor], Optional[Tuple[Union[RelationClassType, str], Optional[str]]]]],
                                  relation_class: Union[str, RelationClassType]=None,
-                                 oer: Union[str, Observer]=Observer.no_observer_specified) -> List:
+                                 oer: Union[str, Observer]=Observer.no_observer_specified,
+                                 attributes=None) -> List:
     """
     Create and register one or more relations from a single origin to one or more destinations.
     Relation parameters (type and weight) can be specified for each destination, or a default relation class parameter is used
@@ -694,6 +695,7 @@ def create_relation_observations(state: Union[State, PartialRetrievalDictionary]
     :param destinations: List of tuples, where each tuple can be of a single element, the string, Processor or Factor, or can be accompanied by the relation parameters, the relation type, and the string specifying the weight
     :param relation_class: Default relation class
     :param oer: str or Observer for the Observer to which relation observations are accounted
+    :param attributes: Attributes attached to the new Relationship
     :return: The list of relations
     """
     def get_requested_object(p_, ft_, f_):
@@ -802,7 +804,7 @@ def create_relation_observations(state: Union[State, PartialRetrievalDictionary]
                 weight = dst[2]
             else:
                 weight = ""  # No weight, it only can be used to aggregate
-            rel = _find_or_create_relation(origin_obj, dst_obj, rel_type, oer, weight, glb_idx)
+            rel = _find_or_create_relation(origin_obj, dst_obj, rel_type, oer, weight, glb_idx, attributes=attributes)
         rels.append(rel)
 
     return rels
@@ -894,7 +896,7 @@ def _get_observer(observer: Union[str, Observer], idx: PartialRetrievalDictionar
     return res
 
 
-def _find_or_create_relation(origin, destination, rel_type: Union[str, RelationClassType], oer: Union[Observer, str], weight: str, state: Union[State, PartialRetrievalDictionary]):
+def _find_or_create_relation(origin, destination, rel_type: Union[str, RelationClassType], oer: Union[Observer, str], weight: str, state: Union[State, PartialRetrievalDictionary], attributes=None):
     """
     Construct and register a relation between origin and destination
 
@@ -904,6 +906,7 @@ def _find_or_create_relation(origin, destination, rel_type: Union[str, RelationC
     :param oer: Observer, as object or string
     :param weight: For flow relations
     :param state: State or PartialRetrievalDictionary
+    :param attributes: Attributes of the relationship
     :return: The relation observation
     """
     # Get objects from state
@@ -938,7 +941,7 @@ def _find_or_create_relation(origin, destination, rel_type: Union[str, RelationC
             # Find or Create the relation
             r = glb_idx.get(ProcessorsRelationPartOfObservation.partial_key(parent=origin, child=destination))
             if not r:
-                r = ProcessorsRelationPartOfObservation.create_and_append(origin, destination, oer)  # Part-of
+                r = ProcessorsRelationPartOfObservation.create_and_append(origin, destination, oer, attributes=attributes)  # Part-of
                 glb_idx.put(r.key(), r)
             else:
                 r = r[0]
@@ -959,7 +962,7 @@ def _find_or_create_relation(origin, destination, rel_type: Union[str, RelationC
             # Find or Create the relation
             r = glb_idx.get(ProcessorsRelationUndirectedFlowObservation.partial_key(source=origin, target=destination))
             if not r:
-                r = ProcessorsRelationUndirectedFlowObservation.create_and_append(origin, destination, oer)  # Undirected flow
+                r = ProcessorsRelationUndirectedFlowObservation.create_and_append(origin, destination, oer, attributes=attributes)  # Undirected flow
                 glb_idx.put(r.key(), r)
             else:
                 r = r[0]
@@ -968,7 +971,7 @@ def _find_or_create_relation(origin, destination, rel_type: Union[str, RelationC
             # Find or Create the relation
             r = glb_idx.get(ProcessorsRelationUpscaleObservation.partial_key(parent=origin, child=destination))
             if not r:
-                r = ProcessorsRelationUpscaleObservation.create_and_append(origin, destination, oer, weight)  # Upscale
+                r = ProcessorsRelationUpscaleObservation.create_and_append(origin, destination, oer, weight, attributes=attributes)  # Upscale
                 glb_idx.put(r.key(), r)
             else:
                 r = r[0]
@@ -982,7 +985,7 @@ def _find_or_create_relation(origin, destination, rel_type: Union[str, RelationC
             # Find or Create the relation
             r = glb_idx.get(FactorsRelationDirectedFlowObservation.partial_key(source=origin, target=destination))
             if not r:
-                r = FactorsRelationDirectedFlowObservation.create_and_append(origin, destination, oer, weight)  # Directed flow
+                r = FactorsRelationDirectedFlowObservation.create_and_append(origin, destination, oer, weight, attributes=attributes)  # Directed flow
                 glb_idx.put(r.key(), r)
             else:
                 r = r[0]

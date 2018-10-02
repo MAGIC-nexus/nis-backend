@@ -1,6 +1,6 @@
 import openpyxl
 
-from backend.command_generators import basic_elements_parser
+from backend.command_generators import parser_field_parsers
 from backend.command_generators.parser_spreadsheet_utils import obtain_rectangular_submatrices, binary_mask_from_worksheet
 from backend.common.helper import strcmp
 
@@ -73,7 +73,7 @@ def parse_scale_conversion_command(sh, area):
     # Check that we have valid factor type names
     for ft in subrow+subcol:
         try:
-            basic_elements_parser.string_to_ast(basic_elements_parser.simple_h_name, ft)
+            parser_field_parsers.string_to_ast(parser_field_parsers.simple_h_name, ft)
         except:
             some_error = True
             issues((3, "'"+ft+"' is not a valid Factor Type name"))
@@ -96,7 +96,7 @@ def parse_scale_conversion_command(sh, area):
                     issues((3, "A change of scale to the same factor type ("+origin+") is not allowed"))
                 else:
                     try:
-                        basic_elements_parser.string_to_ast(basic_elements_parser.expression_with_parameters, v)
+                        parser_field_parsers.string_to_ast(parser_field_parsers.expression_with_parameters, v)
                         # Add the scale
                         scales.append(dict(origin=origin, destination=destination, scale=v))
                     except:

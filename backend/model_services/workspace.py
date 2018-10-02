@@ -14,6 +14,7 @@ from typing import List
 import sqlalchemy
 
 import backend
+from backend.command_generators import Issue
 from backend.command_generators.parsers_factory import commands_container_parser_factory
 from backend.models.musiasem_methodology_support import (User,
                                                          CaseStudy,
@@ -199,14 +200,27 @@ def execute_command_container_file(state, generator_type, file_type: str, file):
             stop = False
             # Process the new issues
             for i in issues:
-                if i[0] == 3:
-                    stop = True
+                if isinstance(i, dict):
+                    if i["type"] == 3:
+                        stop = True
+                    tp = i["type"]
+                    msg = i["message"]
+                elif isinstance(i, tuple):
+                    if i[0] == 3:  # Error
+                        stop = True
+                    tp = i[0]
+                    msg = i[1]
+                elif isinstance(i, Issue):
+                    if i.itype == 3:  # Error
+                        stop = True
+                    tp = i.itype
+                    msg = i.description
                 # TODO Issue fields for the location of issues should depend on the file format
                 issue = {"sheet_number": cont,
                          "sheet_name": cmd._source_block_name if hasattr(cmd, "_source_block_name") else "",
                          "c_type": cmd._serialization_type,
-                         "type": i[0],
-                         "message": i[1]
+                         "type": tp,
+                         "message": msg
                          }
                 issues_aggreg.append(issue)
 

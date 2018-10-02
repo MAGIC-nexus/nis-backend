@@ -1,5 +1,5 @@
-from backend.command_generators import basic_elements_parser
-from backend.command_generators.basic_elements_parser import simple_ident
+from backend.command_generators import parser_field_parsers
+from backend.command_generators.parser_field_parsers import simple_ident
 from backend.common.helper import obtain_dataset_source, obtain_dataset_metadata, create_dictionary, strcmp
 from backend.model_services import get_case_study_registry_objects
 
@@ -131,7 +131,7 @@ def parse_etl_external_dataset_command(sh, area, dataset_name, state):
             if len(lst) > 0:
                 result_name = lst[0]
                 try:
-                    basic_elements_parser.string_to_ast(simple_ident, result_name)
+                    parser_field_parsers.string_to_ast(simple_ident, result_name)
                 except:
                     issues.append(
                         (3, "Column '" + col_name + "' has an invalid dataset name '" + result_name + "'"))

@@ -1,4 +1,4 @@
-from backend.command_generators import basic_elements_parser
+from backend.command_generators import parser_field_parsers
 
 
 def parse_indicators_command(sh, area):
@@ -51,7 +51,7 @@ def parse_indicators_command(sh, area):
             if k == "name":  # Mandatory
                 # Check syntax
                 try:
-                    basic_elements_parser.string_to_ast(basic_elements_parser.simple_ident, value)
+                    parser_field_parsers.string_to_ast(parser_field_parsers.simple_ident, value)
                     indicator[k] = value
                 except:
                     some_error = True
@@ -59,7 +59,7 @@ def parse_indicators_command(sh, area):
             elif k == "formula":  # Mandatory
                 # Check syntax
                 try:
-                    basic_elements_parser.string_to_ast(basic_elements_parser.indicator_expression, value)
+                    parser_field_parsers.string_to_ast(parser_field_parsers.indicator_expression, value)
                     indicator[k] = value
                 except:
                     some_error = True

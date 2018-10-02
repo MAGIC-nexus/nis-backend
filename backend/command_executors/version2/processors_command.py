@@ -4,7 +4,7 @@ from backend import CommandField
 from backend.command_field_definitions import processor_types, functional_or_structural, instance_or_archetype, \
     copy_interfaces_mode
 from backend.command_generators import Issue
-from backend.command_generators.basic_elements_parser import dictionary_from_key_value_list
+from backend.command_generators.parser_ast_evaluators import dictionary_from_key_value_list
 from backend.command_generators.spreadsheet_command_parsers_v2 import IssueLocation
 from backend.model_services import IExecutableCommand, get_case_study_registry_objects
 from backend.models.musiasem_concepts import ProcessorsSet, ProcessorsRelationPartOfObservation
@@ -64,7 +64,7 @@ class ProcessorsCommand(IExecutableCommand):
             p_attributes = item.get("attributes", None)  # Optional, key_value_list
             if p_attributes:
                 try:
-                    attributes = dictionary_from_key_value_list(p_attributes)
+                    attributes = dictionary_from_key_value_list(p_attributes, glb_idx)
                 except Exception as e:
                     issues.append(Issue(itype=3,
                                         description=str(e),

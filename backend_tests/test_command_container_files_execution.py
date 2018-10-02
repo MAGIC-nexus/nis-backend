@@ -285,5 +285,8 @@ class TestCommandFiles(unittest.TestCase):
 if __name__ == '__main__':
     i = TestCommandFiles()
     prepare_and_reset_database_for_tests(prepare=True)
-    i.test_008_execute_file_v2_two()
-    #i.test_009_execute_file_v2_three()
+    backend.data_source_manager = register_external_datasources({})
+    i.test_009_execute_file_v2_three()  # Soslaires. v2 syntax
+    #i.test_008_execute_file_v2_two()
+    #i.test_011_execute_file_v2_five()  # Dataset
+

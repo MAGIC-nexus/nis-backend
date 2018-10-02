@@ -64,3 +64,4 @@ def commands_container_parser_factory(generator_type, file_type, file, state):
         if isinstance(s, bytes):
             s = s.decode("utf-8")
         yield from commands_generator_from_native_json(s, state)
+

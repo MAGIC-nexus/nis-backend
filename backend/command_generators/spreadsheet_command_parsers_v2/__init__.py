@@ -2,7 +2,7 @@ from attr import attrs, attrib
 from typing import List, Tuple
 from backend import CommandField
 from backend.command_field_definitions import commands
-from backend.command_generators import Issue, basic_elements_parser
+from backend.command_generators import Issue, parser_field_parsers
 
 
 @attrs
@@ -90,6 +90,8 @@ def parse_command(sh, area, name: str, cmd_name):
     # Each row
     for r in range(area[0] + 1, area[1]):
         line = {}
+        expandable = False  # The line contains at least one field implying expansion into multiple lines
+        complex = False  # The line contains at least one field with a complex rule (which cannot be evaluated with a simple cast)
 
         # Mandatory values
         mandatory_not_found = set([c.name for c in cols if c.mandatory])
@@ -117,7 +119,13 @@ def parse_command(sh, area, name: str, cmd_name):
                 # Parse. Just check syntax
                 if col.parser:
                     try:
-                        basic_elements_parser.string_to_ast(col.parser, value)
+                        ast = parser_field_parsers.string_to_ast(col.parser, value)
+                        # Rules are in charge of informing if the result is expandable and if it complex
+                        if "expandable" in ast and ast["expandable"]:
+                            expandable = True
+                        if "complex" in ast and ast["complex"]:
+                            complex = True
+
                         line[cname] = value
                     except:
                         col_header = sh.cell(row=1, column=col_map[cname]).value
@@ -129,6 +137,10 @@ def parse_command(sh, area, name: str, cmd_name):
 
             if col.name in mandatory_not_found:
                 mandatory_not_found.discard(col.name)
+
+        # Flags to accelerate the second evaluation, during execution
+        line["_expandable"] = expandable
+        line["_complex"] = complex
 
         if len(mandatory_not_found) > 0:
             issues.append(Issue(itype=3,

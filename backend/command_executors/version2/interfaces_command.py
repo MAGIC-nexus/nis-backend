@@ -1,7 +1,7 @@
 import json
 
-from backend.command_generators import basic_elements_parser, Issue
-from backend.command_generators.basic_elements_parser import dictionary_from_key_value_list
+from backend.command_generators import parser_field_parsers, Issue
+from backend.command_generators.parser_ast_evaluators import dictionary_from_key_value_list
 from backend.command_generators.spreadsheet_command_parsers_v2 import IssueLocation
 from backend.common.helper import strcmp
 from backend.model_services import IExecutableCommand, get_case_study_registry_objects
@@ -53,22 +53,22 @@ class InterfacesAndQualifiedQuantitiesCommand(IExecutableCommand):
 
             if f_interface_attributes:
                 try:
-                    iface_attributes = dictionary_from_key_value_list(f_interface_attributes)
+                    iface_attributes = dictionary_from_key_value_list(f_interface_attributes, glb_idx)
                 except Exception as e:
                     issues.append(Issue(itype=3,
                                         description=str(e),
-                                        location=IssueLocation(sheet_name=name, row=r + 1, column=None)))
+                                        location=IssueLocation(sheet_name=name, row=i + 1, column=None)))
                     return
             else:
                 iface_attributes = {}
 
             if f_number_attributes:
                 try:
-                    number_attributes = dictionary_from_key_value_list(f_number_attributes)
+                    number_attributes = dictionary_from_key_value_list(f_number_attributes, glb_idx)
                 except Exception as e:
                     issues.append(Issue(itype=3,
                                         description=str(e),
-                                        location=IssueLocation(sheet_name=name, row=r + 1, column=None)))
+                                        location=IssueLocation(sheet_name=name, row=i + 1, column=None)))
                     return
             else:
                 number_attributes = {}
@@ -81,7 +81,7 @@ class InterfacesAndQualifiedQuantitiesCommand(IExecutableCommand):
                 else:
                     issues.append(Issue(itype=3,
                                         description="When 'Interface' column is not defined, both 'Processor' and 'InterfaceType' must",
-                                        location=IssueLocation(sheet_name=name, row=r + 1, column=None)))
+                                        location=IssueLocation(sheet_name=name, row=i + 1, column=None)))
                     return
             else:
                 # TODO Split using syntax analysis. Each of the parts may contain advanced syntactic expressions. For now, only literals are considered
@@ -94,7 +94,7 @@ class InterfacesAndQualifiedQuantitiesCommand(IExecutableCommand):
                 if len(pm) == 0:
                     issues.append(Issue(itype=3,
                                         description="Could not find Pedigree Matrix '"+f_pedigree_matrix+"'",
-                                        location=IssueLocation(sheet_name=name, row=r + 1, column=None)))
+                                        location=IssueLocation(sheet_name=name, row=i + 1, column=None)))
                     return
                 else:
                     try:
@@ -102,18 +102,18 @@ class InterfacesAndQualifiedQuantitiesCommand(IExecutableCommand):
                     except:
                         issues.append(Issue(itype=3,
                                             description="Could not decode Pedigree '"+f_pedigree+"' for Pedigree Matrix '"+f_pedigree_matrix+"'",
-                                            location=IssueLocation(sheet_name=name, row=r + 1, column=None)))
+                                            location=IssueLocation(sheet_name=name, row=i + 1, column=None)))
                         return
             elif f_pedigree and not f_pedigree_matrix:
                 issues.append(Issue(itype=3,
                                     description="Pedigree specified without accompanying Pedigree Matrix",
-                                    location=IssueLocation(sheet_name=name, row=r + 1, column=None)))
+                                    location=IssueLocation(sheet_name=name, row=i + 1, column=None)))
                 return
 
             # Source
             if f_source:
                 try:
-                    ast = basic_elements_parser.string_to_ast(basic_elements_parser.reference, f_source)
+                    ast = parser_field_parsers.string_to_ast(parser_field_parsers.reference, f_source)
                     ref_id = ast["ref_id"]
                     references = glb_idx.get(Reference.partial_key(ref_id), ref_type="provenance")
                     if len(references) == 1:
@@ -128,7 +128,7 @@ class InterfacesAndQualifiedQuantitiesCommand(IExecutableCommand):
             if f_location:
                 try:
                     # TODO Change to parser for Location (includes references, but also Codes)
-                    ast = basic_elements_parser.string_to_ast(basic_elements_parser.reference, f_location)
+                    ast = parser_field_parsers.string_to_ast(parser_field_parsers.reference, f_location)
                     ref_id = ast["ref_id"]
                     references = glb_idx.get(Reference.partial_key(ref_id), ref_type="geographic")
                     if len(references) == 1:
@@ -144,12 +144,12 @@ class InterfacesAndQualifiedQuantitiesCommand(IExecutableCommand):
             if len(p) == 0:
                 issues.append(Issue(itype=3,
                                     description="Processor '"+f_processor_name+"' not declared previously",
-                                    location=IssueLocation(sheet_name=name, row=r + 1, column=None)))
+                                    location=IssueLocation(sheet_name=name, row=i + 1, column=None)))
                 return
             elif len(p) > 1:
                 issues.append(Issue(itype=3,
                                     description="Processor '"+f_processor_name+"' found "+str(len(p))+" times. It must be uniquely identified.",
-                                    location=IssueLocation(sheet_name=name, row=r + 1, column=None)))
+                                    location=IssueLocation(sheet_name=name, row=i + 1, column=None)))
                 return
             else:
                 p = p[0]
@@ -173,12 +173,12 @@ class InterfacesAndQualifiedQuantitiesCommand(IExecutableCommand):
                 if len(ft) == 0:
                     issues.append(Issue(itype=3,
                                         description="InterfaceType '"+f_interface_type_name+"' not declared previously",
-                                        location=IssueLocation(sheet_name=name, row=r + 1, column=None)))
+                                        location=IssueLocation(sheet_name=name, row=i + 1, column=None)))
                     return
                 elif len(ft) > 1:
                     issues.append(Issue(itype=3,
                                         description="InterfaceType '"+f_interface_type_name+"' found "+str(len(ft))+" times. It must be uniquely identified.",
-                                        location=IssueLocation(sheet_name=name, row=r + 1, column=None)))
+                                        location=IssueLocation(sheet_name=name, row=i + 1, column=None)))
                     return
                 else:
                     ft = ft[0]
@@ -247,7 +247,7 @@ class InterfacesAndQualifiedQuantitiesCommand(IExecutableCommand):
         #         hh[h] = []
         #     hh[h].extend(self._content["code_lists"][h])
 
-        dataset_column_rule = basic_elements_parser.dataset_with_column
+        dataset_column_rule = parser_field_parsers.dataset_with_column
 
         #processor_attributes = self._content["processor_attributes"]
 

@@ -287,6 +287,7 @@ Comando
 
                     total_issues.append(issue)
         else:
+            print(issues)
             cmd = None  # cmd, _ = create_command(c_type, c_label, {}, sh_name)
 
         yield cmd, total_issues

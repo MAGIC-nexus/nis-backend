@@ -2,7 +2,7 @@
 List of parameters. Name, initial value (optional), domain (range), description
 
 """
-from backend.command_generators import basic_elements_parser
+from backend.command_generators import parser_field_parsers
 from backend.common.helper import strcmp, create_dictionary
 
 
@@ -52,7 +52,7 @@ def parse_parameters_command(sh, area):
             if k == "name":  # Mandatory
                 # Check syntax
                 try:
-                    basic_elements_parser.string_to_ast(basic_elements_parser.simple_ident, value)
+                    parser_field_parsers.string_to_ast(parser_field_parsers.simple_ident, value)
                     param[k] = value
                 except:
                     some_error = True
@@ -86,7 +86,7 @@ def parse_parameters_command(sh, area):
             elif k == "group":  # Optional
                 # Check syntax. A way to group parameters
                 try:
-                    basic_elements_parser.string_to_ast(basic_elements_parser.simple_ident, value)
+                    parser_field_parsers.string_to_ast(parser_field_parsers.simple_ident, value)
                     param[k] = value
                 except:
                     some_error = True
