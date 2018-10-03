@@ -69,7 +69,6 @@ commands = {
     "DatasetDef":
     [CommandField(allowed_names=["DatasetName"], name="dataset_name", mandatory=True, allowed_values=None, parser=simple_ident),
      CommandField(allowed_names=["DatasetDataLocation"], name="dataset_data_location", mandatory=True, allowed_values=None, parser=url_parser),
-     CommandField(allowed_names=["DatasetDataDescription"], name="dataset_description", mandatory=True, allowed_values=None, parser=unquoted_string),
      CommandField(allowed_names=["ConceptType"], name="concept_type", mandatory=True, allowed_values=concept_types, parser=simple_ident),
      CommandField(allowed_names=["ConceptName"], name="concept_name", mandatory=True, allowed_values=None, parser=simple_ident),
      CommandField(allowed_names=["ConceptDataType"], name="concept_data_type", mandatory=True, allowed_values=data_types, parser=simple_ident),

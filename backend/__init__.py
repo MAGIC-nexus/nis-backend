@@ -84,7 +84,10 @@ class CommandField:
     many_values = attrib(default=True)
     # Many appearances (the field can appear multiple times). A convenience to define a list
     many_appearances = attrib(default=False)
+    # Examples
+    examples = attrib(default=None)  # type: list[str]
     # Compiled regex
     regex_allowed_names = attrib(default=None)
+
 
 

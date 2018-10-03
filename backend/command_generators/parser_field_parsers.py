@@ -295,6 +295,14 @@ arith_boolean_expression << operatorPrecedence(Or([positive_float, positive_int,
                                  lpar=lparen.suppress(),
                                  rpar=rparen.suppress())
 
+# RULES - Expression varying value depending on conditions
+condition = Optional(arith_boolean_expression("if") + Literal("->")) + arith_boolean_expression("then")
+conditions_list = delimitedList(condition, ",").setParseAction(lambda _s, l, t:
+                                                               {
+                                                                   'type': 'conditional',
+                                                                   'parts': t.asList()[0]
+                                                               })
+
 # RULES - Expression type 2
 expression << operatorPrecedence(Or([positive_float, positive_int, string, h_name]),  # Operand types
                                  [(signop, 1, opAssoc.RIGHT, lambda _s, l, t: {'type': 'u'+t.asList()[0][0], 'terms': [0, t.asList()[0][1]], 'ops': ['u'+t.asList()[0][0]]}),

@@ -2195,7 +2195,7 @@ class Mapping:
         self.map = the_map  # List of tuples (pairs) source code, destination code[, expression]
 
 # TODO Currently ExternalDataset is used only in evaluation of expressions. It may be removed because
-# TODO expressions can refer dirctly to State -> datasets
+# TODO expressions can refer directly to State -> datasets
 
 
 class ExternalDataset:

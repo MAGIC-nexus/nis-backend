@@ -10,6 +10,15 @@ class AdHocDatasets(IDataSourceManager):
     def __init__(self):
         self._registry = create_dictionary()
 
+    def initialize_datasets_registry(self, datasets_list):
+        """
+        Receive a list of the datasts and make a copy
+
+        :param datasets_list:
+        :return:
+        """
+        pass
+
     def register_dataset(self, name, location):
         self._registry[name] = location
 
@@ -32,7 +41,6 @@ class AdHocDatasets(IDataSourceManager):
         return Dataset.construct()
 
     def etl_full_database(self, database=None, update=False):
-        """ If bulk download is supported, refresh full database """
         pass
 
     def etl_dataset(self, dataset, update=False) -> str:

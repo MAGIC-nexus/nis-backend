@@ -26,6 +26,8 @@ import json
 # >>>>>>>>>> IMPORTANT <<<<<<<<<
 # For debugging in local mode, prepare an environment variable "MAGIC_NIS_SERVICE_CONFIG_FILE", with value "./nis_local.conf"
 # >>>>>>>>>> IMPORTANT <<<<<<<<<
+from backend.command_field_definitions import commands
+from backend.command_generators.parser_field_parsers import string_to_ast
 from backend.command_generators.parser_spreadsheet_utils import rewrite_xlsx_file
 
 if __name__ == '__main__':
@@ -2560,6 +2562,82 @@ def regenerate_xlsx_file():  # Receive an XLSX workbook, regenerate it
                  status=200)
 
     return r
+
+
+@app.route(nis_api_base + "/commands_and_fields", methods=["GET"])
+def obtain_commands_and_their_fields():
+    # Recover InteractiveSession
+    isess = deserialize_isession_and_prepare_db_session()
+    if isess and isinstance(isess, Response):
+        return isess
+
+    j = {}
+    for k, v in commands.items():
+        j["name"] = k
+        flds = []
+        for f in v:
+            flds.append(f.allowed_names)
+        j["fields"] = flds
+    return j
+
+
+@app.route(nis_api_base + "/validate_command_record", methods=["POST"])
+def validate_command_record():
+    """
+    A function for on-line, field by field or row by row validation of syntax
+    (the client can send what the user just entered, the server, this function, will respond
+     None the field is ok, and an error message if not)
+
+    :return: A dictionary with the same fields of the input dictionary, whose values are the diagnosis, None being
+            everything-ok, and a string being a message describing the problem.
+    """
+    # Recover InteractiveSession
+    isess = deserialize_isession_and_prepare_db_session()
+    if isess and isinstance(isess, Response):
+        return isess
+
+    command_content_to_validate = request.form.get("content")
+    result = {}
+    if "command" in command_content_to_validate:
+        command = command_content_to_validate["command"]
+        if command in commands:
+            if "fields" in command_content_to_validate:
+                fields = command_content_to_validate["fields"]
+                for f in fields:  # Validate field by field
+                    for f2 in commands[command]:  # Find corresponding field in the command
+                        if f.lower() in [f3.lower() for f3 in f2.allowed_names]:
+                            fld = f2
+                            break
+                    else:
+                        fld = None
+                    if fld:  # If found, can validate syntax
+                        # Validate Syntax
+                        content = fields[f]
+                        if fld.allowed_values:
+                            if content.lower().strip() in fld.allowed_values:
+                                result[f] = None
+                            else:
+                                result[f] = "'"+content+"' in field '"+f+"' must be one of: "+", ".join(fld.allowed_values)
+                        else:
+                            try:
+                                string_to_ast(fld.parser, content)
+                                result[f] = None
+                            except:
+                                s = "Invalid syntax in field '"+f+"' with value: "+content
+                                if fld.examples:
+                                    s += ". Possible examples: "+", ".join(fld.examples)
+                                result[f] = s
+
+                    else:
+                        result[f] = "Field '"+f+"' not found in command '"+command+"'. Possible field names: "+", ".join([item for f2 in commands[command] for item in f2.allowed_names])
+            else:
+                raise Exception("Must specify 'fields'")
+        else:
+            raise Exception("Command '"+command+"' not found in the list of commands: "+", ".join([c for c in commands]))
+    else:
+        raise Exception("Must specify 'command'")
+
+    return build_json_response(result)
 
 
 @app.route(nis_api_base + "/commands_reference.json", methods=["GET"])
