@@ -109,6 +109,19 @@ class DatasetDefCommand(IExecutableCommand):
             else:
                 process_line(line)
 
+        # Any error?
+        for issue in issues:
+            if issue.itype == 3:
+                error = True
+                break
+        else:
+            error = False
+
+        if not error:
+            # If no error happened, add the new Datasets to the Datasets in the "global" state
+            for ds in current_ds:
+                datasets[ds] = current_ds[ds]
+
         return issues, None
 
     def estimate_execution_time(self):

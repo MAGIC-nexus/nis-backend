@@ -48,7 +48,7 @@ python_magic==0.4.13  # To be removed, it is used only by the Magic Box file typ
 
 # Dotted notation
 #j = {"a": [{"b": 5, "c": "hola"},{"b": 2, "c": "adios"}], "g": {"t": "hello", "r": "bye"}}
-#dotted 0.1.8 <- !!Fantastic!!
+dotted==0.1.8 # <- !!Fantastic!!
 #python-box <- INTERESTING, MATURE
 #mo-dots
 #dpath <- ~ Could be, there are some quirks for cases with a bit more complexity

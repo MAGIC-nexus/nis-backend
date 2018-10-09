@@ -5,7 +5,7 @@ import io
 import regex as re  # Improvement over standard "re"
 from backend import Issue
 import backend
-from backend.command_executors.analysis.indicators_command import IndicatorsCommand
+from backend.command_executors.version2.indicators_command import IndicatorsCommand
 from backend.command_executors.external_data.etl_external_dataset_command import ETLExternalDatasetCommand
 from backend.command_executors.external_data.mapping_command import MappingCommand
 from backend.command_executors.external_data.parameters_command import ParametersCommand
@@ -22,10 +22,11 @@ from backend.command_executors.version2.hierarchy_mapping_command import Hierarc
 from backend.command_executors import create_command, DatasetDataCommand, DatasetQryCommand, AttributeTypesCommand, \
     AttributeSetsCommand, InterfaceTypesCommand, ProcessorsCommand, InterfacesAndQualifiedQuantitiesCommand, \
     RelationshipsCommand, InstantiationsCommand, ScaleConversionV2Command, DatasetDefCommand
+from backend.command_executors.version2.references_v2_command import ReferenceProvenance, ReferenceBibliographic, \
+    ReferenceGeographic
 from backend.command_generators.spreadsheet_command_parsers.analysis.indicators_spreadsheet_parse import parse_indicators_command
 from backend.command_generators.spreadsheet_command_parsers.external_data.mapping_spreadsheet_parse import parse_mapping_command
 from backend.command_generators.spreadsheet_command_parsers.external_data.etl_external_dataset_spreadsheet_parse import parse_etl_external_dataset_command
-from backend.command_generators.spreadsheet_command_parsers.external_data.parameters_spreadsheet_parse import parse_parameters_command
 from backend.command_generators.spreadsheet_command_parsers.specification.hierarchy_spreadsheet_parser import parse_hierarchy_command
 from backend.command_generators.spreadsheet_command_parsers.specification.metadata_spreadsheet_parse import parse_metadata_command
 from backend.command_generators.spreadsheet_command_parsers.specification.data_input_spreadsheet_parse import parse_data_input_command
@@ -46,7 +47,8 @@ from backend.command_generators.spreadsheet_command_parsers_v2.simple_parsers im
     parse_hierarchy_mapping_command, parse_parameters_command_v2, parse_attribute_sets_command, \
     parse_attribute_types_command, parse_datasetdef_command, parse_interface_types_command, parse_processors_v2_command, \
     parse_interfaces_command, parse_relationships_command, parse_instantiations_command, parse_scale_changers_command, \
-    parse_shared_elements_command, parse_reused_elements_command, parse_indicators_v2_command
+    parse_shared_elements_command, parse_reused_elements_command, parse_indicators_v2_command, parse_ref_provenance, \
+    parse_ref_bibliographic, parse_ref_geographic
 
 # Most complex name
 # [namespace::][type:]var(.var)*[(@|#)var] : [namespace] + [type] + var + [attribute or tag]
@@ -133,9 +135,9 @@ Comando
     re_reused_elements = re.compile(r"(ReusedElements)" + optional_alphanumeric, flags=flags)
     re_pedigree_matrices = re.compile(r"PedigreeMatrices" + optional_alphanumeric, flags=flags)
     re_refbibliographic = re.compile(r"RefBibliographic" + optional_alphanumeric, flags=flags)
-    re_refsource = re.compile(r"RefSource" + optional_alphanumeric, flags=flags)
-    re_refgeographical = re.compile(r"RefGeographical" + optional_alphanumeric, flags=flags)
+    re_refgeographical = re.compile(r"RefGeographic" + optional_alphanumeric, flags=flags)
     re_refprovenance = re.compile(r"RefProvenance" + optional_alphanumeric, flags=flags)
+    re_refsource = re.compile(r"RefSource" + optional_alphanumeric, flags=flags)
     # re_indicators
     # re_indicators_benchmark NOT DEFINED, NOT IMPLEMENTED
     re_problem_statement = re.compile(r"ProblemStatement" + optional_alphanumeric, flags=flags)
@@ -156,32 +158,33 @@ Comando
             (re_hierarchy, "hierarchy", 0, HierarchyCommand),
             (re_data, "etl_dataset", 0, ETLExternalDatasetCommand),
             (re_mapping, "mapping", 0, MappingCommand),
+
             # V2 commands
-            (re_hierarchies_mapping, "cat_hier_mapping", parse_hierarchy_mapping_command, 3, HierarchyMappingCommand),  # TODO Develop and Test (2***)
+            (re_hierarchies_mapping, "cat_hier_mapping", parse_hierarchy_mapping_command, 3, HierarchyMappingCommand),  # TODO Test
             (re_hierarchies, "cat_hierarchies", parse_cat_hierarchy_command, 3, HierarchyCategoriesCommand),  # TODO Test
              (re_attributes, "attribute_types", parse_attribute_types_command, 2, AttributeTypesCommand),  # TODO Attribute Types (1***)
-             (re_attribute_sets, "attribute_sets", parse_attribute_sets_command, 3, AttributeSetsCommand),  # TODO Develop and Test (2***)
-            (re_datasetdef, "datasetdef", parse_datasetdef_command, 2, DatasetDefCommand),  # TODO Dataset Metadata (3***)
-            (re_datasetdata, "datasetdata", parse_dataset_data_command, 2, DatasetDataCommand),  # TODO Dataset Data   (3***)
+            (re_datasetdef, "datasetdef", parse_datasetdef_command, 2, DatasetDefCommand),  # Dataset Metadata
+            (re_datasetdata, "datasetdata", parse_dataset_data_command, 2, DatasetDataCommand),  # TODO Test
             (re_parameters, "parameters", parse_parameters_command_v2, 3, ParametersCommand),  # The old function was "parse_parameters_command"
-            (re_datasetqry, "datasetqry", parse_dataset_qry_command, 2, DatasetQryCommand),  # TODO Develop and TestDataset Query. Very similar to "etl_dataset" IExecutableCommand (3***)
+            (re_datasetqry, "datasetqry", parse_dataset_qry_command, 2, DatasetQryCommand),  # TODO Test
             (re_interfacetypes, "interface_types", parse_interface_types_command, 2, InterfaceTypesCommand),  # TODO Test
             (re_processors_v2, "processors", parse_processors_v2_command, 2, ProcessorsCommand),  # TODO Test
             (re_interfaces, "interfaces_and_qq", parse_interfaces_command, 2, InterfacesAndQualifiedQuantitiesCommand),  # TODO Test
             (re_relationships, "relationships", parse_relationships_command, 2, RelationshipsCommand),  # TODO Test
-            (re_instantiations, "instantiations", parse_instantiations_command, 2, InstantiationsCommand),  # TODO (5***)(evolution of "re_upscale" "upscale")
-            (re_scale_changers, "scale_conversion_v2", parse_scale_changers_command, 2, ScaleConversionV2Command),  # TODO (5***)Relations of conversion between interface types
-            (re_problem_statement, "problem_statement",),  # TODO
-
-            (re_shared_elements, "shared_elements", parse_shared_elements_command, 2, ),  # TODO
-            (re_reused_elements, "reused_elements", parse_reused_elements_command, 2, ),  # TODO
+             (re_instantiations, "instantiations", parse_instantiations_command, 2, InstantiationsCommand),  # TODO (5***)(evolution of "re_upscale" "upscale")
+            (re_scale_changers, "scale_conversion_v2", parse_scale_changers_command, 2, ScaleConversionV2Command),  # TODO Test
             (re_indicators, "indicators", parse_indicators_v2_command, 2, IndicatorsCommand),  # (V1 and) V2
-
+            (re_refbibliographic, "ref_bibliographic", parse_ref_bibliographic, 2, ReferenceBibliographic),
+            (re_refgeographical, "ref_geographical", parse_ref_geographic, 2, ReferenceGeographic),
+            (re_refprovenance, "ref_provenance", parse_ref_provenance, 2, ReferenceProvenance),
+            # Will not be implemented NOW
+            (re_problem_statement, "problem_statement",),  # TODO
+            # Will not be implemented
+            (re_shared_elements, "shared_elements", parse_shared_elements_command, 2,),  # TODO
+            (re_reused_elements, "reused_elements", parse_reused_elements_command, 2,),  # TODO
             (re_pedigree_matrices, "ref_pedigree_matrices", ),  # TODO
-            (re_refbibliographic, "ref_bibliographic", ),  # TODO
             (re_refsource, "ref_source", ),  # TODO
-            (re_refgeographical, "ref_geographical", ),  # TODO
-            (re_refprovenance, "ref_provenance", ),  # TODO
+            (re_attribute_sets, "attribute_sets", parse_attribute_sets_command, 3, AttributeSetsCommand),  # TODO Develop and Test (2***)
             ]
 
     # For each worksheet, get the command type, convert into primitive JSON

@@ -1,4 +1,4 @@
-from backend.command_executors.analysis.indicators_command import IndicatorsCommand
+from backend.command_executors.version2.indicators_command import IndicatorsCommand
 from backend.command_executors.external_data.etl_external_dataset_command import ETLExternalDatasetCommand
 from backend.command_executors.external_data.mapping_command import MappingCommand
 from backend.command_executors.external_data.parameters_command import ParametersCommand

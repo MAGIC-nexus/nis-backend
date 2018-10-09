@@ -595,7 +595,14 @@ class PartialRetrievalDictionary:
 # #####################################################################################################################
 
 
-def get_statistical_dataset_structure(source, dset_name):
+def get_statistical_dataset_structure(source, dset_name, local_datasets=None):
+    from backend.ie_imports.data_sources.ad_hoc_dataset import AdHocDatasets
+    # Register AdHocDatasets
+    if local_datasets:
+        # Register AdHocSource, which needs the current state
+        adhoc = AdHocDatasets(local_datasets)
+        backend.data_source_manager.register_datasource_manager(adhoc)
+
     # Obtain DATASET: Datasource -> Database -> DATASET -> Dimension(s) -> CodeList (no need for "Concept")
     dset = backend.data_source_manager.get_dataset_structure(source, dset_name)
 
@@ -633,14 +640,22 @@ def get_statistical_dataset_structure(source, dset_name):
         lst_dim.append(("startPeriod", None))
         lst_dim.append(("endPeriod", None))
 
+    # Unregister AdHocDatasets
+    if local_datasets:
+        backend.data_source_manager.unregister_datasource_manager(adhoc)
+
     return lst_dim, (dims, attrs, meas)
 
 
-def obtain_dataset_source(dset_name):
-    # from backend.model.persistent_db.persistent import DBSession
-    # if not backend.data_source_manager:
-    #     backend.data_source_manager = register_external_datasources(app.config, DBSession)
+def obtain_dataset_source(dset_name, local_datasets=None):
+    from backend.ie_imports.data_sources.ad_hoc_dataset import AdHocDatasets
+    # Register AdHocDatasets
+    if local_datasets:
+        # Register AdHocSource, which needs the current state
+        adhoc = AdHocDatasets(local_datasets)
+        backend.data_source_manager.register_datasource_manager(adhoc)
 
+    # Obtain the list of ALL datasets, and find the desired one, then find the source of the dataset
     lst = backend.data_source_manager.get_datasets()  # ALL Datasets, (source, dataset)
     ds = create_dictionary(data={d[0]: t[0] for t in lst for d in t[1]})  # Dataset to Source (to obtain the source given the dataset name)
 
@@ -648,12 +663,11 @@ def obtain_dataset_source(dset_name):
         source = ds[dset_name]
     else:
         source = None
-    # else:  # Last resource, try using how the dataset starts
-    #     if dset_name.startswith("ssp_"):
-    #         # Obtain SSP
-    #         source = "SSP"
-    #     else:
-    #         source = "Eurostat"
+
+    # Unregister AdHocDatasets
+    if local_datasets:
+        backend.data_source_manager.unregister_datasource_manager(adhoc)
+
     return source
 
 
@@ -786,6 +800,8 @@ def augment_dataframe_with_mapped_columns(df, maps, measure_columns):
     where map is of the form:
         [{"o": "", "to": [{"d": "", "w": ""}]}]
         [ {o: origin category, to: [{d: destination category, w: weight assigned to destination category}] } ]
+
+    Support not only "Many to One" (ManyToOne) but also "Many to Many" (ManyToMany)
 
     :param df: pd.DataFrame to process
     :param maps: list of tuples (source, destination, map), see previous introduction

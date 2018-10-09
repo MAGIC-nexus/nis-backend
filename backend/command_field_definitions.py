@@ -4,7 +4,7 @@ from backend import CommandField
 from backend.command_generators.parser_field_parsers import simple_ident, unquoted_string, alphanums_string, \
     hierarchy_expression_v2, key_value_list, key_value, parameter_value, expression_with_parameters, \
     time_expression, boolean, indicator_expression, code_string, simple_h_name, domain_definition, context_query, \
-    unit_name, geo_value, url_parser, processor_names
+    unit_name, geo_value, url_parser, processor_names, date
 
 data_types = ["Number", "Boolean", "URL", "UUID", "Datetime", "String", "UnitName", "Category", "Geo"]
 concept_types = ["Dimension", "Measure", "Attribute"]
@@ -32,13 +32,17 @@ relation_types = [# Relationships between Processors
                   "flow", ">",
                   "<"
                   ]
-instantiation_types = ["Upscale", "Scale"]
+instantiation_types = ["CloneAndScale", "Scale"]
+agent_types = ["Person", "Software", "Organization"]
+bib_entry_types = ["article", "book", "booklet", "conference", "inbook", "incollection", "inproceedings",
+                   "mastersthesis", "misc", "phdtesis", "proceedings", "techreport", "unpublished"]
+bib_months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
 
 commands = {
     "CatHierarchies":
     [CommandField(allowed_names=["Source"], name="source", mandatory=False, allowed_values=None, parser=simple_h_name),
      CommandField(allowed_names=["HierarchyGroup"], name="hierarchy_group", mandatory=False, allowed_values=None, parser=simple_ident),
-     CommandField(allowed_names=["HierarchyName"], name="hierarchy_name", mandatory=True, allowed_values=None, parser=simple_ident),
+     CommandField(allowed_names=["Hierarchy", "HierarchyName"], name="hierarchy_name", mandatory=True, allowed_values=None, parser=simple_ident),
      CommandField(allowed_names=["Level", "LevelCode"], name="level", mandatory=False, allowed_values=None, parser=alphanums_string),
      CommandField(allowed_names=["ReferredHierarchy"], name="referred_hierarchy", mandatory=False, allowed_values=None, parser=simple_h_name),
      CommandField(allowed_names=["Code"], name="code", mandatory=False, allowed_values=None, parser=code_string),
@@ -56,9 +60,8 @@ commands = {
      CommandField(allowed_names=["OriginHierarchy"], name="source_hierarchy", mandatory=True, allowed_values=None, parser=simple_h_name),
      CommandField(allowed_names=["OriginCode"], name="source_code", mandatory=True, allowed_values=None, parser=code_string),
      CommandField(allowed_names=["DestinationHierarchy"], name="destination_hierarchy", mandatory=True, allowed_values=None, parser=simple_h_name),
-     CommandField(allowed_names=["DestinationCode"], name="destination_hierarchy", mandatory=True, allowed_values=None, parser=code_string),
+     CommandField(allowed_names=["DestinationCode"], name="destination_code", mandatory=True, allowed_values=None, parser=code_string),
      CommandField(allowed_names=["Weight"], name="weight", mandatory=True, allowed_values=None, parser=expression_with_parameters),
-     CommandField(allowed_names=["Context"], name="context", mandatory=True, allowed_values=None, parser=context_query),  # "context_query" allows applying different weights depending on values of dimensions of the source dataset
      ],
     "AttributeTypes":
     [CommandField(allowed_names=["AttributeTypeName"], name="attribute_type_name", mandatory=True, allowed_values=None, parser=simple_ident),
@@ -186,9 +189,8 @@ commands = {
      CommandField(allowed_names=["OriginInterfaceType"], name="source_interface_type", mandatory=True, allowed_values=None, parser=simple_ident),
      CommandField(allowed_names=["DestinationHierarchy"], name="target_hierarchy", mandatory=False, allowed_values=None, parser=simple_ident),
      CommandField(allowed_names=["DestinationInterfaceType"], name="target_interface_type", mandatory=True, allowed_values=None, parser=simple_ident),
-     # TODO
-     #CommandField(allowed_names=["OriginContext"], name="source_context", mandatory=False, allowed_values=None, parser=scale_context),
-     #CommandField(allowed_names=["DestinationContext"], name="target_context", mandatory=False, allowed_values=None, parser=scale_context),
+     CommandField(allowed_names=["OriginContext"], name="source_context", mandatory=False, allowed_values=None, parser=context_query),
+     CommandField(allowed_names=["DestinationContext"], name="target_context", mandatory=False, allowed_values=None, parser=context_query),
      CommandField(allowed_names=["Scale"], name="scale", mandatory=False, allowed_values=None, parser=expression_with_parameters),
      #CommandField(allowed_names=["OriginUnit"], name="source_unit", mandatory=False, allowed_values=None, parser=unit_name),
      #CommandField(allowed_names=["DestinationUnit"], name="target_unit", mandatory=False, allowed_values=None, parser=unit_name),
@@ -197,19 +199,84 @@ commands = {
      ],
     "SharedElements":
     [
-
      ],
     "ReusedElements":
     [
-
      ],
+    "ReuseCommands":
+    [
+        CommandField(allowed_names=["Workbook"], name="workbook_name", mandatory=False, allowed_values=None, parser=url_parser),
+        CommandField(allowed_names=["Worksheets"], name="worksheets", mandatory=False, allowed_values=None, parser=unquoted_string)
+    ],
+    "TableOfContents":
+    [
+        CommandField(allowed_names=["Worksheet", "WorksheetName"], name="worksheet", mandatory=False, allowed_values=None, parser=unquoted_string),
+        CommandField(allowed_names=["Command"], name="command", mandatory=False, allowed_values=None, parser=simple_ident),
+        CommandField(allowed_names=["Comment", "Description"], name="comment", mandatory=False, allowed_values=None, parser=unquoted_string),
+    ],
+    "RefProvenance":
+    [   # Reduced, from W3C Provenance Recommendation
+        CommandField(allowed_names=["Reference"], name="ref_id", mandatory=True, allowed_values=None, parser=simple_ident),
+        CommandField(allowed_names=["AgentType"], name="agent_type", mandatory=True, allowed_values=agent_types, parser=simple_ident),
+        CommandField(allowed_names=["Agent"], name="agent", mandatory=True, allowed_values=None, parser=simple_ident),
+        CommandField(allowed_names=["Activities"], name="activities", mandatory=True, allowed_values=None, parser=simple_ident),
+        CommandField(allowed_names=["Entities"], name="entities", mandatory=False, allowed_values=None, parser=simple_ident),
+    ],
+    "RefGeographic":
+    [   # Reduced, from ISO19139
+        CommandField(allowed_names=["Reference"], name="ref_id", mandatory=True, allowed_values=None, parser=simple_ident),
+        CommandField(allowed_names=["Title"], name="title", mandatory=True, allowed_values=None, parser=unquoted_string),
+        CommandField(allowed_names=["Date"], name="date", mandatory=True, allowed_values=None, parser=date),
+        CommandField(allowed_names=["BoundingBox"], name="bounding_box", mandatory=False, allowed_values=None, parser=unquoted_string),  # Syntax??
+        CommandField(allowed_names=["TopicCategory"], name="topic_category", mandatory=False, allowed_values=None, parser=unquoted_string),
+        CommandField(allowed_names=["Description"], name="description", mandatory=False, allowed_values=None, parser=unquoted_string),  # Syntax??
+        CommandField(allowed_names=["PointOfContact"], name="metadata_point_of_contact", mandatory=False, allowed_values=None, parser=unquoted_string),
+        CommandField(allowed_names=["Annote"], name="annote", mandatory=False, allowed_values=None, parser=unquoted_string),  # Syntax??
+        CommandField(allowed_names=["DataLocation"], name="data_location", mandatory=False, allowed_values=None, parser=url_parser)
+        # Field(name="language", domain=Domain(type="string", values=None), mandatory="True"),
+        # Field(name="charset", domain=Domain(type="string", values=None), mandatory="False"),
+        # Field(name="metadatalanguage", domain=Domain(type="string", values=None), mandatory="False"),
+        # Field(name="metadatacharset", domain=Domain(type="string", values=None), mandatory="False"),
+    ],
+    "RefBibliographic":
+    [   # From BibTex
+        CommandField(allowed_names=["Reference"], name="ref_id", mandatory=True, allowed_values=None, parser=simple_ident),
+        CommandField(allowed_names=["EntryType"], name="entry_type", mandatory=True, allowed_values=bib_entry_types, parser=unquoted_string),
+        CommandField(allowed_names=["Address"], name="date", mandatory="entry_type not in ('article', 'misc')", allowed_values=None, parser=unquoted_string),
+        CommandField(allowed_names=["Annote"], name="annote", mandatory=False, allowed_values=None, parser=unquoted_string),
+        CommandField(allowed_names=["Author"], name="author", mandatory="entry_type not in ('misc')", allowed_values=None, parser=unquoted_string),
+        CommandField(allowed_names=["BookTitle"], name="booktitle", mandatory="entry_type in ('incollection', 'inproceedings')", allowed_values=None, parser=unquoted_string),
+        CommandField(allowed_names=["Chapter"], name="chapter", mandatory="entry_type in ('inbook', 'incollection')", allowed_values=None, parser=unquoted_string),
+        CommandField(allowed_names=["CrossRef"], name="crossref", mandatory=False, allowed_values=None, parser=unquoted_string),
+        CommandField(allowed_names=["Edition"], name="edition", mandatory=False, allowed_values=None, parser=unquoted_string),
+        CommandField(allowed_names=["Editor"], name="editor", mandatory="entry_type in ('book', 'inbook', 'incollection', 'inproceedings', 'proceedings')", allowed_values=None, parser=unquoted_string),
+        CommandField(allowed_names=["HowPublished"], name="how_published", mandatory=False, allowed_values=None, parser=unquoted_string),
+        CommandField(allowed_names=["Institution"], name="institution", mandatory=False, allowed_values=None, parser=unquoted_string),
+        CommandField(allowed_names=["Journal"], name="journal", mandatory="entry_type in ('article')", allowed_values=None, parser=unquoted_string),
+        CommandField(allowed_names=["Key"], name="key", mandatory=False, allowed_values=None, parser=unquoted_string),
+        CommandField(allowed_names=["Month"], name="month", mandatory=False, allowed_values=bib_months, parser=simple_ident),
+        CommandField(allowed_names=["Note"], name="note", mandatory=False, allowed_values=None, parser=unquoted_string),
+        CommandField(allowed_names=["Number"], name="number", mandatory=False, allowed_values=None, parser=unquoted_string),
+        CommandField(allowed_names=["Organization"], name="organization", mandatory=False, allowed_values=None, parser=unquoted_string),
+        CommandField(allowed_names=["Pages"], name="pages", mandatory=False, allowed_values=None, parser=unquoted_string),
+        CommandField(allowed_names=["Publisher"], name="publisher", mandatory=False, allowed_values=None, parser=unquoted_string),
+        CommandField(allowed_names=["School"], name="school", mandatory=False, allowed_values=None, parser=unquoted_string),
+        CommandField(allowed_names=["Series"], name="series", mandatory=False, allowed_values=None, parser=unquoted_string),
+        CommandField(allowed_names=["Title"], name="title", mandatory="entry_type not in ('misc')", allowed_values=None, parser=unquoted_string),
+        CommandField(allowed_names=["Type"], name="type", mandatory=False, allowed_values=None, parser=unquoted_string),
+        CommandField(allowed_names=["URL"], name="url", mandatory=False, allowed_values=None, parser=url_parser),
+        # This one is not BibTex standard, but it is necessary
+        CommandField(allowed_names=["Volume"], name="volume", mandatory=False, allowed_values=None, parser=unquoted_string),
+        CommandField(allowed_names=["Year"], name="year", mandatory="entry_type in ('article', 'book', 'inbook', 'incollection', 'inproceedings', 'mastersthesis', 'phdthesis', 'proceedings', 'techreport')", allowed_values=None, parser=unquoted_string)
+    ],
     "Indicators":
-    [CommandField(allowed_names=["IndicatorName"], name="indicator_name", mandatory=True, allowed_values=None, parser=simple_ident),
+    [CommandField(allowed_names=["Indicator"], name="indicator_name", mandatory=True, allowed_values=None, parser=simple_ident),
      CommandField(allowed_names=["Local"], name="local", mandatory=True, allowed_values=yes_no, parser=simple_ident),
      CommandField(allowed_names=["Formula", "Expression"], name="expression", mandatory=True, allowed_values=None, parser=indicator_expression),
      # TODO
      #CommandField(allowed_names=["Benchmark"], name="benchmark", mandatory=False, allowed_values=None, parser=benchmark_definition),
      CommandField(allowed_names=["Benchmark"], name="benchmark", mandatory=False, allowed_values=None, parser=unquoted_string),
+     CommandField(allowed_names=["Description"], name="description", mandatory=False, allowed_values=None, parser=unquoted_string),
      ],
     # "ProblemStatement" needs a specialized parser
 }

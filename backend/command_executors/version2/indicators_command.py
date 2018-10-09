@@ -27,17 +27,26 @@ class IndicatorsCommand(IExecutableCommand):
         # TODO Only the factor_types_expression can be validated at this EXECUTION time, all FactorTypes MUST exist
         # TODO The other two types "factors_expression" and "case_study" can mention FactorTypes which are not currently expanded (they are expanded at reasoning/solving time)
         # Obtain global variables in state
+        issues = []
         glb_idx, p_sets, hh, datasets, mappings = get_case_study_registry_objects(state)
+        name = self._content["command_name"]
 
-        for indicator in self._content:
-            name = indicator["name"]
-            formula = indicator["formula"]
-            indi = Indicator(name, formula, from_indicator=None, benchmark=None, indicator_category=None)
-            if "description" in indicator:
-                indi._description = indicator["description"]
+        # Process parsed information
+        for r, line in enumerate(self._content["items"]):
+            i_name = line.get("indicator_name", None)
+            i_local = line.get("local", None)
+            i_formula = line.get("expression", None)
+            i_benchmark = line.get("benchmark", None)
+            i_description = line.get("description", None)
+            b = None
+            # if i_benchmark:
+            #     b = Benchmark(i_benchmark)
+            # else:
+            #     b = None
+            indi = Indicator(i_name, i_formula, from_indicator=None, benchmark=b, indicator_category=None, description=i_description)
             glb_idx.put(indi.key(), indi)
 
-        return None, None
+        return issues, None
 
     def estimate_execution_time(self):
         return 0

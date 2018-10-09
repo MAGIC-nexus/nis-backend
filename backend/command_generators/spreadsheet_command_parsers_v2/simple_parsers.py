@@ -72,5 +72,17 @@ def parse_reused_elements_command(sh, area, name: str = None):
 def parse_indicators_v2_command(sh, area, name: str = None):
     return parse_command(sh, area, name, "Indicators")
 
+
+def parse_ref_provenance(sh, area, name: str = None):
+    return parse_command(sh, area, name, "RefProvenance")
+
+
+def parse_ref_geographic(sh, area, name: str = None):
+    return parse_command(sh, area, name, "RefGeographic")
+
+
+def parse_ref_bibliographic(sh, area, name: str = None):
+    return parse_command(sh, area, name, "RefBibliographic")
+
 # NOTE: Other commands may come here: Problem Specification, Dashboards (or the new Storyboards) which include defining
 # NOTE: each of the views in it.

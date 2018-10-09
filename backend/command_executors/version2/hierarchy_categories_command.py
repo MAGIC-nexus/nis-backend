@@ -46,6 +46,11 @@ class HierarchyCategoriesCommand(IExecutableCommand):
                     hsource = hsource[0]
 
             hname = item.get("hierarchy_name", None)
+            if not hname:
+                issues.append(Issue(itype=3,
+                                    description="The name of the Hierarchy has not been defined. Skipped.",
+                                    location=IssueLocation(sheet_name=name, row=r + 1, column=None)))
+                continue
 
             # HierarchyGroup (equivalent to Hierarchy of Code Lists, HCL)
             hg = item.get("hierarchy_group", None)
@@ -55,7 +60,7 @@ class HierarchyCategoriesCommand(IExecutableCommand):
                 is_code_list = True  # Hierarchy group for the Code List, with the same name
                 hg = hname
 
-            # Check if the hierarchy Group is defined. YES, get it; NO, create it
+            # Check if the HierarchyGroup is previously defined. YES, use it; NO, create new HierarchyGroup
             tmp = hg
             hg = glb_idx.get(HierarchyGroup.partial_key(name=hg))
             if len(hg) == 0:
@@ -70,8 +75,13 @@ class HierarchyCategoriesCommand(IExecutableCommand):
             if len(h) == 0:
                 h = Hierarchy(name=tmp)
                 glb_idx.put(h.key(), h)
+                glb_idx.put(h.key(hg.name+"."+h.name), h)  # Register with alternative (full) name
             else:
                 h = h[0]
+
+            # Add the Hierarchy to the HierarchyGroup (if not)
+            if h not in hg.hierarchies:
+                hg.hierarchies.append(h)
 
             # Level
             level = item.get("level", None)

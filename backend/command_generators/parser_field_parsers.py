@@ -191,6 +191,11 @@ processor_names_pre = (Or([processor_name_part, Literal("*")])("part") +
 processor_names = ((processor_names_wildcard_separator + Optional(processor_names_pre)) | processor_names_pre
                    ).setParseAction(partial(parse_action_processor_name, node_type="processor_names"))
 
+
+# RULES - context_query
+# Right now, context_query would be exactly equal to "processor_names", i.e., a way to specify a set of processors (idea proposed by Michele)
+context_query << processor_names
+
 # RULES - reference
 reference = (lbracket + simple_ident.setResultsName("ident") + rbracket
              ).setParseAction(lambda _s, l, t: {'type': 'reference',

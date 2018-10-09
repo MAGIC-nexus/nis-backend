@@ -1,5 +1,12 @@
 import json
-from backend.model_services import IExecutableCommand
+from collections import OrderedDict
+
+import numpy as np
+import pandas as pd
+
+import backend
+from backend.common.helper import strcmp, create_dictionary, obtain_dataset_metadata
+from backend.model_services import IExecutableCommand, get_case_study_registry_objects
 
 
 # TODO Currently is just a copy of "ETLExternalDatasetCommand"
@@ -9,6 +16,33 @@ from backend.model_services import IExecutableCommand
 # TODO Result parameter column also change a bit
 # TODO See "DatasetQry" command in "MuSIASEM case study commands" Google Spreadsheet
 #
+
+def obtain_reverse_codes(mapped, dst):
+    """
+    Given the list of desired dst codes and an extensive map src -> dst,
+    obtain the list of src codes
+
+    :param mapped: Correspondence between src codes and dst codes [{"o", "to": [{"d", "e"}]}]
+    :param dst: Iterable of destination codes
+    :return: List of origin codes
+    """
+    src = set()
+    dest_set = set([d.lower() for d in dst])  # Destination categories
+    # Obtain origin categories referencing "dest_set" destination categories
+    for k in mapped:
+        for t in k["to"]:
+            if t["d"] and t["d"].lower() in dest_set:
+                src.add(k["o"])
+    return list(src)  # list(set([k[0].lower() for k in mapped if k[1].lower() in dest_set]))
+
+
+def pctna(x):
+    """
+    Aggregation function computing the percentage of NaN values VS total number of elements, in a group "x"
+    """
+    return 100.0 * np.count_nonzero(np.isnan(x)) / x.size
+
+
 class DatasetQryCommand(IExecutableCommand):
     def __init__(self, name: str):
         self._name = name
@@ -27,6 +61,7 @@ class DatasetQryCommand(IExecutableCommand):
         # DS Source + DS Name
         source = self._content["dataset_source"]
         dataset_name = self._content["dataset_name"]
+        dataset_datetime = self._content["dataset_datetime"]
 
         # Result name
         result_name = self._content["result_name"]
@@ -35,6 +70,7 @@ class DatasetQryCommand(IExecutableCommand):
 
         # Dataset metadata
         dims, attrs, meas = obtain_dataset_metadata(dataset_name, source)
+
         # Obtain filter parameters
         params = create_dictionary()  # Native dimension name to list of values the filter will allow to pass
         for dim in self._content["where"]:

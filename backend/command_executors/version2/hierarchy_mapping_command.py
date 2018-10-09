@@ -1,9 +1,30 @@
 import json
 from anytree import Node
+from dotted.collection import DottedDict
 
+from backend.command_generators import Issue
+from backend.command_generators.spreadsheet_command_parsers_v2 import IssueLocation
 from backend.model_services import IExecutableCommand, get_case_study_registry_objects
 from backend.common.helper import obtain_dataset_metadata, strcmp, create_dictionary, obtain_dataset_source
 from backend.models.musiasem_concepts import Mapping
+
+
+# Combinatory of lists (for many-to-many mappings)
+#
+# import itertools
+# a = [[(0.5, "a"),(4, "b"),(7, "c")],[(1, "b")],[(0.2, "z"),(0.1, "y"),(0.7, "x")]]
+# list(itertools.product(*a))
+#
+
+def fill_map_with_all_origin_categories(dim, mapping):
+    # Check all codes exist
+    mapped_codes = set([d["o"] for d in mapping])
+    all_codes = set([c for c in dim.code_list])
+    for c in all_codes - mapped_codes:  # Loop over "unmapped" origin codes
+        # This sentence MODIFIES map, so it is not necessary to return it
+        mapping.append({"o": c, "to": [{"d": None, "w": 1.0}]})  # Map to placeholder, with weight 1
+
+    return mapping
 
 
 class HierarchyMappingCommand(IExecutableCommand):
@@ -12,18 +33,102 @@ class HierarchyMappingCommand(IExecutableCommand):
         self._content = None
 
     def execute(self, state: "State"):
-        some_error = False
+        def process_line(item):
+            # Read variables
+            mh_src_dataset = item.get("source_dataset", None)
+            mh_src_hierarchy = item.get("source_hierarchy", None)
+            mh_src_code = item.get("source_code", None)
+            mh_dst_hierarchy = item.get("destination_hierarchy", None)
+            mh_dst_code = item.get("destination_code", None)
+            mh_weight = item.get("weight", None)
+
+            # Mapping name
+            name = (mh_src_dataset + ".") if mh_src_dataset else "" + mh_dst_hierarchy + " -> " + mh_dst_hierarchy
+
+            if name in mappings:
+                issues.append(Issue(itype=3,
+                                    description="The mapping '"+name+"' has been declared previously. Skipped.",
+                                    location=IssueLocation(sheet_name=name, row=r + 1, column=None)))
+                return
+
+            if name in local_mappings:
+                d = local_mappings[name]
+            else:
+                d = DottedDict()
+                local_mappings[name] = d
+                d.name = name
+                d.origin_dataset = mh_src_dataset
+                d.origin_hierarchy = mh_src_hierarchy
+                d.destination_hierarchy = mh_dst_hierarchy
+                d.mapping = create_dictionary()
+
+            # Specific code
+            if mh_src_code in d.mapping:
+                to_dict = d.mapping[mh_src_code]
+            else:
+                to_dict = create_dictionary()
+                d.mapping[mh_src_code] = to_dict
+            if mh_dst_code in to_dict:
+                issues.append(Issue(itype=3,
+                                    description="The mapping of '" + mh_src_code + "' into '" + mh_dst_code + "' has been done already",
+                                    location=IssueLocation(sheet_name=name, row=r + 1, column=None)))
+                return
+            else:
+                to_dict[mh_dst_code] = mh_weight  # NOTE: This could be an object instead of just a FLOAT or expression
+
         issues = []
+        glb_idx, p_sets, hh, datasets, mappings = get_case_study_registry_objects(state)
+        name = self._content["command_name"]
+
+        local_mappings = create_dictionary()
+
+        # Process parsed information
+        for r, line in enumerate(self._content["items"]):
+            # If the line contains a reference to a dataset or hierarchy, expand it
+            # If not, process it directly
+            is_expansion = False
+            if is_expansion:
+                # TODO Iterate through dataset and/or hierarchy elements, producing a list of new items
+                pass
+            else:
+                process_line(line)
+
+        # Mappings post-processing
+        for d in local_mappings:
+            # Convert the mapping into:
+            # [{"o": "", "to": [{"d": "", "w": ""}]}]
+            # [ {o: origin category, to: [{d: destination category, w: weight assigned to destination category}] } ]
+            mapping = []
+            for orig in local_mappings[d].mapping:
+                lst = []
+                for dst in local_mappings[d].mapping[orig]:
+                    lst.append(dict(d=dst, w=local_mappings[d].mapping[orig][dst]))
+                mapping.append(dict(o=orig, to=lst))
+            if local_mappings[d].origin_dataset:
+                dims, attrs, meas = obtain_dataset_metadata(local_mappings[d].origin_dataset)
+                if d.origin_hierarchy not in dims:
+                    issues.append(Issue(itype=3,
+                                        description="The origin dimension '" + local_mappings[d].origin_hierarchy + "' does not exist in dataset '" + local_mappings[d].origin_dataset + "'",
+                                        location=IssueLocation(sheet_name=name, row=r + 1, column=None)))
+                    continue
+                else:
+                    dim = dims[local_mappings[d].origin_dimension]
+                    mapping = fill_map_with_all_origin_categories(dim, mapping)
+            #
+            origin_dataset = local_mappings[d].origin_dataset
+            origin_hierarchy = local_mappings[d].origin_hierarchy
+            destination_hierarchy = local_mappings[d].destination_hierarchy
+            # Create Mapping and add it to Case Study mappings variable
+            mappings[d] = Mapping(d, obtain_dataset_source(origin_dataset), origin_dataset, origin_hierarchy, destination_hierarchy, mapping)
+
+        # TODO
+        # Find the function to perform many to many mappings
+        # Put it to work !!!
 
         # One or more mapping could be specified. The key is "source hierarchy+dest hierarchy"
         # Read mapping parameters
 
-        # Create and store the mapping
-        glb_idx, p_sets, hh, datasets, mappings = get_case_study_registry_objects(state)
-        mappings[self._name] = Mapping(self._name, obtain_dataset_source(origin_dataset), origin_dataset, origin_dimension, destination, map)
-
-
-        return None, None
+        return issues, None
 
     def estimate_execution_time(self):
         return 0

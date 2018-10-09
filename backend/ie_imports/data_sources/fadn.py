@@ -283,9 +283,9 @@ class FADN(IDataSourceManager):
         """ If bulk download is supported, refresh full database """
         pass
 
-    def etl_dataset(self, dataset, update=False) -> str:
+    def etl_dataset(self, dataset, update=False) -> Dataset:
         """
-        Download a OECD bulk file
+        Download a FADN bulk file
 
         :param url:
         :param local_filename:

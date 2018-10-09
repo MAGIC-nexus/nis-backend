@@ -502,6 +502,10 @@ class HierarchyGroup(Nameable, Identifiable):
     def hierarchy_source(self):
         return self._hierarchy_source
 
+    @property
+    def hierarchies(self):
+        return self._hierarchies
+
 
 class HierarchyLevel(Nameable):  # Levels in a View. Code Lists do not have levels in SDMX, although it is allowed here
     def __init__(self, name, hierarchy):
@@ -631,14 +635,17 @@ class Hierarchy(Nameable, Identifiable):
             d["_ht"] = Hierarchy.__get_hierarchy_type(hierarchy_type).__name__
         return d
 
-    def key(self):
+    def key(self, alter_name=None):
         """
         Return a Key for the identification of the Hierarchy in the registry
 
-        :param registry:
+        :param alter_name: Alternative name for the Hierarchy (multiple names are allowed for objects)
         :return:
         """
-        return {"_t": "h", "_ht": self.hierarchy_type.__name__, "_n": self.name, "__id": self.ident}
+        return {"_t": "h",
+                "_ht": self.hierarchy_type.__name__,
+                "_n": self.name if not alter_name else alter_name,
+                "__id": self.ident}
 
     def get_all_nodes(self):
         """
@@ -784,6 +791,12 @@ class Context(Identifiable, Nameable, Qualifiable):
 
     def key(self):
         return {"_t": "ctx", "_n": self.name, "__id": self.ident}
+
+
+class ReferenceType(Enum):
+    provenance = 2,
+    geographic = 3,
+    bibliography = 4,
 
 
 class Reference(Nameable, Identifiable, Qualifiable):
@@ -1605,7 +1618,7 @@ class FactorTypesRelationUnidirectionalLinearTransformObservation(FactorTypesRel
     This relation will be applied to Factors which are instances of the origin FactorTypes, to obtain destination
     FactorTypes
     """
-    def __init__(self, origin: FactorType, destination: FactorType, generate_back_flow: bool=False, weight: Union[float, str]=None, observer: Observer=None, tags=None, attributes=None):
+    def __init__(self, origin: FactorType, destination: FactorType, generate_back_flow: bool=False, weight: Union[float, str]=None, origin_context=None, destination_context=None, observer: Observer=None, tags=None, attributes=None):
         Taggable.__init__(self, tags)
         Qualifiable.__init__(self, attributes)
         Automatable.__init__(self)
@@ -1618,10 +1631,12 @@ class FactorTypesRelationUnidirectionalLinearTransformObservation(FactorTypesRel
         self._destination = destination
         self._weight = weight
         self._observer = observer
+        self._origin_context = origin_context
+        self._destination_context = destination_context
 
     @staticmethod
-    def create_and_append(origin: FactorType, destination: FactorType, weight, observer: Observer, tags=None, attributes=None):
-        o = FactorTypesRelationUnidirectionalLinearTransformObservation(origin, destination, weight, observer, tags, attributes)
+    def create_and_append(origin: FactorType, destination: FactorType, weight, origin_context=None, destination_context=None, observer: Observer=None, tags=None, attributes=None):
+        o = FactorTypesRelationUnidirectionalLinearTransformObservation(origin, destination, weight, origin_context, destination_context, observer, tags, attributes)
         if origin:
             origin.observations_append(o)
         if destination:
@@ -2145,14 +2160,14 @@ class Indicator(Nameable, Identifiable):
     # TODO Expressions should support rich selectors, of the form "factors from processors matching these properties and factor types with those properties (include "all factors in a processor") AND/OR ..." plus set operations (union/intersection).
     # TODO Then, compute an operation over all selected factors.
     # TODO To generate multiple instances of the indicator or a single indicator accumulating many things.
-    def __init__(self, name: str, formula: str, from_indicator: "Indicator", benchmark: Benchmark, indicator_category: IndicatorCategories):
+    def __init__(self, name: str, formula: str, from_indicator: "Indicator", benchmark: Benchmark, indicator_category: IndicatorCategories, description=None):
         Identifiable.__init__(self)
         Nameable.__init__(self, name)
         self._formula = formula
         self._from_indicator = from_indicator
         self._benchmark = benchmark
         self._indicator_category = indicator_category
-        self._description = None
+        self._description = description
 
     @staticmethod
     def partial_key(name: str=None):

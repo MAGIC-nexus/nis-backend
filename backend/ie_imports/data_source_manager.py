@@ -41,7 +41,7 @@ class IDataSourceManager(metaclass=ABCMeta):
         pass
 
     @abstractmethod
-    def etl_dataset(self, dataset, update=False):
+    def etl_dataset(self, dataset, update=False) -> Dataset:
         """ If bulk download is supported, refresh full dataset """
         pass
 
@@ -76,6 +76,19 @@ class DataSourceManager:
 
     def register_datasource_manager(self, instance: IDataSourceManager):
         self.registry[instance.get_name()] = instance
+
+    def unregister_datasource_manager(self, instance: IDataSourceManager):
+        """
+        Remove a data source
+        This is necessary for AdHocDatasets which has to be created and deleted depending on needs
+        (it is an Adapter of a map of the Datasets in the current state)
+
+        :param instance:
+        :return:
+        """
+        n = instance.get_name()
+        if n in self.registry:
+            del self.registry[instance.get_name()]
 
     def update_data_source(self, source: IDataSourceManager):
         # TODO Clear database
@@ -205,6 +218,9 @@ def filter_dataset_into_dataframe(in_df, filter_dict, eurostat_postprocessing=Fa
     using the information from "filter_dict", containing the dimension names and the list
     of codes that should pass the filter. If several dimensions are specified an AND combination
     is done
+
+    "in_df" must have as index a MultiIndex with all the dimensions appearing in the "filter_dict"
+
 
     :param in_df: Input dataset, pd.DataFrame
     :param filter_dict: A dictionary with the items to keep, per dimension

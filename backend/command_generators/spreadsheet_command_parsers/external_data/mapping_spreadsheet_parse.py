@@ -126,7 +126,7 @@ def parse_mapping_command(sh, area, origin, destination):
                "destination": destination,  # Name of the destination hierarchy
                "map": [{"o": k, "to": v} for k, v in o_dict.items()]
                }
-    label = content["origin_dataset"] + "." + content["origin_dimension"] + " - " + content["destination"]
+    label = (content["origin_dataset"] + ".") if origin_dataset else "" + content["origin_dimension"] + " -> " + content["destination"]
     return issues, label, content
     # else:
     #     if not some_error:

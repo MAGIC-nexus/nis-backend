@@ -3,6 +3,7 @@ from typing import List, Tuple
 from backend import CommandField
 from backend.command_field_definitions import commands
 from backend.command_generators import Issue, parser_field_parsers
+from backend.common.helper import strcmp
 
 
 @attrs
@@ -86,6 +87,10 @@ def parse_command(sh, area, name: str, cmd_name):
 
     issues.extend(local_issues)
 
+    # "mandatory" can be defined as expression depending on other base fields (like in RefBibliographic command fields)
+    # Elaborate a list of fields having this "complex" mandatory property
+    complex_mandatory_cols = [c for c in cols if isinstance(c.mandatory, str)]
+
     content = []  # The output JSON
     # Each row
     for r in range(area[0] + 1, area[1]):
@@ -93,8 +98,8 @@ def parse_command(sh, area, name: str, cmd_name):
         expandable = False  # The line contains at least one field implying expansion into multiple lines
         complex = False  # The line contains at least one field with a complex rule (which cannot be evaluated with a simple cast)
 
-        # Mandatory values
-        mandatory_not_found = set([c.name for c in cols if c.mandatory])
+        # Constant mandatory values
+        mandatory_not_found = set([c.name for c in cols if c.mandatory and isinstance(c.mandatory, bool)])
 
         # Each "field"
         for cname in col_map.keys():
@@ -142,12 +147,28 @@ def parse_command(sh, area, name: str, cmd_name):
         line["_expandable"] = expandable
         line["_complex"] = complex
 
+        # Append if all mandatory fields have been filled
+        may_append = True
         if len(mandatory_not_found) > 0:
             issues.append(Issue(itype=3,
                                 description="Mandatory columns: " + ", ".join(
                                     mandatory_not_found) + " have not been specified",
                                 location=IssueLocation(sheet_name=name, row=r, column=None)))
-        else:
+            may_append = False
+
+        # Check varying mandatory fields (fields depending on the value of other fields)
+        for c in complex_mandatory_cols:
+            col = next(c2 for c2 in col_map if strcmp(c.name, c2))
+            if isinstance(c.mandatory, str):
+                # Evaluate
+                mandatory = eval(c.mandatory, None, line)
+                may_append = (mandatory and col in line) or (not mandatory)
+                if mandatory and col not in line:
+                    issues.append(Issue(itype=3,
+                                        description="Mandatory column: " + col + " has not been specified",
+                                        location=IssueLocation(sheet_name=name, row=r, column=None)))
+
+        if may_append:
             content.append(line)
 
     return issues, None, {"items": content, "command_name": name}

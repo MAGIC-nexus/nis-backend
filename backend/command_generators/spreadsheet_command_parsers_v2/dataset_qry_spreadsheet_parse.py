@@ -1,5 +1,6 @@
-from backend.command_generators import parser_field_parsers
+from backend.command_generators import parser_field_parsers, Issue
 from backend.command_generators.parser_field_parsers import simple_ident
+from backend.command_generators.spreadsheet_command_parsers_v2 import IssueLocation
 from backend.common.helper import obtain_dataset_source, obtain_dataset_metadata, create_dictionary, strcmp
 from backend.model_services import get_case_study_registry_objects
 
@@ -39,7 +40,28 @@ def parse_dataset_qry_command(sh, area, name, state):
     issues = []
     # Global variables (at parse time they may not be defined, so process carefully...)
     glb_idx, p_sets, hh, datasets, mappings = get_case_study_registry_objects(state)
-    # Dataset source
+
+    # Look for the name of the input Dataset
+    dataset_name = None
+    available_at_datetime = None
+    for c in range(area[2], area[3]):
+        col_name = sh.cell(row=1, column=c).value
+        if not col_name:
+            continue
+        if col_name.lower().strip() in ["inputdataset"]:
+            lst = obtain_column(c, area[0]+1, area[1])
+            for v in lst:
+                if v:
+                    dataset_name = v
+                    break  # Stop on first definition
+        elif col_name.lower().strip() in ["availableatdatetime"]:
+            lst = obtain_column(c, area[0]+1, area[1])
+            for v in lst:
+                if v:
+                    available_at_datetime = v
+                    break  # Stop on first definition
+
+    # Obtain the source
     source = obtain_dataset_source(dataset_name)
     # Obtain metadata
     dims, attrs, meas = obtain_dataset_metadata(dataset_name, source)
@@ -54,6 +76,7 @@ def parse_dataset_qry_command(sh, area, name, state):
             cl[d] = None  # No code list (TIME_PERIOD for instance)
         if dims[d].istime:
             we_have_time = True
+
     # Add matching mappings as more dimensions
     for m in mappings:
         if strcmp(mappings[m].source, source) and \
@@ -65,10 +88,12 @@ def parse_dataset_qry_command(sh, area, name, state):
 
     # Scan columns for Dimensions, Measures and Aggregation.
     # Pivot Table is a Visualization, so now it is not in the command, there will be a command aside.
+
     # TODO The result COULD be an automatic BI cube (with a separate field)
     # TODO - Write into a set of tables in Mondrian
     # TODO - Generate Schema for Mondrian
     # TODO - Write the Schema for Mondrian
+
     measures = []
     out_dims = []
     agg_funcs = []
@@ -79,24 +104,18 @@ def parse_dataset_qry_command(sh, area, name, state):
         col_name = sh.cell(row=1, column=c).value
         if not col_name:
             continue
-
-        if col_name.lower().strip() in ["dimensions_kept", "dims", "dimensions"]:  # "GROUP BY"
+        if col_name.lower().strip() in ["resultdimensions", "dimensions"]:  # "GROUP BY"
             lst = obtain_column(c, area[0] + 1, area[1])
             for d in lst:
                 if not d:
                     continue
                 if d not in cl:
-                    issues.append((3, "The dimension specified for output, '"+d+"' is neither a dataset dimension nor a mapped dimension. ["+', '.join([d2 for d2 in cl])+"]"))
+                    issues.append(Issue(itype=3,
+                                        description="The dimension specified for output, '"+d+"' is neither a dataset dimension nor a mapped dimension. ["+', '.join([d2 for d2 in cl])+"]",
+                                        location=IssueLocation(sheet_name=name, row=c + 1, column=None)))
                 else:
                     out_dims.append(d)
-        elif col_name.lower().strip() in ["aggregation_function", "aggfunc", "agg_func"]:  # "SELECT AGGREGATORS"
-            lst = obtain_column(c, area[0] + 1, area[1])
-            for f in lst:
-                if f.lower() not in ["sum", "avg", "count", "sumna", "countav", "avgna", "pctna"]:
-                    issues.append((3, "The specified aggregation function, '"+f+"' is not one of the supported ones: 'sum', 'avg', 'count', 'sumna', 'avgna', 'countav', 'pctna'"))
-                else:
-                    agg_funcs.append(f)
-        elif col_name.lower().strip() in ["measures"]:  # "SELECT"
+        elif col_name.lower().strip() in ["resultsmeasures", "measures"]:  # "SELECT"
             lst = obtain_column(c, area[0] + 1, area[1])
             # Check for measures
             # TODO (and attributes?)
@@ -104,10 +123,21 @@ def parse_dataset_qry_command(sh, area, name, state):
                 if not m:
                     continue
                 if m not in meas:
-                    issues.append((3, "The specified measure, '"+m+"' is not a measure available in the dataset. ["+', '.join([m2 for m2 in measures])+"]"))
+                    issues.append(Issue(itype=3,
+                                        description="The specified measure, '"+m+"' is not a measure available in the dataset. ["+', '.join([m2 for m2 in measures])+"]",
+                                        location=IssueLocation(sheet_name=name, row=c + 1, column=None)))
                 else:
                     measures.append(m)
-        elif col_name.lower().strip() in ["measuresas"]:  # "AS <name>"
+        elif col_name.lower().strip() in ["resultmeasuresaggregation", "resultmeasuresaggregator", "aggregation"]:  # "SELECT AGGREGATORS"
+            lst = obtain_column(c, area[0] + 1, area[1])
+            for f in lst:
+                if f.lower() not in ["sum", "avg", "count", "sumna", "countav", "avgna", "pctna"]:
+                    issues.append(Issue(itype=3,
+                                        description="The specified aggregation function, '"+f+"' is not one of the supported ones: 'sum', 'avg', 'count', 'sumna', 'avgna', 'countav', 'pctna'",
+                                        location=IssueLocation(sheet_name=name, row=c + 1, column=None)))
+                else:
+                    agg_funcs.append(f)
+        elif col_name.lower().strip() in ["resultmeasuresas", "measuresas"]:  # "AS <name>"
             lst = obtain_column(c, area[0] + 1, area[1])
             for m in lst:
                 measures_as.append(m)
@@ -118,7 +148,9 @@ def parse_dataset_qry_command(sh, area, name, state):
                 if not cd:
                     continue
                 if str(cd).lower() not in cl[col_name]:
-                    issues.append((3, "The code '"+cd+"' is not present in the codes declared for dimension '"+col_name+"'. Please, check them."))
+                    issues.append(Issue(itype=3,
+                                        description="The code '"+cd+"' is not present in the codes declared for dimension '"+col_name+"'. Please, check them.",
+                                        location=IssueLocation(sheet_name=name, row=c + 1, column=None)))
                 else:
                     if col_name not in filter_:
                         lst2 = []
@@ -132,30 +164,37 @@ def parse_dataset_qry_command(sh, area, name, state):
             lst = obtain_column(c, area[0] + 1, area[1])
             if len(lst) > 0:
                 filter_[col_name] = lst[0]  # In this case it is not a list, but a number or string !!!!
-        elif col_name.lower() in ["result_name", "result name", "resultname"]:
+        elif col_name.lower() in ["outputdatasetname", "outputdataset", "result_name", "result name", "resultname"]:
             lst = obtain_column(c, area[0] + 1, area[1])
             if len(lst) > 0:
                 result_name = lst[0]
                 try:
                     parser_field_parsers.string_to_ast(simple_ident, result_name)
                 except:
-                    issues.append(
-                        (3, "Column '" + col_name + "' has an invalid dataset name '" + result_name + "'"))
+                    issues.append(Issue(itype=3,
+                                        description="Column '" + col_name + "' has an invalid dataset name '" + result_name + "'",
+                                        location=IssueLocation(sheet_name=name, row=c + 1, column=None)))
 
     if len(measures) == 0:
-        issues.append((3, "At least one measure should be specified"))
+        issues.append(Issue(itype=3,
+                            description="At least one measure should be specified",
+                            location=IssueLocation(sheet_name=name, row=c + 1, column=None)))
 
     if len(agg_funcs) == 0:
-        issues.append((2, "No aggregation function specified. Assuming 'average'"))
+        issues.append(Issue(itype=2,
+                            description="No aggregation function specified. Assuming 'average'",
+                            location=IssueLocation(sheet_name=name, row=c + 1, column=None)))
         agg_funcs.append("average")
 
     if not result_name:
         result_name = source + "_" + dataset_name
-        issues.append((2, "No result name specified. Assuming '"+result_name+"'"))
+        issues.append(Issue(itype=2,
+                            description="No result name specified. Assuming '"+result_name+"'",
+                            location=IssueLocation(sheet_name=name, row=c + 1, column=None)))
 
     content = {"dataset_source": source,
                "dataset_name": dataset_name,
-               "dataset_datetime": None,
+               "dataset_datetime": available_at_datetime,
                "where": filter_,
                "dimensions": [d for d in dims],
                "group_by": out_dims,

@@ -1,6 +1,10 @@
 import unittest
 import pandas as pd
+import pyximport
 
+pyximport.install(reload_support=True)
+
+from backend.common.helper_accel import augment_dataframe_with_mapped_columns2
 import backend.common.helper
 from backend.common.helper import PartialRetrievalDictionary, augment_dataframe_with_mapped_columns
 from backend.models.musiasem_concepts import Processor, ProcessorsRelationPartOfObservation, Observer
@@ -116,8 +120,8 @@ class TestMapFunction(unittest.TestCase):
              ]
         # Prepare a simple DataFrame
         df = pd.DataFrame(data=[["c11", "c31", 4], ["c12", "c32", 3], ["c13", "c31", 1.5]], columns=["cat_o_1", "cat_o_2", "value"])
-        # Call
-        df2 = augment_dataframe_with_mapped_columns(df, m, ["value"])
+        # >>>>> Call Cython ACCELERATED Function <<<<<
+        df2 = augment_dataframe_with_mapped_columns2(df, m, ["value"])
         # Check result
         self.assertEqual(list(df2.columns), ["cat_o_1", "cat_o_2", "cat_d_1", "cat_d_2", "value"])
         self.assertEqual(df2.shape, (7, 5))
@@ -262,3 +266,6 @@ class TestPartialKeyDictionary(unittest.TestCase):
         self.assertEqual(len(res), 0)
 
 
+if __name__ == '__main__':
+    i = TestMapFunction()
+    i.test_003_many_to_many_2()
