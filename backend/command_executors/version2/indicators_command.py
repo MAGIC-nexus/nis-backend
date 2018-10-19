@@ -32,7 +32,8 @@ class IndicatorsCommand(IExecutableCommand):
         name = self._content["command_name"]
 
         # Process parsed information
-        for r, line in enumerate(self._content["items"]):
+        for line in self._content["items"]:
+            r = line["_row"]
             i_name = line.get("indicator_name", None)
             i_local = line.get("local", None)
             i_formula = line.get("expression", None)

@@ -1,7 +1,7 @@
 import mimetypes
 from io import BytesIO
 import pandas as pd
-from typing import List
+from typing import List, Tuple
 import urllib.request
 
 from backend.common.helper import create_dictionary
@@ -115,7 +115,7 @@ class AdHocDatasets(IDataSourceManager):
         """
         pass
 
-    def get_dataset_filtered(self, dataset, dataset_params: list[tuple]) -> Dataset:
+    def get_dataset_filtered(self, dataset, dataset_params: List[Tuple]) -> Dataset:
         """ This method has to consider the last dataset download, to re"""
         # Read dataset structure
         ds = self.get_dataset_structure(None, dataset)

@@ -25,6 +25,7 @@ ParserElement.enablePackrat()
 # Arithmetic Expression
 
 # FORWARD DECLARATIONS
+arith_expression = Forward()
 arith_boolean_expression = Forward()
 expression = Forward()  # Generic expression (boolean, string, numeric)
 expression_with_parameters = Forward()  # TODO Parameter value definition. An expression potentially referring to other parameters. Boolean operators. Simulation of IF ELIF ELSE or SWITCH
@@ -92,19 +93,20 @@ unit_name = Regex(r".*").setParseAction(parse_action_unit_name)
 
 # RULES - Simple hierarchical name
 #         A literal hierarchical name - A non literal hierarchical name could be "processor_name"
-simple_h_name = (Group(simple_ident + ZeroOrMore(dot.suppress() + simple_ident)).setResultsName("ident")
-                 ).setParseAction(lambda _s, l, t: {'type': 'h_var',
-                                                    'parts': t.ident.asList(),
-                                                    }
-                                  )
+simple_h_name = (simple_ident + ZeroOrMore(dot.suppress() + simple_ident))\
+    .setParseAction(lambda _s, l, t: {'type': 'h_var',
+                                      'parts': t.asList()
+                                      }
+                    )
 
 # RULES - simple_hierarchical_name [":" simple_hierarchical_name]
 factor_name = (Optional(simple_h_name.setResultsName("processor")) + Optional(Group(processor_factor_separator.suppress() + simple_h_name).setResultsName("factor"))
-               ).setParseAction(lambda _s, l, t: {'type': 'pf_name',
-                                                                'processor': t.processor if t.processor else None,
-                                                                'factor': t.factor[0] if t.factor else None
-                                                        }
-                                      )
+               ).setParseAction(lambda _s, l, t:
+                                {'type': 'pf_name',
+                                 'processor': t.processor if t.processor else None,
+                                 'factor': t.factor[0] if t.factor else None
+                                 }
+                                )
 
 # RULES - processor_name
 # "h{c}ola{b}.sdf{c}",
@@ -218,6 +220,11 @@ func_call = Group(simple_ident + lparen.suppress() + parameters_list + rparen.su
 
 # RULES - key-value list
 # key "=" value. Key is a simple_ident; "Value" can be an expression referring to parameters
+value = Group(arith_boolean_expression).setParseAction(lambda t:
+                                                       {'type': 'value',
+                                                        'value': t[0]
+                                                        }
+                                                       )
 key_value = Group(simple_ident + equals.suppress() + arith_boolean_expression).setParseAction(lambda t: {'type': 'key_value', 'key': t[0][0], 'value': t[0][1]})
 key_value_list = delimitedList(key_value, ",").setParseAction(
     lambda _s, l, t: {'type': 'key_value_list',
@@ -257,7 +264,29 @@ h_name = (Optional(namespace).setResultsName("namespace") +
                                              }
                            )
 
-# RULES - Arithmetic and Boolean expression
+# RULES - Arithmetic expression AND Arithmetic Plus Boolean expression
+arith_expression << operatorPrecedence(Or([positive_float, positive_int, string,
+                                       Optional(Literal('{')).suppress() + simple_h_name + Optional(Literal('}')).suppress(),
+                                       func_call]),  # Operand types (REMOVED h_name: no "namespace" and no "datasets")
+                                 [(signop, 1, opAssoc.RIGHT, lambda _s, l, t: {
+                                     'type': 'u'+t.asList()[0][0],
+                                     'terms': [0, t.asList()[0][1]],
+                                     'ops': ['u'+t.asList()[0][0]]
+                                  }),
+                                  (multop, 2, opAssoc.LEFT, lambda _s, l, t: {
+                                      'type': 'multipliers',
+                                      'terms': t.asList()[0][0::2],
+                                      'ops': t.asList()[0][1::2]
+                                  }),
+                                  (plusop, 2, opAssoc.LEFT, lambda _s, l, t: {
+                                      'type': 'adders',
+                                      'terms': t.asList()[0][0::2],
+                                      'ops': t.asList()[0][1::2]
+                                  }),
+                                  ],
+                                 lpar=lparen.suppress(),
+                                 rpar=rparen.suppress())
+
 arith_boolean_expression << operatorPrecedence(Or([positive_float, positive_int, string, boolean,
                                      Optional(Literal('{')).suppress() + simple_h_name + Optional(Literal('}')).suppress(),
                                      func_call]),  # Operand types (REMOVED h_name: no "namespace" and no "datasets")
@@ -355,7 +384,7 @@ relation_operators = Or([Literal('|'),  # Part-of
                          Literal('||')  # Upscale (implies part-of also)
                          ]
                         )
-relation_expression = (Optional(expression_with_parameters).setResultsName("weight") +
+relation_expression = (Optional(arith_expression).setResultsName("weight") +
                        Optional(relation_operators).setResultsName("relation_type") +
                        factor_name.setResultsName("destination")
                        ).setParseAction(lambda _s, l, t: {'type': 'relation',

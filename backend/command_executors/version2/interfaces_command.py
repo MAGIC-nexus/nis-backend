@@ -57,7 +57,7 @@ class InterfacesAndQualifiedQuantitiesCommand(IExecutableCommand):
                 except Exception as e:
                     issues.append(Issue(itype=3,
                                         description=str(e),
-                                        location=IssueLocation(sheet_name=name, row=i + 1, column=None)))
+                                        location=IssueLocation(sheet_name=name, row=i, column=None)))
                     return
             else:
                 iface_attributes = {}
@@ -68,7 +68,7 @@ class InterfacesAndQualifiedQuantitiesCommand(IExecutableCommand):
                 except Exception as e:
                     issues.append(Issue(itype=3,
                                         description=str(e),
-                                        location=IssueLocation(sheet_name=name, row=i + 1, column=None)))
+                                        location=IssueLocation(sheet_name=name, row=i, column=None)))
                     return
             else:
                 number_attributes = {}
@@ -81,7 +81,7 @@ class InterfacesAndQualifiedQuantitiesCommand(IExecutableCommand):
                 else:
                     issues.append(Issue(itype=3,
                                         description="When 'Interface' column is not defined, both 'Processor' and 'InterfaceType' must",
-                                        location=IssueLocation(sheet_name=name, row=i + 1, column=None)))
+                                        location=IssueLocation(sheet_name=name, row=i, column=None)))
                     return
             else:
                 # TODO Split using syntax analysis. Each of the parts may contain advanced syntactic expressions. For now, only literals are considered
@@ -94,7 +94,7 @@ class InterfacesAndQualifiedQuantitiesCommand(IExecutableCommand):
                 if len(pm) == 0:
                     issues.append(Issue(itype=3,
                                         description="Could not find Pedigree Matrix '"+f_pedigree_matrix+"'",
-                                        location=IssueLocation(sheet_name=name, row=i + 1, column=None)))
+                                        location=IssueLocation(sheet_name=name, row=i, column=None)))
                     return
                 else:
                     try:
@@ -102,12 +102,12 @@ class InterfacesAndQualifiedQuantitiesCommand(IExecutableCommand):
                     except:
                         issues.append(Issue(itype=3,
                                             description="Could not decode Pedigree '"+f_pedigree+"' for Pedigree Matrix '"+f_pedigree_matrix+"'",
-                                            location=IssueLocation(sheet_name=name, row=i + 1, column=None)))
+                                            location=IssueLocation(sheet_name=name, row=i, column=None)))
                         return
             elif f_pedigree and not f_pedigree_matrix:
                 issues.append(Issue(itype=3,
                                     description="Pedigree specified without accompanying Pedigree Matrix",
-                                    location=IssueLocation(sheet_name=name, row=i + 1, column=None)))
+                                    location=IssueLocation(sheet_name=name, row=i, column=None)))
                 return
 
             # Source
@@ -144,12 +144,12 @@ class InterfacesAndQualifiedQuantitiesCommand(IExecutableCommand):
             if len(p) == 0:
                 issues.append(Issue(itype=3,
                                     description="Processor '"+f_processor_name+"' not declared previously",
-                                    location=IssueLocation(sheet_name=name, row=i + 1, column=None)))
+                                    location=IssueLocation(sheet_name=name, row=i, column=None)))
                 return
             elif len(p) > 1:
                 issues.append(Issue(itype=3,
                                     description="Processor '"+f_processor_name+"' found "+str(len(p))+" times. It must be uniquely identified.",
-                                    location=IssueLocation(sheet_name=name, row=i + 1, column=None)))
+                                    location=IssueLocation(sheet_name=name, row=i, column=None)))
                 return
             else:
                 p = p[0]
@@ -173,12 +173,12 @@ class InterfacesAndQualifiedQuantitiesCommand(IExecutableCommand):
                 if len(ft) == 0:
                     issues.append(Issue(itype=3,
                                         description="InterfaceType '"+f_interface_type_name+"' not declared previously",
-                                        location=IssueLocation(sheet_name=name, row=i + 1, column=None)))
+                                        location=IssueLocation(sheet_name=name, row=i, column=None)))
                     return
                 elif len(ft) > 1:
                     issues.append(Issue(itype=3,
                                         description="InterfaceType '"+f_interface_type_name+"' found "+str(len(ft))+" times. It must be uniquely identified.",
-                                        location=IssueLocation(sheet_name=name, row=i + 1, column=None)))
+                                        location=IssueLocation(sheet_name=name, row=i, column=None)))
                     return
                 else:
                     ft = ft[0]
@@ -252,7 +252,9 @@ class InterfacesAndQualifiedQuantitiesCommand(IExecutableCommand):
         #processor_attributes = self._content["processor_attributes"]
 
         # Read each of the rows
-        for i, r in enumerate(self._content["items"]):
+        for r in self._content["items"]:
+            i = r["_row"]
+
             # Create processor, hierarchies (taxa) and factors
             # Check if the processor exists. Two ways to characterize a processor: name or taxa
             """

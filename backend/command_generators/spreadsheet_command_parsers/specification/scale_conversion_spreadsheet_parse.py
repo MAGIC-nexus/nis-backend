@@ -76,7 +76,7 @@ def parse_scale_conversion_command(sh, area):
             parser_field_parsers.string_to_ast(parser_field_parsers.simple_h_name, ft)
         except:
             some_error = True
-            issues((3, "'"+ft+"' is not a valid Factor Type name"))
+            issues.append((3, "'"+ft+"' is not a valid Factor Type name"))
     if some_error:
         return issues, None, None
 
@@ -93,14 +93,14 @@ def parse_scale_conversion_command(sh, area):
                 # Destination factor
                 destination = subrow[j]
                 if strcmp(origin, destination):
-                    issues((3, "A change of scale to the same factor type ("+origin+") is not allowed"))
+                    issues.append((3, "A change of scale to the same factor type ("+origin+") is not allowed"))
                 else:
                     try:
                         parser_field_parsers.string_to_ast(parser_field_parsers.expression_with_parameters, v)
                         # Add the scale
                         scales.append(dict(origin=origin, destination=destination, scale=v))
                     except:
-                        issues((3, "The expression '"+v+"' at the intersection of factor types " + origin + " and " + destination + " is syntactically incorrect"))
+                        issues.append((3, "The expression '"+v+"' at the intersection of factor types " + origin + " and " + destination + " is syntactically incorrect"))
 
     content = {"origin_factor_types": subcol,
                "destination_factor_types": subrow,

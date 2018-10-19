@@ -119,7 +119,11 @@ class UpscaleCommand(IExecutableCommand):
                     issues.append((3, "Either the tuple (" + d2s + ") did not match any Processor or matched more than one."))
             else:
                 parent_dict.update(Processor.partial_key())
-                parents = glb_idx.get(parent_dict) # Query the PartialRetrievalDictionary by attributes
+
+                # Obtain Processor matching the attributes <<<<<<<<<<
+                # Query the PartialRetrievalDictionary by attributes
+                parents = glb_idx.get(parent_dict)
+
                 if len(parents) > 1:
                     issues.append((3, "The tuple ("+str(parent_dict)+") matches "+str(len(parents))+" Processors: "+(", ".join([p.name for p in parents]))))
                     parent = None
@@ -140,7 +144,11 @@ class UpscaleCommand(IExecutableCommand):
                     issues.append((3, "Either the tuple (" + d2s + ") did not match any Processor or matched more than one."))
             else:
                 child_dict.update(Processor.partial_key())
-                children = glb_idx.get(child_dict) # Query the PartialRetrievalDictionary by attributes
+
+                # Obtain Processors matching the attributes
+                # Query the PartialRetrievalDictionary by attributes
+                children = glb_idx.get(child_dict)
+
                 if len(children) > 1:
                     issues.append((3, "The tuple ("+str(child_dict)+") matches "+str(len(parents))+" Processors: "+(", ".join([p.name for p in children]))))
                     child = None
@@ -156,12 +164,15 @@ class UpscaleCommand(IExecutableCommand):
             if parent and child:
                 if non_zero_weight:
                     # Clone the child processor
+                    # TODO
                     cloned_child = child.clone(glb_idx)
 
                     # Create the new Relation Observations
+                    # TODO
                     # - Part-of Relation
                     o1 = ProcessorsRelationPartOfObservation.create_and_append(parent, cloned_child, oer)  # Part-of
                     glb_idx.put(o1.key(), o1)
+                    # TODO
                     # - Upscale Relation
                     quantity = str(sc_dict["weight"])
                     o3 = ProcessorsRelationUpscaleObservation.create_and_append(parent, cloned_child,
@@ -170,6 +181,7 @@ class UpscaleCommand(IExecutableCommand):
                                                                                 quantity=quantity)
                     glb_idx.put(o3.key(), o3)
             else:
+                # TODO
                 parent_dict = str({attr: codes[i] for attr, i in parent_attrs})
                 child_dict = str({attr: codes[i] for attr, i in child_attrs})
                 if not parent and child:

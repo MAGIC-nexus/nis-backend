@@ -39,7 +39,7 @@ class ScaleConversionCommand(IExecutableCommand):
                                                  )
             if not ft:
                 some_error = True
-                issues((3, "Could not obtain/create the Factor Type '"+ft_name+"'"))
+                issues.append((3, "Could not obtain/create the Factor Type '"+ft_name+"'"))
             fts[ft_name] = ft
 
         if some_error:

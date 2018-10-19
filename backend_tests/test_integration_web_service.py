@@ -175,9 +175,9 @@ class TestHighLevelUseCases(unittest.TestCase):
         self.assertEqual(len(lst), 1)
         # List case study versions
         uuid2 = lst[0]["uuid"]
-        r = a.get(lst[0]["versions"])  # Use the navigation URL
+        r = a.get(lst[0]["versions"][0]["resource"])  # Use the navigation URL
         d = json.loads(r.data)
-        self.assertIsNotNone(d["uuid"])
+        self.assertIsNotNone(d["version"])
         # List case study version sessions
         # Open a reproducible session, add another command
 

@@ -156,7 +156,7 @@ class TestHighLevelUseCases(unittest.TestCase):
         self.assertEqual(ide, "test_user")
 
     def test_003_new_case_study_with_no_command(self):
-        prepare_and_reset_database_for_tests()
+        prepare_and_reset_database_for_tests(True)
         uuid2, isess = new_case_study(with_metadata_command=0)
         isess.quit()
         self.assertIsNotNone(uuid2, "UUID should be defined after saving+closing the reproducible session")
@@ -168,7 +168,7 @@ class TestHighLevelUseCases(unittest.TestCase):
         session.close()
 
     def test_004_new_case_study_with_only_metadata_command(self):
-        prepare_and_reset_database_for_tests()
+        prepare_and_reset_database_for_tests(True)
         uuid2, isess = new_case_study(with_metadata_command=1)  # 1 means "execute" (do not register)
         # Check State
         md = isess._state.get("_metadata")
@@ -177,14 +177,15 @@ class TestHighLevelUseCases(unittest.TestCase):
         self.assertEqual(md["Title"], "Case study for test only")
         # Check Session should not have CommandsContainer
         session = DBSession()
-        self.assertEqual(len(session.query(CaseStudy).all()), 1)
+        tmp = len(session.query(CaseStudy).all())
+        self.assertEqual(tmp, 1)
         self.assertEqual(len(session.query(CaseStudyVersion).all()), 1)
         self.assertEqual(len(session.query(CaseStudyVersionSession).all()), 1)
         self.assertEqual(len(session.query(CommandsContainer).all()), 0)
         session.close()
 
     def test_005_new_case_study_with_metadata_plus_dummy_command(self):
-        prepare_and_reset_database_for_tests()
+        prepare_and_reset_database_for_tests(True)
         # ----------------------------------------------------------------------
         # Create case study, with one CommandsContainer
         uuid_, isess = new_case_study(with_metadata_command=3)
@@ -250,7 +251,7 @@ class TestHighLevelUseCases(unittest.TestCase):
         cs_lst = session.query(CaseStudy).all()
         self.assertEqual(len(cs_lst), 1)
         self.assertEqual(len(session.query(CaseStudyVersion).all()), 2)
-        self.assertEqual(len(session.query(CaseStudyVersionSession).all()), 2)
+        self.assertEqual(len(session.query(CaseStudyVersionSession).all()), 3)
         self.assertEqual(len(session.query(CommandsContainer).all()), 6)
         session.close()
 
@@ -416,6 +417,7 @@ class TestHighLevelUseCases(unittest.TestCase):
 if __name__ == '__main__':
     setUpModule()
     i = TestHighLevelUseCases()
-    i.test_005_new_case_study_with_only_metadata_command()
+    i.test_003_new_case_study_with_no_command()
+    #i.test_005_new_case_study_with_only_metadata_command()
 
     print("Just a placeholder (useful when running to check if the file is syntactically valid")

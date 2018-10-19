@@ -73,18 +73,18 @@ class RelationshipsCommand(IExecutableCommand):
                     if len(ds_list) >= 1 and len(h_list) >= 1:
                         issues.append(Issue(itype=3,
                                             description="Either a dataset ("+", ".join([d.name for d in ds_list])+") or a hierarchy ("+", ".join([h.name for h in h_list])+")",
-                                            location=IssueLocation(sheet_name=name, row=r + 1, column=None)))
+                                            location=IssueLocation(sheet_name=name, row=r, column=None)))
                         return
                     elif len(ds_list) > 1:
                         issues.append(Issue(itype=3,
                                             description="More than one dataset has been specified: "+", ".join([d.name for d in ds_list]),
-                                            location=IssueLocation(sheet_name=name, row=r + 1, column=None)))
+                                            location=IssueLocation(sheet_name=name, row=r, column=None)))
                         return
                     elif len(h_list) > 1:
                         issues.append(Issue(itype=3,
                                             description="More than one hierarchy has been specified: " + ", ".join(
                                                 [h.name for h in h_list]),
-                                            location=IssueLocation(sheet_name=name, row=r + 1, column=None)))
+                                            location=IssueLocation(sheet_name=name, row=r, column=None)))
                         return
                     const_dict = obtain_dictionary_with_literal_fields(item, asts)
                     if len(ds_list) == 1:
@@ -106,7 +106,7 @@ class RelationshipsCommand(IExecutableCommand):
                         if measure_requested and not all_dimensions_requested:
                             issues.append(Issue(itype=3,
                                                 description="It is not possible to use a measure if not all dimensions are used (cannot assume implicit aggregation)",
-                                                location=IssueLocation(sheet_name=name, row=r + 1, column=None)))
+                                                location=IssueLocation(sheet_name=name, row=r, column=None)))
                             return
                         elif not measure_requested and not all_dimensions_requested:
                             # TODO Reduce the dataset to the unique tuples (consider the current case -sensitive or not-sensitive-)
@@ -216,7 +216,7 @@ class RelationshipsCommand(IExecutableCommand):
                 except Exception as e:
                     issues.append(Issue(itype=3,
                                         description=str(e),
-                                        location=IssueLocation(sheet_name=name, row=r + 1, column=None)))
+                                        location=IssueLocation(sheet_name=name, row=r, column=None)))
                     return
             else:
                 attributes = {}
@@ -299,14 +299,14 @@ class RelationshipsCommand(IExecutableCommand):
                                                             "to the other cannot be performed). Origin: " +
                                                             source_interface_type.name+"; Target: " +
                                                             target_interface_type.name,
-                                                location=IssueLocation(sheet_name=name, row=r + 1, column=None)))
+                                                location=IssueLocation(sheet_name=name, row=r, column=None)))
                             return
                         else:
                             change_type_scale = r_change_type_scale
                 else:  # No interface types!!
                     issues.append(Issue(itype=3,
                                         description="No InterfaceTypes specified or retrieved for a flow",
-                                        location=IssueLocation(sheet_name=name, row=r + 1, column=None)))
+                                        location=IssueLocation(sheet_name=name, row=r, column=None)))
                     return
 
                 # Find source Interface, if not add it
@@ -363,8 +363,8 @@ class RelationshipsCommand(IExecutableCommand):
         all_processors = get_processor_names_to_processors_dictionary(glb_idx)
 
         # Process parsed information
-        for r, line in enumerate(self._content["items"]):
-            print(str(r))
+        for line in self._content["items"]:
+            r = line["_row"]
             for sub_line in parse_and_unfold_line(line):
                 process_line(sub_line)
 

@@ -22,8 +22,8 @@ from backend.command_executors.version2.hierarchy_mapping_command import Hierarc
 from backend.command_executors import create_command, DatasetDataCommand, DatasetQryCommand, AttributeTypesCommand, \
     AttributeSetsCommand, InterfaceTypesCommand, ProcessorsCommand, InterfacesAndQualifiedQuantitiesCommand, \
     RelationshipsCommand, InstantiationsCommand, ScaleConversionV2Command, DatasetDefCommand
-from backend.command_executors.version2.references_v2_command import ReferenceProvenance, ReferenceBibliographic, \
-    ReferenceGeographic
+from backend.command_executors.version2.references_v2_command import ProvenanceReferencesCommand, BibliographicReferencesCommand, \
+    GeographicReferencesCommand
 from backend.command_generators.spreadsheet_command_parsers.analysis.indicators_spreadsheet_parse import parse_indicators_command
 from backend.command_generators.spreadsheet_command_parsers.external_data.mapping_spreadsheet_parse import parse_mapping_command
 from backend.command_generators.spreadsheet_command_parsers.external_data.etl_external_dataset_spreadsheet_parse import parse_etl_external_dataset_command
@@ -150,11 +150,11 @@ Comando
     cmds = [(re_metadata, "metadata", parse_metadata_command, 2, MetadataCommand),  # V1 and V2
             (re_processors, "data_input", parse_data_input_command, 3, DataInputCommand),  # V1
             (re_relations, "structure", parse_structure_command, 2, StructureCommand),  # V1
-            (re_scale_conversion, "scale_conversion", parse_scale_conversion_command, 2, ScaleConversionCommand),  # V1
             (re_upscale, "upscale", parse_upscale_command, 2, UpscaleCommand),  # V1
+            (re_scale_conversion, "scale_conversion", parse_scale_conversion_command, 2, ScaleConversionCommand),  # V1
             (re_pedigree_template, "pedigree_matrix", parse_pedigree_matrix_command, 3, PedigreeMatrixCommand),  # V1 and V2
             (re_references, "references", parse_references_command, 2, ReferencesCommand),  # V1 MAYBE V2
-            # Special (declared but not used)
+            # **Special** (declared but not used)
             (re_hierarchy, "hierarchy", 0, HierarchyCommand),
             (re_data, "etl_dataset", 0, ETLExternalDatasetCommand),
             (re_mapping, "mapping", 0, MappingCommand),
@@ -164,9 +164,12 @@ Comando
             (re_hierarchies, "cat_hierarchies", parse_cat_hierarchy_command, 3, HierarchyCategoriesCommand),  # TODO Test
              (re_attributes, "attribute_types", parse_attribute_types_command, 2, AttributeTypesCommand),  # TODO Attribute Types (1***)
             (re_datasetdef, "datasetdef", parse_datasetdef_command, 2, DatasetDefCommand),  # Dataset Metadata
+
+            # **Special** (declared but not used)
             (re_datasetdata, "datasetdata", parse_dataset_data_command, 2, DatasetDataCommand),  # TODO Test
-            (re_parameters, "parameters", parse_parameters_command_v2, 3, ParametersCommand),  # The old function was "parse_parameters_command"
             (re_datasetqry, "datasetqry", parse_dataset_qry_command, 2, DatasetQryCommand),  # TODO Test
+
+            (re_parameters, "parameters", parse_parameters_command_v2, 3, ParametersCommand),  # The old function was "parse_parameters_command"
             (re_interfacetypes, "interface_types", parse_interface_types_command, 2, InterfaceTypesCommand),  # TODO Test
             (re_processors_v2, "processors", parse_processors_v2_command, 2, ProcessorsCommand),  # TODO Test
             (re_interfaces, "interfaces_and_qq", parse_interfaces_command, 2, InterfacesAndQualifiedQuantitiesCommand),  # TODO Test
@@ -174,9 +177,9 @@ Comando
              (re_instantiations, "instantiations", parse_instantiations_command, 2, InstantiationsCommand),  # TODO (5***)(evolution of "re_upscale" "upscale")
             (re_scale_changers, "scale_conversion_v2", parse_scale_changers_command, 2, ScaleConversionV2Command),  # TODO Test
             (re_indicators, "indicators", parse_indicators_v2_command, 2, IndicatorsCommand),  # (V1 and) V2
-            (re_refbibliographic, "ref_bibliographic", parse_ref_bibliographic, 2, ReferenceBibliographic),
-            (re_refgeographical, "ref_geographical", parse_ref_geographic, 2, ReferenceGeographic),
-            (re_refprovenance, "ref_provenance", parse_ref_provenance, 2, ReferenceProvenance),
+            (re_refbibliographic, "ref_bibliographic", parse_ref_bibliographic, 2, BibliographicReferencesCommand),
+            (re_refgeographical, "ref_geographical", parse_ref_geographic, 2, GeographicReferencesCommand),
+            (re_refprovenance, "ref_provenance", parse_ref_provenance, 2, ProvenanceReferencesCommand),
             # Will not be implemented NOW
             (re_problem_statement, "problem_statement",),  # TODO
             # Will not be implemented
@@ -210,7 +213,7 @@ Comando
 
         # v = worksheet_to_numpy_array(sh_in)
 
-        # COMMAND parse
+        # Find which COMMAND to parse, then parse it
         if re_data.search(name):
             dataset = re_data.search(name).group(2)
             c_type = "etl_dataset"
@@ -260,7 +263,7 @@ Comando
                         issues, c_label, c_content = cmd[2](sh_in, t, name2)
                     break
 
-        # Append issues
+        # Command parsed, now append "issues"
         errors = 0
         if len(issues) > 0:
             for i in issues:

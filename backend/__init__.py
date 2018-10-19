@@ -68,7 +68,7 @@ metadata_fields = [("Case study name", "title", False, False, "case_study_name")
 # Commands
 
 
-@attrs
+@attrs(cmp=False)  # Constant and Hashable by id
 class CommandField:
     # Allowed names for the column
     allowed_names = attrib()  # type: list[str]

@@ -31,7 +31,7 @@ class DatasetDefCommand(IExecutableCommand):
                 except Exception as e:
                     issues.append(Issue(itype=3,
                                         description=str(e),
-                                        location=IssueLocation(sheet_name=name, row=r + 1, column=None)))
+                                        location=IssueLocation(sheet_name=name, row=r, column=None)))
                     return
             else:
                 attributes = {}
@@ -39,7 +39,7 @@ class DatasetDefCommand(IExecutableCommand):
             if dsd_dataset_name in ds_names:
                 issues.append(Issue(itype=3,
                                     description="The dataset '"+dsd_dataset_name+"' has been already defined",
-                                    location=IssueLocation(sheet_name=name, row=r + 1, column=None)))
+                                    location=IssueLocation(sheet_name=name, row=r, column=None)))
                 return
 
             # Internal dataset definitions cache
@@ -74,7 +74,7 @@ class DatasetDefCommand(IExecutableCommand):
                         if not h:
                             issues.append(Issue(itype=3,
                                                 description="Could not find hierarchy of Categories '" + dsd_concept_domain + "'",
-                                                location=IssueLocation(sheet_name=name, row=r + 1, column=None)))
+                                                location=IssueLocation(sheet_name=name, row=r, column=None)))
                             return
                         d.hierarchy = h
                         # Reencode the Hierarchy as a CodeList
@@ -100,7 +100,8 @@ class DatasetDefCommand(IExecutableCommand):
         current_ds = create_dictionary()
 
         # Process parsed information
-        for r, line in enumerate(self._content["items"]):
+        for line in enumerate(self._content["items"]):
+            r = line["_row"]
             # If the line contains a reference to a dataset or hierarchy, expand it
             # If not, process it directly
             is_expansion = False

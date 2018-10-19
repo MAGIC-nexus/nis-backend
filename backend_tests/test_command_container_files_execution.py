@@ -3,6 +3,7 @@ import unittest
 import os
 
 import backend
+from backend.command_generators import parser_field_parsers
 from backend.model_services import get_case_study_registry_objects
 from backend.restful_service.serialization import serialize_state, deserialize_state
 from backend.model_services.workspace import execute_file, prepare_and_reset_database_for_tests
@@ -196,7 +197,7 @@ class TestCommandFiles(unittest.TestCase):
         # Check State of things
         glb_idx, p_sets, hh, datasets, mappings = get_case_study_registry_objects(isess.state)
         # Three processor sets
-        self.assertEqual(len(p_sets), 3)
+        self.assertEqual(len(p_sets), 1)
         # Close interactive session
         isess.close_db_session()
 
@@ -281,12 +282,36 @@ class TestCommandFiles(unittest.TestCase):
         # Close interactive session
         isess.close_db_session()
 
+    def test_012_execute_file_v2_six(self):
+        """
+        Almeria upscaling with new syntax
+        * References
+        * InterfaceTypes
+        * BareProcessors
+          * Dynamic attribute columns
+        * Interfaces
+        * Old Upscale (really efficient)
+
+        :return:
+        """
+        file_path = os.path.dirname(
+            os.path.abspath(__file__)) + "/z_input_files/v2/06_upscale_almeria.xlsx"
+        isess = execute_file(file_path, generator_type="spreadsheet")
+        # Check State of things
+        glb_idx, p_sets, hh, datasets, mappings = get_case_study_registry_objects(isess.state)
+        # TODO Check things!!!
+        # self.assertEqual(len(p_sets), 3)
+        # Close interactive session
+        isess.close_db_session()
+
 
 if __name__ == '__main__':
     i = TestCommandFiles()
     prepare_and_reset_database_for_tests(prepare=True)
     backend.data_source_manager = register_external_datasources({})
-    i.test_009_execute_file_v2_three()  # Soslaires. v2 syntax
+    #i.test_006_execute_file_five()
+    #i.test_009_execute_file_v2_three()  # Soslaires. v2 syntax
     #i.test_008_execute_file_v2_two()
     #i.test_011_execute_file_v2_five()  # Dataset
+    i.test_012_execute_file_v2_six()  # Almeria using v2 commands and v1 upscale
 

@@ -1,4 +1,5 @@
 from backend.command_executors.version2.indicators_command import IndicatorsCommand
+
 from backend.command_executors.external_data.etl_external_dataset_command import ETLExternalDatasetCommand
 from backend.command_executors.external_data.mapping_command import MappingCommand
 from backend.command_executors.external_data.parameters_command import ParametersCommand
@@ -27,6 +28,8 @@ from backend.command_executors.version2.interfaces_command import InterfacesAndQ
 from backend.command_executors.version2.pedigree_matrices_command import PedigreeMatricesReferencesCommand
 from backend.command_executors.version2.problem_statement_command import ProblemSolvingCommand
 from backend.command_executors.version2.processors_command import ProcessorsCommand
+from backend.command_executors.version2.references_v2_command import BibliographicReferencesCommand, \
+    GeographicReferencesCommand, ProvenanceReferencesCommand
 from backend.command_executors.version2.relationships_command import RelationshipsCommand
 from backend.command_executors.version2.scale_conversion_v2_command import ScaleConversionV2Command
 
@@ -72,10 +75,10 @@ def create_command(cmd_type, name, json_input, source_block=None):
             "shared_elements":       ExportableElementsCommand,
             "reused_elements":       ImportElementsCommand,
             "ref_pedigree_matrices": PedigreeMatricesReferencesCommand,
-            # "ref_bibliographic":     BibliographicReferencesCommand,
+            "ref_bibliographic":     BibliographicReferencesCommand,
             # "ref_source":            SourceReferencesCommand,
-            # "ref_geographical":      GeographicalReferencesCommand,
-            # "ref_provenance":        ProvenanceReferencesCommand,
+            "ref_geographical":      GeographicReferencesCommand,
+            "ref_provenance":        ProvenanceReferencesCommand,
             "indicators":            IndicatorsCommand,
             "problem_statement":     ProblemSolvingCommand
             }

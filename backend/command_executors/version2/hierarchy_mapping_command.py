@@ -43,12 +43,12 @@ class HierarchyMappingCommand(IExecutableCommand):
             mh_weight = item.get("weight", None)
 
             # Mapping name
-            name = (mh_src_dataset + ".") if mh_src_dataset else "" + mh_dst_hierarchy + " -> " + mh_dst_hierarchy
+            name = ((mh_src_dataset + ".") if mh_src_dataset else "") + mh_dst_hierarchy + " -> " + mh_dst_hierarchy
 
             if name in mappings:
                 issues.append(Issue(itype=3,
                                     description="The mapping '"+name+"' has been declared previously. Skipped.",
-                                    location=IssueLocation(sheet_name=name, row=r + 1, column=None)))
+                                    location=IssueLocation(sheet_name=name, row=r, column=None)))
                 return
 
             if name in local_mappings:
@@ -71,7 +71,7 @@ class HierarchyMappingCommand(IExecutableCommand):
             if mh_dst_code in to_dict:
                 issues.append(Issue(itype=3,
                                     description="The mapping of '" + mh_src_code + "' into '" + mh_dst_code + "' has been done already",
-                                    location=IssueLocation(sheet_name=name, row=r + 1, column=None)))
+                                    location=IssueLocation(sheet_name=name, row=r, column=None)))
                 return
             else:
                 to_dict[mh_dst_code] = mh_weight  # NOTE: This could be an object instead of just a FLOAT or expression
@@ -83,7 +83,8 @@ class HierarchyMappingCommand(IExecutableCommand):
         local_mappings = create_dictionary()
 
         # Process parsed information
-        for r, line in enumerate(self._content["items"]):
+        for line in self._content["items"]:
+            r = line["_row"]
             # If the line contains a reference to a dataset or hierarchy, expand it
             # If not, process it directly
             is_expansion = False
@@ -109,7 +110,7 @@ class HierarchyMappingCommand(IExecutableCommand):
                 if d.origin_hierarchy not in dims:
                     issues.append(Issue(itype=3,
                                         description="The origin dimension '" + local_mappings[d].origin_hierarchy + "' does not exist in dataset '" + local_mappings[d].origin_dataset + "'",
-                                        location=IssueLocation(sheet_name=name, row=r + 1, column=None)))
+                                        location=IssueLocation(sheet_name=name, row=r, column=None)))
                     continue
                 else:
                     dim = dims[local_mappings[d].origin_dimension]
@@ -122,10 +123,10 @@ class HierarchyMappingCommand(IExecutableCommand):
             mappings[d] = Mapping(d, obtain_dataset_source(origin_dataset), origin_dataset, origin_hierarchy, destination_hierarchy, mapping)
 
         # TODO
-        # Find the function to perform many to many mappings
+        # Use the function to perform many to many mappings, "augment_dataframe_with_mapped_columns"
         # Put it to work !!!
 
-        # One or more mapping could be specified. The key is "source hierarchy+dest hierarchy"
+        # One or more mapping in sequence could be specified?. The key is "source hierarchy+dest hierarchy"
         # Read mapping parameters
 
         return issues, None

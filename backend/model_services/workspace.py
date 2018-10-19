@@ -633,6 +633,8 @@ class ReproducibleSession:
                     for ws in lst:
                         for c in ws.commands:
                             execute_command_container(self._isess._state, c)
+                if cr_new == CreateNew.VERSION:  # TODO Check if this works in all possible circumstances (combine the parameters of the function)
+                    recover_previous_state = False
             else:
                 self._isess._state = State()
 
@@ -747,9 +749,9 @@ class ReproducibleSession:
         if cs_name:
             ws.version.name = cs_name
 
-        # Assure that the version has a creation date (it should not happen)
-        if not vs.creation_instant:
-            print("Fecha de creacion de version establecida de modo tardio")
+        # If it was called from the REST API, assure that the version has a creation date (it should not happen)
+        if from_web_service and not vs.creation_instant:
+            print("Late setup of version creation date")
             vs.creation_instant = datetime.datetime.utcnow()
 
         # Commit DB session
@@ -810,6 +812,13 @@ class ReproducibleSession:
 
 
 def execute_file(file_name, generator_type):
+    """
+    Execution of files in the context of tests
+
+    :param file_name:
+    :param generator_type:
+    :return:
+    """
     if generator_type == "spreadsheet":
         content_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         read_type = "rb"

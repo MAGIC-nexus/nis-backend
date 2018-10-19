@@ -46,7 +46,7 @@ def parse_references_command(sh, area):
         value = sh.cell(row=area[0], column=c).value
         column_names.append(value.lower())
     if "ref_id" not in column_names:
-        issues((3, "'ref_id' column is mandatory"))
+        issues.append((3, "'ref_id' column is mandatory"))
 
     if some_error:
         return issues, None, []
@@ -77,7 +77,7 @@ def parse_references_command(sh, area):
                 ref[col] = value
                 field = col2field[col]
                 if not validate(value, field):
-                    issues((3, "Problem validating field '"+field.name+"' with value: "+value))
+                    issues.append((3, "Problem validating field '"+field.name+"' with value: "+value))
 
         references.append(ref)
 

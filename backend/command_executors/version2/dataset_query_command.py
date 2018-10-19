@@ -180,11 +180,11 @@ class DatasetQryCommand(IExecutableCommand):
                                     df[r] = params[k][0]
                                 else:
                                     rows.remove(r)
-                                    issues((2, "Dimension '" + r + "' removed from the list of dimensions because it is not present in the raw input dataset."))
+                                    issues.append((2, "Dimension '" + r + "' removed from the list of dimensions because it is not present in the raw input dataset."))
                                 break
                         if not found:
                             rows.remove(r)
-                            issues((2, "Dimension '" + r + "' removed from the list of dimensions because it is not present in the raw input dataset."))
+                            issues.append((2, "Dimension '" + r + "' removed from the list of dimensions because it is not present in the raw input dataset."))
                 # Pivot table using Group by
                 if True:
                     groups = df.groupby(by=rows, as_index=False)  # Split

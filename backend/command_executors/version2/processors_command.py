@@ -68,7 +68,7 @@ class ProcessorsCommand(IExecutableCommand):
                 except Exception as e:
                     issues.append(Issue(itype=3,
                                         description=str(e),
-                                        location=IssueLocation(sheet_name=name, row=r + 1, column=None)))
+                                        location=IssueLocation(sheet_name=name, row=r, column=None)))
                     return
             else:
                 attributes = {}
@@ -77,7 +77,7 @@ class ProcessorsCommand(IExecutableCommand):
             if not p_name:
                 issues.append(Issue(itype=3,
                                     description="Empty processor name. Skipped.",
-                                    location=IssueLocation(sheet_name=name, row=r + 1, column=None)))
+                                    location=IssueLocation(sheet_name=name, row=r, column=None)))
                 return
 
             parent_processor = None
@@ -88,7 +88,7 @@ class ProcessorsCommand(IExecutableCommand):
                 if not parent_processor:
                     issues.append(Issue(itype=3,
                                         description="Specified parent processor, '"+p_parent+"', does not exist",
-                                        location=IssueLocation(sheet_name=name, row=r + 1, column=None)))
+                                        location=IssueLocation(sheet_name=name, row=r, column=None)))
                     return
 
             is_context_processor = True
@@ -117,9 +117,10 @@ class ProcessorsCommand(IExecutableCommand):
 
             # Add to ProcessorsGroup, if specified
             if p_group:
-                if p_group not in p_sets:
-                    p_sets[p_group] = set()
-                p_sets[p_group].add(p)
+                p_set = p_sets.get(p_group, ProcessorsSet(p_group))
+                p_sets[p_group] = p_set
+                if p_set.append(p, glb_idx):  # Appends codes to the pset if the processor was not member of the pset
+                    p_set.append_attributes_codes(attributes)
 
             # Add Relationship "part-of" if parent was specified
             # The processor may have previously other parent processors that will keep its parentship
@@ -133,7 +134,8 @@ class ProcessorsCommand(IExecutableCommand):
         name = self._content["command_name"]
 
         # Process parsed information
-        for r, line in enumerate(self._content["items"]):
+        for line in self._content["items"]:
+            r = line["_row"]
             # If the line contains a reference to a dataset or hierarchy, expand it
             # If not, process it directly
             is_expansion = False

@@ -25,11 +25,13 @@ class ReferencesV2Command(IExecutableCommand):
 
         # Receive a list of validated references
         # Store them as objects, which can be referred to later
-        for r, ref in enumerate(self._content["items"]):
+        for ref in self._content["items"]:
+            r = ref["_row"]
+
             if "ref_id" not in ref:
                 issues.append(Issue(itype=3,
                                     description="'ref_id' field not found: "+str(ref),
-                                    location=IssueLocation(sheet_name=name, row=r + 1, column=None)))
+                                    location=IssueLocation(sheet_name=name, row=r, column=None)))
                 continue
             else:
                 ref_id = ref["ref_id"]
@@ -38,12 +40,12 @@ class ReferencesV2Command(IExecutableCommand):
                 if len(existing) == 1:
                     issues.append(Issue(itype=3,
                                         description="Reference '"+ref_id+"' of type '"+ref_type+"' is already defined. Not allowed",
-                                        location=IssueLocation(sheet_name=name, row=r + 1, column=None)))
+                                        location=IssueLocation(sheet_name=name, row=r, column=None)))
                     continue
                 elif len(existing) > 1:  # This condition should not occur...
                     issues.append(Issue(itype=3,
                                         description="The reference '"+ref_id+"' of type '"+ref_type+"' is defined more than one time ("+str(len(existing))+")",
-                                        location=IssueLocation(sheet_name=name, row=r + 1, column=None)))
+                                        location=IssueLocation(sheet_name=name, row=r, column=None)))
                     continue
 
                 # Create and store the Reference
@@ -69,16 +71,16 @@ class ReferencesV2Command(IExecutableCommand):
         return issues
 
 
-class ReferenceProvenance(ReferencesV2Command):
+class ProvenanceReferencesCommand(ReferencesV2Command):
     def __init__(self, name: str):
         ReferencesV2Command.__init__(self, name, "prov")
 
 
-class ReferenceBibliographic(ReferencesV2Command):
+class BibliographicReferencesCommand(ReferencesV2Command):
     def __init__(self, name: str):
         ReferencesV2Command.__init__(self, name, "bib")
 
 
-class ReferenceGeographic(ReferencesV2Command):
+class GeographicReferencesCommand(ReferencesV2Command):
     def __init__(self, name: str):
         ReferencesV2Command.__init__(self, name, "geo")

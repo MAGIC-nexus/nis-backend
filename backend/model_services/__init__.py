@@ -179,8 +179,8 @@ class Namespace:
                     else:
                         return self.__scope[scope_idx][name]
             else:
-                logger.warning(
-                    "The name '" + name + "' was not found in the stack of scopes (" + str(len(self.__scope)) + ")")
+                # logger.warning(
+                #     "The name '" + name + "' was not found in the stack of scopes (" + str(len(self.__scope)) + ")")
                 if return_scope:
                     return None, None
                 else:

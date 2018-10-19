@@ -306,7 +306,7 @@ def ast_to_string(exp):
             val += "(" + ", ".join(params) + ")"
         elif t == "h_var":
             # Evaluate in sequence
-            _namespace = exp["ns"]
+            _namespace = exp["ns"] if "ns" in exp else None
             if _namespace:
                 val = _namespace + "::"
             else:

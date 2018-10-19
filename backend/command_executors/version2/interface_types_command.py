@@ -31,7 +31,7 @@ class InterfaceTypesCommand(IExecutableCommand):
                 except Exception as e:
                     issues.append(Issue(itype=3,
                                         description=str(e),
-                                        location=IssueLocation(sheet_name=name, row=r + 1, column=None)))
+                                        location=IssueLocation(sheet_name=name, row=r, column=None)))
                     return
             else:
                 attributes = {}
@@ -41,13 +41,13 @@ class InterfaceTypesCommand(IExecutableCommand):
             if not ft_h_name:
                 issues.append(Issue(itype=3,
                                     description="Empty interface type hierarchy name. Skipped.",
-                                    location=IssueLocation(sheet_name=name, row=r + 1, column=None)))
+                                    location=IssueLocation(sheet_name=name, row=r, column=None)))
                 return
 
             if not ft_name:
                 issues.append(Issue(itype=3,
                                     description="Empty interface type name. Skipped.",
-                                    location=IssueLocation(sheet_name=name, row=r + 1, column=None)))
+                                    location=IssueLocation(sheet_name=name, row=r, column=None)))
                 return
 
             # Check if a hierarchy of interface types by the name <ft_h_name> exists, if not, create it and register it
@@ -70,18 +70,18 @@ class InterfaceTypesCommand(IExecutableCommand):
                     if not isinstance(parent, FactorType):
                         issues.append(Issue(itype=3,
                                             description="Parent interface type name '"+ft_parent+"' not found in hierarchy '"+ft_h_name+"'",
-                                            location=IssueLocation(sheet_name=name, row=r + 1, column=None)))
+                                            location=IssueLocation(sheet_name=name, row=r, column=None)))
                         return
                 else:
                     issues.append(Issue(itype=3,
                                         description="Parent interface type name '" + ft_parent + "' not found",
-                                        location=IssueLocation(sheet_name=name, row=r + 1, column=None)))
+                                        location=IssueLocation(sheet_name=name, row=r, column=None)))
                     return
                 # Double check, it must be defined in "hie"
                 if ft_parent not in hie.codes:
                     issues.append(Issue(itype=3,
                                         description="Parent interface type name '" + ft_parent + "' not registered in the hierarchy '"+ft_h_name+"'",
-                                        location=IssueLocation(sheet_name=name, row=r + 1, column=None)))
+                                        location=IssueLocation(sheet_name=name, row=r, column=None)))
                     return
             else:
                 parent = None
@@ -116,7 +116,8 @@ class InterfaceTypesCommand(IExecutableCommand):
         name = self._content["command_name"]
 
         # Process parsed information
-        for r, line in enumerate(self._content["items"]):
+        for line in self._content["items"]:
+            r = line["_row"]
             # If the line contains a reference to a dataset or hierarchy, expand it
             # If not, process it directly
             is_expansion = False

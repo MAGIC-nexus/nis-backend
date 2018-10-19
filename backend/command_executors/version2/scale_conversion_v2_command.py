@@ -40,7 +40,7 @@ class ScaleConversionV2Command(IExecutableCommand):
                 if not t[1]:
                     issues.append(Issue(itype=3,
                                         description="The "+m+ "interface type name has not been specified",
-                                        location=IssueLocation(sheet_name=name, row=r + 1, column=None)))
+                                        location=IssueLocation(sheet_name=name, row=r, column=None)))
                     return
 
                 # Check if FactorType exists
@@ -52,7 +52,7 @@ class ScaleConversionV2Command(IExecutableCommand):
                         if not t[0]:
                             issues.append(Issue(itype=3,
                                                 description="The hierarchy of the " + m + "interface type name has not been specified and the interface type name is not unique",
-                                                location=IssueLocation(sheet_name=name, row=r + 1, column=None)))
+                                                location=IssueLocation(sheet_name=name, row=r, column=None)))
                             return
 
                         for ft2 in ft:
@@ -62,14 +62,14 @@ class ScaleConversionV2Command(IExecutableCommand):
             if len(fts) != 2:
                 issues.append(Issue(itype=3,
                                     description="Found "+str(len(fts))+" interface types in the specification of a scale change",
-                                    location=IssueLocation(sheet_name=name, row=r + 1, column=None)))
+                                    location=IssueLocation(sheet_name=name, row=r, column=None)))
                 return
 
             # Check that the interface types are from different hierarchies (warn if not; not error)
             if fts[0].hierarchy == fts[1].hierarchy:
                 issues.append(Issue(itype=2,
                                     description="The interface types '"+fts[0].name+"' and '"+fts[1].name+"' are in the same hierarchy",
-                                    location=IssueLocation(sheet_name=name, row=r + 1, column=None)))
+                                    location=IssueLocation(sheet_name=name, row=r, column=None)))
 
             # Create the directed Scale (Linear "Transformation") Relationship
             origin = fts[0]
@@ -84,7 +84,8 @@ class ScaleConversionV2Command(IExecutableCommand):
         name = self._content["command_name"]
 
         # Process parsed information
-        for r, line in enumerate(self._content["items"]):
+        for line in self._content["items"]:
+            r = line["_row"]
             # If the line contains a reference to a dataset or hierarchy, expand it
             # If not, process it directly
             is_expansion = False

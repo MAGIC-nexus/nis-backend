@@ -33,7 +33,8 @@ class HierarchyCategoriesCommand(IExecutableCommand):
         name = self._content["command_name"]
 
         # Process parsed information
-        for r, item in enumerate(self._content["items"]):
+        for item in self._content["items"]:
+            r = item["_row"]
             # HierarchySource (Optional)
             hsource = item.get("source", None)  # Code of entity defining the Hierarchy
             if hsource:
@@ -49,7 +50,7 @@ class HierarchyCategoriesCommand(IExecutableCommand):
             if not hname:
                 issues.append(Issue(itype=3,
                                     description="The name of the Hierarchy has not been defined. Skipped.",
-                                    location=IssueLocation(sheet_name=name, row=r + 1, column=None)))
+                                    location=IssueLocation(sheet_name=name, row=r, column=None)))
                 continue
 
             # HierarchyGroup (equivalent to Hierarchy of Code Lists, HCL)
@@ -109,7 +110,7 @@ class HierarchyCategoriesCommand(IExecutableCommand):
                 if not pcode:
                     issues.append(Issue(itype=3,
                                         description="Could not find code '"+parent_code+"' in hierarchy '"+ph.name+"'. Skipped.",
-                                        location=IssueLocation(sheet_name=name, row=r + 1, column=None)))
+                                        location=IssueLocation(sheet_name=name, row=r, column=None)))
                     continue
             else:
                 pcode = None
@@ -120,7 +121,7 @@ class HierarchyCategoriesCommand(IExecutableCommand):
                 if not ref_hierarchy:
                     issues.append(Issue(itype=3,
                                         description="For HCLs, defining ReferredHierarchy is mandatory",
-                                        location=IssueLocation(sheet_name=name, row=r+1, column=None)))
+                                        location=IssueLocation(sheet_name=name, row=r, column=None)))
                     continue
 
                 tmp = ref_hierarchy
@@ -128,14 +129,14 @@ class HierarchyCategoriesCommand(IExecutableCommand):
                 if len(ref_hierarchy) == 0:
                     issues.append(Issue(itype=3,
                                         description="ReferredHierarchy '"+tmp+"' not defined previously",
-                                        location=IssueLocation(sheet_name=name, row=r+1, column=None)))
+                                        location=IssueLocation(sheet_name=name, row=r, column=None)))
                     continue
 
                 ref_code = ref_hierarchy.codes.get(code, None)
                 if not ref_code:
                     issues.append(Issue(itype=3,
                                         description="Code '"+code+"' not found in referred hierarchy '"+ref_hierarchy.name+"'",
-                                        location=IssueLocation(sheet_name=name, row=r+1, column=None)))
+                                        location=IssueLocation(sheet_name=name, row=r, column=None)))
                     continue
 
                 # Ignore: LABEL, DESCRIPTION. Copy them from referred code
@@ -148,7 +149,7 @@ class HierarchyCategoriesCommand(IExecutableCommand):
             if c:
                 issues.append(Issue(itype=3,
                                     description="Code '" + code + "' in hierarchy '" + h.name + "' redefined.",
-                                    location=IssueLocation(sheet_name=name, row=r + 1, column=None)))
+                                    location=IssueLocation(sheet_name=name, row=r, column=None)))
                 continue
 
             # Finally, create the HierarchyCode with all the gathered attributes, then weave it to other

@@ -279,10 +279,12 @@ class HierarchyNode(Nameable):
         Nameable.__init__(self, name)
         self._parents = []
         self._parents_weights = []
-        self._referred_node = referred_node
+        self._referred_node = referred_node  # type: HierarchyNode in another Hierarchy
         self._children = set()  # type: HierarchyNode in the same "hierarchy"
         self._level = level  # type: HierarchyLevel
         self._hierarchy = hierarchy  # type: Hierarchy
+        if referred_node and referred_node.hierarchy == self.hierarchy:
+            raise Exception("The hierarchy of a node and the hierarchy of the referred cannot be the same")
         if hierarchy:  # Add name to the hierarchy
             hierarchy.codes[name] = self
         if parent:
@@ -610,8 +612,8 @@ class Hierarchy(Nameable, Identifiable):
                     return n
 
             for n in lst:
-                if n.get_children(self):
-                    f = recursive_get_node(n.get_children(self))
+                if n.get_children():
+                    f = recursive_get_node(n.get_children())
                     if f:
                         return f
             return None
