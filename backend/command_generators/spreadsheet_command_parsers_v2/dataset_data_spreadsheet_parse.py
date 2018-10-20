@@ -49,7 +49,9 @@ def parse_dataset_data_command(sh, area, name, state):
     for r in range(area[0] + 1, area[1]):
         line = []
         for col_name, c in col_map.items():
-            v = sh.cell(row=r, column=c).value.strip()
+            v = sh.cell(row=r, column=c).value
+            if isinstance(v, str):
+                v = v.strip()
             line.append(v)
         lines.append(line)
 
@@ -63,11 +65,12 @@ def parse_dataset_data_command(sh, area, name, state):
     content = []  # The output JSON
     for dataset in datasets:
         # Obtain filtered
-        df2 = df.loc[df['dataset'].lower() == dataset]
+        df2 = df.loc[df['dataset'].str.lower() == dataset]
         # Convert to JSON and store in content
+        del df2["dataset"]
         s = StringIO()
-        df2.to_json(s, orient="table")
-        content.append(dict(name=dataset, values=str(s)))
+        df2.to_json(s, orient="split")
+        content.append(dict(name=dataset, values=s.getvalue()))
 
     return issues, None, dict(items=content, command_name=name)
 

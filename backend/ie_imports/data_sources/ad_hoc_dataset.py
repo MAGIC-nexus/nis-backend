@@ -1,42 +1,8 @@
-import mimetypes
-from io import BytesIO
-import pandas as pd
 from typing import List, Tuple
-import urllib.request
 
-from backend.common.helper import create_dictionary
+from backend.common.helper import create_dictionary, load_dataset
 from backend.ie_imports.data_source_manager import IDataSourceManager, filter_dataset_into_dataframe
 from backend.models.statistical_datasets import Dataset, DataSource, Database
-
-
-def load_dataset(ds):
-    """
-    Loads a dataset into a DataFrame
-    If the dataset is present, it decompresses it in memory to obtain one of the four datasets per file
-    If the dataset is not downloaded, downloads it and decompresses into the corresponding version directory
-    :param code:
-    :param date:
-    :param ds_lst: list of FADN datasets
-    :param directory:
-    :param base_url:
-    :return:
-    """
-
-    location = ds.attributes["_location"]
-    if not location:
-        df = None
-    else:
-        # Try to load the Dataset from the specified location
-        data = urllib.request.urlopen(location).read()
-        data = BytesIO(data)
-        # Then, try to read it
-        t = mimetypes.guess_type(location, strict=True)
-        if t[0] == "text/csv":
-            df = pd.read_csv(data)
-        elif t[0] == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet":
-            df = pd.read_excel(data)
-
-    return df
 
 
 class AdHocDatasets(IDataSourceManager):
@@ -121,7 +87,7 @@ class AdHocDatasets(IDataSourceManager):
         ds = self.get_dataset_structure(None, dataset)
 
         if not ds.data:
-            df = load_dataset(ds)
+            df = load_dataset(ds.attributes["_location"])
 
         # Obtain dataset dictionary
         d = None

@@ -125,10 +125,9 @@ def parse_command(sh, area, name: str, cmd_name):
 
                 if col.allowed_values:  # If the CommandField checks for a list of allowed values
                     if value.lower() not in [v.lower() for v in col.allowed_values]:  # TODO Case insensitive CI
-                        col_header = sh.cell(row=1, column=col_map[cname]).value
                         issues.append(Issue(itype=3,
-                                            description="Field '" + col_header + "' of command '" + cmd_name + "' has as allowed values: "+", ".join(col.allowed_values)+". Entered: " + value,
-                                            location=IssueLocation(sheet_name=name, row=r, column=col_map[cname])))
+                                            description="Field '" + col_name + "' of command '" + cmd_name + "' has as allowed values: "+", ".join(col.allowed_values)+". Entered: " + value,
+                                            location=IssueLocation(sheet_name=name, row=r, column=col_idx)))
                     else:
                         line[cname] = value
                 else:  # Instead of a list of values, check if a syntactic rule is met by the value

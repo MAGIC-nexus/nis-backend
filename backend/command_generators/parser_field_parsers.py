@@ -66,6 +66,11 @@ positive_float = (Combine(Word(nums) + Optional("." + Word(nums))
                   | Combine(Word(nums) + "." + Word(nums))
                   ).setParseAction(lambda _s, l, t: {'type': 'float', 'value': float(t[0])}
                                    )
+signed_float = (Optional(Or([Literal("+"), Literal("-")]))("sign") + positive_float).\
+    setParseAction(lambda _s, l, t: {'type': 'float',
+                                     'value': float(t[0])
+                                     }
+                   )
 boolean = Or([true, false]).setParseAction(lambda t: {'type': 'boolean', 'value': bool(t[0])})
 
 quoted_string = quotedString(r".*")
@@ -197,6 +202,17 @@ processor_names = ((processor_names_wildcard_separator + Optional(processor_name
 # RULES - context_query
 # Right now, context_query would be exactly equal to "processor_names", i.e., a way to specify a set of processors (idea proposed by Michele)
 context_query << processor_names
+
+
+# RULES - domain_definition
+number_interval = (Or(Literal("["), Literal(")"))("left") + signed_float("number") + Literal(", ") + signed_float + Or(Literal("["), Literal(")"))("right"))\
+    .setParseAction(lambda _s, l, t: {'type': 'number_interval',
+                                                'left': t.left,
+                                                'right': t.right,
+                                                'number': t.number
+                                                })
+domain_definition << Or([simple_ident, number_interval])
+
 
 # RULES - reference
 reference = (lbracket + simple_ident.setResultsName("ident") + rbracket
@@ -447,7 +463,7 @@ factor_unit = (simple_h_name.setResultsName("factor") + Optional(Regex(".*").set
 
 url_chars = alphanums + '-_.~%+'
 fragment = Combine((Suppress('#') + Word(url_chars)))('fragment')
-scheme = oneOf('http https ftp file')('scheme')
+scheme = oneOf('http https ftp file data')('scheme')
 host = Combine(delimitedList(Word(url_chars), '.'))('host')
 port = Suppress(':') + Word(nums)('port')
 user_info = (
@@ -469,7 +485,7 @@ url_parser = (
   scheme.setResultsName("scheme")
   + Suppress('://')
   + Optional(user_info).setResultsName("user_info")
-  + host.setResultsName("host")
+  + Optional(host).setResultsName("host")
   + Optional(port).setResultsName("port")
   + Optional(path).setResultsName("path")
   + Optional(query).setResultsName("query")

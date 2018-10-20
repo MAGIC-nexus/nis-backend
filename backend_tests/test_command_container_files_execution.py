@@ -304,6 +304,22 @@ class TestCommandFiles(unittest.TestCase):
         # Close interactive session
         isess.close_db_session()
 
+    def test_013_execute_file_v2_seven(self):
+        """
+        Parsing of Custom datasets
+
+        :return:
+        """
+        file_path = os.path.dirname(
+            os.path.abspath(__file__)) + "/z_input_files/v2/07_custom_datasets.xlsx"
+        isess = execute_file(file_path, generator_type="spreadsheet")
+        # Check State of things
+        glb_idx, p_sets, hh, datasets, mappings = get_case_study_registry_objects(isess.state)
+        # TODO Check things!!!
+        # self.assertEqual(len(p_sets), 3)
+        # Close interactive session
+        isess.close_db_session()
+
 
 if __name__ == '__main__':
     i = TestCommandFiles()
@@ -313,5 +329,5 @@ if __name__ == '__main__':
     #i.test_009_execute_file_v2_three()  # Soslaires. v2 syntax
     #i.test_008_execute_file_v2_two()
     #i.test_011_execute_file_v2_five()  # Dataset
-    i.test_012_execute_file_v2_six()  # Almeria using v2 commands and v1 upscale
-
+    #i.test_012_execute_file_v2_six()  # Almeria using v2 commands and v1 upscale
+    i.test_013_execute_file_v2_seven()

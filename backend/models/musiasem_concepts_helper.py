@@ -52,10 +52,12 @@ def convert_code_list_to_hierarchy(cl: CodeList) -> Hierarchy:
 
     # Set children & parents
     for ct in code_node_dict:
+        p = code_node_dict[ct]
         for ch in ct.children:
-            ct._children.add(ch)
-            ch._parents.append(ct)
-            ch._parents_weights.append(1.0)
+            c = code_node_dict[ch]
+            p._children.add(c)
+            c._parents.append(p)
+            c._parents_weights.append(1.0)
 
     # Finally, set "roots" to HierarchyNodes without "parents"
     tmp = []
@@ -110,8 +112,10 @@ def convert_hierarchy_to_code_list(h: Hierarchy) -> CodeList:
     # Links between nodes
     for hn in h.codes.values():
         for ch in hn._children:
-            codes_map[hn].children.append(codes_map[ch])
-            codes_map[ch].parents.append(hn)
+            p = codes_map[hn]
+            c = codes_map[ch]
+            p.children.append(c)  # Append a child
+            c.parents.append(p)  # Add a parent
 
     return cl
 

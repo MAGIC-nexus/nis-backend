@@ -115,6 +115,10 @@ class Code(ORMBase): # A single value and its description for a Dimension
     children = Column(Unicode)  # postgresql.JSONB)  # List of codes totalling this code
     parents = Column(Unicode)  # postgresql.JSONB)  # List of codes aggregating this code
 
+    def __init__(self):
+        self.children = []
+        self.parents = []
+
 
 @event.listens_for(Code, 'before_insert')
 def code_before_insert(mapper, connection, target):

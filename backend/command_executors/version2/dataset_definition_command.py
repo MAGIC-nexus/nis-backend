@@ -1,10 +1,12 @@
 import json
 
-from backend.command_generators import Issue
+from backend.command_generators import Issue, parser_field_parsers
 from backend.command_generators.parser_ast_evaluators import dictionary_from_key_value_list
+from backend.command_generators.parser_field_parsers import url_parser
 from backend.command_generators.spreadsheet_command_parsers_v2 import IssueLocation
-from backend.common.helper import create_dictionary
+from backend.common.helper import create_dictionary, load_dataset, prepare_dataframe_after_external_read
 from backend.model_services import IExecutableCommand, get_case_study_registry_objects
+from backend.models.musiasem_concepts import Hierarchy
 from backend.models.musiasem_concepts_helper import convert_hierarchy_to_code_list
 from backend.models.statistical_datasets import Dataset, Dimension
 
@@ -70,12 +72,21 @@ class DatasetDefCommand(IExecutableCommand):
                     else:
                         attributes["_attribute"] = False
                     if dsd_concept_data_type.lower() == "category":
-                        h = hierarchies.get(dsd_concept_domain, None)
-                        if not h:
+                        # TODO "hierarchies" variable really does not register hierarchies (see "hierarchy_command.py" or "hierarchy_categories_command.py", no insertion is made)
+                        # h = hierarchies.get(dsd_concept_domain, None)
+                        h = glb_idx.get(Hierarchy.partial_key(name=dsd_concept_domain))
+                        if len(h) == 0:
                             issues.append(Issue(itype=3,
                                                 description="Could not find hierarchy of Categories '" + dsd_concept_domain + "'",
                                                 location=IssueLocation(sheet_name=name, row=r, column=None)))
                             return
+                        elif len(h) > 1:
+                            issues.append(Issue(itype=3,
+                                                description="Found more than one instance of Categories '" + dsd_concept_domain + "'",
+                                                location=IssueLocation(sheet_name=name, row=r, column=None)))
+                            return
+                        else:  # len(h) == 1
+                            h = h[0]
                         d.hierarchy = h
                         # Reencode the Hierarchy as a CodeList
                         cl = convert_hierarchy_to_code_list(h)
@@ -84,6 +95,7 @@ class DatasetDefCommand(IExecutableCommand):
                     attributes["_domain"] = dsd_concept_domain
                     d.attributes = attributes
 
+        # -------------------------------------------------------------------------------------------------------------
         issues = []
         glb_idx, p_sets, hh, datasets, mappings = get_case_study_registry_objects(state)
         name = self._content["command_name"]
@@ -100,7 +112,7 @@ class DatasetDefCommand(IExecutableCommand):
         current_ds = create_dictionary()
 
         # Process parsed information
-        for line in enumerate(self._content["items"]):
+        for line in self._content["items"]:
             r = line["_row"]
             # If the line contains a reference to a dataset or hierarchy, expand it
             # If not, process it directly
@@ -117,6 +129,34 @@ class DatasetDefCommand(IExecutableCommand):
                 break
         else:
             error = False
+
+        # Load the data for those datasets that are not local (data defined later in the same spreadsheet)
+        for ds in current_ds.values():
+            if "_location" not in ds.attributes:
+                error = True
+                issues.append(Issue(itype=3,
+                                    description="Location of data not specified  for dataset '" + ds.code + "'",
+                                    location=IssueLocation(sheet_name=name, row=r, column=None)))
+            else:
+                loc = ds.attributes["_location"]
+                ast = parser_field_parsers.string_to_ast(url_parser, loc)
+                if ast["scheme"] != "data":
+                    df = load_dataset(loc)
+                    if df is None:
+                        error = True
+                        issues.append(Issue(itype=3,
+                                            description="Could not obtain data for dataset '" + ds.code + "'",
+                                            location=IssueLocation(sheet_name=name, row=r, column=None)))
+                    else:
+                        iss = prepare_dataframe_after_external_read(ds, df)
+                        for issue in iss:
+                            issues.append(
+                                Issue(itype=3,
+                                      description=issue,
+                                      location=IssueLocation(sheet_name=name, row=-1, column=-1)))
+                        # Everything ok? Store the dataframe!
+                        if len(iss) == 0:
+                            ds.data = df
 
         if not error:
             # If no error happened, add the new Datasets to the Datasets in the "global" state

@@ -76,10 +76,11 @@ commands = {
      CommandField(allowed_names=["DatasetDataLocation"], name="dataset_data_location", mandatory=True, allowed_values=None, parser=url_parser),
      CommandField(allowed_names=["ConceptType"], name="concept_type", mandatory=True, allowed_values=concept_types, parser=simple_ident),
      CommandField(allowed_names=["ConceptName"], name="concept_name", mandatory=True, allowed_values=None, parser=simple_ident),
-     CommandField(allowed_names=["ConceptDataType"], name="concept_data_type", mandatory=True, allowed_values=data_types, parser=simple_ident),
-     CommandField(allowed_names=["ConceptDomain"], name="concept_domain", mandatory=False, allowed_values=None, parser=domain_definition),
-     CommandField(allowed_names=["ConceptDescription"], name="concept_description", mandatory=True, allowed_values=None, parser=unquoted_string),
-    ],
+     CommandField(allowed_names=["DataType", "ConceptDataType"], name="concept_data_type", mandatory=True, allowed_values=data_types, parser=simple_ident),
+     CommandField(allowed_names=["Domain", "ConceptDomain"], name="concept_domain", mandatory=False, allowed_values=None, parser=domain_definition),
+     CommandField(allowed_names=["Description", "ConceptDescription"], name="concept_description", mandatory=True, allowed_values=None, parser=unquoted_string),
+     CommandField(allowed_names=["Attributes"], name="attributes", mandatory=False, allowed_values=None, parser=key_value_list),
+     ],
     # "DatasetData" needs a specialized parser
     "AttributeSets":
     [CommandField(allowed_names=["AttributeSetName"], name="attribute_set_name", mandatory=True, allowed_values=None, parser=simple_ident),

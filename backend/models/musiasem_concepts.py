@@ -744,7 +744,7 @@ class Taxon(Identifiable, HierarchyNode, HierarchyExpression, Qualifiable):
     """ For categories in a taxonomy. A taxonomy  """
     def __init__(self, name, parent=None, bottom_up_split=1.0, hierarchy=None, level=None, referred_taxon=None, expression=None, label=None, description=None, attributes=None):
         Identifiable.__init__(self)
-        HierarchyNode.__init__(self, name, parent, bottom_up_split, hierarchy=hierarchy, referred_node=referred_taxon,
+        HierarchyNode.__init__(self, name, parent, bottom_up_split, hierarchy=hierarchy, level=level, referred_node=referred_taxon,
                                label=label, description=description)
         HierarchyExpression.__init__(self, expression)
         Qualifiable.__init__(self, attributes)

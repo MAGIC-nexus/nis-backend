@@ -1,6 +1,10 @@
 # -*- coding: utf-8 -*-
 
 import collections
+import mimetypes
+from io import BytesIO
+import pandas as pd
+import urllib.request
 import functools
 import gzip
 import itertools
@@ -10,8 +14,6 @@ import json
 import urllib
 from typing import IO
 from uuid import UUID
-
-import pandas as pd
 import numpy as np
 from flask import after_this_request, request
 from multidict import MultiDict, CIMultiDict
@@ -792,7 +794,7 @@ def gzipped(f):
 # #####################################################################################################################
 
 
-# TODO Consider optimization using numba or others
+# Cython version is in module "helper_accel.pyx"
 def augment_dataframe_with_mapped_columns(df, maps, measure_columns):
     """
     Elaborate a pd.DataFrame from the input DataFrame "df" and
@@ -994,6 +996,55 @@ def is_str(v):
 
 def to_str(v):
     return str(v)
+
+# #####################################################################################################################
+# >>>> LOAD DATASET FROM URL INTO PD.DATAFRAME <<<<
+# #####################################################################################################################
+
+
+def load_dataset(location:str=None):
+    """
+    Loads a dataset into a DataFrame
+    If the dataset is present, it decompresses it in memory to obtain one of the four datasets per file
+    If the dataset is not downloaded, downloads it and decompresses into the corresponding version directory
+    :param location: URL of the dataset data
+    :return: pd.DataFrame
+    """
+
+    if not location:
+        df = None
+    else:
+        # Try to load the Dataset from the specified location
+        data = urllib.request.urlopen(location).read()
+        data = BytesIO(data)
+        # Then, try to read it
+        t = mimetypes.guess_type(location, strict=True)
+        if t[0] == "text/csv":
+            df = pd.read_csv(data)
+        elif t[0] == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet":
+            df = pd.read_excel(data)
+
+    return df
+
+
+def prepare_dataframe_after_external_read(ds, df):
+    issues = []
+    dims = set()  # Set of dimensions, to index Dataframe on them
+    cols = []  # Same columns, with exact case (matching Dataset object)
+    for c in df.columns:
+        for d in ds.dimensions:
+            if strcmp(c, d.code):
+                cols.append(d.code)  # Exact case
+                if not d.is_measure:
+                    dims.add(d.code)
+                break
+        else:
+            issues.append("Column '" + c + "' not found in the definition of Dataset '" + ds.code + "'")
+    if len(issues) == 0:
+        df.columns = cols
+        df.set_index(list(dims), inplace=True)
+
+    return issues
 
 
 if __name__ == '__main__':
