@@ -4,6 +4,7 @@ from backend.common.helper import create_dictionary
 
 def parse_line(item, fields):
     """
+    Convert fields from a line to AST
 
     :param item:
     :param fields:
@@ -20,12 +21,18 @@ def parse_line(item, fields):
 
 def classify_variables(asts, datasets, hierarchies, parameters):
     """
+    Iterate through the variables in a AST, determining
+    for each if it is a:
+    * dataset
+    * hierarchy
+    * parameter
+    * or unknown
 
-    :param asts:
-    :param datasets:
-    :param hierarchies:
-    :param parameters:
-    :return:
+    :param asts: The AST
+    :param datasets: The collection of Datasets
+    :param hierarchies: The collection of Category Hierarchies
+    :param parameters: The collection of Parameters
+    :return: A dictionary with the classification,
     """
     ds = set()
     ds_concepts = set()

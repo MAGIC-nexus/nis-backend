@@ -61,36 +61,49 @@ class RelationshipsCommand(IExecutableCommand):
 
     def execute(self, state: "State"):
         def parse_and_unfold_line(item):
+            # Consider multiplicity because of:
+            # - A dataset (only one). First a list of dataset concepts used in the line is obtained.
+            #   Then the unique tuples formed by them are obtained.
+            # - Processor name.
+            #   - A set of processors (wildcard or filter by attributes)
+            #   - A set of interfaces (according to another filter?)
+            # - Multiple types of relation
+            # - Both (first each dataset record applied -expanded-, then the name evaluation is applied)
+            # - UNRESOLVED: expressions are resolved partially. Parts where parameters
+            # expressions depending on parameters. Only the part of the expression depending on varying things
+            # - The processor name could be a concatenation of multiple literals
+            #
+            # Look for multiple items in r_source_processor_name, r_source_interface_name,
+            #                            r_target_processor_name, r_target_interface_name
             if item["_complex"]:
                 asts = parse_line(item, fields)
                 if item["_expandable"]:
                     # It is an expandable line
-                    # Look for fields which need to be variable in order to originate the expansion
+                    # Look for fields which are specified to be variable in order to originate the expansion
                     res = classify_variables(asts, datasets, hh, parameters)
                     ds_list = res["datasets"]
                     ds_concepts = res["ds_concepts"]
                     h_list = res["hierarchies"]
                     if len(ds_list) >= 1 and len(h_list) >= 1:
                         issues.append(Issue(itype=3,
-                                            description="Either a dataset ("+", ".join([d.name for d in ds_list])+") or a hierarchy ("+", ".join([h.name for h in h_list])+")",
+                                            description="Dataset(s): "+", ".join([d.name for d in ds_list])+", and hierarchy(ies): "+", ".join([h.name for h in h_list])+", have been specified. Either a single dataset or a single hiearchy is supported.",
                                             location=IssueLocation(sheet_name=name, row=r, column=None)))
                         return
                     elif len(ds_list) > 1:
                         issues.append(Issue(itype=3,
-                                            description="More than one dataset has been specified: "+", ".join([d.name for d in ds_list]),
+                                            description="More than one dataset has been specified: "+", ".join([d.name for d in ds_list])+", just one dataset is supported.",
                                             location=IssueLocation(sheet_name=name, row=r, column=None)))
                         return
                     elif len(h_list) > 1:
                         issues.append(Issue(itype=3,
-                                            description="More than one hierarchy has been specified: " + ", ".join(
-                                                [h.name for h in h_list]),
+                                            description="More than one hierarchy has been specified: " + ", ".join([h.name for h in h_list])+", just one hierarchy is supported.",
                                             location=IssueLocation(sheet_name=name, row=r, column=None)))
                         return
                     const_dict = obtain_dictionary_with_literal_fields(item, asts)
                     if len(ds_list) == 1:
                         # If a measure is requested and not all dimensions are used, aggregate or
-                        # issue an error because it is not possible to compress.
-                        # If only dimensions are used, then obtain all the tuples
+                        # issue an error (because it is not possible to reduce without aggregation).
+                        # If only dimensions are used, then obtain all the unique tuples
                         ds = ds_list[0]
                         measure_requested = False
                         all_dimensions = set([c.code for c in ds.dimensions if not c.is_measure])
@@ -101,14 +114,14 @@ class RelationshipsCommand(IExecutableCommand):
                                         measure_requested = True
                                     else:  # Dimension
                                         all_dimensions.remove(c.code)
-                        all_dimensions_requested = len(all_dimensions) == 0
+                        only_dimensions_requested = len(all_dimensions) == 0
 
-                        if measure_requested and not all_dimensions_requested:
+                        if measure_requested and not only_dimensions_requested:
                             issues.append(Issue(itype=3,
                                                 description="It is not possible to use a measure if not all dimensions are used (cannot assume implicit aggregation)",
                                                 location=IssueLocation(sheet_name=name, row=r, column=None)))
                             return
-                        elif not measure_requested and not all_dimensions_requested:
+                        elif not measure_requested and not only_dimensions_requested:
                             # TODO Reduce the dataset to the unique tuples (consider the current case -sensitive or not-sensitive-)
                             data = None
                         else:  # Take the dataset as-is
@@ -177,22 +190,6 @@ class RelationshipsCommand(IExecutableCommand):
                         else:
                             # yield item
                             raise Exception("If 'complex' is signaled, it should not pass by this line")
-
-                    # Multiplicity because
-                    # - A dataset (only one), iterated. First the concepts are obtained. Then the unique tuples formed by them are obtained.
-                    #   - Processor name.
-                    # - A set of processors (wildcard or filter by attributes)
-                    # - A set of interfaces (according to another filter?)
-                    # - Multiple types of relation
-                    # - Both (first each dataset record applied -expanded-, then the name evaluation is applied)
-
-                    # - UNRESOLVED: expressions are resolved partially. Parts where parameters
-                    # expressions depending on parameters. Only the part of the expression depending on varying things
-
-                    # - The processor name could be a concatenation of multiple literals
-                    # -
-                    # Look for multiple items in r_source_processor_name, r_source_interface_name,
-                    #                            r_target_processor_name, r_target_interface_name
             else:
                 print("Single: "+str(item))
                 yield item

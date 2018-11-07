@@ -48,6 +48,7 @@ quote = oneOf('" ''')  # Double quotes, single quotes
 signop = oneOf('+ -')
 multop = oneOf('* / // %')
 plusop = oneOf('+ -')
+tag = Literal('#')  # Used to specify literal Categories ("codes") in expressions
 comparisonop = oneOf("< <= > >= == != <>")
 andop = CaselessKeyword("AND")
 orop = CaselessKeyword("OR")
@@ -77,6 +78,7 @@ quoted_string = quotedString(r".*")
 unquoted_string = Regex(r".*")  # Anything
 alphanums_string = Word(alphanums)
 code_string = Word(alphanums+"_")  # For codes in Categories, Code Lists
+literal_code_string = (tag.suppress()+Optional(simple_ident+dot.suppress())("hierarchy")+code_string("code"))
 
 # RULES - literal ANY string
 string = quotedString.setParseAction(

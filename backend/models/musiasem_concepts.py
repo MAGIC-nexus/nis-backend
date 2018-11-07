@@ -910,13 +910,16 @@ class FactorType(Identifiable, HierarchyNode, HierarchyExpression, Taggable, Qua
     """ A Factor as type, in a hierarchy, a Taxonomy """
     def __init__(self, name, parent=None, hierarchy=None,
                  tipe: FlowFundRoegenType=FlowFundRoegenType.flow,
-                 tags=None, attributes=None, expression=None):
+                 tags=None, attributes=None, expression=None,
+                 orientation=None, opposite_processor_type=None):
         Identifiable.__init__(self)
         HierarchyNode.__init__(self, name, parent, hierarchy=hierarchy)
         Taggable.__init__(self, tags)
         Qualifiable.__init__(self, attributes)
         HierarchyExpression.__init__(self, expression)
         self._roegen_type = tipe
+        self._orientation = orientation
+        self._opposite_processor_type = opposite_processor_type
         self._physical_type = None  # TODO Which physical types. An object
         self._default_unit_str = None  # TODO A string representing the unit, compatible with the physical type
         self._factors = []
@@ -949,6 +952,14 @@ class FactorType(Identifiable, HierarchyNode, HierarchyExpression, Taggable, Qua
     @property
     def roegen_type(self):
         return self._roegen_type
+
+    @property
+    def orientation(self):
+        return self._orientation
+
+    @property
+    def opposite_processor_type(self):
+        return self._opposite_processor_type
 
     def simple_name(self):
         parts = self.name.split(".")

@@ -1,6 +1,6 @@
 """
 Serialize a model once it has been built
-Before solving. Clone operations executed. Scales not performed.
+Before solving and/or after solving. Clone operations executed. Scales not performed.
 
 It could be something like:
 

@@ -134,8 +134,8 @@ Comando
     re_shared_elements = re.compile(r"(SharedElements)" + optional_alphanumeric, flags=flags)
     re_reused_elements = re.compile(r"(ReusedElements)" + optional_alphanumeric, flags=flags)
     re_pedigree_matrices = re.compile(r"PedigreeMatrices" + optional_alphanumeric, flags=flags)
-    re_refbibliographic = re.compile(r"RefBibliographic" + optional_alphanumeric, flags=flags)
-    re_refgeographical = re.compile(r"RefGeographic" + optional_alphanumeric, flags=flags)
+    re_refbibliographic = re.compile(r"(RefBibliographic|RefBibliography)" + optional_alphanumeric, flags=flags)
+    re_refgeographical = re.compile(r"(RefGeographic|RefGeography)" + optional_alphanumeric, flags=flags)
     re_refprovenance = re.compile(r"RefProvenance" + optional_alphanumeric, flags=flags)
     re_refsource = re.compile(r"RefSource" + optional_alphanumeric, flags=flags)
     # re_indicators

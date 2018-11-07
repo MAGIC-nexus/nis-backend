@@ -24,6 +24,9 @@ class InterfaceTypesCommand(IExecutableCommand):
             ft_formula = item.get("formula", None)
             ft_description = item.get("description", None)
             ft_unit = item.get("unit", None)
+            ft_orientation = item.get("orientation", None)
+            ft_opposite_processor_type = item.get("opposite_processor_type", None)
+            ft_unit = item.get("unit", None)
             ft_attributes = item.get("attributes", {})
             if ft_attributes:
                 try:
@@ -99,7 +102,9 @@ class InterfaceTypesCommand(IExecutableCommand):
                                 tipe=roegen_type,
                                 tags=None,  # No tags
                                 attributes=dict(sphere=ft_sphere, unit=ft_unit, description=ft_description, **ft_attributes),
-                                expression=ft_formula
+                                expression=ft_formula,
+                                orientation=ft_orientation,
+                                opposite_processor_type=ft_opposite_processor_type
                                 )
                 # Simple name
                 glb_idx.put(FactorType.partial_key(ft_name, ft.ident), ft)

@@ -217,6 +217,9 @@ class TestCommandFiles(unittest.TestCase):
         # Close interactive session
         isess.close_db_session()
 
+    # ------------------------------------------------------------------------------------------------------------------
+    #                                -------------------------------------------------------
+    # ------------------------------------------------------------------------------------------------------------------
     def test_008_execute_file_v2_two(self):
         """
         Processors from Soslaires
@@ -320,14 +323,78 @@ class TestCommandFiles(unittest.TestCase):
         # Close interactive session
         isess.close_db_session()
 
+    def test_014_execute_file_v2_eight(self):
+        """
+        Dataset queries using Mappings
+
+        :return:
+        """
+        file_path = os.path.dirname(
+            os.path.abspath(__file__)) + "/z_input_files/v2/08_caso_energia_eu_new_commands.xlsx"
+        isess = execute_file(file_path, generator_type="spreadsheet")
+        # Check State of things
+        glb_idx, p_sets, hh, datasets, mappings = get_case_study_registry_objects(isess.state)
+        # TODO Check things!!!
+        # self.assertEqual(len(p_sets), 3)
+        # Close interactive session
+        isess.close_db_session()
+
+    def test_015_execute_file_v2_nine(self):
+        """
+        Dataset queries using Mappings, then use of Datasets to create Processors and Interfaces
+
+        :return:
+        """
+        file_path = os.path.dirname(
+            os.path.abspath(__file__)) + "/z_input_files/v2/09_mapping_dataset_qry_and_dataset_expansion.xlsx"
+        isess = execute_file(file_path, generator_type="spreadsheet")
+        # Check State of things
+        glb_idx, p_sets, hh, datasets, mappings = get_case_study_registry_objects(isess.state)
+        # TODO Check things!!!
+        # self.assertEqual(len(p_sets), 3)
+        # Close interactive session
+        isess.close_db_session()
+
+    def test_016_execute_file_v2_ten(self):
+        """
+        Upscaling using Instantiations. Translation of Louisa's file "Electricity state of the play 16.03.xlsm"
+
+        :return:
+        """
+        file_path = os.path.dirname(
+            os.path.abspath(__file__)) + "/z_input_files/v2/10_electricity_state_of_the_play.xlsx"
+        isess = execute_file(file_path, generator_type="spreadsheet")
+        # Check State of things
+        glb_idx, p_sets, hh, datasets, mappings = get_case_study_registry_objects(isess.state)
+        # TODO Check things!!!
+        # self.assertEqual(len(p_sets), 3)
+        # Close interactive session
+        isess.close_db_session()
+
+    def test_017_execute_file_v2_eleven(self):
+        """
+        Dataset queries using Mappings, then use of resulting Datasets to create Processors and Interfaces
+
+        :return:
+        """
+        file_path = os.path.dirname(
+            os.path.abspath(__file__)) + "/z_input_files/v2/11_dataset_to_musiasem_maddalena.xlsx"
+        isess = execute_file(file_path, generator_type="spreadsheet")
+        # Check State of things
+        glb_idx, p_sets, hh, datasets, mappings = get_case_study_registry_objects(isess.state)
+        # TODO Check things!!!
+        # self.assertEqual(len(p_sets), 3)
+        # Close interactive session
+        isess.close_db_session()
+
 
 if __name__ == '__main__':
     i = TestCommandFiles()
     prepare_and_reset_database_for_tests(prepare=True)
     backend.data_source_manager = register_external_datasources({})
     #i.test_006_execute_file_five()
-    #i.test_009_execute_file_v2_three()  # Soslaires. v2 syntax
     #i.test_008_execute_file_v2_two()
+    #i.test_009_execute_file_v2_three()  # Soslaires. v2 syntax
     #i.test_011_execute_file_v2_five()  # Dataset
     #i.test_012_execute_file_v2_six()  # Almeria using v2 commands and v1 upscale
-    i.test_013_execute_file_v2_seven()
+    #i.test_013_execute_file_v2_seven()

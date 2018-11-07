@@ -18,7 +18,7 @@ yes_no = ["Yes", "No"]
 processor_types = ["Local", "Environment", "External", "ExternalEnvironment"]
 functional_or_structural = ["Functional", "Structural"]
 instance_or_archetype = ["Instance", "Archetype"]
-copy_interfaces_mode = ["No", "ChildFromParent", "ParentFromChild", "Bidirectional"]
+copy_interfaces_mode = ["No", "FromParent", "FromChildren", "Bidirectional"]
 source_cardinalities = ["One", "Zero", "ZeroOrOne", "ZeroOrMore", "OneOrMore"]
 target_cardinalities = source_cardinalities
 relation_types = [# Relationships between Processors
@@ -29,8 +29,7 @@ relation_types = [# Relationships between Processors
                   "compose",
                   "associate", "association",
                   # Relationships between interfaces
-                  "flow", ">",
-                  "<"
+                  "flow", "scale", ">", "<"
                   ]
 instantiation_types = ["CloneAndScale", "Scale"]
 agent_types = ["Person", "Software", "Organization"]
@@ -107,11 +106,13 @@ commands = {
      CommandField(allowed_names=["Formula", "Expression"], name="formula", mandatory=False, allowed_values=None, parser=unquoted_string),
      CommandField(allowed_names=["Description"], name="description", mandatory=False, allowed_values=None, parser=unquoted_string),
      CommandField(allowed_names=["Unit"], name="unit", mandatory=False, allowed_values=None, parser=unit_name),
+     CommandField(allowed_names=["Orientation"], name="orientation", mandatory=False, allowed_values=orientations, parser=simple_ident),
+     CommandField(allowed_names=["OppositeProcessorType"], name="opposite_processor_type", mandatory=False, allowed_values=processor_types, parser=simple_ident),
      CommandField(allowed_names=["Attributes"], name="attributes", mandatory=False, allowed_values=None, parser=key_value_list),
      CommandField(allowed_names=[attributeRegex], name="attributes", mandatory=False, many_appearances=True, parser=value)
      ],
     "Processors":
-    [CommandField(allowed_names=["ProcessorType"], name="processor_type", mandatory=False, allowed_values=processor_types, parser=simple_ident),
+    [CommandField(allowed_names=["ProcessorContextType", "ProcessorType"], name="processor_type", mandatory=False, allowed_values=processor_types, parser=simple_ident),
      CommandField(allowed_names=["ProcessorGroup"], name="processor_group", mandatory=False, allowed_values=None, parser=simple_ident),
      CommandField(allowed_names=["Processor"], name="processor", mandatory=True, allowed_values=None, parser=simple_ident),
      CommandField(allowed_names=["ParentProcessor"], name="parent_processor", mandatory=False, allowed_values=None, parser=simple_ident),
@@ -139,6 +140,7 @@ commands = {
      CommandField(allowed_names=["OppositeProcessorType"], name="opposite_processor_type", mandatory=False, allowed_values=processor_types, parser=simple_ident),
      CommandField(allowed_names=["InterfaceAttributes"], name="interface_attributes", mandatory=False, allowed_values=None, parser=key_value_list),
      CommandField(allowed_names=["I"+attributeRegex], name="interface_attributes", mandatory=False, many_appearances=True, parser=value),
+
      # Qualified Quantification
      CommandField(allowed_names=["Value"], name="value", mandatory=False, allowed_values=None, parser=expression_with_parameters),
      # TODO
