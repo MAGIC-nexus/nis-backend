@@ -267,5 +267,6 @@ class TestPartialKeyDictionary(unittest.TestCase):
 
 
 if __name__ == '__main__':
-    i = TestMapFunction()
-    i.test_003_many_to_many_2()
+    unittest.main()
+    #i = TestMapFunction()
+    #i.test_003_many_to_many_2()
