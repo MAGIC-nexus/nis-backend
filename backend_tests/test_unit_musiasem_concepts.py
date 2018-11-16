@@ -97,46 +97,41 @@ class ModelBuildingHierarchies(unittest.TestCase):
 
     # ###########################################################
 
-    def test_001_hierarchy(self):
-        # TODO INVALID. Adapt to the new way of building Taxonomic hierarchies
-        h = Hierarchy("Test")
-        t1 = Taxon("T1", None, h)
-        t2 = Taxon("T2", t1, h)
-        t3 = Taxon("T3", None, h)
-        roots = [t1, t3]
-        h.roots_append(roots)
-        # Same roots
-        self.assertEqual(len(set(roots).intersection(h.roots)), len(roots))
-        # Relations
-        self.assertEqual(t1.get_children(h)[0], t2)
-        self.assertEqual(t2.parent, t1)  # Special test, to test parent of node in a single hierarchy
-        self.assertEqual(t3.get_parent(h), None)
-
-    def test_002_hierarchy_2(self):
+    def test_hierarchy_construction(self):
         prd = PartialRetrievalDictionary()
-        h = build_hierarchy("Test_auto", "Taxon", prd, [dict(code="T1", children=[dict(code="T2")]),
-                                                        dict(code="T3")])
-        self.assertEqual(len(h.roots), 2)
 
-    def test_003_hierarchy_of_factors(self):
-        # TODO INVALID. Adapt to the new way of building FactorType hierarchies
-        h = Hierarchy("Test2")
-        f1 = FactorType("F1", None, h)
-        f2 = FactorType("F2", f1, h)
-        t1 = Taxon("T1")
+        for node_type in (Taxon, FactorType):
+            h = build_hierarchy("hierarchy_" + node_type.__name__, node_type.__name__, prd,
+                            [dict(code="NODE1", children=[dict(code="NODE2")]),
+                            dict(code="NODE3")])
+            node1 = prd.get(node_type.partial_key("NODE1"))[0]
+            node2 = prd.get(node_type.partial_key("NODE1.NODE2"))[0]
+            node3 = prd.get(node_type.partial_key("NODE3"))[0]
+            roots = [node1, node3]
+
+            # Roots
+            self.assertEqual(len(h.roots), 2, "Size of hierarchy is not correct")
+            self.assertEqual(len(set(roots).intersection(h.roots)), len(roots),
+                             "Number of roots elements in hierarchy is not correct")
+            # Relations
+            self.assertIn(node2, node1.get_children(), "Children of a node do not match")
+            self.assertEqual(node2.parent, node1, "Parent of a node do not match")
+            self.assertEqual(node3.parent, None, "The parent of a root node should not exist")
+
+    def test_hierarchy_nodes_linking(self):
+        interface_type = FactorType("Node1")
+        interface = Taxon("Node2")
+
+        # An interface type cannot be linked to a interface
         with self.assertRaises(Exception):
-            FactorType("F3", t1)
-        f3 = FactorType("F3", None, h)
-        roots = [f1, f3]
-        h.roots_append(roots)
-        # Same roots
-        self.assertEqual(len(set(roots).intersection(h.roots)), len(roots))
-        # Relations
-        self.assertEqual(f1.get_children(h)[0], f2)
-        self.assertEqual(f2.get_parent(h), f1)
-        self.assertEqual(f3.get_parent(h), None)
+            FactorType("Node3", interface)
 
-    def test_004_hierarchy_of_processors(self):
+        # An interface cannot be linked to a interface type
+        with self.assertRaises(Exception):
+            Taxon("Node3", interface_type)
+
+
+    def test_hierarchy_of_processors(self):
         state = prepare_simple_processors_hierarchy()
         glb_idx, p_sets, hh, datasets, mappings = get_case_study_registry_objects(state)
         p2 = glb_idx.get(Processor.partial_key("P1.P2"))[0]
@@ -152,7 +147,7 @@ class ModelBuildingHierarchies(unittest.TestCase):
 
         # TODO Register Aliases for the Processor (in "obtain_relation")
 
-    def test_005_hierarchy_of_processors_after_serialization_deserialization(self):
+    def test_hierarchy_of_processors_after_serialization_deserialization(self):
         state = prepare_simple_processors_hierarchy()
         # Serialize, deserialize
         s = serialize_state(state)

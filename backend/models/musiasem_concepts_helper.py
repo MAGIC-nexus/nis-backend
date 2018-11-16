@@ -1022,7 +1022,7 @@ def build_hierarchy(name, type_name, registry: PartialRetrievalDictionary, h: di
     return _build_hierarchy(name, type_name, registry, h, oer, level_names, acum_name="", parent=None)
 
 
-def _build_hierarchy(name, type_name, registry: PartialRetrievalDictionary, h: dict, oer=None, level_names=None, acum_name="", parent=None):
+def _build_hierarchy(name, type_name, registry: PartialRetrievalDictionary, h: dict, oer=None, level_names=None, acum_name="", parent=None) -> Optional[Hierarchy]:
     """
     Take the result of parsing a hierarchy and elaborate either an Hierarchy (for Categories and FactorType)
     or a set of nested Processors

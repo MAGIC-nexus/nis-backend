@@ -264,10 +264,7 @@ class TestPartialKeyDictionary(unittest.TestCase):
         self.assertEqual(len(res), 1)
         res = prd.get({"_type": "Partof", "_parent": "C"})
         self.assertEqual(len(res), 0)
-        self.assertTrue(False, "Example assert to make this test to fail!")
 
 
 if __name__ == '__main__':
     unittest.main()
-    # i = TestMapFunction()
-    # i.test_003_many_to_many_2()
