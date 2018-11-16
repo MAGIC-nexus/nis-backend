@@ -1,2 +1,8 @@
 **/__pycache__
 .idea
+
+backend/restful_service/nis_local\.conf
+
+backend/restful_service/nis_unittests\.conf
+
+dump\.rdb

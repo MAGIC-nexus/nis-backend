@@ -391,10 +391,10 @@ class TestCommandFiles(unittest.TestCase):
 if __name__ == '__main__':
     i = TestCommandFiles()
     prepare_and_reset_database_for_tests(prepare=True)
-    backend.data_source_manager = register_external_datasources({})
+    backend.data_source_manager = register_external_datasources({"FAO_DATASETS_DIR": "/home/marco/temp/Data/FAOSTAT/"})
     #i.test_006_execute_file_five()
     #i.test_008_execute_file_v2_two()
     #i.test_009_execute_file_v2_three()  # Soslaires. v2 syntax
     #i.test_011_execute_file_v2_five()  # Dataset
-    #i.test_012_execute_file_v2_six()  # Almeria using v2 commands and v1 upscale
+    i.test_012_execute_file_v2_six()  # Almeria using v2 commands and v1 upscale
     #i.test_013_execute_file_v2_seven()
