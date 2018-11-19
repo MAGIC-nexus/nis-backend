@@ -77,8 +77,11 @@ boolean = Or([true, false]).setParseAction(lambda t: {'type': 'boolean', 'value'
 quoted_string = quotedString(r".*")
 unquoted_string = Regex(r".*")  # Anything
 alphanums_string = Word(alphanums)
-code_string = Word(alphanums+"_")  # For codes in Categories, Code Lists
+code_string = Word(alphanums+"_"+"-")  # For codes in Categories, Code Lists
 literal_code_string = (tag.suppress()+Optional(simple_ident+dot.suppress())("hierarchy")+code_string("code"))
+
+# References
+code_string_reference = hash.suppress() + code_string + hash.suppress()
 
 # RULES - literal ANY string
 string = quotedString.setParseAction(
@@ -283,7 +286,7 @@ h_name = (Optional(namespace).setResultsName("namespace") +
                            )
 
 # RULES - Arithmetic expression AND Arithmetic Plus Boolean expression
-arith_expression << operatorPrecedence(Or([positive_float, positive_int, string,
+arith_expression << operatorPrecedence(Or([positive_float, positive_int, string, code_string_reference,
                                        Optional(Literal('{')).suppress() + simple_h_name + Optional(Literal('}')).suppress(),
                                        func_call]),  # Operand types (REMOVED h_name: no "namespace" and no "datasets")
                                  [(signop, 1, opAssoc.RIGHT, lambda _s, l, t: {
@@ -305,7 +308,7 @@ arith_expression << operatorPrecedence(Or([positive_float, positive_int, string,
                                  lpar=lparen.suppress(),
                                  rpar=rparen.suppress())
 
-arith_boolean_expression << operatorPrecedence(Or([positive_float, positive_int, string, boolean,
+arith_boolean_expression << operatorPrecedence(Or([positive_float, positive_int, string, boolean, code_string_reference,
                                      Optional(Literal('{')).suppress() + simple_h_name + Optional(Literal('}')).suppress(),
                                      func_call]),  # Operand types (REMOVED h_name: no "namespace" and no "datasets")
                                  [(signop, 1, opAssoc.RIGHT, lambda _s, l, t: {
