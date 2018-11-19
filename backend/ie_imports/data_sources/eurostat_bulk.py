@@ -231,6 +231,7 @@ class Eurostat(IDataSourceManager):
                 df = pd.read_csv(fc, sep="\t")
 
                 def split_codes(all_codes):  # Split, strip and lower
+                    # TODO: lower() only if needed
                     return [s.strip().lower() for s in all_codes.split(",")]
 
                 original_column = df.columns[0]
