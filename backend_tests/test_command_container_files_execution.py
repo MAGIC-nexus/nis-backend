@@ -337,6 +337,8 @@ class TestCommandFiles(unittest.TestCase):
         # TODO Check things!!!
         # self.assertEqual(len(p_sets), 3)
         # Close interactive session
+        datasets["ds1"].data.to_csv("/tmp/08_caso_energia_eu_new_commands_ds1_results.csv")
+        datasets["ds2"].data.to_csv("/tmp/08_caso_energia_eu_new_commands_ds2_results.csv")
         isess.close_db_session()
 
     def test_015_execute_file_v2_nine(self):
@@ -396,5 +398,7 @@ if __name__ == '__main__':
     #i.test_008_execute_file_v2_two()
     #i.test_009_execute_file_v2_three()  # Soslaires. v2 syntax
     #i.test_011_execute_file_v2_five()  # Dataset
-    i.test_012_execute_file_v2_six()  # Almeria using v2 commands and v1 upscale
+    #i.test_012_execute_file_v2_six()  # Almeria using v2 commands and v1 upscale
     #i.test_013_execute_file_v2_seven()
+    i.test_014_execute_file_v2_eight()
+    #i.test_018_many_to_many_mappings()

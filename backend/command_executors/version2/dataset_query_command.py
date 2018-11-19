@@ -122,13 +122,13 @@ class DatasetQryCommand(IExecutableCommand):
                 for el in mappings[m].map:
                     for to in el["to"]:
                         if to["d"]:
-                            tmp.append([el["o"], to["d"]])
+                            # TODO: should be lowercased if caseinsentive is globally set
+                            tmp.append([el["o"].lower(), to["d"].lower()])
                 df_dst = pd.DataFrame(tmp, columns=['sou_rce', mappings[m].destination.lower()])
                 for di in df.columns:
                     if strcmp(mappings[m].origin, di):
                         d = di
                         break
-                # df[d] = df[d].str.upper()  # Upper case column before merging
                 df = pd.merge(df, df_dst, how='left', left_on=d, right_on='sou_rce')
                 del df['sou_rce']
 

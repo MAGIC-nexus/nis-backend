@@ -71,7 +71,7 @@ def parse_dataset_qry_command(sh, area, name, state):
     we_have_time = False
     for d in dims:
         if dims[d].code_list:
-            cl[d] = [k.lower() for k in dims[d].code_list.keys()]  # Attach the code list
+            cl[d] = create_dictionary(data={k: None for k in dims[d].code_list.keys()})  # Attach the code list
         else:
             cl[d] = None  # No code list (TIME_PERIOD for instance)
         if dims[d].istime:
@@ -83,8 +83,9 @@ def parse_dataset_qry_command(sh, area, name, state):
                 strcmp(mappings[m].dataset, dataset_name) and \
                 mappings[m].origin in dims:
             # Add a dictionary entry for the new dimension, add also the codes present in the map
-            tmp = [to["d"] for o in mappings[m].map for to in o["to"] if to["d"]]
-            cl[mappings[m].destination] = set(tmp)  # [t[1] for t in mappings[m].map]
+            # tmp = [to["d"] for o in mappings[m].map for to in o["to"] if to["d"]]
+            tmp = create_dictionary(data={to["d"]: None for o in mappings[m].map for to in o["to"] if to["d"]})
+            cl[mappings[m].destination] = tmp  # [t[1] for t in mappings[m].map]
 
     # Scan columns for Dimensions, Measures and Aggregation.
     # Pivot Table is a Visualization, so now it is not in the command, there will be a command aside.
@@ -115,7 +116,7 @@ def parse_dataset_qry_command(sh, area, name, state):
                                         location=IssueLocation(sheet_name=name, row=c + 1, column=None)))
                 else:
                     out_dims.append(d)
-        elif col_name.lower().strip() in ["resultsmeasures", "measures"]:  # "SELECT"
+        elif col_name.lower().strip() in ["resultmeasures", "measures"]:  # "SELECT"
             lst = obtain_column(c, area[0] + 1, area[1])
             # Check for measures
             # TODO (and attributes?)
@@ -147,7 +148,7 @@ def parse_dataset_qry_command(sh, area, name, state):
             for cd in lst:
                 if not cd:
                     continue
-                if str(cd).lower() not in cl[col_name]:
+                if str(cd) not in cl[col_name]:
                     issues.append(Issue(itype=3,
                                         description="The code '"+cd+"' is not present in the codes declared for dimension '"+col_name+"'. Please, check them.",
                                         location=IssueLocation(sheet_name=name, row=c + 1, column=None)))

@@ -107,13 +107,13 @@ class HierarchyMappingCommand(IExecutableCommand):
                 mapping.append(dict(o=orig, to=lst))
             if local_mappings[d].origin_dataset:
                 dims, attrs, meas = obtain_dataset_metadata(local_mappings[d].origin_dataset)
-                if d.origin_hierarchy not in dims:
+                if local_mappings[d].origin_hierarchy not in dims:
                     issues.append(Issue(itype=3,
                                         description="The origin dimension '" + local_mappings[d].origin_hierarchy + "' does not exist in dataset '" + local_mappings[d].origin_dataset + "'",
                                         location=IssueLocation(sheet_name=name, row=r, column=None)))
                     continue
                 else:
-                    dim = dims[local_mappings[d].origin_dimension]
+                    dim = dims[local_mappings[d].origin_hierarchy]
                     mapping = fill_map_with_all_origin_categories(dim, mapping)
             #
             origin_dataset = local_mappings[d].origin_dataset
