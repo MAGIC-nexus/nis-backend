@@ -14,7 +14,7 @@ import pandasdmx
 import requests
 import requests_cache
 
-from backend.common.helper import create_dictionary, import_names, Memoize2
+from backend.common.helper import create_dictionary, import_names, Memoize2, translate_case
 from backend.ie_imports.data_source_manager import IDataSourceManager, filter_dataset_into_dataframe
 from backend.models.statistical_datasets import DataSource, Database, Dataset, Dimension, CodeList, CodeImmutable
 
@@ -255,8 +255,9 @@ class Eurostat(IDataSourceManager):
                 df.to_msgpack(dataframe_fn)
 
         # Change dataframe index names to match the case of the names in the metadata
-        metadata_names_dict = {dim.code.lower(): dim.code for dim in ds.dimensions}
-        dataframe_new_names = [metadata_names_dict.get(name, name) for name in df.index.names]
+        # metadata_names_dict = {dim.code.lower(): dim.code for dim in ds.dimensions}
+        # dataframe_new_names = [metadata_names_dict.get(name.lower(), name) for name in df.index.names]
+        dataframe_new_names = translate_case(df.index.names, [dim.code for dim in ds.dimensions])
         df.index.names = dataframe_new_names
 
         # Filter it using generic Pandas filtering capabilities

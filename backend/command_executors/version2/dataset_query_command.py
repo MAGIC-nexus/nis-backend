@@ -5,7 +5,8 @@ import numpy as np
 import pandas as pd
 
 import backend
-from backend.common.helper import strcmp, create_dictionary, obtain_dataset_metadata
+from backend.common.helper import strcmp, create_dictionary, obtain_dataset_metadata, \
+    augment_dataframe_with_mapped_columns, translate_case
 from backend.model_services import IExecutableCommand, get_case_study_registry_objects
 
 
@@ -69,7 +70,7 @@ class DatasetQryCommand(IExecutableCommand):
             issues.append((2, "A dataset called '"+result_name+"' is already stored in the registry of datasets"))
 
         # Dataset metadata
-        dims, attrs, meas = obtain_dataset_metadata(dataset_name, source)
+        dims, attrs, measures = obtain_dataset_metadata(dataset_name, source)
 
         # Obtain filter parameters
         params = create_dictionary()  # Native dimension name to list of values the filter will allow to pass
@@ -111,10 +112,13 @@ class DatasetQryCommand(IExecutableCommand):
         # TODO Prepare an "m" containing ALL the mappings affecting "df"
         # TODO df2 = augment_dataframe_with_mapped_columns(df, m, ["value"])
         # TODO Does it allow adding the new column for the dimension, in case it is requested? Probably yes, but test it
+        ### mapping_tuples = []
         for m in mappings:
             if strcmp(mappings[m].source, source) and \
                     strcmp(mappings[m].dataset, dataset_name) and \
                     mappings[m].origin in dims:
+                ### mapping_tuples.append((mappings[m].origin, mappings[m].destination, mappings[m].map))
+
                 # TODO Change by many-to-many mapping
                 # TODO augment_dataframe_with_mapped_columns(df, maps, measure_columns)
                 # Elaborate a many to one mapping
@@ -123,22 +127,43 @@ class DatasetQryCommand(IExecutableCommand):
                     for to in el["to"]:
                         if to["d"]:
                             # TODO: should be lowercased if caseinsentive is globally set
-                            tmp.append([el["o"].lower(), to["d"].lower()])
-                df_dst = pd.DataFrame(tmp, columns=['sou_rce', mappings[m].destination.lower()])
+                            if not backend.case_sensitive:
+                                tmp.append([el["o"].lower(), to["d"]])
+                            else:
+                                tmp.append([el["o"], to["d"]])
+
+                df_dst = pd.DataFrame(tmp, columns=['sou_rce', mappings[m].destination])
                 for di in df.columns:
                     if strcmp(mappings[m].origin, di):
                         d = di
                         break
+
+                if not backend.case_sensitive:
+                    d_lower = d + "_lower"
+                    df[d_lower] = df[d].str.lower()
+                    d = d_lower
+
                 df = pd.merge(df, df_dst, how='left', left_on=d, right_on='sou_rce')
                 del df['sou_rce']
+
+                if not backend.case_sensitive:
+                    del df[d]
+
+                ds.data = df
+
+        ### df = augment_dataframe_with_mapped_columns(df, mapping_tuples, ["value"])
+
 
         # Aggregate (If any dimension has been specified)
         if len(self._content["group_by"]) > 0:
             # Column names where data is
             # HACK: for the case where the measure has been named "obs_value", use "value"
             values = [m.lower() if m.lower() != "obs_value" else "value" for m in self._content["measures"]]
+            # TODO: use metadata name (e.g. "OBS_VALUE") instead of hardcoded "value"
+            # values = self._content["measures"]
             out_names = self._content["measures_as"]
-            rows = [v.lower() for v in self._content["group_by"]]  # Group by dimension names
+            # rows = [v.lower() for v in self._content["group_by"]]  # Group by dimension names
+            rows = self._content["group_by"]  # Group by dimension names
             aggs = []  # Aggregation functions
             agg_names = {}
             for f in self._content["agg_funcs"]:
@@ -171,13 +196,14 @@ class DatasetQryCommand(IExecutableCommand):
                 # Check that all "rows" on which pivot table aggregates are present in the input "df"
                 # If not either synthesize them (only if there is a single filter value) or remove (if not present
                 for r in rows.copy():
-                    if r not in df.columns:
+                    df_columns_dict = create_dictionary(data={c: None for c in df.columns})
+                    if r not in df_columns_dict:
                         found = False
                         for k in params:
-                            if k.lower() == r:
+                            if strcmp(k, r):
                                 found = True
                                 if len(params[k]) == 1:
-                                    df[r] = params[k][0]
+                                    df[k] = params[k][0]
                                 else:
                                     rows.remove(r)
                                     issues.append((2, "Dimension '" + r + "' removed from the list of dimensions because it is not present in the raw input dataset."))
@@ -187,7 +213,8 @@ class DatasetQryCommand(IExecutableCommand):
                             issues.append((2, "Dimension '" + r + "' removed from the list of dimensions because it is not present in the raw input dataset."))
                 # Pivot table using Group by
                 if True:
-                    groups = df.groupby(by=rows, as_index=False)  # Split
+                    group_by_columns = translate_case(rows, params)
+                    groups = df.groupby(by=group_by_columns, as_index=False)  # Split
                     d = OrderedDict([])
                     lst_names = []
                     if len(values) == len(aggs):

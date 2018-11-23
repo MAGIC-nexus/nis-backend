@@ -330,7 +330,7 @@ class TestCommandFiles(unittest.TestCase):
         :return:
         """
         file_path = os.path.dirname(
-            os.path.abspath(__file__)) + "/z_input_files/v2/08_caso_energia_eu_new_commands.xlsx"
+            os.path.abspath(__file__)) + "/z_input_files/v2/08_caso_energia_eu_new_commands_CASE_SENSITIVE.xlsx"
         isess = execute_file(file_path, generator_type="spreadsheet")
         # Check State of things
         glb_idx, p_sets, hh, datasets, mappings = get_case_study_registry_objects(isess.state)
