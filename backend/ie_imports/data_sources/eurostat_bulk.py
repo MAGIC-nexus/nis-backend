@@ -4,7 +4,7 @@ import os
 import re
 import tempfile
 from io import StringIO
-from typing import List
+from typing import List, Dict
 import getpass
 import csv
 
@@ -230,9 +230,8 @@ class Eurostat(IDataSourceManager):
                 # Remove " p" -> ""
                 df = pd.read_csv(fc, sep="\t")
 
-                def split_codes(all_codes):  # Split, strip and lower
-                    # TODO: lower() only if needed
-                    return [s.strip().lower() for s in all_codes.split(",")]
+                def split_codes(all_codes):  # Split and strip
+                    return [s.strip() for s in all_codes.split(",")]
 
                 original_column = df.columns[0]
                 new_cols = [s.strip() for s in original_column.split(",")]
@@ -254,6 +253,11 @@ class Eurostat(IDataSourceManager):
                 df.set_index(new_cols, inplace=True)
                 # Save df
                 df.to_msgpack(dataframe_fn)
+
+        # Change dataframe index names to match the case of the names in the metadata
+        metadata_names_dict = {dim.code.lower(): dim.code for dim in ds.dimensions}
+        dataframe_new_names = [metadata_names_dict.get(name, name) for name in df.index.names]
+        df.index.names = dataframe_new_names
 
         # Filter it using generic Pandas filtering capabilities
         if dataset_params:

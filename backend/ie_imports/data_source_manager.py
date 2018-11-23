@@ -2,7 +2,9 @@ from abc import ABCMeta, abstractmethod
 from typing import List, Union
 import pandas as pd
 
-from backend.common.helper import create_dictionary, Memoize2, obtain_dataset_source
+from backend import case_sensitive
+from backend.common.helper import create_dictionary, Memoize2, obtain_dataset_source, \
+    get_dataframe_copy_with_lowercase_multiindex
 from backend.models.statistical_datasets import DataSource, Database, Dataset
 from backend.models.musiasem_methodology_support import force_load
 
@@ -232,11 +234,11 @@ def filter_dataset_into_dataframe(in_df, filter_dict, eurostat_postprocessing=Fa
     # TODO The filter params can contain a filter related to the new joins
 
     start = None
-    if "startPeriod" in filter_dict:
-        start = filter_dict["startPeriod"]
+    if "StartPeriod" in filter_dict:
+        start = filter_dict["StartPeriod"]
         if isinstance(start, list): start = start[0]
-    if "endPeriod" in filter_dict:
-        endd = filter_dict["endPeriod"]
+    if "EndPeriod" in filter_dict:
+        endd = filter_dict["EndPeriod"]
         if isinstance(endd, list): endd = endd[0]
     else:
         if start:
@@ -249,6 +251,9 @@ def filter_dataset_into_dataframe(in_df, filter_dict, eurostat_postprocessing=Fa
         endd = int(endd)
         columns = [str(a) for a in range(start, endd + 1)]
 
+    if not case_sensitive:
+        in_df_lower = get_dataframe_copy_with_lowercase_multiindex(in_df)
+
     # Rows (dimensions)
     cond_acum = None
     for i, k in enumerate(in_df.index.names):
@@ -258,14 +263,21 @@ def filter_dataset_into_dataframe(in_df, filter_dict, eurostat_postprocessing=Fa
                 lst = [lst]
             if len(lst) > 0:
                 if cond_acum is not None:
-                    cond_acum &= in_df.index.isin([str(l).lower() for l in lst], i)
+                    if not case_sensitive:
+                        cond_acum &= in_df_lower.index.isin([str(l).lower() for l in lst], i)
+                    else:
+                        cond_acum &= in_df.index.isin([str(l) for l in lst], i)
                 else:
-                    cond_acum = in_df.index.isin([str(l).lower() for l in lst], i)
+                    if not case_sensitive:
+                        cond_acum = in_df_lower.index.isin([str(l).lower() for l in lst], i)
+                    else:
+                        cond_acum = in_df.index.isin([str(l) for l in lst], i)
             else:
                 if cond_acum is not None:
                     cond_acum &= in_df[in_df.columns[0]] == in_df[in_df.columns[0]]
                 else:
                     cond_acum = in_df[in_df.columns[0]] == in_df[in_df.columns[0]]
+
     # Remove non existent index values
     for v in columns.copy():
         if v not in in_df.columns:
@@ -281,8 +293,9 @@ def filter_dataset_into_dataframe(in_df, filter_dict, eurostat_postprocessing=Fa
             lst = []
             for i, cn in enumerate(tmp.columns):
                 df2 = tmp[[cn]].copy(deep=True)
+                # TODO: use column name from metadata instead of hardcoded "value"
                 df2.columns = ["value"]
-                df2["time_period"] = cn
+                df2["TIME_PERIOD"] = cn
                 lst.append(df2)
             in_df = pd.concat(lst)
             in_df.reset_index(inplace=True)

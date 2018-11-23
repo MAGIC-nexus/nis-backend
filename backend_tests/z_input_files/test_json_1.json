@@ -41,8 +41,8 @@
                 "UNIT": [
                     "THS_HW"
                 ],
-                "endPeriod": 2012,
-                "startPeriod": 2012
+                "EndPeriod": 2012,
+                "StartPeriod": 2012
             }
         },
         "issues": [

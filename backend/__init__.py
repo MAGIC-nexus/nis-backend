@@ -17,7 +17,7 @@ data_source_manager = None  # type: DataSourceManager
 redis = None
 
 # Case sensitive
-case_sensitive = False
+case_sensitive = True
 
 # Create units registry
 ureg = pint.UnitRegistry()
