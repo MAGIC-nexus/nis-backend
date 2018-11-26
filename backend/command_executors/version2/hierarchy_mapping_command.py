@@ -67,7 +67,6 @@ class HierarchyMappingCommand(IExecutableCommand):
                 to_dict = d.mapping[mh_src_code]
             else:
                 to_dict = create_dictionary()
-                d.mapping[mh_src_code] = to_dict
             if mh_dst_code in to_dict:
                 issues.append(Issue(itype=3,
                                     description="The mapping of '" + mh_src_code + "' into '" + mh_dst_code + "' has been done already",
@@ -75,6 +74,7 @@ class HierarchyMappingCommand(IExecutableCommand):
                 return
             else:
                 to_dict[mh_dst_code] = mh_weight  # NOTE: This could be an object instead of just a FLOAT or expression
+                d.mapping[mh_src_code] = to_dict
 
         issues = []
         glb_idx, p_sets, hh, datasets, mappings = get_case_study_registry_objects(state)

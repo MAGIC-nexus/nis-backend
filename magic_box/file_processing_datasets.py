@@ -218,8 +218,8 @@ def get_statistical_dataset_structure(source, dataset, sh_out=None, dataset_mana
                 sh_out.cell(row=r + 1, column=0 + 1, value=l + (" (TimeDimension)" if dims[l].istime else ""))
             r += 1
     if time_dim:
-        lst_dim.append(("startPeriod", None))
-        lst_dim.append(("endPeriod", None))
+        lst_dim.append(("StartPeriod", None))
+        lst_dim.append(("EndPeriod", None))
 
     return lst_dim, (dims, attrs, meas)
 
@@ -243,12 +243,12 @@ def get_statistical_dataset(source, dataset, dataset_params, dataset_manager=Non
                 pass
         # CURRENTLY DISABLED vvvvv OLD METHOD (SOMETIMES DOES NOT WORK, BULK PREFERRED)
         params = {}
-        if "startPeriod" in dataset_params:
-            params["startPeriod"] = dataset_params["startPeriod"]
-            del dataset_params["startPeriod"]
-        if "endPeriod" in dataset_params:
-            params["endPeriod"] = dataset_params["endPeriod"]
-            del dataset_params["endPeriod"]
+        if "StartPeriod" in dataset_params:
+            params["StartPeriod"] = dataset_params["StartPeriod"]
+            del dataset_params["StartPeriod"]
+        if "EndPeriod" in dataset_params:
+            params["EndPeriod"] = dataset_params["EndPeriod"]
+            del dataset_params["EndPeriod"]
 
         # Convert list params into concatenated strings
         ds_params = {}
@@ -391,10 +391,10 @@ def filter_dataset_into_dataframe(in_df, filter_dict, eurostat_postprocessing=Fa
     # TODO The filter params can contain a filter related to the new joins
 
     start = None
-    if "startPeriod" in filter_dict:
-        start = filter_dict["startPeriod"]
-    if "endPeriod" in filter_dict:
-        endd = filter_dict["endPeriod"]
+    if "StartPeriod" in filter_dict:
+        start = filter_dict["StartPeriod"]
+    if "EndPeriod" in filter_dict:
+        endd = filter_dict["EndPeriod"]
     else:
         if start:
             endd = start
