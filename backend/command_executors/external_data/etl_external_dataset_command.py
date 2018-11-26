@@ -67,7 +67,7 @@ class ETLExternalDatasetCommand(IExecutableCommand):
         for dim in self._content["where"]:
             lst = self._content["where"][dim]
             native_dim = None
-            if dim.lower() in ["startperiod", "endperiod"]:
+            if dim.lower() in ["StartPeriod", "EndPeriod"]:
                 native_dim = dim
                 lst = [lst]
             elif dim not in dims:

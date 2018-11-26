@@ -4,6 +4,7 @@ import collections
 import mimetypes
 from io import BytesIO
 import pandas as pd
+from pandas import DataFrame
 import urllib.request
 import functools
 import gzip
@@ -12,7 +13,7 @@ import itertools
 import ast
 import json
 import urllib
-from typing import IO
+from typing import IO, List
 from uuid import UUID
 import numpy as np
 from flask import after_this_request, request
@@ -110,7 +111,9 @@ def create_dictionary(case_sens=case_sensitive, multi_dict=False, data=dict()):
 
     if not multi_dict:
         if case_sens:
-            return {}.update(data)  # Normal, "native" dictionary
+            tmp = {}
+            tmp.update(data)
+            return tmp  # Normal, "native" dictionary
         else:
             return CaseInsensitiveDict(data)
     else:
@@ -608,7 +611,7 @@ def get_statistical_dataset_structure(source, dset_name, local_datasets=None):
     # Obtain DATASET: Datasource -> Database -> DATASET -> Dimension(s) -> CodeList (no need for "Concept")
     dset = backend.data_source_manager.get_dataset_structure(source, dset_name)
 
-    # TODO Generate "dims", "attrs" and "meas" from "dset"
+    # Generate "dims", "attrs" and "meas" from "dset"
     dims = create_dictionary()  # Each dimension has a name, a description and a code list
     attrs = create_dictionary()
     meas = create_dictionary()
@@ -639,8 +642,8 @@ def get_statistical_dataset_structure(source, dset_name, local_datasets=None):
                 lst_dim_codes.append((c, description))
 
     if time_dim:
-        lst_dim.append(("startPeriod", None))
-        lst_dim.append(("endPeriod", None))
+        lst_dim.append(("StartPeriod", None))
+        lst_dim.append(("EndPeriod", None))
 
     # Unregister AdHocDatasets
     if local_datasets:
@@ -810,12 +813,12 @@ def augment_dataframe_with_mapped_columns(df, maps, measure_columns):
     :param measure_columns: list of measure column names in "df"
     :return: The pd.DataFrame resulting from the mapping
     """
-    dest_col = {t[0]: t[1] for t in maps}  # Destination column from origin column
+    dest_col = create_dictionary(data={t[0]: t[1] for t in maps})  # Destination column from origin column
     mapped_cols = {}  # A dict from mapped column names to column index in "m"
     measure_cols = {}  # A dict from measure columns to column index in "m". These will be the columns affected by the mapping weights
     non_mapped_cols = {}  # A dict of non-mapped columns (the rest)
     for i, c in enumerate(df.columns):
-        if c in dest_col.keys():
+        if c in dest_col:
             mapped_cols[c] = i
         elif c in measure_columns:
             measure_cols[c] = i
@@ -824,8 +827,9 @@ def augment_dataframe_with_mapped_columns(df, maps, measure_columns):
 
     # A map relating origin column to a tuple formed by the destination column and the full map
     dict_of_maps = {}
-    for t in maps:
-        dict_of_maps[t[0]] = (t[1], {d["o"]: d["to"] for d in t[2]})  # Destination column and a new mapping repeating the origin
+    for origin_col, destination_col, mapping_map in maps:
+        # Destination column and a new mapping repeating the origin
+        dict_of_maps[origin_col] = (destination_col, {d["o"]: d["to"] for d in mapping_map})
 
     # "np.ndarray" from "pd.DataFrame" (no index, no column labels, only values)
     m = df.values
@@ -849,10 +853,10 @@ def augment_dataframe_with_mapped_columns(df, maps, measure_columns):
     measure_cols_base = non_mapped_cols_base + len(non_mapped_cols)
 
     # Output matrix column names
-    col_names = [col for col in mapped_cols.keys()]
-    col_names.extend([dest_col[col] for col in mapped_cols.keys()])
-    col_names.extend([col for col in non_mapped_cols.keys()])
-    col_names.extend([col for col in measure_cols.keys()])
+    col_names = [col for col in mapped_cols]
+    col_names.extend([dest_col[col] for col in mapped_cols])
+    col_names.extend([col for col in non_mapped_cols])
+    col_names.extend([col for col in measure_cols])
     assert len(col_names) == ncols
 
     # Output matrix
@@ -1106,6 +1110,38 @@ if __name__ == '__main__':
     print("Finished!!")
 
 
+# #####################################################################################################################
+# >>>> DATAFRAME <<<<
+# #####################################################################################################################
+
+def get_dataframe_copy_with_lowercase_multiindex(dataframe: DataFrame) -> DataFrame:
+    """
+    Create a copy of an input MultiIndex dataframe where all the index values have been lowercased.
+    :param dataframe: a MultiIndex dataframe
+    :return: A copy of the input dataframe with lowercased index values.
+    """
+    df = dataframe.copy()
+    levels = [df.index.get_level_values(n).str.lower() for n in range(df.index.nlevels)]
+    df.index = pd.MultiIndex.from_arrays(levels)
+    return df
+
+# #####################################################################################################################
+# >>>> OTHER STUFF <<<<
+# #####################################################################################################################
+
+
 def str2bool(v: str):
     return str(v).lower() in ("yes", "true", "t", "1")
 
+
+def translate_case(current_names: List[str], new_names: List[str]) -> List[str]:
+    """
+    Translate the names in the current_names list according the existing names in the new_names list that
+    can have a different case.
+    :param current_names: a list of names to translate
+    :param new_names: a list of new names to use
+    :return: the current_names list where some or all of the names are translated
+    """
+    new_names_dict = {name.lower(): name for name in new_names}
+    translated_names = [new_names_dict.get(name.lower(), name) for name in current_names]
+    return translated_names
