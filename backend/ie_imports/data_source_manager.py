@@ -1,6 +1,7 @@
 from abc import ABCMeta, abstractmethod
 from typing import List, Union
 import pandas as pd
+import numpy as np
 
 from backend import case_sensitive
 from backend.common.helper import create_dictionary, Memoize2, obtain_dataset_source, \
@@ -255,38 +256,27 @@ def filter_dataset_into_dataframe(in_df, filter_dict, eurostat_postprocessing=Fa
         in_df_lower = get_dataframe_copy_with_lowercase_multiindex(in_df)
 
     # Rows (dimensions)
-    cond_acum = None
+    cond_accum = np.full(in_df.index.size, fill_value=True)
     for i, k in enumerate(in_df.index.names):
         if k in filter_dict:
             lst = filter_dict[k]
             if not isinstance(lst, list):
                 lst = [lst]
             if len(lst) > 0:
-                if cond_acum is not None:
-                    if not case_sensitive:
-                        cond_acum &= in_df_lower.index.isin([str(l).lower() for l in lst], i)
-                    else:
-                        cond_acum &= in_df.index.isin([str(l) for l in lst], i)
+                if not case_sensitive:
+                    cond_accum &= in_df_lower.index.isin([str(l).lower() for l in lst], i)
                 else:
-                    if not case_sensitive:
-                        cond_acum = in_df_lower.index.isin([str(l).lower() for l in lst], i)
-                    else:
-                        cond_acum = in_df.index.isin([str(l) for l in lst], i)
+                    cond_accum &= in_df.index.isin([str(l) for l in lst], i)
             else:
-                if cond_acum is not None:
-                    cond_acum &= in_df[in_df.columns[0]] == in_df[in_df.columns[0]]
-                else:
-                    cond_acum = in_df[in_df.columns[0]] == in_df[in_df.columns[0]]
+                cond_accum &= in_df[in_df.columns[0]] == in_df[in_df.columns[0]]
 
     # Remove non existent index values
     for v in columns.copy():
         if v not in in_df.columns:
             columns.remove(v)
 
-    if cond_acum is not None:
-        tmp = in_df[columns][cond_acum]
-    else:
-        tmp = in_df[columns]
+    tmp = in_df[columns][cond_accum]
+
     # Convert columns to a single column "TIME_PERIOD"
     if eurostat_postprocessing:
         if len(tmp.columns) > 0:

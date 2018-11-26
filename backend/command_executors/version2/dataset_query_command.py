@@ -91,7 +91,8 @@ class DatasetQryCommand(IExecutableCommand):
                         lst = obtain_reverse_codes(mappings[m].map, lst)
                         break
             else:
-                native_dim = dim
+                # Get the dimension name with the original case
+                native_dim = dims[dim].name
             if native_dim:
                 if native_dim not in params:
                     f = set()
@@ -162,40 +163,39 @@ class DatasetQryCommand(IExecutableCommand):
             # TODO: use metadata name (e.g. "OBS_VALUE") instead of hardcoded "value"
             # values = self._content["measures"]
             out_names = self._content["measures_as"]
-            # rows = [v.lower() for v in self._content["group_by"]]  # Group by dimension names
-            rows = self._content["group_by"]  # Group by dimension names
-            aggs = []  # Aggregation functions
+            group_by_dims = translate_case(self._content["group_by"], params)  # Group by dimension names
+            agg_funcs = []  # Aggregation functions
             agg_names = {}
             for f in self._content["agg_funcs"]:
                 if f.lower() in ["avg", "average"]:
-                    aggs.append(np.average)
+                    agg_funcs.append(np.average)
                     agg_names[np.average] = "avg"
                 elif f.lower() in ["sum"]:
-                    aggs.append(np.sum)
+                    agg_funcs.append(np.sum)
                     agg_names[np.sum] = "sum"
                 elif f.lower() in ["count"]:
-                    aggs.append(np.size)
+                    agg_funcs.append(np.size)
                     agg_names[np.size] = "count"
                 elif f.lower() in ["sumna"]:
-                    aggs.append(np.nansum)
+                    agg_funcs.append(np.nansum)
                     agg_names[np.nansum] = "sumna"
                 elif f.lower() in ["countav"]:
-                    aggs.append("count")
+                    agg_funcs.append("count")
                     agg_names["count"] = "countav"
                 elif f.lower() in ["avgna"]:
-                    aggs.append(np.nanmean)
+                    agg_funcs.append(np.nanmean)
                     agg_names[np.nanmean] = "avgna"
                 elif f.lower() in ["pctna"]:
-                    aggs.append(pctna)
+                    agg_funcs.append(pctna)
                     agg_names[pctna] = "pctna"
 
             # Calculate Pivot Table. The columns are a combination of values x aggregation functions
             # For instance, if two values ["v2", "v2"] and two agg. functions ["avg", "sum"] are provided
             # The columns will be: [["average", "v2"], ["average", "v2"], ["sum", "v2"], ["sum", "v2"]]
             try:
-                # Check that all "rows" on which pivot table aggregates are present in the input "df"
+                # Check that all "group_by_dims" on which pivot table aggregates are present in the input "df"
                 # If not either synthesize them (only if there is a single filter value) or remove (if not present
-                for r in rows.copy():
+                for r in group_by_dims.copy():
                     df_columns_dict = create_dictionary(data={c: None for c in df.columns})
                     if r not in df_columns_dict:
                         found = False
@@ -205,20 +205,19 @@ class DatasetQryCommand(IExecutableCommand):
                                 if len(params[k]) == 1:
                                     df[k] = params[k][0]
                                 else:
-                                    rows.remove(r)
+                                    group_by_dims.remove(r)
                                     issues.append((2, "Dimension '" + r + "' removed from the list of dimensions because it is not present in the raw input dataset."))
                                 break
                         if not found:
-                            rows.remove(r)
+                            group_by_dims.remove(r)
                             issues.append((2, "Dimension '" + r + "' removed from the list of dimensions because it is not present in the raw input dataset."))
                 # Pivot table using Group by
                 if True:
-                    group_by_columns = translate_case(rows, params)
-                    groups = df.groupby(by=group_by_columns, as_index=False)  # Split
+                    groups = df.groupby(by=group_by_dims, as_index=False)  # Split
                     d = OrderedDict([])
                     lst_names = []
-                    if len(values) == len(aggs):
-                        for i, t in enumerate(zip(values, aggs)):
+                    if len(values) == len(agg_funcs):
+                        for i, t in enumerate(zip(values, agg_funcs)):
                             v, agg = t
                             if len(out_names) == len(values):
                                 if out_names[i]:
@@ -233,7 +232,7 @@ class DatasetQryCommand(IExecutableCommand):
                     else:
                         for v in values:
                             lst = d.get(v, [])
-                            for agg in aggs:
+                            for agg in agg_funcs:
                                 lst.append(agg)
                                 lst_names.append(agg_names[agg] + "_" +v)
                             d[v] = lst
@@ -245,13 +244,13 @@ class DatasetQryCommand(IExecutableCommand):
                     df2 = groups.agg(d)
 
                     # Rename the aggregated columns
-                    df2.columns = rows + lst_names
+                    df2.columns = group_by_dims + lst_names
                 else:
                     # Pivot table
                     df2 = pd.pivot_table(df,
                                          values=values,
-                                         index=rows,
-                                         aggfunc=[aggs[0]], fill_value=np.NaN, margins=False,
+                                         index=group_by_dims,
+                                         aggfunc=[agg_funcs[0]], fill_value=np.NaN, margins=False,
                                          dropna=True)
                     # Remove the multiindex in columns
                     df2.columns = [col[-1] for col in df2.columns.values]
