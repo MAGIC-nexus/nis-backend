@@ -19,39 +19,36 @@ import itertools
 
 import numpy as np
 import pandas as pd
+from pandas import DataFrame
+from typing import Dict, Tuple, List
 
-
-def augment_dataframe_with_mapped_columns2(df, maps, measure_columns):
+def augment_dataframe_with_mapped_columns2(
+        df: DataFrame,
+        dict_of_maps: Dict[str, Tuple[str, List[Dict]]],
+        measure_columns: List[str]) -> DataFrame:
     """
     Elaborate a pd.DataFrame from the input DataFrame "df" and
-    "maps" which is a list of tuples ("source_column", "destination_column", map)
+    "dict_of_maps" which is a dictionary of "source_column" to a tuple ("destination_column", map)
     where map is of the form:
-        [{"o": "", "to": [{"d": "", "w": ""}]}]
-        [ {o: origin category, to: [{d: destination category, w: weight assigned to destination category}] } ]
+        [ {origin category: [{d: destination category, w: weight assigned to destination category}] } ]
 
     Support not only "Many to One" (ManyToOne) but also "Many to Many" (ManyToMany)
 
     :param df: pd.DataFrame to process
-    :param maps: list of tuples (source, destination, map), see previous introduction
+    :param dict_of_maps: dictionary from "source" to a tuple of ("destination", "map"), see previous introduction
     :param measure_columns: list of measure column names in "df"
     :return: The pd.DataFrame resulting from the mapping
     """
-    dest_col = {t[0]: t[1] for t in maps}  # Destination column from origin column
     mapped_cols = {}  # A dict from mapped column names to column index in "m"
     measure_cols = {}  # A dict from measure columns to column index in "m". These will be the columns affected by the mapping weights
     non_mapped_cols = {}  # A dict of non-mapped columns (the rest)
     for i, c in enumerate(df.columns):
-        if c in dest_col.keys():
+        if c in dict_of_maps:
             mapped_cols[c] = i
         elif c in measure_columns:
             measure_cols[c] = i
         else:
             non_mapped_cols[c] = i
-
-    # A map relating origin column to a tuple formed by the destination column and the full map
-    dict_of_maps = {}
-    for t in maps:
-        dict_of_maps[t[0]] = (t[1], {d["o"]: d["to"] for d in t[2]})  # Destination column and a new mapping repeating the origin
 
     # "np.ndarray" from "pd.DataFrame" (no index, no column labels, only values)
     m = df.values
@@ -63,7 +60,6 @@ def augment_dataframe_with_mapped_columns2(df, maps, measure_columns):
         # Obtain each code combination
         n_subrows = 1
         for c_name, c in mapped_cols.items():
-            # dest_col = map_of_maps[c_name][0]
             map_ = dict_of_maps[c_name][1]
             code = m[r, c]
             n_subrows *= len(map_[code])
@@ -75,10 +71,10 @@ def augment_dataframe_with_mapped_columns2(df, maps, measure_columns):
     measure_cols_base = non_mapped_cols_base + len(non_mapped_cols)
 
     # Output matrix column names
-    col_names = [col for col in mapped_cols.keys()]
-    col_names.extend([dest_col[col] for col in mapped_cols.keys()])
-    col_names.extend([col for col in non_mapped_cols.keys()])
-    col_names.extend([col for col in measure_cols.keys()])
+    col_names = [col for col in mapped_cols]
+    col_names.extend([dict_of_maps[col][0] for col in mapped_cols])
+    col_names.extend([col for col in non_mapped_cols])
+    col_names.extend([col for col in measure_cols])
     assert len(col_names) == ncols
 
     # Output matrix
@@ -91,7 +87,6 @@ def augment_dataframe_with_mapped_columns2(df, maps, measure_columns):
         lst = []
         n_subrows = 1
         for c_name, c in mapped_cols.items():
-            # dest_col = dict_of_maps[c_name][0]
             map_ = dict_of_maps[c_name][1]
             code = m[r, c]
             n_subrows *= len(map_[code])
@@ -106,8 +101,9 @@ def augment_dataframe_with_mapped_columns2(df, maps, measure_columns):
             w = 1.0
             for i, col in enumerate(mapped_cols.keys()):
                 mm[row+icomb, i] = m[r, mapped_cols[col]]
-                mm[row+icomb, new_cols_base+i] = combination[i]["d"]
-                w *= float(combination[i]["w"])
+                mm[row+icomb, new_cols_base+i] = ifnull(combination[i]["d"], '')
+                if combination[i]["w"]:
+                    w *= float(combination[i]["w"])
 
             # Fill the measures
             for i, col in enumerate(measure_cols.keys()):
@@ -123,3 +119,8 @@ def augment_dataframe_with_mapped_columns2(df, maps, measure_columns):
     tmp = pd.DataFrame(data=mm, columns=col_names)
 
     return tmp
+
+def ifnull(var, val):
+    if var is None:
+        return val
+    return var
