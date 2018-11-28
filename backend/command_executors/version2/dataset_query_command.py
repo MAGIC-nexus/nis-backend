@@ -110,50 +110,15 @@ class DatasetQryCommand(IExecutableCommand):
         df = ds.data
 
         # Join with mapped dimensions (augment it)
-        # TODO Prepare an "m" containing ALL the mappings affecting "df"
-        # TODO df2 = augment_dataframe_with_mapped_columns(df, m, ["value"])
-        # TODO Does it allow adding the new column for the dimension, in case it is requested? Probably yes, but test it
-        ### mapping_tuples = []
+        mapping_dict = create_dictionary()
         for m in mappings:
             if strcmp(mappings[m].source, source) and \
                     strcmp(mappings[m].dataset, dataset_name) and \
                     mappings[m].origin in dims:
-                ### mapping_tuples.append((mappings[m].origin, mappings[m].destination, mappings[m].map))
+                # mapping_tuples.append((mappings[m].origin, mappings[m].destination, mappings[m].map))
+                mapping_dict[mappings[m].origin] = (mappings[m].destination, {d["o"]: d["to"] for d in mappings[m].map})
 
-                # TODO Change by many-to-many mapping
-                # TODO augment_dataframe_with_mapped_columns(df, maps, measure_columns)
-                # Elaborate a many to one mapping
-                tmp = []
-                for el in mappings[m].map:
-                    for to in el["to"]:
-                        if to["d"]:
-                            # TODO: should be lowercased if caseinsentive is globally set
-                            if not backend.case_sensitive:
-                                tmp.append([el["o"].lower(), to["d"]])
-                            else:
-                                tmp.append([el["o"], to["d"]])
-
-                df_dst = pd.DataFrame(tmp, columns=['sou_rce', mappings[m].destination])
-                for di in df.columns:
-                    if strcmp(mappings[m].origin, di):
-                        d = di
-                        break
-
-                if not backend.case_sensitive:
-                    d_lower = d + "_lower"
-                    df[d_lower] = df[d].str.lower()
-                    d = d_lower
-
-                df = pd.merge(df, df_dst, how='left', left_on=d, right_on='sou_rce')
-                del df['sou_rce']
-
-                if not backend.case_sensitive:
-                    del df[d]
-
-                ds.data = df
-
-        ### df = augment_dataframe_with_mapped_columns(df, mapping_tuples, ["value"])
-
+        df = augment_dataframe_with_mapped_columns(df, mapping_dict, ["value"])
 
         # Aggregate (If any dimension has been specified)
         if len(self._content["group_by"]) > 0:
@@ -217,29 +182,25 @@ class DatasetQryCommand(IExecutableCommand):
                     d = OrderedDict([])
                     lst_names = []
                     if len(values) == len(agg_funcs):
-                        for i, t in enumerate(zip(values, agg_funcs)):
-                            v, agg = t
-                            if len(out_names) == len(values):
-                                if out_names[i]:
-                                    lst_names.append(out_names[i])
-                                else:
-                                    lst_names.append(agg_names[agg] + "_" + v)
+                        for i, (value, agg_func) in enumerate(zip(values, agg_funcs)):
+                            if len(out_names) == len(values) and out_names[i]:
+                                lst_names.append(out_names[i])
                             else:
-                                lst_names.append(agg_names[agg] + "_" +v)
-                            lst = d.get(v, [])
-                            lst.append(agg)
-                            d[v] = lst
+                                lst_names.append(agg_names[agg_func] + "_" +value)
+                            lst = d.get(value, [])
+                            lst.append(agg_func)
+                            d[value] = lst
                     else:
-                        for v in values:
-                            lst = d.get(v, [])
-                            for agg in agg_funcs:
-                                lst.append(agg)
-                                lst_names.append(agg_names[agg] + "_" +v)
-                            d[v] = lst
+                        for value in values:
+                            lst = d.get(value, [])
+                            for agg_func in agg_funcs:
+                                lst.append(agg_func)
+                                lst_names.append(agg_names[agg_func] + "_" +value)
+                            d[value] = lst
                     # Print NaN values for each value column
-                    for v in set(values):
-                        cnt = df[v].isnull().sum()
-                        print("NA count for col '"+v+"': "+str(cnt)+" of "+str(df.shape[0]))
+                    for value in set(values):
+                        cnt = df[value].isnull().sum()
+                        print("NA count for col '"+value+"': "+str(cnt)+" of "+str(df.shape[0]))
                     # AGGREGATE !!
                     df2 = groups.agg(d)
 
