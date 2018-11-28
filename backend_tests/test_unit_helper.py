@@ -64,12 +64,12 @@ class TestMapFunction(unittest.TestCase):
         # Prepare a many to one map from category set to category set
         m = create_dictionary()
         m["cat_o_1"] = ("cat_d_1",
-              [
-                  {"c11": [{"d": "c21", "w": 1.0}]},
-                  {"c12": [{"d": "c23", "w": 1.0}]},
-                  {"c13": [{"d": "c23", "w": 1.0}]},
-               ]
-              )
+              {
+                  "c11": [{"d": "c21", "w": 1.0}],
+                  "c12": [{"d": "c23", "w": 1.0}],
+                  "c13": [{"d": "c23", "w": 1.0}]
+              }
+        )
         # Prepare a simple DataFrame
         df = pd.DataFrame(data=[["c11", 4], ["c12", 3], ["c13", 1.5]], columns=["cat_o_1", "value"])
         # Call
@@ -83,13 +83,13 @@ class TestMapFunction(unittest.TestCase):
         # Prepare a simple DataFrame containing
         m = create_dictionary()
         m["cat_o_1"] = ("cat_d_1",
-              [
-                  {"c11": [{"d": "c21", "w": 0.6},
-                           {"d": "c22", "w": 0.4}]},
-                  {"c12": [{"d": "c23", "w": 1.0}]},
-                  {"c13": [{"d": "c23", "w": 1.0}]},
-               ]
-              )
+              {
+                  "c11": [{"d": "c21", "w": 0.6},
+                          {"d": "c22", "w": 0.4}],
+                  "c12": [{"d": "c23", "w": 1.0}],
+                  "c13": [{"d": "c23", "w": 1.0}]
+              }
+        )
         # Prepare a simple DataFrame
         df = pd.DataFrame(data=[["c11", 4], ["c12", 3], ["c13", 1.5]], columns=["cat_o_1", "value"])
         # Call
@@ -103,21 +103,21 @@ class TestMapFunction(unittest.TestCase):
         # Prepare a simple DataFrame containing
         m = create_dictionary()
         m["cat_o_1"] = ("cat_d_1",
-              [
-                  {"c11": [{"d": "c21", "w": 0.6},
-                           {"d": "c22", "w": 0.4}]},
-                  {"c12": [{"d": "c23", "w": 1.0}]},
-                  {"c13": [{"d": "c23", "w": 1.0}]},
-               ]
-              )
+                {
+                  "c11": [{"d": "c21", "w": 0.6},
+                          {"d": "c22", "w": 0.4}],
+                  "c12": [{"d": "c23", "w": 1.0}],
+                  "c13": [{"d": "c23", "w": 1.0}]
+                }
+        )
         m["cat_o_2"] = ("cat_d_2",
-              [
-                  {"c31": [{"d": "c41", "w": 0.3},
-                           {"d": "c42", "w": 0.7}]},
-                  {"c32": [{"d": "c43", "w": 1.0}]},
-                  {"c33": [{"d": "c43", "w": 1.0}]},
-              ]
-              )
+              {
+                  "c31": [{"d": "c41", "w": 0.3},
+                          {"d": "c42", "w": 0.7}],
+                  "c32": [{"d": "c43", "w": 1.0}],
+                  "c33": [{"d": "c43", "w": 1.0}]
+              }
+        )
         # Prepare a simple DataFrame
         df = pd.DataFrame(data=[["c11", "c31", 4], ["c12", "c32", 3], ["c13", "c31", 1.5]], columns=["cat_o_1", "cat_o_2", "value"])
         # >>>>> Call Cython ACCELERATED Function <<<<<

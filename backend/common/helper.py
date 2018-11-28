@@ -848,7 +848,6 @@ def augment_dataframe_with_mapped_columns(
 
     # Output matrix column names
     col_names = [col for col in mapped_cols]
-    start_index = len(col_names)
     col_names.extend([dict_of_maps[col][0] for col in mapped_cols])
     col_names.extend([col for col in non_mapped_cols])
     col_names.extend([col for col in measure_cols])
