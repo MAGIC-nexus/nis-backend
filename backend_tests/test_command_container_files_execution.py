@@ -359,7 +359,7 @@ class TestCommandFiles(unittest.TestCase):
 
     def test_016_execute_file_v2_ten(self):
         """
-        Upscaling using Instantiations. Translation of Louisa's file "Electricity state of the play 16.03.xlsm"
+        Upscaling using ProcessorScalings. Translation of Louisa's file "Electricity state of the play 16.03.xlsm"
 
         :return:
         """

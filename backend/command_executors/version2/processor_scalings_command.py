@@ -2,7 +2,7 @@ import json
 from backend.model_services import IExecutableCommand
 
 
-class InstantiationsCommand(IExecutableCommand):
+class ProcessorScalingsCommand(IExecutableCommand):
     def __init__(self, name: str):
         self._name = name
         self._content = None

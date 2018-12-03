@@ -22,7 +22,7 @@ def parse_hierarchy_command(sh, area, name: str, n_type: str):
     :param sh: Input worksheet
     :param area: Tuple (top, bottom, left, right) representing the rectangular area of the input worksheet where the
     command is present
-    :param n_type: Type of hierarchy node: "C" (Category), "F" (FactorType) or "P" (Processor)
+    :param n_type: Type of hierarchy node: "C" (Category), "I" (InterfaceType) or "P" (Processor)
     :return: list of issues [(issue_type, message)], command label, command content
     """
     some_error = False

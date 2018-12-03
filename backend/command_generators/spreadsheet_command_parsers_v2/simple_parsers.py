@@ -50,8 +50,8 @@ def parse_relationships_command(sh, area, name: str = None):
     return parse_command(sh, area, name, "Relationships")
 
 
-def parse_instantiations_command(sh, area, name: str = None):
-    return parse_command(sh, area, name, "Instantiations")
+def parse_processor_scalings_command(sh, area, name: str = None):
+    return parse_command(sh, area, name, "ProcessorScalings")
 
 
 def parse_scale_changers_command(sh, area, name: str = None):

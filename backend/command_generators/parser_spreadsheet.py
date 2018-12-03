@@ -21,7 +21,7 @@ from backend.command_executors.version2.hierarchy_categories_command import Hier
 from backend.command_executors.version2.hierarchy_mapping_command import HierarchyMappingCommand
 from backend.command_executors import create_command, DatasetDataCommand, DatasetQryCommand, AttributeTypesCommand, \
     AttributeSetsCommand, InterfaceTypesCommand, ProcessorsCommand, InterfacesAndQualifiedQuantitiesCommand, \
-    RelationshipsCommand, InstantiationsCommand, ScaleConversionV2Command, DatasetDefCommand
+    RelationshipsCommand, ProcessorScalingsCommand, ScaleConversionV2Command, DatasetDefCommand
 from backend.command_executors.version2.references_v2_command import ProvenanceReferencesCommand, BibliographicReferencesCommand, \
     GeographicReferencesCommand
 from backend.command_generators.spreadsheet_command_parsers.analysis.indicators_spreadsheet_parse import parse_indicators_command
@@ -46,7 +46,7 @@ from backend.command_generators.spreadsheet_command_parsers_v2.dataset_qry_sprea
 from backend.command_generators.spreadsheet_command_parsers_v2.simple_parsers import parse_cat_hierarchy_command, \
     parse_hierarchy_mapping_command, parse_parameters_command_v2, parse_attribute_sets_command, \
     parse_attribute_types_command, parse_datasetdef_command, parse_interface_types_command, parse_processors_v2_command, \
-    parse_interfaces_command, parse_relationships_command, parse_instantiations_command, parse_scale_changers_command, \
+    parse_interfaces_command, parse_relationships_command, parse_processor_scalings_command, parse_scale_changers_command, \
     parse_shared_elements_command, parse_reused_elements_command, parse_indicators_v2_command, parse_ref_provenance, \
     parse_ref_bibliographic, parse_ref_geographic
 
@@ -107,7 +107,7 @@ Comando
     re_metadata = re.compile(r"^(Metadata)" + optional_alphanumeric, flags=flags)  # Shared by V1 and V2
     re_processors = re.compile(r"(Processors|Proc)[ _]+" + var_name, flags=flags)  # V1. Deprecated in V2 (use "re_interfaces")
     re_hierarchy = re.compile(r"(Taxonomy|Tax|Composition|Comp)[ _]([cpf])[ ]" + var_name, flags=flags)  # V1. Deprecated in V2 (use "re_hierarchies"). SPECIAL
-    re_upscale = re.compile(r"(Upscale|Up)[ _](" + var_name + "[ _]" + var_name + ")?", flags=flags)  # V1. Deprecated in V2 (use "re_instantiations")
+    re_upscale = re.compile(r"(Upscale|Up)[ _](" + var_name + "[ _]" + var_name + ")?", flags=flags)  # V1. Deprecated in V2 (use "re_processor_scalings")
     re_relations = re.compile(r"(Grammar|Structure)([ _]+" + var_name+")?", flags=flags)  # V1. Deprecated in V2 (use "re_relationships")
     re_scale_conversion = re.compile(r"Scale", flags=flags)  # V1. Deprecated in V2 (use "re_scale_changers")
     re_pedigree_template = re.compile(r"(Pedigree|Ped|NUSAP\.PM)[ _]+" + var_name, flags=flags)  # V1. Deprecated in V2 (use "re_pedigree_matrices") ???? TO BE SOLVED <<<<<<< MAYBE V1 is better option
@@ -117,8 +117,8 @@ Comando
     re_mapping = re.compile(r"^(Mapping|Map)([ _]" + cplex_var + "[ _]" + cplex_var + ")?", flags=flags)  # V1. Deprecated in V2 (use "re_hierarchies_mapping"). SPECIAL
     re_indicators = re.compile(r"(Indicators|KPI)([ _]" + var_name + ")?", flags=flags)  # Shared by V1 and V2 (not used in V1, so v2 directly)
     # Version 2 commands
-    re_hierarchies = re.compile(r"(CatHierarchies|Categories)" + optional_alphanumeric, flags=flags)  # Hierarchies for categories (formerly "Taxonomy_C")
-    re_hierarchies_mapping = re.compile(r"(CatHierarchiesMapping|CategoriesMap)" + optional_alphanumeric, flags=flags)
+    re_hierarchies = re.compile(r"(CodeHierarchies|Hierarchies|CatHierarchies|Categories)" + optional_alphanumeric, flags=flags)  # Hierarchies for codes (formerly "Taxonomy_C")
+    re_hierarchies_mapping = re.compile(r"(CodeHierarchiesMapping|HierarchiesMapping|CatHierarchiesMapping|CategoriesMap)" + optional_alphanumeric, flags=flags)
     re_attributes = re.compile(r"(AttributeTypes)" + optional_alphanumeric, flags=flags)  # Declaration of attributes used in different elements
     re_datasetdef = re.compile(r"(DatasetDef)" + optional_alphanumeric, flags=flags)  # Dataset metadata
     re_datasetdata = re.compile(r"(DatasetData)" + optional_alphanumeric, flags=flags)  # Dataset data
@@ -129,7 +129,7 @@ Comando
     re_processors_v2 = re.compile(r"(BareProcessors)" + optional_alphanumeric, flags=flags)  # It is NOT the next version of "re_processors" (which is "re_interfaces")
     re_interfaces = re.compile(r"(Interfaces)" + optional_alphanumeric, flags=flags)  # Interfaces and data. V2 of "re_processors"
     re_relationships = re.compile(r"(Flows|Relationships)" + optional_alphanumeric, flags=flags)
-    re_instantiations = re.compile(r"(Instantiations)" + optional_alphanumeric, flags=flags)
+    re_processor_scalings = re.compile(r"(ProcessorScalings)" + optional_alphanumeric, flags=flags)
     re_scale_changers = re.compile(r"(ScaleChangeMap) + optional_alphanumeric", flags=flags)
     re_shared_elements = re.compile(r"(SharedElements)" + optional_alphanumeric, flags=flags)
     re_reused_elements = re.compile(r"(ReusedElements)" + optional_alphanumeric, flags=flags)
@@ -174,7 +174,7 @@ Comando
             (re_processors_v2, "processors", parse_processors_v2_command, 2, ProcessorsCommand),  # TODO Test
             (re_interfaces, "interfaces_and_qq", parse_interfaces_command, 2, InterfacesAndQualifiedQuantitiesCommand),  # TODO Test
             (re_relationships, "relationships", parse_relationships_command, 2, RelationshipsCommand),  # TODO Test
-             (re_instantiations, "instantiations", parse_instantiations_command, 2, InstantiationsCommand),  # TODO (5***)(evolution of "re_upscale" "upscale")
+             (re_processor_scalings, "processor_scalings", parse_processor_scalings_command, 2, ProcessorScalingsCommand),  # TODO (5***)(evolution of "re_upscale" "upscale")
             (re_scale_changers, "scale_conversion_v2", parse_scale_changers_command, 2, ScaleConversionV2Command),  # TODO Test
             (re_indicators, "indicators", parse_indicators_v2_command, 2, IndicatorsCommand),  # (V1 and) V2
             (re_refbibliographic, "ref_bibliographic", parse_ref_bibliographic, 2, BibliographicReferencesCommand),

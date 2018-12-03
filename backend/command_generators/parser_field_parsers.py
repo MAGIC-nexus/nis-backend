@@ -60,6 +60,8 @@ true = Keyword("True")
 false = Keyword("False")
 # Simple identifier
 simple_ident = Word(alphas, alphanums+"_")  # Start in letter, then "_" + letters + numbers
+list_simple_ident = delimitedList(simple_ident, ",")
+
 # Basic data types
 positive_int = Word(nums).setParseAction(lambda t: {'type': 'int', 'value': int(t[0])})
 positive_float = (Combine(Word(nums) + Optional("." + Word(nums))
@@ -210,7 +212,7 @@ context_query << processor_names
 
 
 # RULES - domain_definition
-number_interval = (Or(Literal("["), Literal(")"))("left") + signed_float("number") + Literal(", ") + signed_float + Or(Literal("["), Literal(")"))("right"))\
+number_interval = (Or(Literal("["), Literal("("))("left") + signed_float("number") + Literal(", ") + signed_float + Or(Literal("]"), Literal(")"))("right"))\
     .setParseAction(lambda _s, l, t: {'type': 'number_interval',
                                                 'left': t.left,
                                                 'right': t.right,
@@ -415,8 +417,8 @@ relation_expression = (Optional(arith_expression).setResultsName("weight") +
                                                           }
                                         )
 
-# RULES: Expression type 5. For hierarchies (version 2). Can mention quoted strings (for codes), parameters and numbers
-hierarchy_expression_v2 << operatorPrecedence(Or([positive_float, positive_int, quotedString, named_parameter]),  # Operand types
+# RULES: Expression type 5. For hierarchies (version 2). Can mention code_string (for codes), parameters and numbers
+hierarchy_expression_v2 << operatorPrecedence(Or([positive_float, positive_int, code_string, named_parameter]),  # Operand types
                                               [(signop, 1, opAssoc.RIGHT, lambda _s, l, t: {'type': 'u'+t.asList()[0][0], 'terms': [0, t.asList()[0][1]], 'ops': ['u'+t.asList()[0][0]]}),
                                             (multop, 2, opAssoc.LEFT, lambda _s, l, t: {'type': 'multipliers', 'terms': t.asList()[0][0::2], 'ops': t.asList()[0][1::2]}),
                                             (plusop, 2, opAssoc.LEFT, lambda _s, l, t: {'type': 'adders', 'terms': t.asList()[0][0::2], 'ops': t.asList()[0][1::2]}),
