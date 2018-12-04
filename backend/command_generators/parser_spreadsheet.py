@@ -1,3 +1,6 @@
+import mimetypes
+import urllib
+
 import openpyxl
 
 import io
@@ -21,7 +24,7 @@ from backend.command_executors.version2.hierarchy_categories_command import Hier
 from backend.command_executors.version2.hierarchy_mapping_command import HierarchyMappingCommand
 from backend.command_executors import create_command, DatasetDataCommand, DatasetQryCommand, AttributeTypesCommand, \
     AttributeSetsCommand, InterfaceTypesCommand, ProcessorsCommand, InterfacesAndQualifiedQuantitiesCommand, \
-    RelationshipsCommand, ProcessorScalingsCommand, ScaleConversionV2Command, DatasetDefCommand
+    RelationshipsCommand, ProcessorScalingsCommand, ScaleConversionV2Command, DatasetDefCommand, NestedCommandsCommand
 from backend.command_executors.version2.references_v2_command import ProvenanceReferencesCommand, BibliographicReferencesCommand, \
     GeographicReferencesCommand
 from backend.command_generators.spreadsheet_command_parsers.analysis.indicators_spreadsheet_parse import parse_indicators_command
@@ -46,9 +49,10 @@ from backend.command_generators.spreadsheet_command_parsers_v2.dataset_qry_sprea
 from backend.command_generators.spreadsheet_command_parsers_v2.simple_parsers import parse_cat_hierarchy_command, \
     parse_hierarchy_mapping_command, parse_parameters_command_v2, parse_attribute_sets_command, \
     parse_attribute_types_command, parse_datasetdef_command, parse_interface_types_command, parse_processors_v2_command, \
-    parse_interfaces_command, parse_relationships_command, parse_processor_scalings_command, parse_scale_changers_command, \
+    parse_interfaces_command, parse_relationships_command, parse_processor_scalings_command, \
+    parse_scale_changers_command, \
     parse_shared_elements_command, parse_reused_elements_command, parse_indicators_v2_command, parse_ref_provenance, \
-    parse_ref_bibliographic, parse_ref_geographic
+    parse_ref_bibliographic, parse_ref_geographic, parse_import_commands_command
 
 # Most complex name
 # [namespace::][type:]var(.var)*[(@|#)var] : [namespace] + [type] + var + [attribute or tag]
@@ -61,24 +65,15 @@ cplex_var = "((" + var_name + "::)?" + hvar_name + ")"
 # ############################### #
 
 
-def commands_generator_from_ooxml_file(input, state):
+def commands_generator_from_ooxml_file(input, state, sublist, stack):
     """
     It reads an Office Open XML input
     Yields a sequence of command_executors
 
-Hoja comando
-* Lex+Parse
-* Producir JSON ~ AST
-* Enumerar problemas sintácticos
-* Producir hoja a partir de JSON??
-
-Comando
-* Analizar JSON
-* Ejecutar
-* Enumerar problemas semánticos
-
     :param input: A bytes input
     :param state: State used to check variables
+    :param sublist: List of worksheets to consider
+    :param stack: Stack of nested files. Just pass it...
     :return:
     """
     # Start the Excel reader
@@ -133,6 +128,7 @@ Comando
     re_scale_changers = re.compile(r"(ScaleChangeMap) + optional_alphanumeric", flags=flags)
     re_shared_elements = re.compile(r"(SharedElements)" + optional_alphanumeric, flags=flags)
     re_reused_elements = re.compile(r"(ReusedElements)" + optional_alphanumeric, flags=flags)
+    re_import_commands = re.compile(r"(ImportCommands)" + optional_alphanumeric, flags=flags)
     re_pedigree_matrices = re.compile(r"PedigreeMatrices" + optional_alphanumeric, flags=flags)
     re_refbibliographic = re.compile(r"(RefBibliographic|RefBibliography)" + optional_alphanumeric, flags=flags)
     re_refgeographical = re.compile(r"(RefGeographic|RefGeography)" + optional_alphanumeric, flags=flags)
@@ -185,6 +181,7 @@ Comando
             # Will not be implemented
             (re_shared_elements, "shared_elements", parse_shared_elements_command, 2,),  # TODO
             (re_reused_elements, "reused_elements", parse_reused_elements_command, 2,),  # TODO
+            (re_import_commands, "import_commands", parse_import_commands_command, 2, NestedCommandsCommand),  # INLINE execution. Declared here just to note the former
             (re_pedigree_matrices, "ref_pedigree_matrices", ),  # TODO
             (re_refsource, "ref_source", ),  # TODO
             (re_attribute_sets, "attribute_sets", parse_attribute_sets_command, 3, AttributeSetsCommand),  # TODO Develop and Test (2***)
@@ -192,6 +189,10 @@ Comando
 
     # For each worksheet, get the command type, convert into primitive JSON
     for c, sh_name in enumerate(xl_in.sheetnames):
+        if sublist:
+            if sh_name not in sublist:
+                continue
+
         issues = []
         total_issues = []  # type: List[Issue]
         sh_in = xl_in[sh_name]
@@ -226,6 +227,48 @@ Comando
                 issue = {"sheet_number": c, "sheet_name": sh_name, "c_type": c_type, "type": 3,
                          "message": "It seems there are no parameters for the dataset import command at worksheet '" + sh_name + "'"}
                 total_issues.append(issue)
+        elif re_import_commands.search(name):
+            # Declared at this point to avoid circular reference ("parsers_factory" imports "parsers_spreadsheet")
+            from backend.command_generators.parsers_factory import commands_container_parser_factory
+
+            def load_file(location: str = None):
+                """
+                Loads a case study file (well, really any file) into a BytesIO object
+                :param location: URL of the case study file
+                :return: bytes
+                """
+
+                if not location:
+                    f_type = None
+                    data = None
+                else:
+                    # Try to load the Dataset from the specified location
+                    data = urllib.request.urlopen(location).read()
+                    # data = io.BytesIO(data)
+                    # Then, try to read it
+                    t = mimetypes.guess_type(location, strict=True)
+                    if t[0] == "text/python":
+                        f_type = "python"
+                    elif t[0] == "text/json":
+                        f_type = "json"
+                    elif t[0] == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet":
+                        f_type = "spreadsheet"
+
+                return f_type, data
+
+            issues, c_label, c_content = parse_import_commands_command(sh_in, t)
+            if 3 not in [issue.itype for issue in issues]:
+                c_type = "import_commands"
+                # For each line, repeat the import
+                for r in c_content["items"]:
+                    workbook = r.get("workbook_name", None)
+                    worksheets = r.get("worksheets", None)
+                    sublist2 = [w.strip() for w in worksheets.split(",")] if worksheets else None  # Convert to list of worksheets
+                    # Read file in memory
+                    generator_type, file2 = load_file(workbook)
+                    file_type = None  # Ignored
+                    yield from commands_container_parser_factory(generator_type, file_type, file2, state, sublist=sublist2, stack=stack)
+                    print("Done")
         elif re_datasetqry.search(name):
             c_type = "datasetqry"
             issues, c_label, c_content = parse_dataset_qry_command(sh_in, t, sh_name, state)

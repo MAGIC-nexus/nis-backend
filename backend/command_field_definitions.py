@@ -216,9 +216,9 @@ commands = {
     # "ReusedElements":
     # [
     #  ],
-    "ReuseCommands":
+    "ImportCommands":
     [
-        CommandField(allowed_names=["Workbook"], name="workbook_name", mandatory=False, allowed_values=None, parser=url_parser),
+        CommandField(allowed_names=["Workbook", "WorkbookLocation"], name="workbook_name", mandatory=False, allowed_values=None, parser=url_parser),
         CommandField(allowed_names=["Worksheets"], name="worksheets", mandatory=False, allowed_values=None, parser=unquoted_string)
     ],
     "TableOfContents":

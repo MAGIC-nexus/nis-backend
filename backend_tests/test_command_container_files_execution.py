@@ -406,11 +406,27 @@ class TestCommandFiles(unittest.TestCase):
         datasets["ds1"].data.to_csv("/tmp/09_many_to_many_mapping_ds1_results.csv", index=False)
         isess.close_db_session()
 
+    def test_019_import_commands(self):
+        """
+        Testing import commands
+
+        :return:
+        """
+        file_path = os.path.dirname(
+            os.path.abspath(__file__)) + "/z_input_files/v2/12_import_commands_example.xlsx"
+        isess = execute_file(file_path, generator_type="spreadsheet")
+        # Check State of things
+        glb_idx, p_sets, hh, datasets, mappings = get_case_study_registry_objects(isess.state)
+        # TODO Check things!!!
+        # self.assertEqual(len(p_sets), 3)
+        # Close interactive session
+        isess.close_db_session()
+
 
 if __name__ == '__main__':
     i = TestCommandFiles()
     prepare_and_reset_database_for_tests(prepare=True)
-    backend.data_source_manager = register_external_datasources({"FAO_DATASETS_DIR": "/home/marco/temp/Data/FAOSTAT/"})
+    #backend.data_source_manager = register_external_datasources({"FAO_DATASETS_DIR": "/home/marco/temp/Data/FAOSTAT/"})
     #i.test_006_execute_file_five()
     #i.test_008_execute_file_v2_two()
     #i.test_009_execute_file_v2_three()  # Soslaires. v2 syntax
@@ -418,4 +434,5 @@ if __name__ == '__main__':
     #i.test_012_execute_file_v2_six()  # Almeria using v2 commands and v1 upscale
     #i.test_013_execute_file_v2_seven()
     #i.test_014_execute_file_v2_eight()
-    i.test_018_many_to_many_mappings()
+    #i.test_018_many_to_many_mappings()
+    i.test_019_import_commands()
