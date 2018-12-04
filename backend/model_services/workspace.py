@@ -147,7 +147,10 @@ def persistable_to_executable_command(p_cmd: CommandsContainer, limit=1000):
 
 
 def execute_command(state, e_cmd: "IExecutableCommand"):
-    return e_cmd.execute(state)
+    if e_cmd:
+        return e_cmd.execute(state)
+    else:
+        return None, None  # issues, output
 
 
 def execute_command_container(state, p_cmd: CommandsContainer):
