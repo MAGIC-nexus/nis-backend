@@ -52,10 +52,12 @@ from backend.command_generators.spreadsheet_command_parsers_v2.simple_parsers im
     parse_interfaces_command, parse_relationships_command, parse_processor_scalings_command, \
     parse_scale_changers_command, \
     parse_shared_elements_command, parse_reused_elements_command, parse_indicators_v2_command, parse_ref_provenance, \
-    parse_ref_bibliographic, parse_ref_geographic, parse_import_commands_command
+    parse_ref_bibliographic, parse_ref_geographic, parse_import_commands_command, parse_list_of_commands_command
 
 # Most complex name
 # [namespace::][type:]var(.var)*[(@|#)var] : [namespace] + [type] + var + [attribute or tag]
+from backend.common.helper import create_dictionary
+
 var_name = "([a-zA-Z][a-zA-Z0-9_-]*)"
 hvar_name = "("+var_name + r"(\." + var_name + ")*)"
 cplex_var = "((" + var_name + "::)?" + hvar_name + ")"
@@ -129,6 +131,7 @@ def commands_generator_from_ooxml_file(input, state, sublist, stack):
     re_shared_elements = re.compile(r"(SharedElements)" + optional_alphanumeric, flags=flags)
     re_reused_elements = re.compile(r"(ReusedElements)" + optional_alphanumeric, flags=flags)
     re_import_commands = re.compile(r"(ImportCommands)" + optional_alphanumeric, flags=flags)
+    re_list_of_commands = re.compile(r"(ListOfCommands)" + optional_alphanumeric, flags=flags)
     re_pedigree_matrices = re.compile(r"PedigreeMatrices" + optional_alphanumeric, flags=flags)
     re_refbibliographic = re.compile(r"(RefBibliographic|RefBibliography)" + optional_alphanumeric, flags=flags)
     re_refgeographical = re.compile(r"(RefGeographic|RefGeography)" + optional_alphanumeric, flags=flags)
@@ -137,6 +140,30 @@ def commands_generator_from_ooxml_file(input, state, sublist, stack):
     # re_indicators
     # re_indicators_benchmark NOT DEFINED, NOT IMPLEMENTED
     re_problem_statement = re.compile(r"ProblemStatement" + optional_alphanumeric, flags=flags)
+
+    # Command names (for the "list of commands" command)
+    command_names = [
+        "CodeHierarchies", "Hierarchies",
+        "CodeHierarchiesMapping", "HierarchiesMapping",
+        "AttributeTypes",
+        "DatasetDef",
+        "DatasetData",
+        "DatasetQry",
+        "AttributeSets",
+        "InterfaceTypes",
+        "BareProcessors",
+        "Interfaces",
+        "Relationships",
+        "ProcessorScalings",
+        "ScaleChangeMap",
+        "ImportCommands",
+        "PedigreeMatrices",
+        "RefBibliographic",
+        "RefGeographic",
+        "RefProvenance",
+        "ProblemStatement"
+    ]
+    command_names = create_dictionary(data={cmd_name: None for cmd_name in command_names})
 
     # List of tuples defining each command parsing:
     # - Regular expression
@@ -182,10 +209,19 @@ def commands_generator_from_ooxml_file(input, state, sublist, stack):
             (re_shared_elements, "shared_elements", parse_shared_elements_command, 2,),  # TODO
             (re_reused_elements, "reused_elements", parse_reused_elements_command, 2,),  # TODO
             (re_import_commands, "import_commands", parse_import_commands_command, 2, NestedCommandsCommand),  # INLINE execution. Declared here just to note the former
+            (re_list_of_commands, "list_of_commands", parse_list_of_commands_command, 2, None),  # INLINE execution. Declared here just to note the former
+            # INLINE execution. Declared here just to note the former
             (re_pedigree_matrices, "ref_pedigree_matrices", ),  # TODO
             (re_refsource, "ref_source", ),  # TODO
             (re_attribute_sets, "attribute_sets", parse_attribute_sets_command, 3, AttributeSetsCommand),  # TODO Develop and Test (2***)
             ]
+
+    worksheet_to_command = create_dictionary()  # A dictionary to translate a worksheet to an equivalent command
+    if sublist:
+        # Force reading "ListOfCommands" commands
+        for sh_name in xl_in.sheetnames:
+            if re_list_of_commands.search(sh_name):
+                sublist.append(sh_name)
 
     # For each worksheet, get the command type, convert into primitive JSON
     for c, sh_name in enumerate(xl_in.sheetnames):
@@ -202,6 +238,10 @@ def commands_generator_from_ooxml_file(input, state, sublist, stack):
         c_content = None
 
         name = sh_in.title
+
+        # Use an equivalent command name
+        if name in worksheet_to_command:
+            name = worksheet_to_command[name]
 
         # Extract worksheet matrices
         m = binary_mask_from_worksheet(sh_in, False)
@@ -227,6 +267,18 @@ def commands_generator_from_ooxml_file(input, state, sublist, stack):
                 issue = {"sheet_number": c, "sheet_name": sh_name, "c_type": c_type, "type": 3,
                          "message": "It seems there are no parameters for the dataset import command at worksheet '" + sh_name + "'"}
                 total_issues.append(issue)
+        elif re_list_of_commands.search(name):
+            issues, c_label, c_content = parse_list_of_commands_command(sh_in, t)
+            c_type = None
+            if 3 not in [issue.itype for issue in issues]:
+                for r in c_content["items"]:
+                    worksheet = r.get("worksheet", None)
+                    command = r.get("command", None)
+                    # Check if valid command
+                    if command not in command_names:
+                        issue = Issue(c, sh_name, 3, None, "Command '" + command + "' not recognized in List of Commands.")
+                    else:
+                        worksheet_to_command[worksheet] = command
         elif re_import_commands.search(name):
             # Declared at this point to avoid circular reference ("parsers_factory" imports "parsers_spreadsheet")
             from backend.command_generators.parsers_factory import commands_container_parser_factory
@@ -306,6 +358,7 @@ def commands_generator_from_ooxml_file(input, state, sublist, stack):
                         issues, c_label, c_content = cmd[2](sh_in, t, name2)
                     break
 
+        # -------------------------------------------------------------------------------------------------------------
         # Command parsed, now append "issues"
         errors = 0
         if len(issues) > 0:
@@ -321,7 +374,11 @@ def commands_generator_from_ooxml_file(input, state, sublist, stack):
                 total_issues.append(issue)
         if errors == 0:
             try:
-                cmd, issues = create_command(c_type, c_label, c_content, sh_name)
+                if c_type:
+                    cmd, issues = create_command(c_type, c_label, c_content, sh_name)
+                else:
+                    cmd = None
+                    issues = []
             except:
                 cmd = None
                 issues = [(3, "Could not create command of type '"+c_type+"'")]
@@ -336,7 +393,7 @@ def commands_generator_from_ooxml_file(input, state, sublist, stack):
 
                     total_issues.append(issue)
         else:
-            print(issues)
+            print(issues)  # Convenient for debugging purposes
             cmd = None  # cmd, _ = create_command(c_type, c_label, {}, sh_name)
 
         yield cmd, total_issues

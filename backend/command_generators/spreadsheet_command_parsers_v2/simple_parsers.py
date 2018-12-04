@@ -69,6 +69,10 @@ def parse_reused_elements_command(sh, area, name: str = None):
 def parse_import_commands_command(sh, area, name: str = None):
     return parse_command(sh, area, name, "ImportCommands")
 
+
+def parse_list_of_commands_command(sh, area, name: str = None):
+    return parse_command(sh, area, name, "TableOfContents")
+
 # NOTE: Metadata is special parser
 # NOTE: PedigreeMatrices and References are special parsers
 
