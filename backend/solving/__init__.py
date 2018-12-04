@@ -1,10 +1,10 @@
-from typing import List, Union
+from typing import List, Union, Dict, Set
 from abc import ABCMeta, abstractmethod
 
 from backend.models.musiasem_concepts import Processor, Observer, FactorType, Factor, \
     FactorQuantitativeObservation, FactorTypesRelationUnidirectionalLinearTransformObservation, \
     ProcessorsRelationPartOfObservation, ProcessorsRelationUndirectedFlowObservation, \
-    ProcessorsRelationUpscaleObservation, FactorsRelationDirectedFlowObservation
+    ProcessorsRelationUpscaleObservation, FactorsRelationDirectedFlowObservation, Hierarchy, Parameter
 from backend.model_services import get_case_study_registry_objects, State
 from backend.common.helper import create_dictionary, PartialRetrievalDictionary
 
@@ -29,81 +29,34 @@ class BasicQuery(IQueryObjects):
         self._state = state
         self._registry, self._p_sets, self._hierarchies, self._datasets, self._mappings = get_case_study_registry_objects(state)
 
-    def execute(self, object_classes: List, filt: Union[dict, str]) -> str:
+    def execute(self, object_classes: List[Union[type, str]], filt: Union[dict, str]) -> Dict[type, List[object]]:
         requested = {}
-        types = [Observer, Processor, FactorType, Factor,
-                 FactorQuantitativeObservation, FactorTypesRelationUnidirectionalLinearTransformObservation,
-                 ProcessorsRelationPartOfObservation, ProcessorsRelationUpscaleObservation,
-                 ProcessorsRelationUndirectedFlowObservation,
-                 FactorsRelationDirectedFlowObservation]
-        for o_class in object_classes:
-            for t in types:
-                if (isinstance(o_class, str) and o_class.lower() == t.__name__.lower()) or \
-                        (isinstance(o_class, type) and o_class == t):
-                    requested[t] = None
+        supported_types = [Observer, Processor, FactorType, Factor,
+                           FactorQuantitativeObservation, FactorTypesRelationUnidirectionalLinearTransformObservation,
+                           ProcessorsRelationPartOfObservation, ProcessorsRelationUpscaleObservation,
+                           ProcessorsRelationUndirectedFlowObservation,
+                           FactorsRelationDirectedFlowObservation, Hierarchy, Parameter]
+        supported_types_names = {t.__name__.lower(): t for t in supported_types}
 
-        if Observer in requested:
-            # Obtain All Observers
-            oers = self._registry.get(Observer.partial_key())
-            # Apply filter
-            if "observer_name" in filt:
-                oers = [o for o in oers if o.name.lower() == filt["observer_name"]]
-            # Store result
-            requested[Observer] = oers
-        if Processor in requested:
-            # Obtain All Processors
-            procs = set(self._registry.get(Processor.partial_key()))
-            # TODO Apply filter
-            # Store result
-            requested[Processor] = procs
-        if FactorType in requested:
-            # Obtain FactorTypes
-            fts = set(self._registry.get(FactorType.partial_key()))
-            # TODO Apply filter
-            # Store result
-            requested[FactorType] = fts
-        if Factor in requested:
-            # Obtain Factors
-            fs = self._registry.get(Factor.partial_key())
-            # TODO Apply filter
-            # Store result
-            requested[Factor] = fs
-        if FactorQuantitativeObservation in requested:
-            # Obtain Observations
-            qqs = self._registry.get(FactorQuantitativeObservation.partial_key())
-            # TODO Apply filter
-            # Store result
-            requested[FactorQuantitativeObservation] = qqs
-        if FactorTypesRelationUnidirectionalLinearTransformObservation in requested:
-            # Obtain Observations
-            ftlts = self._registry.get(FactorTypesRelationUnidirectionalLinearTransformObservation.partial_key())
-            # TODO Apply filter
-            # Store result
-            requested[FactorTypesRelationUnidirectionalLinearTransformObservation] = ftlts
-        if ProcessorsRelationPartOfObservation in requested:
-            # Obtain Observations
-            pos = self._registry.get(ProcessorsRelationPartOfObservation.partial_key())
-            # TODO Apply filter
-            # Store result
-            requested[ProcessorsRelationPartOfObservation] = pos
-        if ProcessorsRelationUndirectedFlowObservation in requested:
-            # Obtain Observations
-            ufs = self._registry.get(ProcessorsRelationUndirectedFlowObservation.partial_key())
-            # TODO Apply filter
-            # Store result
-            requested[ProcessorsRelationUndirectedFlowObservation] = ufs
-        if ProcessorsRelationUpscaleObservation in requested:
-            # Obtain Observations
-            upss = self._registry.get(ProcessorsRelationUpscaleObservation.partial_key())
-            # TODO Apply filter
-            # Store result
-            requested[ProcessorsRelationUpscaleObservation] = upss
-        if FactorsRelationDirectedFlowObservation in requested:
-            # Obtain Observations
-            dfs = self._registry.get(FactorsRelationDirectedFlowObservation.partial_key())
-            # TODO Apply filter
-            # Store result
-            requested[FactorsRelationDirectedFlowObservation] = dfs
+        for object_class_name in [o.lower() if isinstance(o, str) else o.__name__.lower() for o in object_classes]:
+
+            if object_class_name in supported_types_names:
+                # Get the type from the name
+                object_class = supported_types_names[object_class_name]
+
+                # Obtain all objects of specified type
+                objects = set(self._registry.get(object_class.partial_key()))
+
+                # Filter list of objects
+                # TODO: apply filter to all types
+                if object_class == Observer:
+                    if "observer_name" in filt:
+                        objects = [o for o in objects if o.name.lower() == filt["observer_name"]]
+
+                # Store result
+                requested[object_class] = objects
+            else:
+                raise Exception("Class not found in BasicQuery.execute(): " + str(object_class_name))
 
         return requested
 

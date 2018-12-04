@@ -3,6 +3,8 @@
 import collections
 import mimetypes
 from io import BytesIO
+
+import jsonpickle
 import pandas as pd
 from pandas import DataFrame
 import urllib.request
@@ -13,7 +15,7 @@ import itertools
 import ast
 import json
 import urllib
-from typing import IO, List, Tuple, Dict
+from typing import IO, List, Tuple, Dict, Any
 from uuid import UUID
 import numpy as np
 from flask import after_this_request, request
@@ -26,12 +28,86 @@ from backend import case_sensitive, \
 
 
 # #####################################################################################################################
+# >>>> JSON FUNCTIONS <<<<
+# #####################################################################################################################
+
+
+def _json_serial(obj):
+    """JSON serializer for objects not serializable by default json code"""
+    from datetime import datetime
+    if isinstance(obj, datetime):
+        serial = obj.isoformat()
+        return serial
+    elif isinstance(obj, CaseInsensitiveDict):
+        return str(obj)
+    elif isinstance(obj, np.int64):
+        return int(obj)
+    raise TypeError("Type not serializable")
+
+
+JSON_INDENT = 4
+ENSURE_ASCII = False
+
+
+def generate_json(o):
+    return json.dumps(o,
+                      default=_json_serial,
+                      sort_keys=True,
+                      indent=JSON_INDENT,
+                      ensure_ascii=ENSURE_ASCII,
+                      separators=(',', ': ')
+                      ) if o else None
+
+
+class Encodable:
+    """
+    Abstract class with the method encode() that should be implemented by a subclass to be encoded into JSON
+    using the json.dumps() method together with the option cls=CustomEncoder.
+    """
+    def encode(self) -> Dict[str, Any]:
+        raise NotImplementedError("users must define encode() to use this base class")
+
+    @staticmethod
+    def parents_encode(obj: "Encodable", cls: type) -> Dict[str, Any]:
+        """
+        Get the state of all "cls" parent classes for the selected instance "obj"
+        :param obj: The instance. Use "self".
+        :param cls: The base class which parents we want to get. Use "__class__".
+        :return: A dictionary with the state of the instance "obj" for all inherited classes.
+
+        """
+        d = {}
+        for parent in cls.__bases__:
+            if issubclass(parent, Encodable) and parent is not Encodable:
+                d.update(parent.encode(obj))
+        return d
+
+
+class CustomEncoder(json.JSONEncoder):
+    """
+    Encoding class used by json.dumps(). It should be passed as the "cls" argument.
+    Example: print(json.dumps({'A': 2, 'b': 4}), cls=CustomEncoder)
+    """
+    def default(self, obj):
+        # Does the object implement its own encoder?
+        if isinstance(obj, Encodable):
+            return obj.encode()
+
+        # Use the default encoder for handled types
+        if isinstance(obj, (list, dict, str, int, float, bool, type(None))):
+            return json.JSONEncoder.default(self, obj)
+
+        # For other unhandled types, like set, use universal json encoder "jsonpickle"
+        return jsonpickle.encode(obj, unpicklable=False)
+
+
+# #####################################################################################################################
 # >>>> CASE SeNsItIvE or INSENSITIVE names (flows, funds, processors, ...) <<<<
 # #####################################################################################################################
 # from backend.models.musiasem_concepts import Taxon  IMPORT LOOP !!!!! AVOID !!!!
 
 
-class CaseInsensitiveDict(collections.MutableMapping):
+class CaseInsensitiveDict(collections.MutableMapping, Encodable):
     """
     A dictionary with case insensitive Keys.
     Prepared also to support TUPLES as keys, required because compound keys are required
@@ -42,6 +118,15 @@ class CaseInsensitiveDict(collections.MutableMapping):
         if data is None:
             data = {}
         self.update(data, **kwargs)
+
+    def encode(self):
+        return self.get_data()
+
+    def get_original_data(self):
+        return {casedkey: mappedvalue for casedkey, mappedvalue in self._store.values()}
+
+    def get_data(self):
+        return {key: self._store[key][1] for key in self._store}
 
     def __setitem__(self, key, value):
         # Use the lowercased key for lookups, but store the actual
@@ -170,37 +255,6 @@ def import_names(package, names):
         return tmp2
     else:
         return None
-
-# #####################################################################################################################
-# >>>> JSON FUNCTIONS <<<<
-# #####################################################################################################################
-
-
-def _json_serial(obj):
-    """JSON serializer for objects not serializable by default json code"""
-    from datetime import datetime
-    if isinstance(obj, datetime):
-        serial = obj.isoformat()
-        return serial
-    elif isinstance(obj, CaseInsensitiveDict):
-        return str(obj)
-    elif isinstance(obj, np.int64):
-        return int(obj)
-    raise TypeError("Type not serializable")
-
-
-JSON_INDENT = 4
-ENSURE_ASCII = False
-
-
-def generate_json(o):
-    return json.dumps(o,
-                      default=_json_serial,
-                      sort_keys=True,
-                      indent=JSON_INDENT,
-                      ensure_ascii=ENSURE_ASCII,
-                      separators=(',', ': ')
-                      ) if o else None
 
 # #####################################################################################################################
 # >>>> KEY -> VALUE STORE, WITH PARTIAL KEY INDEXATION <<<<
@@ -1126,6 +1180,15 @@ def get_dataframe_copy_with_lowercase_multiindex(dataframe: DataFrame) -> DataFr
 
 def str2bool(v: str):
     return str(v).lower() in ("yes", "true", "t", "1")
+
+
+def ascii2hex(s: str) -> str:
+    """
+    Convert an ASCII string to an hexadecimal string
+    :param s: an ASCII string
+    :return: an hexadecimal string
+    """
+    return s.encode(encoding="ascii").hex()
 
 
 def ifnull(var, val):

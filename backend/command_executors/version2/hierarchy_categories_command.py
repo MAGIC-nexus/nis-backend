@@ -160,6 +160,8 @@ class HierarchyCategoriesCommand(IExecutableCommand):
                       attributes=attributes, expression=expression)
             # Add code to hierarchy
             h.codes[code] = c
+            if not c.parent:
+                h.roots_append(c)
             # Add code to level
             if level:
                 level.codes.add(c)
