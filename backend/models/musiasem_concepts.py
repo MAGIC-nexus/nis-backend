@@ -63,7 +63,7 @@ from attr import attrs, attrib
 
 from backend.common.helper import create_dictionary, strcmp, PartialRetrievalDictionary, \
     case_sensitive, is_boolean, is_integer, is_float, is_datetime, is_url, is_uuid, to_datetime, to_integer, to_float, \
-    to_url, to_uuid, to_boolean, to_category, to_str, is_category, is_str, is_geo, to_geo, ascii2hex, \
+    to_url, to_uuid, to_boolean, to_category, to_str, is_category, is_str, is_geo, to_geo, ascii2uuid, \
     Encodable
 from backend.models import ureg, log_level
 from backend.model_services import State, get_case_study_registry_objects, LocallyUniqueIDManager
@@ -103,7 +103,7 @@ class Identifiable(Encodable):
 
     def encode(self):
         return {
-            "ident": ascii2hex(self.ident)
+            "id": ascii2uuid(self.ident)
         }
 
     @property

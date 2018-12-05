@@ -1,7 +1,8 @@
 # -*- coding: utf-8 -*-
-
+import base64
 import collections
 import mimetypes
+import uuid
 from io import BytesIO
 
 import jsonpickle
@@ -1182,13 +1183,13 @@ def str2bool(v: str):
     return str(v).lower() in ("yes", "true", "t", "1")
 
 
-def ascii2hex(s: str) -> str:
+def ascii2uuid(s: str) -> str:
     """
-    Convert an ASCII string to an hexadecimal string
+    Convert an ASCII string to an UUID hexadecimal string
     :param s: an ASCII string
-    :return: an hexadecimal string
+    :return: an UUID hexadecimal string
     """
-    return s.encode(encoding="ascii").hex()
+    return str(uuid.UUID(bytes=base64.a85decode(s)))
 
 
 def ifnull(var, val):
