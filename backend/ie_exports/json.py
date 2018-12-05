@@ -58,12 +58,12 @@ import jsonpickle
 
 from backend.common.helper import create_dictionary, CustomEncoder
 from backend.model_services import State
-from backend.models.musiasem_concepts import Processor, Factor, Parameter, Hierarchy, Taxon
+from backend.models.musiasem_concepts import Processor, Factor, Parameter, Hierarchy, Taxon, Observer
 from backend.solving import BasicQuery
 
 
 def export_model_to_json(state: State) -> str:
-    object_types = [Processor, Parameter, Hierarchy
+    object_types = [Processor, Parameter, Hierarchy, Observer
      #, Factor, FactorType,
      # FactorQuantitativeObservation,
      # FactorTypesRelationUnidirectionalLinearTransformObservation,

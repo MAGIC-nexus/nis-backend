@@ -624,13 +624,13 @@ class Hierarchy(Nameable, Identifiable, Encodable):
                     nodes_list.extend(hierarchy_to_list(list(node.get_children())))
             return nodes_list
 
-        d = {
+        d = Encodable.parents_encode(self, __class__)
+
+        d.update({
             "description": self._description,
             "hierarchy_group": None if not self.hierarchy_group else self.hierarchy_group.encode(),
             "nodes": hierarchy_to_list(self.roots)
-        }
-
-        d.update(Encodable.parents_encode(self, __class__))
+        })
 
         return d
 
@@ -845,11 +845,12 @@ class Taxon(Identifiable, HierarchyNode, HierarchyExpression, Qualifiable):
         self._description = description
 
     def encode(self):
-        d = {
-            "description": self.description
-        }
+        d = Encodable.parents_encode(self, __class__)
 
-        d.update(Encodable.parents_encode(self, __class__))
+        d.update({
+            "description": self.description
+        })
+
         return d
 
     @staticmethod
@@ -897,41 +898,156 @@ class Context(Identifiable, Nameable, Qualifiable):
         return {"_t": "ctx", "_n": self.name, "__id": self.ident}
 
 
-class ReferenceType(Enum):
-    provenance = 2,
-    geographic = 3,
-    bibliography = 4,
+class Observer(Identifiable, Nameable, Encodable):
+    """ An entity capable of producing Observations on an Observable
+        In our context, it is a process obtaining data
+    """
+    no_observer_specified = "_default_observer"
+
+    def __init__(self, name, description=None):
+        Identifiable.__init__(self)
+        Nameable.__init__(self, name)
+        self._description = description  # Informal description of the observation process (it could be just a manual transcription of numbers from a book)
+        self._observation_process_description = None  # Formal description of the observation process
+        self._observables = []  # type: List[Observable]
+
+    def encode(self):
+        d = Encodable.parents_encode(self, __class__)
+
+        d.update({
+            "description": self._description,
+            "observation_process_description": self._observation_process_description,
+            "observables": self.observables
+        })
+
+        return d
+
+    @property
+    def observables(self):
+        return self._observables
+
+    def observables_append(self, oble):
+        if isinstance(oble, (list, set)):
+            lst = oble
+        else:
+            lst = [oble]
+
+        for o in lst:
+            if o not in self._observables:
+                self._observables.append(o)
+
+    @staticmethod
+    def partial_key(name: str=None):
+        if name:
+            return {"_t": "o", "_n": name}
+        else:
+            return {"_t": "o"}
+
+    def key(self):
+        """
+        Return a Key for the identification of the Observer in the registry
+        :param registry:
+        :return:
+        """
+        return {"_t": "o", "_n": self.name, "__id": self.ident}
 
 
-class Reference(Nameable, Identifiable, Qualifiable):
+class Reference(Identifiable, Nameable, Qualifiable):
     """ A dictionary containing a set of key-value pairs
         with some validation schema (search code for "ref_prof" global variable)
     """
-    def __init__(self, name, ref_type, content):
+    def __init__(self, name, content):
         """
-
         :param name:
-        :param ref_type: One of the elements declared in "ref_prof"
         :param content:
         """
         Identifiable.__init__(self)
         Nameable.__init__(self, name)
         Qualifiable.__init__(self, content)
-        self._ref_type = ref_type
+
+
+class GeographicReference(Reference, Encodable):
+    def __init__(self, name, content):
+        """
+        :param name:
+        :param content:
+        """
+        Reference.__init__(self, name, content)
 
     # TODO A method to validate that attributes
 
+    def encode(self):
+        d = Encodable.parents_encode(self, __class__)
+
+        return d
+
     @staticmethod
-    def partial_key(name: str=None, ref_type: str=None):
-        d = dict(_t="r")
+    def partial_key(name: str=None):
+        d = dict(_t="rg")
         if name:
             d["_n"] = name
-        if ref_type:
-            d["_rt"] = ref_type
         return d
 
     def key(self):
-        return {"_t": "r", "_n": self.name, "_rt": self._ref_type, "__o": self.ident}
+        return {"_t": "rg", "_n": self.name, "__o": self.ident}
+
+
+class BibliographicReference(Reference, Observer, Encodable):
+    def __init__(self, name, content):
+        """
+        :param name:
+        :param content:
+        """
+        Reference.__init__(self, name, content)
+        Observer.__init__(self, name, description=None)
+
+    # TODO A method to validate that attributes
+
+    def encode(self):
+        d = {"type": "bibliographic_reference"}
+
+        d.update(Encodable.parents_encode(self, __class__))
+
+        return d
+
+    @staticmethod
+    def partial_key(name: str=None):
+        d = dict(_t="rb")
+        if name:
+            d["_n"] = name
+        return d
+
+    def key(self):
+        return {"_t": "rb", "_n": self.name, "__o": self.ident}
+
+
+class ProvenanceReference(Reference, Observer, Encodable):
+    def __init__(self, name, content):
+        """
+        :param name:
+        :param content:
+        """
+        Reference.__init__(self, name, content)
+        Observer.__init__(self, name, description=None)
+
+    # TODO A method to validate that attributes
+
+    def encode(self):
+        d = {"type": "provenance_reference"}
+
+        d.update(Encodable.parents_encode(self, __class__))
+
+        return d
+
+    @staticmethod
+    def partial_key(name: str=None):
+        d = dict(_t="rp")
+        if name:
+            d["_n"] = name
+        return d
+
+    def key(self):
+        return {"_t": "rp", "_n": self.name, "__o": self.ident}
 
 
 # #################################################################################################################### #
@@ -950,62 +1066,6 @@ class Source(Nameable, Qualifiable):
         self._location = None  # Where is the source accessible
         self._address = None  # Address to have direct access to the source
         Qualifiable.__init__(self, attributes2)
-
-
-class Observer(Identifiable, Nameable):
-    """ An entity capable of producing Observations on an Observable
-        In our context, it is a process obtaining data
-    """
-    no_observer_specified = "_default_observer"
-
-    def __init__(self, name, description=None):
-        Identifiable.__init__(self)
-        Nameable.__init__(self, name)
-        self._description = description  # Informal description of the observation process (it could be just a manual transcription of numbers from a book)
-        self._observation_process_description = None  # Formal description of the observation process
-        self._sources = []  # type: List[Source]
-        self._observables = []  # type: List[Observable]
-
-    @property
-    def observables(self):
-        return self._observables
-
-    def observables_append(self, oble):
-        if isinstance(oble, (list, set)):
-            lst = oble
-        else:
-            lst = [oble]
-
-        for o in lst:
-            if o not in self._observables:
-                self._observables.append(o)
-
-    @property
-    def sources(self):
-        return self._sources
-
-    def sources_append(self, source):
-        if isinstance(source, (list, set)):
-            lst = source
-        else:
-            lst = [source]
-
-        self._sources.extend(lst)
-
-    @staticmethod
-    def partial_key(name: str=None):
-        if name:
-            return {"_t": "o", "_n": name}
-        else:
-            return {"_t": "o"}
-
-    def key(self):
-        """
-        Return a Key for the identification of the Observer in the registry
-        :param registry:
-        :return:
-        """
-        return {"_t": "o", "_n": self.name, "__id": self.ident}
 
 
 class FactorType(Identifiable, HierarchyNode, HierarchyExpression, Taggable, Qualifiable, Encodable):  # Flow or fund type (not attached to a Processor)
@@ -1027,12 +1087,12 @@ class FactorType(Identifiable, HierarchyNode, HierarchyExpression, Taggable, Qua
         self._factors = []
 
     def encode(self):
-        d = {
+        d = Encodable.parents_encode(self, __class__)
+
+        d.update({
             'roegen_type': self.roegen_type.name,
             'orientation': self.orientation
-        }
-
-        d.update(Encodable.parents_encode(self, __class__))
+        })
 
         return d
 
@@ -1136,21 +1196,19 @@ class Processor(Identifiable, Nameable, Taggable, Qualifiable, Automatable, Obse
         self._referenced_processor = referenced_processor
 
     def encode(self):
-        d = {
-            'type': self.type_processor,
-            'external': self.external,
-            'stock': self.stock,
-            'instantiation_type': self.instantiation_type,
-            'interfaces': self.factors
-        }
-
-        d.update(Identifiable.encode(self))
+        d = Identifiable.encode(self)
         d.update(Nameable.encode(self))
         d.update(Taggable.encode(self))
         d.update(Qualifiable.encode(self))
         d.update(Automatable.encode(self))
 
-        #d.update(Encodable.parents_encode(self, __class__))
+        d.update({
+            'type': self.type_processor,
+            'external': self.external,
+            'stock': self.stock,
+            'instantiation_type': self.instantiation_type,
+            'interfaces': self.factors
+        })
 
         return d
 
@@ -1436,12 +1494,12 @@ class Factor(Identifiable, Nameable, Taggable, Qualifiable, Observable, Automata
         self._referenced_factor = referenced_factor
 
     def encode(self):
-        d = {
+        d = Encodable.parents_encode(self, __class__)
+
+        d.update({
             'type': self.type,
             'interface_type': self.taxon
-        }
-
-        d.update(Encodable.parents_encode(self, __class__))
+        })
 
         return d
 
@@ -2293,16 +2351,16 @@ class Parameter(Nameable, Identifiable, Encodable):
         self._current_value = None
 
     def encode(self):
-        d = {
+        d = Encodable.parents_encode(self, __class__)
+
+        d.update({
             'type': self._type,
             'range': self._range,
             'description': self._description,
             'default_value': self._default_value,
             'group': self._group,
             'current_value': self._current_value
-        }
-
-        d.update(Encodable.parents_encode(self, __class__))
+        })
 
         return d
 
@@ -2361,15 +2419,15 @@ class Indicator(Nameable, Identifiable, Encodable):
         self._description = description
 
     def encode(self):
-        d = {
+        d = Encodable.parents_encode(self, __class__)
+
+        d.update({
             'formula': self._formula,
             'from_indicator': self._from_indicator,
             'benchmark': self._benchmark,
             'indicator_category': self._indicator_category.name,
             'description': self._description
-        }
-
-        d.update(Encodable.parents_encode(self, __class__))
+        })
 
         return d
 

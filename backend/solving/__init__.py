@@ -56,7 +56,7 @@ class BasicQuery(IQueryObjects):
                 # Store result
                 requested[object_class] = objects
             else:
-                raise Exception("Class not found in BasicQuery.execute(): " + str(object_class_name))
+                raise Exception("Class not supported in BasicQuery.execute(): " + str(object_class_name))
 
         return requested
 

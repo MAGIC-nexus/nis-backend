@@ -414,7 +414,8 @@ class TestCommandFiles(unittest.TestCase):
         :return:
         """
         #file_path = os.path.dirname(os.path.abspath(__file__)) + "/z_input_files/v2/03_Soslaires_no_parameters.xlsx"
-        file_path = os.path.dirname(os.path.abspath(__file__)) + "/z_input_files/v2/02_declare_hierarchies_and_cloning_and_scaling.xlsx"
+        #file_path = os.path.dirname(os.path.abspath(__file__)) + "/z_input_files/v2/02_declare_hierarchies_and_cloning_and_scaling.xlsx"
+        file_path = os.path.dirname(os.path.abspath(__file__)) + "/z_input_files/v2/06_upscale_almeria.xlsx"
         isess = execute_file(file_path, generator_type="spreadsheet")
         export_model_to_json(isess.state)
         isess.close_db_session()

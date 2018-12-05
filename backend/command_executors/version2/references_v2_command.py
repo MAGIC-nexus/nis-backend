@@ -3,17 +3,22 @@ import json
 from backend.command_generators import Issue
 from backend.command_generators.spreadsheet_command_parsers_v2 import IssueLocation
 from backend.model_services import IExecutableCommand, get_case_study_registry_objects
-from backend.models.musiasem_concepts import Reference
+from backend.models.musiasem_concepts import Reference, ProvenanceReference, BibliographicReference, \
+    GeographicReference, Observer
 
 
 class ReferencesV2Command(IExecutableCommand):
     """ It is a mere data container
         Depending on the type, the format can be controlled with a predefined schema
     """
-    def __init__(self, name: str, ref_type: str):
+    def __init__(self, name: str, ref_type: type):
         self._name = name
         self._content = None
         self._ref_type = ref_type
+
+    @property
+    def ref_type(self):
+        return self._ref_type
 
     def execute(self, state: "State"):
         """
@@ -35,22 +40,25 @@ class ReferencesV2Command(IExecutableCommand):
                 continue
             else:
                 ref_id = ref["ref_id"]
-                ref_type = self._ref_type
-                existing = glb_idx.get(Reference.partial_key(ref_id, ref_type))
+                existing = glb_idx.get(self.ref_type.partial_key(ref_id))
                 if len(existing) == 1:
                     issues.append(Issue(itype=3,
-                                        description="Reference '"+ref_id+"' of type '"+ref_type+"' is already defined. Not allowed",
+                                        description="Reference '"+ref_id+"' of type '"+str(self.ref_type)+"' is already defined. Not allowed",
                                         location=IssueLocation(sheet_name=name, row=r, column=None)))
                     continue
                 elif len(existing) > 1:  # This condition should not occur...
                     issues.append(Issue(itype=3,
-                                        description="The reference '"+ref_id+"' of type '"+ref_type+"' is defined more than one time ("+str(len(existing))+")",
+                                        description="The reference '"+ref_id+"' of type '"+str(self.ref_type)+"' is defined more than one time ("+str(len(existing))+")",
                                         location=IssueLocation(sheet_name=name, row=r, column=None)))
                     continue
 
                 # Create and store the Reference
-                reference = Reference(ref_id, ref_type, ref)
+                reference = self.ref_type(ref_id, ref)
                 glb_idx.put(reference.key(), reference)
+
+                # BibliographicReference and ProvenanceReference ar also Observer
+                if isinstance(reference, Observer):
+                    glb_idx.put(Observer.key(reference), reference)
 
         return issues, None
 
@@ -73,14 +81,14 @@ class ReferencesV2Command(IExecutableCommand):
 
 class ProvenanceReferencesCommand(ReferencesV2Command):
     def __init__(self, name: str):
-        ReferencesV2Command.__init__(self, name, "prov")
+        ReferencesV2Command.__init__(self, name, ProvenanceReference)
 
 
 class BibliographicReferencesCommand(ReferencesV2Command):
     def __init__(self, name: str):
-        ReferencesV2Command.__init__(self, name, "bib")
+        ReferencesV2Command.__init__(self, name, BibliographicReference)
 
 
 class GeographicReferencesCommand(ReferencesV2Command):
     def __init__(self, name: str):
-        ReferencesV2Command.__init__(self, name, "geo")
+        ReferencesV2Command.__init__(self, name, GeographicReference)

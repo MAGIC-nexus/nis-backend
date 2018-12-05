@@ -331,9 +331,9 @@ class InterfacesAndQualifiedQuantitiesCommand(IExecutableCommand):
             # Find Observer
             oer = glb_idx.get(Observer.partial_key(f_source))
             if not oer:
-                # TODO Find reference, and initialize Observer properly!!!
-                oer = Observer(f_source)
-                glb_idx.put(oer.key(), oer)
+                issues.append(Issue(itype=2,
+                                    description=f"Observer '{f_source}' has not been found.",
+                                    location=IssueLocation(sheet_name=name, row=i, column=None)))
             else:
                 oer = oer[0]
 
