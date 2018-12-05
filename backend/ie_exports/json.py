@@ -58,7 +58,7 @@ import jsonpickle
 
 from backend.common.helper import create_dictionary, CustomEncoder
 from backend.model_services import State
-from backend.models.musiasem_concepts import Processor, Factor, Parameter, Hierarchy
+from backend.models.musiasem_concepts import Processor, Factor, Parameter, Hierarchy, Taxon
 from backend.solving import BasicQuery
 
 
@@ -76,8 +76,19 @@ def export_model_to_json(state: State) -> str:
 
     for obj_type in object_types:
         print(obj_type.__name__)
-        for obj in objects.get(obj_type) or []:
-            print(json.dumps(obj, cls=CustomEncoder, indent=4))
+
+        selected_objects = objects.get(obj_type)
+
+        if selected_objects:
+
+            if obj_type is Hierarchy:
+                # Just get the Hierarchy objects of type Taxon
+                selected_objects = [o for o in selected_objects if o.hierarchy_type == Taxon]
+                # Sort the list to show the "code lists" first
+                selected_objects.sort(key=lambda h: not h.is_code_list)
+
+            for obj in selected_objects:
+                print(json.dumps(obj, cls=CustomEncoder, indent=4))
 
     return "TODO"
 

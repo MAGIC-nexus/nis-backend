@@ -131,6 +131,8 @@ class HierarchyCategoriesCommand(IExecutableCommand):
                                         description="ReferredHierarchy '"+tmp+"' not defined previously",
                                         location=IssueLocation(sheet_name=name, row=r, column=None)))
                     continue
+                else:
+                    ref_hierarchy = ref_hierarchy[0]
 
                 ref_code = ref_hierarchy.codes.get(code, None)
                 if not ref_code:

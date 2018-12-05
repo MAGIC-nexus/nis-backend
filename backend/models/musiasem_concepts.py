@@ -340,7 +340,7 @@ class HierarchyNode(Nameable, Encodable):
 
         d = {
             "name": self.name,
-            "label": self._label,
+            "label": self.label,
             "description": self.description,
             "parent": encoded_parent_node,
             "referred_node": encoded_referred_node
@@ -382,6 +382,10 @@ class HierarchyNode(Nameable, Encodable):
     @property
     def description(self):
         return self._description
+
+    @property
+    def label(self):
+        return self._label
 
     @property
     def level(self):
@@ -647,6 +651,12 @@ class Hierarchy(Nameable, Identifiable, Encodable):
         else:
             ret = Taxon
         return ret
+
+    @property
+    def is_code_list(self):
+        if self._roots:
+            return self._roots[0].referred_node is None
+        return False
 
     @property
     def roots(self):
