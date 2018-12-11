@@ -64,7 +64,7 @@ from attr import attrs, attrib
 from backend.common.helper import create_dictionary, strcmp, PartialRetrievalDictionary, \
     case_sensitive, is_boolean, is_integer, is_float, is_datetime, is_url, is_uuid, to_datetime, to_integer, to_float, \
     to_url, to_uuid, to_boolean, to_category, to_str, is_category, is_str, is_geo, to_geo, ascii2uuid, \
-    Encodable
+    Encodable, name_and_id_dict
 from backend.models import ureg, log_level
 from backend.model_services import State, get_case_study_registry_objects, LocallyUniqueIDManager
 from backend.models import CodeImmutable
@@ -103,12 +103,16 @@ class Identifiable(Encodable):
 
     def encode(self):
         return {
-            "id": ascii2uuid(self.ident)
+            "id": self.uuid
         }
 
     @property
     def ident(self):
         return self._id
+
+    @property
+    def uuid(self):
+        return ascii2uuid(self._id)
 
 
 class Nameable(Encodable):
@@ -130,17 +134,12 @@ class Nameable(Encodable):
         self._name = n
 
 
-class Taggable(Encodable):
+class Taggable:
     """ A concept with a set of tags """
     def __init__(self, tags):
         self._tags = set()
         if tags:
             self.tags_append(tags)
-
-    def encode(self):
-        return {
-            "tags": self.tags
-        }
 
     @property
     def tags(self):
@@ -285,7 +284,7 @@ class Observable(Encodable):
 
     def encode(self):
         return {
-            "observations": self.observations
+            "observations": [o for o in self.observations if not isinstance(o, RelationObservation)]
         }
 
     # Methods to manage the properties
@@ -331,18 +330,14 @@ class HierarchyNode(Nameable, Encodable):
         if self.referred_node:
             encoded_referred_node = {
                 "name": self.referred_node.name,
-                "hierarchy": self.referred_node.hierarchy.name
+                "hierarchy": self.referred_node.hierarchy.name if self.referred_node.hierarchy else None
             }
-
-        encoded_parent_node = None
-        if self.parent:
-            encoded_parent_node = self.parent.name
 
         d = {
             "name": self.name,
             "label": self.label,
             "description": self.description,
-            "parent": encoded_parent_node,
+            "parent": self.parent.name if self.parent else None,
             "referred_node": encoded_referred_node
         }
         return d
@@ -917,7 +912,7 @@ class Observer(Identifiable, Nameable, Encodable):
         d.update({
             "description": self._description,
             "observation_process_description": self._observation_process_description,
-            "observables": self.observables
+            "observables": [{"name": obs.name, "id": obs.uuid} for obs in self.observables]
         })
 
         return d
@@ -1090,9 +1085,12 @@ class FactorType(Identifiable, HierarchyNode, HierarchyExpression, Taggable, Qua
         d = Encodable.parents_encode(self, __class__)
 
         d.update({
-            'roegen_type': self.roegen_type.name,
+            'roegen_type': self.roegen_type.name if self.roegen_type else None,
             'orientation': self.orientation
         })
+
+        # Remove property inherited from HierarchyNode because it is always "null" for FactorType
+        d.pop("referred_node", None)
 
         return d
 
@@ -1198,7 +1196,6 @@ class Processor(Identifiable, Nameable, Taggable, Qualifiable, Automatable, Obse
     def encode(self):
         d = Identifiable.encode(self)
         d.update(Nameable.encode(self))
-        d.update(Taggable.encode(self))
         d.update(Qualifiable.encode(self))
         d.update(Automatable.encode(self))
 
@@ -1497,8 +1494,8 @@ class Factor(Identifiable, Nameable, Taggable, Qualifiable, Observable, Automata
         d = Encodable.parents_encode(self, __class__)
 
         d.update({
-            'type': self.type,
-            'interface_type': self.taxon
+            'type': {"external": self.type.external, "incoming": self.type.incoming} if self.type else None,
+            'interface_type': name_and_id_dict(self.taxon)
         })
 
         return d
@@ -1755,7 +1752,7 @@ class FactorQuantitativeObservation(Taggable, Qualifiable, Automatable, Encodabl
 
     def encode(self):
         d = {
-            "value": self.value,
+            "value": self.value
             #"interface": self.factor,
             #"observer": self.observer
         }
@@ -1800,23 +1797,39 @@ class FactorQuantitativeObservation(Taggable, Qualifiable, Automatable, Encodabl
         return d
 
 
-class RelationObservation(Taggable, Qualifiable, Automatable):  # All relation kinds
-    pass
+class RelationObservation(Taggable, Qualifiable, Automatable, Encodable):  # All relation kinds
+
+    def encode(self):
+        d = Encodable.parents_encode(self, __class__)
+
+        return d
 
 
-class ProcessorsRelationObservation(RelationObservation):  # Just base of ProcessorRelations
-    pass
+class ProcessorsRelationObservation(RelationObservation, Encodable):  # Just base of ProcessorRelations
+
+    def encode(self):
+        d = Encodable.parents_encode(self, __class__)
+
+        return d
 
 
-class FactorTypesRelationObservation(RelationObservation):  # Just base of FactorTypesRelations
-    pass
+class FactorTypesRelationObservation(RelationObservation, Encodable):  # Just base of FactorTypesRelations
+
+    def encode(self):
+        d = Encodable.parents_encode(self, __class__)
+
+        return d
 
 
-class FactorsRelationObservation(RelationObservation):  # Just base of FactorRelations
-    pass
+class FactorsRelationObservation(RelationObservation, Encodable):  # Just base of FactorRelations
+
+    def encode(self):
+        d = Encodable.parents_encode(self, __class__)
+
+        return d
 
 
-class FactorTypesLT_Specific:
+class FactorTypesLT_Specific(Encodable):
     def __init__(self, alpha: Union[float, str], origin_unit: str=None, dest_unit: str=None,
                  src_proc_context_qry: str=None, dst_proc_context_qry: str=None,
                  observer: Observer=None):
@@ -1838,8 +1851,18 @@ class FactorTypesLT_Specific:
         self.dst_proc_context_qry = dst_proc_context_qry
         self.observer = observer
 
+    def encode(self):
+        return {
+            "alpha": self.alpha,
+            "origin_unit": self.origin_unit,
+            "dest_unit": self.dest_unit,
+            "src_proc_context_qry": self.src_proc_context_qry,
+            "dst_proc_context_qry": self.dst_proc_context_qry,
+            "observer": name_and_id_dict(self.observer)
+        }
 
-class FactorTypesRelationUnidirectionalLinearTransformObservation(FactorTypesRelationObservation):
+
+class FactorTypesRelationUnidirectionalLinearTransformObservation(FactorTypesRelationObservation, Encodable):
     """
     Expression of an Unidirectional Linear Transform, from an origin FactorType to a destination FactorType
     A weight can be a expression containing parameters
@@ -1861,6 +1884,22 @@ class FactorTypesRelationUnidirectionalLinearTransformObservation(FactorTypesRel
         self._observer = observer
         self._origin_context = origin_context
         self._destination_context = destination_context
+
+    def encode(self):
+        d = Encodable.parents_encode(self, __class__)
+
+        d.update({
+            "origin": name_and_id_dict(self.origin),
+            "destination": name_and_id_dict(self.destination),
+            "observer": name_and_id_dict(self.observer),
+            "weight": self._weight,
+            "generate_back_flow": self._generate_back_flow,
+            "scales": self._scales,
+            "origin_context": self._origin_context,
+            "destination_context": self._destination_context
+        })
+
+        return d
 
     @staticmethod
     def create_and_append(origin: FactorType, destination: FactorType, weight, origin_context=None, destination_context=None, observer: Observer=None, tags=None, attributes=None):
@@ -1908,7 +1947,7 @@ class FactorTypesRelationUnidirectionalLinearTransformObservation(FactorTypesRel
         return d
 
 
-class ProcessorsRelationIsAObservation(ProcessorsRelationObservation):
+class ProcessorsRelationIsAObservation(ProcessorsRelationObservation, Encodable):
     def __init__(self, parent: Processor, child: Processor, observer: Observer=None, tags=None, attributes=None):
         Taggable.__init__(self, tags)
         Qualifiable.__init__(self, attributes)
@@ -1916,6 +1955,17 @@ class ProcessorsRelationIsAObservation(ProcessorsRelationObservation):
         self._parent = parent
         self._child = child
         self._observer = observer
+
+    def encode(self):
+        d = Encodable.parents_encode(self, __class__)
+
+        d.update({
+            "origin": name_and_id_dict(self._parent),
+            "destination": name_and_id_dict(self._child),
+            "observer": name_and_id_dict(self.observer)
+        })
+
+        return d
 
     @staticmethod
     def create_and_append(parent: Processor, child: Processor, observer: Observer, tags=None, attributes=None):
@@ -1962,7 +2012,7 @@ class ProcessorsRelationIsAObservation(ProcessorsRelationObservation):
         return d
 
 
-class ProcessorsRelationPartOfObservation(ProcessorsRelationObservation):
+class ProcessorsRelationPartOfObservation(ProcessorsRelationObservation, Encodable):
     def __init__(self, parent: Processor, child: Processor, observer: Observer=None, tags=None, attributes=None):
         Taggable.__init__(self, tags)
         Qualifiable.__init__(self, attributes)
@@ -1970,6 +2020,17 @@ class ProcessorsRelationPartOfObservation(ProcessorsRelationObservation):
         self._parent = parent
         self._child = child
         self._observer = observer
+
+    def encode(self):
+        d = Encodable.parents_encode(self, __class__)
+
+        d.update({
+            "origin": name_and_id_dict(self._parent),
+            "destination": name_and_id_dict(self._child),
+            "observer": name_and_id_dict(self.observer)
+        })
+
+        return d
 
     @staticmethod
     def create_and_append(parent: Processor, child: Processor, observer: Observer, tags=None, attributes=None):
@@ -2091,6 +2152,19 @@ class ProcessorsRelationUpscaleObservation(ProcessorsRelationObservation):
         self._factor_name = factor_name
         self._quantity = quantity
 
+    def encode(self):
+        d = Encodable.parents_encode(self, __class__)
+
+        d.update({
+            "origin": name_and_id_dict(self._parent),
+            "destination": name_and_id_dict(self._child),
+            "observer": name_and_id_dict(self.observer),
+            "interface": self.factor_name,
+            "quantity": self.quantity
+        })
+
+        return d
+
     @staticmethod
     def create_and_append(parent: Processor, child: Processor, observer: Observer, factor_name: str, quantity: str, tags=None, attributes=None):
         o = ProcessorsRelationUpscaleObservation(parent, child, observer, factor_name, quantity, tags, attributes)
@@ -2185,7 +2259,7 @@ class ProcessorsRelationUpscaleObservation(ProcessorsRelationObservation):
         return d
 
 
-class FactorsRelationDirectedFlowObservation(FactorsRelationObservation):
+class FactorsRelationDirectedFlowObservation(FactorsRelationObservation, Encodable):
     """
     Represents a directed Flow, from a source to a target Factor
     from backend.models.musiasem_concepts import Processor, Factor, Observer, FactorsRelationDirectedFlowObservation
@@ -2201,6 +2275,18 @@ class FactorsRelationDirectedFlowObservation(FactorsRelationObservation):
         self._target = target
         self._weight = weight
         self._observer = observer
+
+    def encode(self):
+        d = Encodable.parents_encode(self, __class__)
+
+        d.update({
+            "origin": name_and_id_dict(self.source_factor),
+            "destination": name_and_id_dict(self.target_factor),
+            "observer": name_and_id_dict(self.observer),
+            "weight": self.weight
+        })
+
+        return d
 
     @staticmethod
     def create_and_append(source: Factor, target: Factor, observer: Observer, weight: str=None, tags=None, attributes=None):
@@ -2358,8 +2444,7 @@ class Parameter(Nameable, Identifiable, Encodable):
             'range': self._range,
             'description': self._description,
             'default_value': self._default_value,
-            'group': self._group,
-            'current_value': self._current_value
+            'group': self._group
         })
 
         return d
@@ -2425,7 +2510,7 @@ class Indicator(Nameable, Identifiable, Encodable):
             'formula': self._formula,
             'from_indicator': self._from_indicator,
             'benchmark': self._benchmark,
-            'indicator_category': self._indicator_category.name,
+            'indicator_category': self._indicator_category.name if self._indicator_category else None,
             'description': self._description
         })
 

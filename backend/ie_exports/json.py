@@ -54,65 +54,82 @@ Relationships:
 ]
 """
 import json
-import jsonpickle
+from collections import OrderedDict
 
-from backend.common.helper import create_dictionary, CustomEncoder
+import jsonpickle
+from typing import Dict, List, Union, Optional, Any
+
+from backend.common.helper import create_dictionary, CustomEncoder, values_of_nested_dictionary
 from backend.model_services import State
-from backend.models.musiasem_concepts import Processor, Factor, Parameter, Hierarchy, Taxon, Observer
+from backend.models.musiasem_concepts import Processor, Parameter, Hierarchy, Taxon, Observer, FactorType, \
+    ProcessorsRelationPartOfObservation, ProcessorsRelationUpscaleObservation, ProcessorsRelationIsAObservation, \
+    FactorsRelationDirectedFlowObservation, FactorTypesRelationUnidirectionalLinearTransformObservation
 from backend.solving import BasicQuery
 
 
+JsonStructureType = Dict[str, Optional[Union[type, "JsonStructureType"]]]
+
+
+def objects_list_to_string(objects_list: List[object], object_type: type) -> str:
+    json_string = ""
+
+    if objects_list:
+        if object_type is Hierarchy:
+            # Just get the Hierarchy objects of type Taxon
+            objects_list = [o for o in objects_list if o.hierarchy_type == Taxon]
+            # Sort the list to show the "code lists" first
+            objects_list.sort(key=lambda h: not h.is_code_list)
+
+        for obj in objects_list:
+            json_string += ", " if json_string else ""
+            json_string += json.dumps(obj, cls=CustomEncoder)
+
+    return json_string
+
+
+def create_json_string_from_objects(objects: Dict[type, List[object]], json_structure: JsonStructureType) -> str:
+
+    def json_structure_to_string(sections_and_types: JsonStructureType) -> str:
+        json_string = ""
+        for section_name, output_type in sections_and_types.items():
+            json_string += ", " if json_string else ""
+            json_string += f'"{section_name}": '
+            if not isinstance(output_type, dict):
+                json_string += "[" + objects_list_to_string(objects.get(output_type), output_type) + "]"
+            else:
+                json_string += "{" + json_structure_to_string(output_type) + "}"
+
+        return json_string
+
+    return "{" + json_structure_to_string(json_structure) + "}"
+
+
 def export_model_to_json(state: State) -> str:
-    object_types = [Processor, Parameter, Hierarchy, Observer
-     #, Factor, FactorType,
-     # FactorQuantitativeObservation,
-     # FactorTypesRelationUnidirectionalLinearTransformObservation,
-     # ProcessorsRelationPartOfObservation, ProcessorsRelationUpscaleObservation,
-     # ProcessorsRelationUndirectedFlowObservation,
-     # FactorsRelationDirectedFlowObservation
-     ]
+
+    json_structure: JsonStructureType = OrderedDict(
+        {"Parameters": Parameter,
+         "CodeHierarchies": Hierarchy,
+         "Observers": Observer,
+         "InterfaceTypes": FactorType,
+         "InterfaceTypeConverts": FactorTypesRelationUnidirectionalLinearTransformObservation,
+         "Processors": Processor,
+         "Relationships": OrderedDict(
+             {"PartOf": ProcessorsRelationPartOfObservation,
+              "Upscale": ProcessorsRelationUpscaleObservation,
+              "IsA": ProcessorsRelationIsAObservation,
+              "DirectedFlow": FactorsRelationDirectedFlowObservation
+              }
+         )
+         }
+    )
+
+    # Get objects from state
     query = BasicQuery(state)
-    objects = query.execute(object_types, filt="")
+    objects = query.execute(values_of_nested_dictionary(json_structure), filt="")
 
-    for obj_type in object_types:
-        print(obj_type.__name__)
+    json_dict = create_json_string_from_objects(objects, json_structure)
 
-        selected_objects = objects.get(obj_type)
+    print(json_dict)
 
-        if selected_objects:
+    return json_dict
 
-            if obj_type is Hierarchy:
-                # Just get the Hierarchy objects of type Taxon
-                selected_objects = [o for o in selected_objects if o.hierarchy_type == Taxon]
-                # Sort the list to show the "code lists" first
-                selected_objects.sort(key=lambda h: not h.is_code_list)
-
-            for obj in selected_objects:
-                print(json.dumps(obj, cls=CustomEncoder, indent=4))
-
-    return "TODO"
-
-
-def test():
-    class Foo:
-        def __init__(self):
-            self.x = 1
-            self.y = 2
-
-        def __getstate__(self):
-            return {'a': self.x * 2, 'b': self.y * 2}
-
-    foo = Foo()
-    foo_str = jsonpickle.encode(foo, unpicklable=False)
-    print(type(foo_str))
-    print(foo_str)
-
-    dic = create_dictionary(case_sens=False, data={'A': 2, 'b': 4})
-    print(type(dic))
-    print(jsonpickle.encode(dic, unpicklable=False))
-    print(dic.get_data())
-    print(dic.get_original_data())
-
-
-if __name__ == '__main__':
-    test()

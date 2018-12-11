@@ -16,7 +16,7 @@ import itertools
 import ast
 import json
 import urllib
-from typing import IO, List, Tuple, Dict, Any
+from typing import IO, List, Tuple, Dict, Any, Optional
 from uuid import UUID
 import numpy as np
 from flask import after_this_request, request
@@ -1209,3 +1209,18 @@ def translate_case(current_names: List[str], new_names: List[str]) -> List[str]:
     new_names_dict = {name.lower(): name for name in new_names}
     translated_names = [new_names_dict.get(name.lower(), name) for name in current_names]
     return translated_names
+
+
+def values_of_nested_dictionary(d: Dict)-> List:
+    for v in d.values():
+        if not isinstance(v, Dict):
+            yield v
+        else:
+            yield from values_of_nested_dictionary(v)
+
+
+def name_and_id_dict(obj: object) -> Optional[Dict]:
+    if obj:
+        return {"name": obj.name, "id": obj.uuid}
+    else:
+        None

@@ -4,7 +4,8 @@ from abc import ABCMeta, abstractmethod
 from backend.models.musiasem_concepts import Processor, Observer, FactorType, Factor, \
     FactorQuantitativeObservation, FactorTypesRelationUnidirectionalLinearTransformObservation, \
     ProcessorsRelationPartOfObservation, ProcessorsRelationUndirectedFlowObservation, \
-    ProcessorsRelationUpscaleObservation, FactorsRelationDirectedFlowObservation, Hierarchy, Parameter
+    ProcessorsRelationUpscaleObservation, FactorsRelationDirectedFlowObservation, Hierarchy, Parameter, \
+    ProcessorsRelationIsAObservation
 from backend.model_services import get_case_study_registry_objects, State
 from backend.common.helper import create_dictionary, PartialRetrievalDictionary
 
@@ -34,7 +35,7 @@ class BasicQuery(IQueryObjects):
         supported_types = [Observer, Processor, FactorType, Factor,
                            FactorQuantitativeObservation, FactorTypesRelationUnidirectionalLinearTransformObservation,
                            ProcessorsRelationPartOfObservation, ProcessorsRelationUpscaleObservation,
-                           ProcessorsRelationUndirectedFlowObservation,
+                           ProcessorsRelationUndirectedFlowObservation, ProcessorsRelationIsAObservation,
                            FactorsRelationDirectedFlowObservation, Hierarchy, Parameter]
         supported_types_names = {t.__name__.lower(): t for t in supported_types}
 
