@@ -131,6 +131,8 @@ class HierarchyCategoriesCommand(IExecutableCommand):
                                         description="ReferredHierarchy '"+tmp+"' not defined previously",
                                         location=IssueLocation(sheet_name=name, row=r, column=None)))
                     continue
+                else:
+                    ref_hierarchy = ref_hierarchy[0]
 
                 ref_code = ref_hierarchy.codes.get(code, None)
                 if not ref_code:
@@ -160,6 +162,8 @@ class HierarchyCategoriesCommand(IExecutableCommand):
                       attributes=attributes, expression=expression)
             # Add code to hierarchy
             h.codes[code] = c
+            if not c.parent:
+                h.roots_append(c)
             # Add code to level
             if level:
                 level.codes.add(c)
