@@ -1,8 +1,56 @@
 **/__pycache__
 .idea
 
-backend/restful_service/nis_local\.conf
-
-backend/restful_service/nis_unittests\.conf
-
 dump\.rdb
+backend/restful_service/nis_docker_protagoras.conf
+backend/restful_service/nis_local_sqlite.conf
+backend/restful_service/nis_docker_local.conf
+backend/restful_service/nis_docker_naples.conf
+backend_tests/z_input_files/caso_energia_eu_filtrado.xlsx
+backend_tests/z_input_files/caso_energia_eu.xlsx
+backend_tests/z_input_files/simplest_hierarchy.xlsx
+backend_tests/z_input_files/fadn_example.xlsx
+backend_tests/z_input_files/brazilian_oil.xlsx
+backend_tests/z_input_files/error_format_test_musiasem_1.xlsx
+backend_tests/z_input_files/Soslaires_no_parameters_v2.xlsx
+backend_tests/z_input_files/z_input_files.zip
+backend_tests/z_input_files/Soslaires_no_parameters.xlsx
+backend_tests/z_input_files/error_generating_graph_test_spreadsheet_upscale_and_NUSAP.xlsx
+backend_tests/z_input_files/operators_in_expressions.xlsx
+backend_tests/z_input_files/nis-cookies.txt
+install.sh
+Input Output entites of each command.gdsheet
+strategy.ini
+/backend/ie_imports/experimental/UN Comtrade Country List.csv
+/backend/ie_imports/experimental/country_alternative_names.csv
+/backend/ie_imports/experimental/saved_queries.csv
+/backend/ie_imports/experimental/0.csv
+/backend/restful_service/nis_local.conf
+/backend_tests/z_input_files/casos_usuarios/
+/backend_tests/z_input_files/v2/caso_energia_eu_filtrado.xlsx
+/backend_tests/z_input_files/v2/04_brazilian_oil (COMPLETE).xlsx
+/backend_tests/z_input_files/v2/error_format_test_musiasem_1.xlsx
+/backend_tests/z_input_files/v2/Soslaires_no_parameters_v2.xlsx
+/backend_tests/z_input_files/v2/test_json_1.json
+/backend_tests/z_input_files/v2/nis-cookies.txt
+/backend_tests/z_input_files/v2/fadn_example.xlsx
+/backend_tests/z_input_files/v2/input_file.xlsx
+/backend_tests/z_input_files/v2/10_electricity_state_of_the_play (TRANSLATE).xlsx
+/backend_tests/z_input_files/v2/09_mapping_dataset_qry_and_dataset_expansion (translate first).xlsx
+/backend_tests/z_input_files/v2/reproduce_million_rows.xlsx
+/backend_tests/z_input_files/v2/simplest_hierarchy.xlsx
+/backend_tests/z_input_files/v2/11_dataset_to_musiasem_maddalena (TRANSLATE).xlsx
+/backend_tests/z_input_files/v2/test_spreadsheet_4.xlsx
+/backend_tests/z_input_files/v2/test_spreadsheet_1.xlsx
+/backend_tests/z_input_files/v2/two_datasets_with_mappings.xlsx
+/backend_tests/z_input_files/v2/error_generating_graph_test_spreadsheet_upscale_and_NUSAP.xlsx
+/backend_tests/z_input_files/v2/mapping_example_maddalena.xlsx
+/backend_tests/z_input_files/v2/test_spreadsheet_3_dataset.xlsx
+/backend_tests/z_input_files/v2/Soslaires.xlsx
+/backend_tests/z_input_files/v2/a_dataset_with_mappings.xlsx
+/magic_box/static/js/Chart.bundle.js
+/magic_box/static/js/mxClient.js
+/magic_box/static/js/Chart.js
+/magic_box/static/js/mxClient.min.js
+/magic_box/to-do-list.txt
+/frontend/

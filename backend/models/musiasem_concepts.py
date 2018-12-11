@@ -871,7 +871,7 @@ class Context(Identifiable, Nameable, Qualifiable):
     """
     A context is just a named container for attribute sets (Qualifiable)
 
-    Parameters, ScaleChangers, Instantiators, ETL or dataset transforms -and other possible adaptive
+    Parameters, ScaleChangers, ProcessorScalings, ETL or dataset transforms -and other possible adaptive
     MuSIASEM elements-, can take into account how the attributes of base MuSIASEM elements: Processors, Interfaces,
     Hierarchies of Categories, InterfaceTypes, MATCH before applying specific coefficients.
     """

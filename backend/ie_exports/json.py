@@ -4,6 +4,9 @@ Before solving and/or after solving. Clone operations executed. Scales not perfo
 
 It could be something like:
 
+Metadata:
+{
+{,
 Parameters:
 [
  {

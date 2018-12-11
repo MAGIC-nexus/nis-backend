@@ -4,11 +4,11 @@ from backend import CommandField
 from backend.command_generators.parser_field_parsers import simple_ident, unquoted_string, alphanums_string, \
     hierarchy_expression_v2, key_value_list, key_value, parameter_value, expression_with_parameters, \
     time_expression, boolean, indicator_expression, code_string, simple_h_name, domain_definition, context_query, \
-    unit_name, geo_value, url_parser, processor_names, date, value
+    unit_name, geo_value, url_parser, processor_names, date, value, list_simple_ident, reference
 
-data_types = ["Number", "Boolean", "URL", "UUID", "Datetime", "String", "UnitName", "Category", "Geo"]
+data_types = ["Number", "Boolean", "URL", "UUID", "Datetime", "String", "UnitName", "Code", "Geo"]
 concept_types = ["Dimension", "Measure", "Attribute"]
-parameter_types = ["Number", "Category", "Boolean"]
+parameter_types = ["Number", "Code", "Boolean"]
 element_types = ["Parameter", "Processor", "InterfaceType", "Interface"]
 spheres = ["Biosphere", "Technosphere"]
 roegen_types = ["Flow", "Fund"]
@@ -31,11 +31,17 @@ relation_types = [# Relationships between Processors
                   # Relationships between interfaces
                   "flow", "scale", ">", "<"
                   ]
-instantiation_types = ["CloneAndScale", "Scale"]
+processor_scaling_types = ["CloneAndScale", "Scale", "CloneScaled"]
 agent_types = ["Person", "Software", "Organization"]
+geographic_resource_types = ["dataset"]
+geographic_topic_categories = ["Farming", "Biota", "Boundaries", "Climatology", "Meteorology", "Atmosphere", "Economy", "Elevation", "Environment", "GeoscientificInformation", "Health", "Imagery", "BaseMaps", "EarthCover", "Intelligence", "Military", "InlandWaters", "Location", "Oceans", "Planning", "Cadastre", "Society", "Structure", "Transportation", "Utilities", "Communication"]
 bib_entry_types = ["article", "book", "booklet", "conference", "inbook", "incollection", "inproceedings",
                    "manual", "mastersthesis", "misc", "phdtesis", "proceedings", "techreport", "unpublished"]
 bib_months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+command_names = ["Structure", "Scale", "Parameters", "Indicators", "Hierarchies", "HierarchiesMapping",
+                 "AttributeTypes", "DatasetDef", "DatasetData", "DatasetQry", "InterfaceTypes", "BareProcessors",
+                 "Interfaces", "Relationships", "ProcessorScalings", "ScaleChangeMap",
+                 "RefBibliographic", "RefGeographic", "RefProvenance", "ProblemStatement"]
 
 attributeRegex = "@.+"
 
@@ -53,6 +59,8 @@ commands = {
      CommandField(allowed_names=["Label"], name="label", mandatory=False, allowed_values=None, parser=unquoted_string),
      CommandField(allowed_names=["Description"], name="description", mandatory=False, allowed_values=None, parser=unquoted_string),
      CommandField(allowed_names=["Expression", "Formula"], name="expression", mandatory=False, allowed_values=None, parser=hierarchy_expression_v2),
+     CommandField(allowed_names=["GeolocationRef"], name="geolocation_ref", mandatory=False, allowed_values=None, parser=reference),
+     CommandField(allowed_names=["GeolocationCode"], name="geolocation_code", mandatory=False, allowed_values=None, parser=code_string),
      CommandField(allowed_names=["Attributes"], name="attributes", mandatory=False, allowed_values=None, parser=key_value_list),
      CommandField(allowed_names=[attributeRegex], name="attributes", mandatory=False, many_appearances=True, parser=value)
      ],
@@ -65,19 +73,19 @@ commands = {
      CommandField(allowed_names=["Weight"], name="weight", mandatory=True, allowed_values=None, parser=expression_with_parameters),
      ],
     "AttributeTypes":
-    [CommandField(allowed_names=["AttributeTypeName"], name="attribute_type_name", mandatory=True, allowed_values=None, parser=simple_ident),
+    [CommandField(allowed_names=["AttributeType", "AttributeTypeName"], name="attribute_type_name", mandatory=True, allowed_values=None, parser=simple_ident),
      CommandField(allowed_names=["Type"], name="data_type", mandatory=True, allowed_values=data_types, parser=simple_ident),
-     CommandField(allowed_names=["ElementTypes"], name="element_types", mandatory=False, allowed_values=element_types, parser=key_value),
+     CommandField(allowed_names=["ElementTypes"], name="element_types", mandatory=False, allowed_values=element_types, parser=list_simple_ident),
      CommandField(allowed_names=["Domain"], name="domain", mandatory=False, allowed_values=None, parser=domain_definition)  # "domain_definition" for Category and NUmber. Boolean is only True or False. Other data types cannot be easily constrained (URL, UUID, Datetime, Geo, String)
      ],
     "DatasetDef":
-    [CommandField(allowed_names=["DatasetName"], name="dataset_name", mandatory=True, allowed_values=None, parser=simple_ident),
+    [CommandField(allowed_names=["Dataset", "DatasetName"], name="dataset_name", mandatory=True, allowed_values=None, parser=simple_ident),
      CommandField(allowed_names=["DatasetDataLocation"], name="dataset_data_location", mandatory=True, allowed_values=None, parser=url_parser),
      CommandField(allowed_names=["ConceptType"], name="concept_type", mandatory=True, allowed_values=concept_types, parser=simple_ident),
-     CommandField(allowed_names=["ConceptName"], name="concept_name", mandatory=True, allowed_values=None, parser=simple_ident),
+     CommandField(allowed_names=["Concept", "ConceptName"], name="concept_name", mandatory=True, allowed_values=None, parser=simple_ident),
      CommandField(allowed_names=["DataType", "ConceptDataType"], name="concept_data_type", mandatory=True, allowed_values=data_types, parser=simple_ident),
      CommandField(allowed_names=["Domain", "ConceptDomain"], name="concept_domain", mandatory=False, allowed_values=None, parser=domain_definition),
-     CommandField(allowed_names=["Description", "ConceptDescription"], name="concept_description", mandatory=True, allowed_values=None, parser=unquoted_string),
+     CommandField(allowed_names=["Description", "ConceptDescription"], name="concept_description", mandatory=False, allowed_values=None, parser=unquoted_string),
      CommandField(allowed_names=["Attributes"], name="attributes", mandatory=False, allowed_values=None, parser=key_value_list),
      ],
     # "DatasetData" needs a specialized parser
@@ -87,7 +95,7 @@ commands = {
      CommandField(allowed_names=[attributeRegex], name="attributes", mandatory=False, many_appearances=True, parser=value)
      ],
     "Parameters":
-    [CommandField(allowed_names=["Name", "ParameterName"], name="name", mandatory=True, allowed_values=None, parser=simple_ident),
+    [CommandField(allowed_names=["Parameter", "ParameterName"], name="name", mandatory=True, allowed_values=None, parser=simple_ident),
      CommandField(allowed_names=["Type"], name="type", mandatory=True, allowed_values=parameter_types, parser=simple_ident),
      CommandField(allowed_names=["Domain"], name="domain", mandatory=False, allowed_values=None, parser=domain_definition),
      CommandField(allowed_names=["Value"], name="value", mandatory=False, allowed_values=None, parser=expression_with_parameters),
@@ -123,7 +131,8 @@ commands = {
      CommandField(allowed_names=["Alias", "SpecificName"], name="alias", mandatory=False, allowed_values=None, parser=simple_ident),
      CommandField(allowed_names=["CloneProcessor"], name="clone_processor", mandatory=False, allowed_values=None, parser=simple_ident),
      CommandField(allowed_names=["Description"], name="description", mandatory=False, allowed_values=None, parser=unquoted_string),
-     CommandField(allowed_names=["Location"], name="location", mandatory=False, allowed_values=None, parser=geo_value),
+     CommandField(allowed_names=["GeolocationRef"], name="geolocation_ref", mandatory=False, allowed_values=None, parser=reference),
+     CommandField(allowed_names=["GeolocationCode"], name="geolocation_code", mandatory=False, allowed_values=None, parser=code_string),
      CommandField(allowed_names=["Attributes"], name="attributes", mandatory=False, allowed_values=None, parser=key_value_list),
      CommandField(allowed_names=[attributeRegex], name="attributes", mandatory=False, many_appearances=True, parser=value),
      ],
@@ -138,6 +147,8 @@ commands = {
      CommandField(allowed_names=["RoegenType"], name="roegen_type", mandatory=False, allowed_values=roegen_types, parser=simple_ident),
      CommandField(allowed_names=["Orientation"], name="orientation", mandatory=False, allowed_values=orientations, parser=simple_ident),
      CommandField(allowed_names=["OppositeProcessorType"], name="opposite_processor_type", mandatory=False, allowed_values=processor_types, parser=simple_ident),
+     CommandField(allowed_names=["GeolocationRef"], name="geolocation_ref", mandatory=False, allowed_values=None, parser=reference),
+     CommandField(allowed_names=["GeolocationCode"], name="geolocation_code", mandatory=False, allowed_values=None, parser=code_string),
      CommandField(allowed_names=["InterfaceAttributes"], name="interface_attributes", mandatory=False, allowed_values=None, parser=key_value_list),
      CommandField(allowed_names=["I"+attributeRegex], name="interface_attributes", mandatory=False, many_appearances=True, parser=value),
 
@@ -156,35 +167,32 @@ commands = {
      CommandField(allowed_names=["Pedigree"], name="pedigree", mandatory=False, allowed_values=None, parser=unquoted_string),
      CommandField(allowed_names=["RelativeTo"], name="relative_to", mandatory=False, allowed_values=None, parser=unquoted_string),
      CommandField(allowed_names=["Time"], name="time", mandatory=False, allowed_values=None, parser=time_expression),
-     #CommandField(allowed_names=["Location"], name="location", mandatory=False, allowed_values=None, parser=geo_value),
-     #CommandField(allowed_names=["Source"], name="qq_source", mandatory=False, allowed_values=None, parser=reference_name_or_unquoted_string),
-     CommandField(allowed_names=["Location"], name="location", mandatory=False, allowed_values=None, parser=unquoted_string),
-     CommandField(allowed_names=["Source"], name="qq_source", mandatory=False, allowed_values=None, parser=unquoted_string),
+     CommandField(allowed_names=["Source"], name="qq_source", mandatory=False, allowed_values=None, parser=reference),
      CommandField(allowed_names=["NumberAttributes"], name="number_attributes", mandatory=False, allowed_values=None, parser=key_value_list),
      CommandField(allowed_names=["N"+attributeRegex], name="number_attributes", mandatory=False, many_appearances=True, parser=key_value),
      CommandField(allowed_names=["Comments"], name="comments", mandatory=False, allowed_values=None, parser=unquoted_string),
      ],
     "Relationships":
-    [CommandField(allowed_names=["OriginProcessor"], name="source_processor", mandatory=False, allowed_values=None, parser=processor_names),
+    [CommandField(allowed_names=["OriginProcessors", "OriginProcessor"], name="source_processor", mandatory=False, allowed_values=None, parser=processor_names),
      CommandField(allowed_names=["OriginInterface"], name="source_interface", mandatory=False, allowed_values=None, parser=simple_ident),
-     CommandField(allowed_names=["DestinationProcessor"], name="target_processor", mandatory=False, allowed_values=None, parser=processor_names),
+     CommandField(allowed_names=["DestinationProcessors", "DestinationProcessor"], name="target_processor", mandatory=False, allowed_values=None, parser=processor_names),
      CommandField(allowed_names=["DestinationInterface"], name="target_interface", mandatory=False, allowed_values=None, parser=simple_ident),
      CommandField(allowed_names=["Origin"], name="source", mandatory=False, allowed_values=None, parser=simple_ident),
      CommandField(allowed_names=["Destination"], name="target", mandatory=False, allowed_values=None, parser=simple_ident),
-     CommandField(allowed_names=["RelationType"], name="relation_type", mandatory=False, allowed_values=relation_types, parser=unquoted_string),
+     CommandField(allowed_names=["RelationType"], name="relation_type", mandatory=True, allowed_values=relation_types, parser=unquoted_string),
      CommandField(allowed_names=["ChangeOfTypeScale"], name="change_type_scale", mandatory=False, allowed_values=None, parser=expression_with_parameters),
      CommandField(allowed_names=["Weight"], name="flow_weight", mandatory=False, allowed_values=None, parser=expression_with_parameters),
      CommandField(allowed_names=["OriginCardinality"], name="source_cardinality", mandatory=False, allowed_values=source_cardinalities, parser=simple_ident),
      CommandField(allowed_names=["DestinationCardinality"], name="target_cardinality", mandatory=False, allowed_values=target_cardinalities, parser=simple_ident),
      CommandField(allowed_names=["Attributes"], name="attributes", mandatory=False, allowed_values=None, parser=key_value_list)
      ],
-    "Instantiations":
-    [CommandField(allowed_names=["InvokingProcessor"], name="invoking_processor", mandatory=False, allowed_values=None, parser=simple_ident),
-     CommandField(allowed_names=["RequestedProcessor"], name="requested_processor", mandatory=False, allowed_values=None, parser=simple_ident),
-     CommandField(allowed_names=["InstantiationType"], name="instantiation_type", mandatory=True, allowed_values=instantiation_types, parser=simple_ident),
-     CommandField(allowed_names=["UpscaleParentInterface"], name="upscale_parent_interface", mandatory=False, allowed_values=None, parser=simple_ident),
-     CommandField(allowed_names=["UpscaleChildInterface"], name="upscale_child_interface", mandatory=False, allowed_values=None, parser=simple_ident),
-     CommandField(allowed_names=["UpscaleWeight"], name="upscale_weight", mandatory=False, allowed_values=None, parser=expression_with_parameters),
+    "ProcessorScalings":
+    [CommandField(allowed_names=["InvokingProcessor"], name="invoking_processor", mandatory=True, allowed_values=None, parser=simple_ident),
+     CommandField(allowed_names=["RequestedProcessor"], name="requested_processor", mandatory=True, allowed_values=None, parser=simple_ident),
+     CommandField(allowed_names=["ScalingType"], name="scaling_type", mandatory=True, allowed_values=processor_scaling_types, parser=simple_ident),
+     CommandField(allowed_names=["InvokingInterface"], name="invoking_interface", mandatory=True, allowed_values=None, parser=simple_ident),
+     CommandField(allowed_names=["RequestedInterface"], name="requested_interface", mandatory=True, allowed_values=None, parser=simple_ident),
+     CommandField(allowed_names=["Scale"], name="scale", mandatory=True, allowed_values=None, parser=expression_with_parameters),
      # TODO
      #CommandField(allowed_names=["UpscaleParentContext"], name="upscale_parent_context", mandatory=False, allowed_values=None, parser=upscale_context),
      #CommandField(allowed_names=["UpscaleChildContext"], name="upscale_child_context", mandatory=False, allowed_values=None, parser=upscale_context),
@@ -194,29 +202,29 @@ commands = {
      CommandField(allowed_names=["OriginInterfaceType"], name="source_interface_type", mandatory=True, allowed_values=None, parser=simple_ident),
      CommandField(allowed_names=["DestinationHierarchy"], name="target_hierarchy", mandatory=False, allowed_values=None, parser=simple_ident),
      CommandField(allowed_names=["DestinationInterfaceType"], name="target_interface_type", mandatory=True, allowed_values=None, parser=simple_ident),
-     CommandField(allowed_names=["OriginContext"], name="source_context", mandatory=False, allowed_values=None, parser=context_query),
-     CommandField(allowed_names=["DestinationContext"], name="target_context", mandatory=False, allowed_values=None, parser=context_query),
+     CommandField(allowed_names=["OriginContext"], name="source_context", mandatory=False, allowed_values=None, parser=processor_names),
+     CommandField(allowed_names=["DestinationContext"], name="target_context", mandatory=False, allowed_values=None, parser=processor_names),
      CommandField(allowed_names=["Scale"], name="scale", mandatory=False, allowed_values=None, parser=expression_with_parameters),
      #CommandField(allowed_names=["OriginUnit"], name="source_unit", mandatory=False, allowed_values=None, parser=unit_name),
      #CommandField(allowed_names=["DestinationUnit"], name="target_unit", mandatory=False, allowed_values=None, parser=unit_name),
-     CommandField(allowed_names=["OriginUnit"], name="source_unit", mandatory=False, allowed_values=None, parser=unquoted_string),
-     CommandField(allowed_names=["DestinationUnit"], name="target_unit", mandatory=False, allowed_values=None, parser=unquoted_string)
+     CommandField(allowed_names=["OriginUnit"], name="source_unit", mandatory=False, allowed_values=None, parser=unit_name),
+     CommandField(allowed_names=["DestinationUnit"], name="target_unit", mandatory=False, allowed_values=None, parser=unit_name)
      ],
-    "SharedElements":
+    # "SharedElements":
+    # [
+    #  ],
+    # "ReusedElements":
+    # [
+    #  ],
+    "ImportCommands":
     [
-     ],
-    "ReusedElements":
-    [
-     ],
-    "ReuseCommands":
-    [
-        CommandField(allowed_names=["Workbook"], name="workbook_name", mandatory=False, allowed_values=None, parser=url_parser),
+        CommandField(allowed_names=["Workbook", "WorkbookLocation"], name="workbook_name", mandatory=False, allowed_values=None, parser=url_parser),
         CommandField(allowed_names=["Worksheets"], name="worksheets", mandatory=False, allowed_values=None, parser=unquoted_string)
     ],
     "TableOfContents":
     [
-        CommandField(allowed_names=["Worksheet", "WorksheetName"], name="worksheet", mandatory=False, allowed_values=None, parser=unquoted_string),
-        CommandField(allowed_names=["Command"], name="command", mandatory=False, allowed_values=None, parser=simple_ident),
+        CommandField(allowed_names=["Worksheet", "WorksheetName"], name="worksheet", mandatory=True, allowed_values=None, parser=unquoted_string),
+        CommandField(allowed_names=["Command"], name="command", mandatory=True, allowed_values=command_names, parser=simple_ident),
         CommandField(allowed_names=["Comment", "Description"], name="comment", mandatory=False, allowed_values=None, parser=unquoted_string),
     ],
     "RefProvenance":
@@ -228,20 +236,17 @@ commands = {
         CommandField(allowed_names=["Entities"], name="entities", mandatory=False, allowed_values=None, parser=unquoted_string),
     ],
     "RefGeographic":
-    [   # Reduced, from ISO19139
+    [   # A subset of fields from INSPIRE regulation for metadata: https://eur-lex.europa.eu/legal-content/EN/TXT/PDF/?uri=CELEX:32008R1205&from=EN
+        # Fields useful to elaborate graphical displays. Augment in the future as demanded
         CommandField(allowed_names=["RefID", "Reference"], name="ref_id", mandatory=True, allowed_values=None, parser=simple_ident),
         CommandField(allowed_names=["Title"], name="title", mandatory=True, allowed_values=None, parser=unquoted_string),
-        CommandField(allowed_names=["Date"], name="date", mandatory=True, allowed_values=None, parser=date),
+        CommandField(allowed_names=["Abstract"], name="abstract", mandatory=False, allowed_values=None, parser=unquoted_string),  # Syntax??
+        CommandField(allowed_names=["Type"], name="type", mandatory=False, allowed_values=geographic_resource_types, parser=unquoted_string),  # Part D.1. JUST "Dataset"
+        CommandField(allowed_names=["ResourceLocator", "DataLocation"], name="data_location", mandatory=False, allowed_values=None, parser=url_parser),
+        CommandField(allowed_names=["TopicCategory"], name="topic_category", mandatory=False, allowed_values=geographic_topic_categories, parser=unquoted_string),  # Part D.2
         CommandField(allowed_names=["BoundingBox"], name="bounding_box", mandatory=False, allowed_values=None, parser=unquoted_string),  # Syntax??
-        CommandField(allowed_names=["TopicCategory"], name="topic_category", mandatory=False, allowed_values=None, parser=unquoted_string),
-        CommandField(allowed_names=["Description"], name="description", mandatory=False, allowed_values=None, parser=unquoted_string),  # Syntax??
+        CommandField(allowed_names=["TemporalExtent", "Date"], name="temporal_extent", mandatory=False, allowed_values=None, parser=unquoted_string),  # Syntax??
         CommandField(allowed_names=["PointOfContact"], name="metadata_point_of_contact", mandatory=False, allowed_values=None, parser=unquoted_string),
-        CommandField(allowed_names=["Annote"], name="annote", mandatory=False, allowed_values=None, parser=unquoted_string),  # Syntax??
-        CommandField(allowed_names=["DataLocation"], name="data_location", mandatory=False, allowed_values=None, parser=url_parser)
-        # Field(name="language", domain=Domain(type="string", values=None), mandatory="True"),
-        # Field(name="charset", domain=Domain(type="string", values=None), mandatory="False"),
-        # Field(name="metadatalanguage", domain=Domain(type="string", values=None), mandatory="False"),
-        # Field(name="metadatacharset", domain=Domain(type="string", values=None), mandatory="False"),
     ],
     "RefBibliographic":
     [   # From BibTex. Mandatory fields depending on EntryType, at "https://en.wikipedia.org/wiki/BibTeX" (or search: "Bibtex entry field types")
@@ -273,16 +278,24 @@ commands = {
         CommandField(allowed_names=["Volume"], name="volume", mandatory="entry_type in ('article')", allowed_values=None, parser=unquoted_string),
         CommandField(allowed_names=["Year"], name="year", mandatory="entry_type in ('article', 'book', 'inbook', 'incollection', 'inproceedings', 'mastersthesis', 'phdthesis', 'proceedings', 'techreport')", allowed_values=None, parser=unquoted_string)
     ],
-    "Indicators":
+    "ScalarIndicators":
     [CommandField(allowed_names=["Indicator"], name="indicator_name", mandatory=True, allowed_values=None, parser=simple_ident),
      CommandField(allowed_names=["Local"], name="local", mandatory=True, allowed_values=yes_no, parser=simple_ident),
      CommandField(allowed_names=["Formula", "Expression"], name="expression", mandatory=True, allowed_values=None, parser=indicator_expression),
-     # TODO
-     #CommandField(allowed_names=["Benchmark"], name="benchmark", mandatory=False, allowed_values=None, parser=benchmark_definition),
-     CommandField(allowed_names=["Benchmark"], name="benchmark", mandatory=False, allowed_values=None, parser=unquoted_string),
+     CommandField(allowed_names=["Benchmark"], name="benchmark", mandatory=False, allowed_values=None, parser=simple_ident),
      CommandField(allowed_names=["Description"], name="description", mandatory=False, allowed_values=None, parser=unquoted_string),
      ],
-    # "ProblemStatement" needs a specialized parser
+    "MatrixIndicators":
+    [CommandField(allowed_names=["Indicator"], name="indicator_name", mandatory=True, allowed_values=None, parser=simple_ident),
+     CommandField(allowed_names=["Formula", "Expression"], name="expression", mandatory=True, allowed_values=None, parser=indicator_expression),
+     CommandField(allowed_names=["Description"], name="description", mandatory=False, allowed_values=None, parser=unquoted_string),
+     ],
+    "ProblemStatement":
+    [CommandField(allowed_names=["Scenario"], name="scenario_name", mandatory=True, allowed_values=None, parser=simple_ident),
+     CommandField(allowed_names=["Parameter"], name="parameter", mandatory=True, allowed_values=None, parser=simple_ident),
+     CommandField(allowed_names=["Value"], name="parameter_value", mandatory=True, allowed_values=None, parser=expression_with_parameters),
+     CommandField(allowed_names=["Description"], name="description", mandatory=False, allowed_values=None, parser=unquoted_string),
+     ]
 }
 
 

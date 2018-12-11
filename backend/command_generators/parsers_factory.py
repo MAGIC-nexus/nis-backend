@@ -21,7 +21,7 @@ from backend.command_generators.parser_json import commands_generator_from_nativ
 """
 
 
-def commands_container_parser_factory(generator_type, file_type, file, state):
+def commands_container_parser_factory(generator_type, file_type, file, state, sublist=None, stack=None):
     """
     Returns a generator appropriate to parse "file" and generate command_executors
 
@@ -31,9 +31,27 @@ def commands_container_parser_factory(generator_type, file_type, file, state):
     :param state: State used to validate existence of some variables at parse time
     :return:
     """
+    def hash_file(f):
+        import hashlib
+        m = hashlib.md5()
+        m.update(f)
+        return m.digest()
+
+    if not stack:
+        stack = []
+
     # TODO Prepare the input stream. It can be a String, a URL, a file, a Stream
     # TODO Define a routine to read it into memory
     s = file
+
+    h = hash_file(s)
+    for i in range(len(stack)):
+        if stack[i] == h:
+            # TODO Another possibility is to allow the circular reference, simply ignoring it (in this point, properly warn (use yield), then return to end this level)
+            raise Exception("Circular reference detected importing file")
+    # Push if OK, then process the file
+    stack.append(h)
+
     if generator_type.lower() in ["rscript", "r-script", "r"]:
         # TODO The R script was prepared to be run from outside NIS, using R NIS client
         # TODO Running the script from the inside should be managed slightly different:
@@ -56,12 +74,14 @@ def commands_container_parser_factory(generator_type, file_type, file, state):
         elif isinstance(s, str):
             pass  # TODO It may be a file name
 
-        yield from commands_generator_from_ooxml_file(s, state)
+        yield from commands_generator_from_ooxml_file(s, state, sublist, stack)
     elif generator_type.lower() in ["json", "native", "primitive"]:  # "primitive" is Deprecated
         # A list of commands. Each command is a dictionary: the command type, a label and the content
         # The type is for the factory to determine the class to instantiate, while label and content
         # are passed to the command constructor to elaborate the command
         if isinstance(s, bytes):
             s = s.decode("utf-8")
-        yield from commands_generator_from_native_json(s, state)
+        yield from commands_generator_from_native_json(s, state, sublist, stack)
 
+    # Pop the file hash from the stack
+    stack.pop()

@@ -1,3 +1,6 @@
+import mimetypes
+import urllib
+
 import openpyxl
 
 import io
@@ -21,7 +24,7 @@ from backend.command_executors.version2.hierarchy_categories_command import Hier
 from backend.command_executors.version2.hierarchy_mapping_command import HierarchyMappingCommand
 from backend.command_executors import create_command, DatasetDataCommand, DatasetQryCommand, AttributeTypesCommand, \
     AttributeSetsCommand, InterfaceTypesCommand, ProcessorsCommand, InterfacesAndQualifiedQuantitiesCommand, \
-    RelationshipsCommand, InstantiationsCommand, ScaleConversionV2Command, DatasetDefCommand
+    RelationshipsCommand, ProcessorScalingsCommand, ScaleConversionV2Command, DatasetDefCommand, NestedCommandsCommand
 from backend.command_executors.version2.references_v2_command import ProvenanceReferencesCommand, BibliographicReferencesCommand, \
     GeographicReferencesCommand
 from backend.command_generators.spreadsheet_command_parsers.analysis.indicators_spreadsheet_parse import parse_indicators_command
@@ -46,12 +49,15 @@ from backend.command_generators.spreadsheet_command_parsers_v2.dataset_qry_sprea
 from backend.command_generators.spreadsheet_command_parsers_v2.simple_parsers import parse_cat_hierarchy_command, \
     parse_hierarchy_mapping_command, parse_parameters_command_v2, parse_attribute_sets_command, \
     parse_attribute_types_command, parse_datasetdef_command, parse_interface_types_command, parse_processors_v2_command, \
-    parse_interfaces_command, parse_relationships_command, parse_instantiations_command, parse_scale_changers_command, \
+    parse_interfaces_command, parse_relationships_command, parse_processor_scalings_command, \
+    parse_scale_changers_command, \
     parse_shared_elements_command, parse_reused_elements_command, parse_indicators_v2_command, parse_ref_provenance, \
-    parse_ref_bibliographic, parse_ref_geographic
+    parse_ref_bibliographic, parse_ref_geographic, parse_import_commands_command, parse_list_of_commands_command
 
 # Most complex name
 # [namespace::][type:]var(.var)*[(@|#)var] : [namespace] + [type] + var + [attribute or tag]
+from backend.common.helper import create_dictionary
+
 var_name = "([a-zA-Z][a-zA-Z0-9_-]*)"
 hvar_name = "("+var_name + r"(\." + var_name + ")*)"
 cplex_var = "((" + var_name + "::)?" + hvar_name + ")"
@@ -61,24 +67,15 @@ cplex_var = "((" + var_name + "::)?" + hvar_name + ")"
 # ############################### #
 
 
-def commands_generator_from_ooxml_file(input, state):
+def commands_generator_from_ooxml_file(input, state, sublist, stack):
     """
     It reads an Office Open XML input
     Yields a sequence of command_executors
 
-Hoja comando
-* Lex+Parse
-* Producir JSON ~ AST
-* Enumerar problemas sintácticos
-* Producir hoja a partir de JSON??
-
-Comando
-* Analizar JSON
-* Ejecutar
-* Enumerar problemas semánticos
-
     :param input: A bytes input
     :param state: State used to check variables
+    :param sublist: List of worksheets to consider
+    :param stack: Stack of nested files. Just pass it...
     :return:
     """
     # Start the Excel reader
@@ -107,7 +104,7 @@ Comando
     re_metadata = re.compile(r"^(Metadata)" + optional_alphanumeric, flags=flags)  # Shared by V1 and V2
     re_processors = re.compile(r"(Processors|Proc)[ _]+" + var_name, flags=flags)  # V1. Deprecated in V2 (use "re_interfaces")
     re_hierarchy = re.compile(r"(Taxonomy|Tax|Composition|Comp)[ _]([cpf])[ ]" + var_name, flags=flags)  # V1. Deprecated in V2 (use "re_hierarchies"). SPECIAL
-    re_upscale = re.compile(r"(Upscale|Up)[ _](" + var_name + "[ _]" + var_name + ")?", flags=flags)  # V1. Deprecated in V2 (use "re_instantiations")
+    re_upscale = re.compile(r"(Upscale|Up)[ _](" + var_name + "[ _]" + var_name + ")?", flags=flags)  # V1. Deprecated in V2 (use "re_processor_scalings")
     re_relations = re.compile(r"(Grammar|Structure)([ _]+" + var_name+")?", flags=flags)  # V1. Deprecated in V2 (use "re_relationships")
     re_scale_conversion = re.compile(r"Scale", flags=flags)  # V1. Deprecated in V2 (use "re_scale_changers")
     re_pedigree_template = re.compile(r"(Pedigree|Ped|NUSAP\.PM)[ _]+" + var_name, flags=flags)  # V1. Deprecated in V2 (use "re_pedigree_matrices") ???? TO BE SOLVED <<<<<<< MAYBE V1 is better option
@@ -117,8 +114,8 @@ Comando
     re_mapping = re.compile(r"^(Mapping|Map)([ _]" + cplex_var + "[ _]" + cplex_var + ")?", flags=flags)  # V1. Deprecated in V2 (use "re_hierarchies_mapping"). SPECIAL
     re_indicators = re.compile(r"(Indicators|KPI)([ _]" + var_name + ")?", flags=flags)  # Shared by V1 and V2 (not used in V1, so v2 directly)
     # Version 2 commands
-    re_hierarchies = re.compile(r"(CatHierarchies|Categories)" + optional_alphanumeric, flags=flags)  # Hierarchies for categories (formerly "Taxonomy_C")
-    re_hierarchies_mapping = re.compile(r"(CatHierarchiesMapping|CategoriesMap)" + optional_alphanumeric, flags=flags)
+    re_hierarchies = re.compile(r"(CodeHierarchies|Hierarchies|CatHierarchies|Categories)" + optional_alphanumeric, flags=flags)  # Hierarchies for codes (formerly "Taxonomy_C")
+    re_hierarchies_mapping = re.compile(r"(CodeHierarchiesMapping|HierarchiesMapping|CatHierarchiesMapping|CategoriesMap)" + optional_alphanumeric, flags=flags)
     re_attributes = re.compile(r"(AttributeTypes)" + optional_alphanumeric, flags=flags)  # Declaration of attributes used in different elements
     re_datasetdef = re.compile(r"(DatasetDef)" + optional_alphanumeric, flags=flags)  # Dataset metadata
     re_datasetdata = re.compile(r"(DatasetData)" + optional_alphanumeric, flags=flags)  # Dataset data
@@ -129,10 +126,12 @@ Comando
     re_processors_v2 = re.compile(r"(BareProcessors)" + optional_alphanumeric, flags=flags)  # It is NOT the next version of "re_processors" (which is "re_interfaces")
     re_interfaces = re.compile(r"(Interfaces)" + optional_alphanumeric, flags=flags)  # Interfaces and data. V2 of "re_processors"
     re_relationships = re.compile(r"(Flows|Relationships)" + optional_alphanumeric, flags=flags)
-    re_instantiations = re.compile(r"(Instantiations)" + optional_alphanumeric, flags=flags)
+    re_processor_scalings = re.compile(r"(ProcessorScalings)" + optional_alphanumeric, flags=flags)
     re_scale_changers = re.compile(r"(ScaleChangeMap) + optional_alphanumeric", flags=flags)
     re_shared_elements = re.compile(r"(SharedElements)" + optional_alphanumeric, flags=flags)
     re_reused_elements = re.compile(r"(ReusedElements)" + optional_alphanumeric, flags=flags)
+    re_import_commands = re.compile(r"(ImportCommands)" + optional_alphanumeric, flags=flags)
+    re_list_of_commands = re.compile(r"(ListOfCommands)" + optional_alphanumeric, flags=flags)
     re_pedigree_matrices = re.compile(r"PedigreeMatrices" + optional_alphanumeric, flags=flags)
     re_refbibliographic = re.compile(r"(RefBibliographic|RefBibliography)" + optional_alphanumeric, flags=flags)
     re_refgeographical = re.compile(r"(RefGeographic|RefGeography)" + optional_alphanumeric, flags=flags)
@@ -141,6 +140,30 @@ Comando
     # re_indicators
     # re_indicators_benchmark NOT DEFINED, NOT IMPLEMENTED
     re_problem_statement = re.compile(r"ProblemStatement" + optional_alphanumeric, flags=flags)
+
+    # Command names (for the "list of commands" command)
+    command_names = [
+        "CodeHierarchies", "Hierarchies",
+        "CodeHierarchiesMapping", "HierarchiesMapping",
+        "AttributeTypes",
+        "DatasetDef",
+        "DatasetData",
+        "DatasetQry",
+        "AttributeSets",
+        "InterfaceTypes",
+        "BareProcessors",
+        "Interfaces",
+        "Relationships",
+        "ProcessorScalings",
+        "ScaleChangeMap",
+        "ImportCommands",
+        "PedigreeMatrices",
+        "RefBibliographic",
+        "RefGeographic",
+        "RefProvenance",
+        "ProblemStatement"
+    ]
+    command_names = create_dictionary(data={cmd_name: None for cmd_name in command_names})
 
     # List of tuples defining each command parsing:
     # - Regular expression
@@ -174,7 +197,7 @@ Comando
             (re_processors_v2, "processors", parse_processors_v2_command, 2, ProcessorsCommand),  # TODO Test
             (re_interfaces, "interfaces_and_qq", parse_interfaces_command, 2, InterfacesAndQualifiedQuantitiesCommand),  # TODO Test
             (re_relationships, "relationships", parse_relationships_command, 2, RelationshipsCommand),  # TODO Test
-             (re_instantiations, "instantiations", parse_instantiations_command, 2, InstantiationsCommand),  # TODO (5***)(evolution of "re_upscale" "upscale")
+             (re_processor_scalings, "processor_scalings", parse_processor_scalings_command, 2, ProcessorScalingsCommand),  # TODO (5***)(evolution of "re_upscale" "upscale")
             (re_scale_changers, "scale_conversion_v2", parse_scale_changers_command, 2, ScaleConversionV2Command),  # TODO Test
             (re_indicators, "indicators", parse_indicators_v2_command, 2, IndicatorsCommand),  # (V1 and) V2
             (re_refbibliographic, "ref_bibliographic", parse_ref_bibliographic, 2, BibliographicReferencesCommand),
@@ -185,13 +208,27 @@ Comando
             # Will not be implemented
             (re_shared_elements, "shared_elements", parse_shared_elements_command, 2,),  # TODO
             (re_reused_elements, "reused_elements", parse_reused_elements_command, 2,),  # TODO
+            (re_import_commands, "import_commands", parse_import_commands_command, 2, NestedCommandsCommand),  # INLINE execution. Declared here just to note the former
+            (re_list_of_commands, "list_of_commands", parse_list_of_commands_command, 2, None),  # INLINE execution. Declared here just to note the former
+            # INLINE execution. Declared here just to note the former
             (re_pedigree_matrices, "ref_pedigree_matrices", ),  # TODO
             (re_refsource, "ref_source", ),  # TODO
             (re_attribute_sets, "attribute_sets", parse_attribute_sets_command, 3, AttributeSetsCommand),  # TODO Develop and Test (2***)
             ]
 
+    worksheet_to_command = create_dictionary()  # A dictionary to translate a worksheet to an equivalent command
+    if sublist:
+        # Force reading "ListOfCommands" commands
+        for sh_name in xl_in.sheetnames:
+            if re_list_of_commands.search(sh_name):
+                sublist.append(sh_name)
+
     # For each worksheet, get the command type, convert into primitive JSON
     for c, sh_name in enumerate(xl_in.sheetnames):
+        if sublist:
+            if sh_name not in sublist:
+                continue
+
         issues = []
         total_issues = []  # type: List[Issue]
         sh_in = xl_in[sh_name]
@@ -201,6 +238,10 @@ Comando
         c_content = None
 
         name = sh_in.title
+
+        # Use an equivalent command name
+        if name in worksheet_to_command:
+            name = worksheet_to_command[name]
 
         # Extract worksheet matrices
         m = binary_mask_from_worksheet(sh_in, False)
@@ -226,6 +267,60 @@ Comando
                 issue = {"sheet_number": c, "sheet_name": sh_name, "c_type": c_type, "type": 3,
                          "message": "It seems there are no parameters for the dataset import command at worksheet '" + sh_name + "'"}
                 total_issues.append(issue)
+        elif re_list_of_commands.search(name):
+            issues, c_label, c_content = parse_list_of_commands_command(sh_in, t)
+            c_type = None
+            if 3 not in [issue.itype for issue in issues]:
+                for r in c_content["items"]:
+                    worksheet = r.get("worksheet", None)
+                    command = r.get("command", None)
+                    # Check if valid command
+                    if command not in command_names:
+                        issue = Issue(c, sh_name, 3, None, "Command '" + command + "' not recognized in List of Commands.")
+                    else:
+                        worksheet_to_command[worksheet] = command
+        elif re_import_commands.search(name):
+            # Declared at this point to avoid circular reference ("parsers_factory" imports "parsers_spreadsheet")
+            from backend.command_generators.parsers_factory import commands_container_parser_factory
+
+            def load_file(location: str = None):
+                """
+                Loads a case study file (well, really any file) into a BytesIO object
+                :param location: URL of the case study file
+                :return: bytes
+                """
+
+                if not location:
+                    f_type = None
+                    data = None
+                else:
+                    # Try to load the Dataset from the specified location
+                    data = urllib.request.urlopen(location).read()
+                    # data = io.BytesIO(data)
+                    # Then, try to read it
+                    t = mimetypes.guess_type(location, strict=True)
+                    if t[0] == "text/python":
+                        f_type = "python"
+                    elif t[0] == "text/json":
+                        f_type = "json"
+                    elif t[0] == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet":
+                        f_type = "spreadsheet"
+
+                return f_type, data
+
+            issues, c_label, c_content = parse_import_commands_command(sh_in, t)
+            if 3 not in [issue.itype for issue in issues]:
+                c_type = "import_commands"
+                # For each line, repeat the import
+                for r in c_content["items"]:
+                    workbook = r.get("workbook_name", None)
+                    worksheets = r.get("worksheets", None)
+                    sublist2 = [w.strip() for w in worksheets.split(",")] if worksheets else None  # Convert to list of worksheets
+                    # Read file in memory
+                    generator_type, file2 = load_file(workbook)
+                    file_type = None  # Ignored
+                    yield from commands_container_parser_factory(generator_type, file_type, file2, state, sublist=sublist2, stack=stack)
+                    print("Done")
         elif re_datasetqry.search(name):
             c_type = "datasetqry"
             issues, c_label, c_content = parse_dataset_qry_command(sh_in, t, sh_name, state)
@@ -263,6 +358,7 @@ Comando
                         issues, c_label, c_content = cmd[2](sh_in, t, name2)
                     break
 
+        # -------------------------------------------------------------------------------------------------------------
         # Command parsed, now append "issues"
         errors = 0
         if len(issues) > 0:
@@ -278,7 +374,11 @@ Comando
                 total_issues.append(issue)
         if errors == 0:
             try:
-                cmd, issues = create_command(c_type, c_label, c_content, sh_name)
+                if c_type:
+                    cmd, issues = create_command(c_type, c_label, c_content, sh_name)
+                else:
+                    cmd = None
+                    issues = []
             except:
                 cmd = None
                 issues = [(3, "Could not create command of type '"+c_type+"'")]
@@ -293,7 +393,7 @@ Comando
 
                     total_issues.append(issue)
         else:
-            print(issues)
+            print(issues)  # Convenient for debugging purposes
             cmd = None  # cmd, _ = create_command(c_type, c_label, {}, sh_name)
 
         yield cmd, total_issues

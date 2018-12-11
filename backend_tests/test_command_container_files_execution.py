@@ -407,7 +407,39 @@ class TestCommandFiles(unittest.TestCase):
         datasets["ds1"].data.to_csv("/tmp/09_many_to_many_mapping_ds1_results.csv", index=False)
         isess.close_db_session()
 
-    def test_019_export_to_json(self):
+    def test_019_import_commands(self):
+        """
+        Testing import commands
+
+        :return:
+        """
+        file_path = os.path.dirname(
+            os.path.abspath(__file__)) + "/z_input_files/v2/12_import_commands_example.xlsx"
+        isess = execute_file(file_path, generator_type="spreadsheet")
+        # Check State of things
+        glb_idx, p_sets, hh, datasets, mappings = get_case_study_registry_objects(isess.state)
+        # TODO Check things!!!
+        # self.assertEqual(len(p_sets), 3)
+        # Close interactive session
+        isess.close_db_session()
+
+    def test_020_list_of_commands(self):
+        """
+        Testing list of commands
+
+        :return:
+        """
+        file_path = os.path.dirname(
+            os.path.abspath(__file__)) + "/z_input_files/v2/13_list_of_commands_example_using_soslaires.xlsx"
+        isess = execute_file(file_path, generator_type="spreadsheet")
+        # Check State of things
+        glb_idx, p_sets, hh, datasets, mappings = get_case_study_registry_objects(isess.state)
+        # TODO Check things!!!
+        # self.assertEqual(len(p_sets), 3)
+        # Close interactive session
+        isess.close_db_session()
+
+    def test_021_export_to_json(self):
         """
         Testing model export
 
@@ -434,4 +466,6 @@ if __name__ == '__main__':
     #i.test_013_execute_file_v2_seven()
     #i.test_014_execute_file_v2_eight()
     #i.test_018_many_to_many_mappings()
-    i.test_019_export_to_json()
+    #i.test_019_import_commands()
+    #i.test_020_list_of_commands()
+    i.test_021_list_of_commands()

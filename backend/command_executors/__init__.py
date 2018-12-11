@@ -22,7 +22,8 @@ from backend.command_executors.version2.export_elements_commands import Exportab
 from backend.command_executors.version2.hierarchy_categories_command import HierarchyCategoriesCommand
 from backend.command_executors.version2.hierarchy_mapping_command import HierarchyMappingCommand
 from backend.command_executors.version2.import_elements_commands import ImportElementsCommand
-from backend.command_executors.version2.instantiations_command import InstantiationsCommand
+from backend.command_executors.version2.nested_commands_command import NestedCommandsCommand
+from backend.command_executors.version2.processor_scalings_command import ProcessorScalingsCommand
 from backend.command_executors.version2.interface_types_command import InterfaceTypesCommand
 from backend.command_executors.version2.interfaces_command import InterfacesAndQualifiedQuantitiesCommand
 from backend.command_executors.version2.pedigree_matrices_command import PedigreeMatricesReferencesCommand
@@ -70,10 +71,11 @@ def create_command(cmd_type, name, json_input, source_block=None):
             "processors":            ProcessorsCommand,
             "interfaces_and_qq":     InterfacesAndQualifiedQuantitiesCommand,
             "relationships":         RelationshipsCommand,
-            "instantiations":        InstantiationsCommand,
+            "processor_scalings":    ProcessorScalingsCommand,
             "scale_conversion_v2":   ScaleConversionV2Command,
             "shared_elements":       ExportableElementsCommand,
             "reused_elements":       ImportElementsCommand,
+            "import_commands":       NestedCommandsCommand,
             "ref_pedigree_matrices": PedigreeMatricesReferencesCommand,
             "ref_bibliographic":     BibliographicReferencesCommand,
             # "ref_source":            SourceReferencesCommand,
