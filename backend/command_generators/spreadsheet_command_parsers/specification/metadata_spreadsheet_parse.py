@@ -1,5 +1,5 @@
 from backend import metadata_fields
-from backend.common.helper import strcmp, create_dictionary
+from backend.common.helper import strcmp, create_dictionary, get_value_or_list
 from backend.command_executors.specification.metadata_command import MetadataCommand
 
 
@@ -20,8 +20,8 @@ def parse_metadata_command(sh, area):
     mandatory = create_dictionary()
     keys = create_dictionary()
     for t in metadata_fields:
-        controlled[t[0]] = t[3]
-        mandatory[t[0]] = t[2]
+        controlled[t[4]] = t[3]
+        mandatory[t[4]] = t[2]
         keys[t[0]] = t[4]
 
     # Scan the sheet, the first column must be one of the keys of "k_list", following
@@ -30,11 +30,13 @@ def parse_metadata_command(sh, area):
     # Map key to a list of values
     content = {}  # Dictionary of lists, one per metadata key
     for r in range(area[0], area[1]):
-        key = sh.cell(row=r, column=area[2]).value
-        if key in keys:
+        label = sh.cell(row=r, column=area[2]).value
+        if label in keys:
+            key = keys[label]
             for c in range(area[2]+1, area[3]):
-                value = sh.cell(row=r, column=area[2] + 1).value
-                if value and str(value).strip():
+                value = sh.cell(row=r, column=c).value
+                if value:
+                    value = str(value).strip()
                     if controlled[key]:
                         # Control "value" if the field is controllable
                         cl = {"dimensions": ["water", "energy", "food", "land", "climate"],
@@ -44,17 +46,17 @@ def parse_metadata_command(sh, area):
                               "restriction_level": ["internal", "confidential", "public"],
                               "language": None,  # TODO Read the list of ALL languages (or just "English"??)
                               }
-                        if cl[keys[key]] and value.lower() not in cl[keys[key]]:
-                            issues.append((3, "The key '"+key+"' should be one of: "+",".join(cl[keys[key]])))
+                        if cl[key] and value.lower() not in cl[key]:
+                            issues.append((3, "The key '"+key+"' should be one of: "+",".join(cl[key])))
 
                     if key not in content:
-                        content[keys[key]] = []
-                    content[keys[key]].append(str(value).strip())
+                        content[key] = []
+                    content[key].append(value)
         else:
-            issues.append((2, "Row "+str(r)+": unknown metadata key '"+key+"'"))
+            issues.append((2, "Row "+str(r)+": unknown metadata label '"+label+"'"))
 
-    for key in keys:
-        if mandatory[key] and keys[key] not in content:
+    for key in keys.values():
+        if mandatory[key] and key not in content:
             some_error = True
             issues.append((3, "The value '"+key+"' is mandatory in the definition of the metadata"))
 

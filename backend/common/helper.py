@@ -1224,3 +1224,20 @@ def name_and_id_dict(obj: object) -> Optional[Dict]:
         return {"name": obj.name, "id": obj.uuid}
     else:
         None
+
+
+def get_value_or_list(current_value, additional_value):
+    """
+    Add a new value to another existing value/s. If a value doesn't exist it returns the new value otherwise
+    returns a list with the existing value/s and the new value.
+    :param current_value: the current value
+    :param additional_value: the new value
+    :return: a single value or a list
+    """
+    if current_value:
+        if isinstance(current_value, list):
+            return current_value + [additional_value]
+        else:
+            return [current_value, additional_value]
+    else:
+        return additional_value

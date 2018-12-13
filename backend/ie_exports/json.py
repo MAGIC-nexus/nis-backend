@@ -74,7 +74,7 @@ JsonStructureType = Dict[str, Optional[Union[type, "JsonStructureType"]]]
 
 
 def objects_list_to_string(objects_list: List[object], object_type: type) -> str:
-    json_string = ""
+    str_list = []
 
     if objects_list:
         if object_type is Hierarchy:
@@ -84,30 +84,35 @@ def objects_list_to_string(objects_list: List[object], object_type: type) -> str
             objects_list.sort(key=lambda h: not h.is_code_list)
 
         for obj in objects_list:
-            json_string += ", " if json_string else ""
-            json_string += json.dumps(obj, cls=CustomEncoder)
+            str_list.append(json.dumps(obj, cls=CustomEncoder))
 
-    return json_string
+    return ", ".join(str_list)
 
 
 def create_json_string_from_objects(objects: Dict[type, List[object]], json_structure: JsonStructureType) -> str:
 
     def json_structure_to_string(sections_and_types: JsonStructureType) -> str:
-        json_string = ""
+        str_list = []
         for section_name, output_type in sections_and_types.items():
-            json_string += ", " if json_string else ""
-            json_string += f'"{section_name}": '
             if not isinstance(output_type, dict):
-                json_string += "[" + objects_list_to_string(objects.get(output_type), output_type) + "]"
+                str_list.append(f'"{section_name}": [{objects_list_to_string(objects.get(output_type), output_type)}]')
             else:
-                json_string += "{" + json_structure_to_string(output_type) + "}"
+                str_list.append(f'"{section_name}": {{{json_structure_to_string(output_type)}}}')
 
-        return json_string
+        return ", ".join(str_list)
 
-    return "{" + json_structure_to_string(json_structure) + "}"
+    return json_structure_to_string(json_structure)
 
 
 def export_model_to_json(state: State) -> str:
+
+    # Get Metadata dictionary
+    metadata = state.get("_metadata")
+    # Change lists of 1 element to a simple value
+    metadata = {k: v[0] if len(v) == 1 else v for k, v in metadata.items()}
+    metadata_string = '"Metadata": ' + json.dumps(metadata, cls=CustomEncoder)
+
+    print(metadata_string)
 
     json_structure: JsonStructureType = OrderedDict(
         {"Parameters": Parameter,
@@ -134,5 +139,5 @@ def export_model_to_json(state: State) -> str:
 
     print(json_dict)
 
-    return json_dict
+    return f'{{{metadata_string}, {json_dict}}}'
 

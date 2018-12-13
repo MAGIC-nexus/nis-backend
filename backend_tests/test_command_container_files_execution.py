@@ -445,12 +445,13 @@ class TestCommandFiles(unittest.TestCase):
 
         :return:
         """
-        #file_path = os.path.dirname(os.path.abspath(__file__)) + "/z_input_files/v2/03_Soslaires_no_parameters.xlsx"
-        file_path = os.path.dirname(os.path.abspath(__file__)) + "/z_input_files/v2/02_declare_hierarchies_and_cloning_and_scaling.xlsx"
+        file_path = os.path.dirname(os.path.abspath(__file__)) + "/z_input_files/v2/03_Soslaires_no_parameters.xlsx"
+        #file_path = os.path.dirname(os.path.abspath(__file__)) + "/z_input_files/v2/02_declare_hierarchies_and_cloning_and_scaling.xlsx"
         #file_path = os.path.dirname(os.path.abspath(__file__)) + "/z_input_files/v2/06_upscale_almeria.xlsx"
         #file_path = os.path.dirname(os.path.abspath(__file__)) + "/z_input_files/test_spreadsheet_4.xlsx"
         isess = execute_file(file_path, generator_type="spreadsheet")
-        export_model_to_json(isess.state)
+        json_string = export_model_to_json(isess.state)
+        print(json_string)
         isess.close_db_session()
 
 
@@ -468,4 +469,4 @@ if __name__ == '__main__':
     #i.test_018_many_to_many_mappings()
     #i.test_019_import_commands()
     #i.test_020_list_of_commands()
-    i.test_021_list_of_commands()
+    i.test_021_export_to_json()
