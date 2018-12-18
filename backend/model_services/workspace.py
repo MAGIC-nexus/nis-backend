@@ -611,6 +611,7 @@ class ReproducibleSession:
                 vs2.case_study = cs  # Assign case study to the new version
                 if recover_previous_state:  # If the new version keeps previous state, copy it also
                     vs2.state = vs.state  # Copy state
+                    vs2.state_version = vs.state_version
                     for ws in lst:  # COPY active ReproducibleSessions
                         ws2 = copy.copy(ws)
                         ws2.version = vs2
@@ -630,7 +631,7 @@ class ReproducibleSession:
                 # Load state if it is persisted
                 if vs.state:
                     # Deserialize
-                    self._isess._state = deserialize_state(vs.state)
+                    self._isess._state = deserialize_state(vs.state, vs.state_version)
                 else:
                     self._isess._state = State()  # Zero State, execute all commands in sequence
                     for ws in lst:
@@ -838,7 +839,14 @@ def execute_file(file_name, generator_type):
                                     allow_saving=False)
     with open(file_name, read_type) as f:
         buffer = f.read()
-    ret = isess.register_andor_execute_command_generator(generator_type, content_type, buffer, False, True)
+
+    issues, output = isess.register_andor_execute_command_generator(generator_type, content_type, buffer, False, True)
+
+    for idx, issue in enumerate(issues):
+        print(f"Issue {idx+1}/{len(issues)} = {issue}")
+
+    print(f"Output = {output}")
+
     isess.close_reproducible_session()
     isess.close_db_session()
     return isess
