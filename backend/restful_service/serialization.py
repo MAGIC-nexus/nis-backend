@@ -3,6 +3,7 @@ import pandas as pd
 
 # Some ideas from function "model_to_dict" (Google it, StackOverflow Q&A)
 from backend.common.helper import PartialRetrievalDictionary, create_dictionary
+from backend.models import MODEL_VERSION
 from backend.models.musiasem_methodology_support import serialize_from_object, deserialize_to_object
 from backend.model_services import State, get_case_study_registry_objects
 
@@ -171,12 +172,13 @@ def serialize_state(state: State):
     return tmp
 
 
-def deserialize_state(st: str):
+def deserialize_state(st: str, state_version: int = MODEL_VERSION):
     """
     Deserializes an object previously serialized using "serialize_state"
 
     It can receive also a "State" modified for the serialization to restore it
 
+    :param state_version: version number of the internal models
     :param st:
     :return:
     """
@@ -187,9 +189,14 @@ def deserialize_state(st: str):
 
     print("  deserialize_state")
     if isinstance(st, str):
-        state = deserialize_to_object(st)
+        # TODO: use state_version to convert a previous version to the latest one
+        #  This means transforming the old json to the latest json
+        if state_version == MODEL_VERSION:
+            state = deserialize_to_object(st)
+        else:
+            raise Exception(f"The model version {state_version} is not supported. Current version is {MODEL_VERSION}.")
     else:
-        raise Exception("It must be a string")
+        raise Exception(f"Serialized state must be a string: currently is of type {type(st)}")
 
     # Iterate all namespaces
     for ns in state.list_namespaces():
