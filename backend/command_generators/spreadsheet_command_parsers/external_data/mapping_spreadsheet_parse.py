@@ -117,7 +117,7 @@ def parse_mapping_command(sh, area, origin, destination):
         if (len(lst) == 0) or (len(lst) >= 1 and d_value not in [d["d"] for d in lst]):
             lst.append({"d": d_value, "w": exp_value})
         else:
-            issues.append((3, "Destination category '" + destination + "' has been repeated for origin category '" + o_value + "'"))
+            issues.append((3, "Destination category '" + destination + "' has been repeated for origin category '" + o_value + "' at row '"+str(r)+"'"))
 
     # List of dictionaries, where each dictionary contains the specification of an origin "o"
     # For multiple entries (many to many map), the origin maps a list "to" of dictionaries "d", "e"

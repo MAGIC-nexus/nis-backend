@@ -7,7 +7,7 @@ import numpy as np
 import backend
 from backend.model_services import IExecutableCommand, get_case_study_registry_objects
 from backend.common.helper import obtain_dataset_metadata, strcmp, create_dictionary, \
-    augment_dataframe_with_mapped_columns
+    augment_dataframe_with_mapped_columns, translate_case
 
 
 def obtain_reverse_codes(mapped, dst):
@@ -67,7 +67,7 @@ class ETLExternalDatasetCommand(IExecutableCommand):
         for dim in self._content["where"]:
             lst = self._content["where"][dim]
             native_dim = None
-            if dim.lower() in ["StartPeriod", "EndPeriod"]:
+            if dim.lower() in ["startperiod", "endperiod"]:
                 native_dim = dim
                 lst = [lst]
             elif dim not in dims:
@@ -81,7 +81,8 @@ class ETLExternalDatasetCommand(IExecutableCommand):
                         lst = obtain_reverse_codes(mappings[m].map, lst)
                         break
             else:
-                native_dim = dim
+                # Get the dimension name with the original case
+                native_dim = dims[dim].name
             if native_dim:
                 if native_dim not in params:
                     f = set()
@@ -114,14 +115,18 @@ class ETLExternalDatasetCommand(IExecutableCommand):
                     for to in el["to"]:
                         if to["d"]:
                             tmp.append([el["o"], to["d"]])
-                df_dst = pd.DataFrame(tmp, columns=['sou_rce', mappings[m].destination.lower()])
+                df_dst = pd.DataFrame(tmp, columns=['sou_rce', mappings[m].destination])
                 for di in df.columns:
                     if strcmp(mappings[m].origin, di):
                         d = di
+                        if not backend.case_sensitive:
+                            df[d+"_l"] = df[d].str.lower()
+                            d = d + "_l"
                         break
-                # df[d] = df[d].str.upper()  # Upper case column before merging
                 df = pd.merge(df, df_dst, how='left', left_on=d, right_on='sou_rce')
                 del df['sou_rce']
+                if not backend.case_sensitive:
+                    del df[d]
 
         # Aggregate (If any dimension has been specified)
         if len(self._content["group_by"]) > 0:
@@ -129,7 +134,7 @@ class ETLExternalDatasetCommand(IExecutableCommand):
             # HACK: for the case where the measure has been named "obs_value", use "value"
             values = [m.lower() if m.lower() != "obs_value" else "value" for m in self._content["measures"]]
             out_names = self._content["measures_as"]
-            rows = [v.lower() for v in self._content["group_by"]]  # Group by dimension names
+            rows = translate_case(self._content["group_by"], params)  # Group by dimension names
             aggs = []  # Aggregation functions
             agg_names = {}
             for f in self._content["agg_funcs"]:
@@ -161,11 +166,12 @@ class ETLExternalDatasetCommand(IExecutableCommand):
             try:
                 # Check that all "rows" on which pivot table aggregates are present in the input "df"
                 # If not either synthesize them (only if there is a single filter value) or remove (if not present
+                df_columns_dict = create_dictionary(data={c: c for c in df.columns})
                 for r in rows.copy():
-                    if r not in df.columns:
+                    if r not in df_columns_dict:
                         found = False
                         for k in params:
-                            if k.lower() == r:
+                            if strcmp(k, r):
                                 found = True
                                 if len(params[k]) == 1:
                                     df[r] = params[k][0]
@@ -176,6 +182,10 @@ class ETLExternalDatasetCommand(IExecutableCommand):
                         if not found:
                             rows.remove(r)
                             issues.append((2, "Dimension '" + r + "' removed from the list of dimensions because it is not present in the raw input dataset."))
+                # Put proper DIMENSION names
+                for ir, r in enumerate(rows):
+                    rows[ir] = df_columns_dict[r]
+
                 # Pivot table using Group by
                 if True:
                     groups = df.groupby(by=rows, as_index=False)  # Split
@@ -224,7 +234,7 @@ class ETLExternalDatasetCommand(IExecutableCommand):
                 # The result, all columns (no index), is stored for later use
                 ds.data = df2
             except Exception as e:
-                issues.append((3, "There was a problem: "+str(e)))
+                issues.append((3, "There was a problem with the grouping: "+repr(e)))
 
         # Store the dataset in State
         datasets[result_name] = ds
