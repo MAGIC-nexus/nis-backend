@@ -838,7 +838,14 @@ def execute_file(file_name, generator_type):
                                     allow_saving=False)
     with open(file_name, read_type) as f:
         buffer = f.read()
-    ret = isess.register_andor_execute_command_generator(generator_type, content_type, buffer, False, True)
+        
+    issues, output = isess.register_andor_execute_command_generator(generator_type, content_type, buffer, False, True)
+
+    for idx, issue in enumerate(issues):
+        print(f"Issue {idx+1}/{len(issues)} = {issue}")
+
+    print(f"Output = {output}")
+
     isess.close_reproducible_session()
     isess.close_db_session()
     return isess
