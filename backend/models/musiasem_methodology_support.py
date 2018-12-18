@@ -28,6 +28,8 @@ from sqlalchemy.dialects.postgresql import UUID, JSONB
 import uuid
 import jsonpickle
 
+from backend.models import MODEL_VERSION
+
 __author__ = 'rnebot'
 
 DBSession = scoped_session(sessionmaker())  # TODO - Is this thread safe ??
@@ -374,6 +376,8 @@ class CaseStudyVersion(ORMBase):
     issues = Column(Unicode, nullable=True, default=None)  # If the session resulted in issues (warnings, errors,...) register here
     state = Column(Unicode, nullable=True, default=None)  # Persisted state after the execution of all commands
 
+    state_version = Column(Integer, nullable=True, default=MODEL_VERSION)
+
     def __copy__(self):
         vs = CaseStudyVersion()
         # vs.id = # NOT copied, a new ID !!!
@@ -417,6 +421,8 @@ class CaseStudyVersionSession(ORMBase):
     issues = Column(Unicode, nullable=True, default=None)  # If the session resulted in issues (warnings, errors,...) register here
     state = Column(Unicode, nullable=True, default=None)  # Persisted state after the execution of all commands
 
+    state_version = Column(Integer, nullable=True, default=MODEL_VERSION)
+
     def __init__(self):
         if not self.uuid:
             self.uuid = str(uuid.uuid4())
@@ -431,6 +437,7 @@ class CaseStudyVersionSession(ORMBase):
         s.close_instant = self.close_instant
         s.issues = self.issues
         s.state = self.state
+        s.state_version = self.state_version
         return s
 
 
