@@ -1019,6 +1019,12 @@ def reproducible_session_query_state_get_dataset(name, format):  # Query list of
 
                     # Generate XLSX from data & return it
                     output = io.BytesIO()
+                    # from pyexcelerate import Workbook, Writer
+                    # wb = Workbook()
+                    # data = [ds2.columns] + [ds2.values]
+                    # wb.new_sheet(name, data=data)
+                    # wr = Writer.Writer(wb)
+                    # wr.save(output)
                     ds2.to_excel(output, sheet_name=name, index=False, engine="xlsxwriter")
                     r = Response(output.getvalue(), mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", status=200)
             else:
