@@ -1198,6 +1198,18 @@ def ifnull(var, val):
     return var
 
 
+def first(l: List[Any]) -> Any:
+    """
+    Returns the first element of the list or None if it is empty.
+    :param l: The input list
+    :return: The first element of the list or None
+    """
+    if l:
+        return l[0]
+    else:
+        return None
+
+
 def translate_case(current_names: List[str], new_names: List[str]) -> List[str]:
     """
     Translate the names in the current_names list according the existing names in the new_names list that

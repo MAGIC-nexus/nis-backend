@@ -1,3 +1,5 @@
+from typing import Optional
+
 import pint
 from collections import namedtuple
 from attr import attrs, attrib
@@ -79,7 +81,7 @@ class CommandField:
     # Parser for the column
     parser = attrib()
     # Some columns have a predefined set of allowed strings
-    allowed_values = attrib(default=None)  # type: list[str]
+    allowed_values = attrib(default=None)  # type: Optional[list[str]]
     # Many values or just one
     many_values = attrib(default=True)
     # Many appearances (the field can appear multiple times). A convenience to define a list
@@ -88,6 +90,8 @@ class CommandField:
     examples = attrib(default=None)  # type: list[str]
     # Compiled regex
     regex_allowed_names = attrib(default=None)
+    # Is it directly an attribute of a Musiasem type? Which one?
+    attribute_of = attrib(default=None)  # type: type
 
 
 

@@ -5,6 +5,7 @@ from backend.command_generators.parser_field_parsers import simple_ident, unquot
     hierarchy_expression_v2, key_value_list, key_value, parameter_value, expression_with_parameters, \
     time_expression, boolean, indicator_expression, code_string, simple_h_name, domain_definition, context_query, \
     unit_name, geo_value, url_parser, processor_names, date, value, list_simple_ident, reference
+from backend.models.musiasem_concepts import Processor
 
 data_types = ["Number", "Boolean", "URL", "UUID", "Datetime", "String", "UnitName", "Code", "Geo"]
 concept_types = ["Dimension", "Measure", "Attribute"]
@@ -120,20 +121,20 @@ commands = {
      CommandField(allowed_names=[attributeRegex], name="attributes", mandatory=False, many_appearances=True, parser=value)
      ],
     "Processors":
-    [CommandField(allowed_names=["ProcessorContextType", "ProcessorType"], name="processor_type", mandatory=False, allowed_values=processor_types, parser=simple_ident),
-     CommandField(allowed_names=["ProcessorGroup"], name="processor_group", mandatory=False, allowed_values=None, parser=simple_ident),
+    [CommandField(allowed_names=["ProcessorGroup"], name="processor_group", mandatory=False, allowed_values=None, parser=simple_ident),
      CommandField(allowed_names=["Processor"], name="processor", mandatory=True, allowed_values=None, parser=simple_ident),
      CommandField(allowed_names=["ParentProcessor"], name="parent_processor", mandatory=False, allowed_values=None, parser=simple_ident),
-     CommandField(allowed_names=["FunctionalOrStructural"], name="functional_or_structural", mandatory=False, allowed_values=functional_or_structural, parser=simple_ident),
      CommandField(allowed_names=["CopyInterfaces"], name="copy_interfaces_mode", mandatory=False, allowed_values=copy_interfaces_mode, parser=simple_ident),
-     CommandField(allowed_names=["InstanceOrArchetype"], name="instance_or_archetype", mandatory=False, allowed_values=instance_or_archetype, parser=simple_ident),
-     CommandField(allowed_names=["Stock"], name="stock", mandatory=False, allowed_values=no_yes, parser=simple_ident),
-     CommandField(allowed_names=["Alias", "SpecificName"], name="alias", mandatory=False, allowed_values=None, parser=simple_ident),
      CommandField(allowed_names=["CloneProcessor"], name="clone_processor", mandatory=False, allowed_values=None, parser=simple_ident),
+     CommandField(allowed_names=["ProcessorContextType", "ProcessorType"], name="processor_type", mandatory=False, allowed_values=processor_types, parser=simple_ident, attribute_of=Processor),
+     CommandField(allowed_names=["FunctionalOrStructural"], name="functional_or_structural", mandatory=False, allowed_values=functional_or_structural, parser=simple_ident, attribute_of=Processor),
+     CommandField(allowed_names=["InstanceOrArchetype"], name="instance_or_archetype", mandatory=False, allowed_values=instance_or_archetype, parser=simple_ident, attribute_of=Processor),
+     CommandField(allowed_names=["Stock"], name="stock", mandatory=False, allowed_values=no_yes, parser=simple_ident, attribute_of=Processor),
+     CommandField(allowed_names=["Alias", "SpecificName"], name="alias", mandatory=False, allowed_values=None, parser=simple_ident),
      CommandField(allowed_names=["Description"], name="description", mandatory=False, allowed_values=None, parser=unquoted_string),
      CommandField(allowed_names=["GeolocationRef"], name="geolocation_ref", mandatory=False, allowed_values=None, parser=reference),
      CommandField(allowed_names=["GeolocationCode"], name="geolocation_code", mandatory=False, allowed_values=None, parser=code_string),
-     CommandField(allowed_names=["Attributes"], name="attributes", mandatory=False, allowed_values=None, parser=key_value_list),
+     CommandField(allowed_names=["Attributes"], name="attributes", mandatory=False, allowed_values=None, parser=key_value_list, attribute_of=Processor),
      CommandField(allowed_names=[attributeRegex], name="attributes", mandatory=False, many_appearances=True, parser=value),
      ],
     "Interfaces":
@@ -297,6 +298,15 @@ commands = {
      CommandField(allowed_names=["Description"], name="description", mandatory=False, allowed_values=None, parser=unquoted_string),
      ]
 }
+
+# command_field_names = {}
+# for command in commands.values():
+#     for field in command:
+#         for name in field.allowed_names:
+#             command_field_names[name] = field.name
+
+command_field_names = {name: f.name for cmd in commands.values() for f in cmd for name in f.allowed_names}
+print(f'command_field_names = {command_field_names}')
 
 
 def compile_command_field_regexes():

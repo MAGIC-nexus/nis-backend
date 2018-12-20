@@ -108,9 +108,11 @@ def export_model_to_json(state: State) -> str:
 
     # Get Metadata dictionary
     metadata = state.get("_metadata")
-    # Change lists of 1 element to a simple value
-    metadata = {k: v[0] if len(v) == 1 else v for k, v in metadata.items()}
-    metadata_string = '"Metadata": ' + json.dumps(metadata, cls=CustomEncoder)
+    metadata_string = None
+    if metadata:
+        # Change lists of 1 element to a simple value
+        metadata = {k: v[0] if len(v) == 1 else v for k, v in metadata.items()}
+        metadata_string = '"Metadata": ' + json.dumps(metadata, cls=CustomEncoder)
 
     print(metadata_string)
 
@@ -135,9 +137,12 @@ def export_model_to_json(state: State) -> str:
     query = BasicQuery(state)
     objects = query.execute(values_of_nested_dictionary(json_structure), filt="")
 
-    json_dict = create_json_string_from_objects(objects, json_structure)
+    json_string = create_json_string_from_objects(objects, json_structure)
 
-    print(json_dict)
+    print(json_string)
 
-    return f'{{{metadata_string}, {json_dict}}}'
+    if metadata_string:
+        json_string = f'{metadata_string}, {json_string}'
+
+    return f'{{{json_string}}}'
 

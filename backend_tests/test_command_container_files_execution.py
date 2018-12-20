@@ -449,6 +449,8 @@ class TestCommandFiles(unittest.TestCase):
         #file_path = os.path.dirname(os.path.abspath(__file__)) + "/z_input_files/v2/02_declare_hierarchies_and_cloning_and_scaling.xlsx"
         #file_path = os.path.dirname(os.path.abspath(__file__)) + "/z_input_files/v2/06_upscale_almeria.xlsx"
         #file_path = os.path.dirname(os.path.abspath(__file__)) + "/z_input_files/test_spreadsheet_4.xlsx"
+        #file_path = os.path.dirname(os.path.abspath(__file__)) + "/z_input_files/v2/08_caso_energia_eu_new_commands.xlsx"
+        #file_path = os.path.dirname(os.path.abspath(__file__)) + "/z_input_files/v2/09_many_to_many_mapping.xlsx"
         isess = execute_file(file_path, generator_type="spreadsheet")
         json_string = export_model_to_json(isess.state)
         print(json_string)

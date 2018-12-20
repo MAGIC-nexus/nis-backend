@@ -321,7 +321,7 @@ class InterfacesAndQualifiedQuantitiesCommand(IExecutableCommand):
                                                      incoming=f_orientation
                                                  ),
                                                  taxon=ft,
-                                                 location=f_location,
+                                                 geolocation=f_location,
                                                  tags=None,
                                                  attributes=iface_attributes)
                     glb_idx.put(f.key(), f)
