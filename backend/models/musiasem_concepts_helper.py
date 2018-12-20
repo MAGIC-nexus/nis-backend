@@ -1,4 +1,4 @@
-from typing import Union, List, Tuple, Optional
+from typing import Union, List, Tuple, Optional, Any, Dict
 
 import jsonpickle
 
@@ -13,7 +13,7 @@ from backend.models.musiasem_concepts import \
     ProcessorsRelationPartOfObservation, ProcessorsRelationUndirectedFlowObservation, \
     ProcessorsRelationUpscaleObservation, \
     FactorsRelationDirectedFlowObservation, Hierarchy, Taxon, QualifiedQuantityExpression, \
-    FactorQuantitativeObservation, HierarchyLevel
+    FactorQuantitativeObservation, HierarchyLevel, Geolocation
 from backend.models.statistical_datasets import CodeList, CodeListLevel, Code
 
 
@@ -331,7 +331,7 @@ def find_factortype_by_name(state: Union[State, PartialRetrievalDictionary], fac
 def find_or_create_observable(state: Union[State, PartialRetrievalDictionary],
                               name: str, source: Union[str, Observer]=Observer.no_observer_specified,
                               aliases: str=None,  # "name" (processor part) is an alias of "aliases" Processor
-                              proc_external: bool=None, proc_attributes: dict=None, proc_location=None,
+                              proc_attributes: Dict[str, Any] = None, proc_location: Geolocation = None,
                               fact_roegen_type: FlowFundRoegenType=None, fact_attributes: dict=None,
                               fact_incoming: bool=None, fact_external: bool=None, fact_location=None):
     """
@@ -344,7 +344,6 @@ def find_or_create_observable(state: Union[State, PartialRetrievalDictionary],
     :param name: Full name of processor, processor':'factor or ':'factor
     :param source: Name of the observer or Observer itself (used only when creating nested Processors, because it implies part-of relations)
     :param aliases: Full name of an existing processor to be aliased by the processor part in "name"
-    :param proc_external: True=external processor; False=internal processor
     :param proc_attributes: Dictionary with attributes to be added to the processor if it is created
     :param proc_location: Specification of where the processor is physically located, if it applies
     :param fact_roegen_type: Flow or Fund
@@ -416,8 +415,7 @@ def find_or_create_observable(state: Union[State, PartialRetrievalDictionary],
                 location = proc_location if last else None
                 # Create processor
                 p = Processor(acum_name,
-                              external=proc_external,
-                              location=location,
+                              geolocation=location,
                               tags=None,
                               attributes=attrs
                               )
@@ -476,7 +474,7 @@ def find_or_create_observable(state: Union[State, PartialRetrievalDictionary],
                                              p,
                                              in_processor_type=FactorInProcessorType(external=fact_external, incoming=fact_incoming),
                                              taxon=ft,
-                                             location=fact_location,
+                                             geolocation=fact_location,
                                              tags=None,
                                              attributes=fact_attributes)
                 glb_idx.put(f.key(), f)
@@ -507,7 +505,7 @@ def find_or_create_factor(state: Union[State, PartialRetrievalDictionary],
                                      in_processor_type=FactorInProcessorType(external=fact_external,
                                                                              incoming=fact_incoming),
                                      taxon=ft,
-                                     location=fact_location,
+                                     geolocation=fact_location,
                                      tags=None,
                                      attributes=fact_attributes)
         glb_idx.put(f.key(), f)
@@ -539,7 +537,6 @@ def find_or_create_factor_type(state: Union[State, PartialRetrievalDictionary],
 
 def find_or_create_processor(state: Union[State, PartialRetrievalDictionary],
                              name: str,
-                             proc_external: bool = None,
                              proc_attributes: dict = None,
                              proc_location=None):
     """
@@ -547,7 +544,6 @@ def find_or_create_processor(state: Union[State, PartialRetrievalDictionary],
 
     :param state:
     :param name:
-    :param proc_external:
     :param proc_attributes:
     :param proc_location:
     :return:
@@ -555,7 +551,6 @@ def find_or_create_processor(state: Union[State, PartialRetrievalDictionary],
     p_names, f_names = _obtain_name_parts(name)
     if not f_names:
         p, _, _ = find_or_create_observable(state, name,
-                                            proc_external=proc_external,
                                             proc_attributes=proc_attributes,
                                             proc_location=proc_location)
         return p
@@ -624,7 +619,6 @@ def create_quantitative_observation(state: Union[State, PartialRetrievalDictiona
                                                    factor,
                                                    # source=None,
                                                    aliases=proc_aliases,
-                                                   proc_external=proc_external,
                                                    proc_attributes=proc_attributes,
                                                    proc_location=proc_location,
                                                    fact_roegen_type=ftype_roegen_type,
@@ -1089,8 +1083,7 @@ def _build_hierarchy(name, type_name, registry: PartialRetrievalDictionary, h: d
                 location = None
                 proc_external = None
                 n = Processor(acum_name2,
-                              external=proc_external,
-                              location=location,
+                              geolocation=location,
                               tags=None,
                               attributes=attrs
                               )

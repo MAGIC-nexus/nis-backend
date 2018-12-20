@@ -11,8 +11,10 @@ from backend.command_generators import Issue
 from backend.command_generators.parser_ast_evaluators import dictionary_from_key_value_list
 from backend.command_generators.parser_field_parsers import string_to_ast, processor_names
 from backend.command_generators.spreadsheet_command_parsers_v2 import IssueLocation
+from backend.common.helper import first
 from backend.model_services import IExecutableCommand, get_case_study_registry_objects
-from backend.models.musiasem_concepts import ProcessorsSet, ProcessorsRelationPartOfObservation, Parameter
+from backend.models.musiasem_concepts import ProcessorsSet, ProcessorsRelationPartOfObservation, Parameter, Processor, \
+    Geolocation
 from backend.models.musiasem_concepts_helper import find_or_create_processor, find_processor_by_name
 from backend.solving import get_processor_names_to_processors_dictionary
 
@@ -78,19 +80,13 @@ class ProcessorsCommand(IExecutableCommand):
                     ds_concepts = res["ds_concepts"]
                     h_list = res["hierarchies"]
                     if len(ds_list) >= 1 and len(h_list) >= 1:
-                        issues.append(Issue(itype=3,
-                                            description="Dataset(s): "+", ".join([d.name for d in ds_list])+", and hierarchy(ies): "+", ".join([h.name for h in h_list])+", have been specified. Either a single dataset or a single hiearchy is supported.",
-                                            location=IssueLocation(sheet_name=name, row=r, column=None)))
+                        issues.append(create_issue(3, "Dataset(s): "+", ".join([d.name for d in ds_list])+", and hierarchy(ies): "+", ".join([h.name for h in h_list])+", have been specified. Either a single dataset or a single hiearchy is supported."))
                         return
                     elif len(ds_list) > 1:
-                        issues.append(Issue(itype=3,
-                                            description="More than one dataset has been specified: "+", ".join([d.name for d in ds_list])+", just one dataset is supported.",
-                                            location=IssueLocation(sheet_name=name, row=r, column=None)))
+                        issues.append(create_issue(3, "More than one dataset has been specified: "+", ".join([d.name for d in ds_list])+", just one dataset is supported."))
                         return
                     elif len(h_list) > 1:
-                        issues.append(Issue(itype=3,
-                                            description="More than one hierarchy has been specified: " + ", ".join([h.name for h in h_list])+", just one hierarchy is supported.",
-                                            location=IssueLocation(sheet_name=name, row=r, column=None)))
+                        issues.append(create_issue(3, "More than one hierarchy has been specified: " + ", ".join([h.name for h in h_list])+", just one hierarchy is supported."))
                         return
                     const_dict = obtain_dictionary_with_literal_fields(item, asts)
                     if len(ds_list) == 1:
@@ -110,9 +106,7 @@ class ProcessorsCommand(IExecutableCommand):
                         only_dimensions_requested = len(all_dimensions) == 0
 
                         if measure_requested and not only_dimensions_requested:
-                            issues.append(Issue(itype=3,
-                                                description="It is not possible to use a measure if not all dimensions are used (cannot assume implicit aggregation)",
-                                                location=IssueLocation(sheet_name=name, row=r, column=None)))
+                            issues.append(create_issue(3, "It is not possible to use a measure if not all dimensions are used (cannot assume implicit aggregation)"))
                             return
                         elif not measure_requested and not only_dimensions_requested:
                             # TODO Reduce the dataset to the unique tuples (consider the current case -sensitive or not-sensitive-)
@@ -188,54 +182,67 @@ class ProcessorsCommand(IExecutableCommand):
                 yield item
 
         def process_line(item):
-            # Read variables
-            p_name = item.get("processor", None)  # Mandatory, simple_ident
-            p_group = item.get("processor_group", None)  # Optional, simple_ident
-            p_type = item.get("processor_type", processor_types[0])  # Optional, simple_ident
-            p_f_or_s = item.get("functional_or_structural", functional_or_structural[0])  # Optional, simple_ident
-            p_copy_interfaces = item.get("copy_interfaces_mode", copy_interfaces_mode[0])
-            p_i_or_a = item.get("instance_or_archetype", instance_or_archetype[0])  # Optional, simple_ident
-            p_parent = item.get("parent_processor", None)  # Optional, simple_ident
-            p_clone_processor = item.get("clone_processor", None)  # Optional, simple_ident
-            p_alias = item.get("alias", None)  # Optional, simple_ident
-            p_description = item.get("description", None)  # Optional, unquoted_string
-            p_location = item.get("location", None)  # Optional, geo_value
-            p_attributes = item.get("attributes", None)  # Optional, key_value_list
-            if p_attributes:
-                try:
-                    attributes = dictionary_from_key_value_list(p_attributes, glb_idx)
-                except Exception as e:
-                    issues.append(Issue(itype=3,
-                                        description=str(e),
-                                        location=IssueLocation(sheet_name=name, row=r, column=None)))
-                    return
-            else:
-                attributes = {}
+            fields_dict = {f.name: item.get(f.name, first(f.allowed_values)) for f in commands["Processors"]}
 
-            # Process variables
-            if not p_name:
-                issues.append(Issue(itype=3,
-                                    description="Empty processor name. Skipped.",
-                                    location=IssueLocation(sheet_name=name, row=r, column=None)))
+            # Check if mandatory fields with no value exist
+            for field in [f.name for f in commands["Processors"] if f.mandatory and not fields_dict[f.name]]:
+                issues.append(create_issue(3, f"Mandatory field '{field}' is empty. Skipped."))
                 return
 
-            parent_processor = None
-            if p_parent:
-                # Obtain the parent
-                # It must exist (it could be created dynamically, but it is important to specify attributes)
-                parent_processor = find_processor_by_name(state=glb_idx, processor_name=p_parent)
-                if not parent_processor:
-                    issues.append(Issue(itype=3,
-                                        description="Specified parent processor, '"+p_parent+"', does not exist",
-                                        location=IssueLocation(sheet_name=name, row=r, column=None)))
+            # # Processor must have a name
+            # if not fields_dict["name"]:
+            #     issues.append(Issue(itype=3,
+            #                         description="Empty processor name. Skipped.",
+            #                         location=IssueLocation(sheet_name=command_name, row=row, column=None)))
+            #     return
+
+            # Transform text of "attributes" into a dictionary
+            field_value = fields_dict.get("attributes", None)
+            if field_value:
+                try:
+                    fields_dict["attributes"] = dictionary_from_key_value_list(field_value, glb_idx)
+                except Exception as e:
+                    issues.append(create_issue(3, str(e)))
                     return
+            else:
+                fields_dict["attributes"] = {}
 
-            is_context_processor = True
+            #
+            # # Read variables
+            # p_name = item.get("processor", None)  # Mandatory, simple_ident
+            # p_group = item.get("processor_group", None)  # Optional, simple_ident
+            # p_type = item.get("processor_type", processor_types[0])  # Optional, simple_ident
+            # p_f_or_s = item.get("functional_or_structural", functional_or_structural[0])  # Optional, simple_ident
+            # p_copy_interfaces = item.get("copy_interfaces_mode", copy_interfaces_mode[0])
+            # p_i_or_a = item.get("instance_or_archetype", instance_or_archetype[0])  # Optional, simple_ident
+            # p_parent = item.get("parent_processor", None)  # Optional, simple_ident
+            # p_clone_processor = item.get("clone_processor", None)  # Optional, simple_ident
+            # p_alias = item.get("alias", None)  # Optional, simple_ident
+            # p_description = item.get("description", None)  # Optional, unquoted_string
+            # p_location = item.get("location", None)  # Optional, geo_value
+            # p_attributes = item.get("attributes", None)  # Optional, key_value_list
+            # if p_attributes:
+            #     try:
+            #         attributes = dictionary_from_key_value_list(p_attributes, glb_idx)
+            #     except Exception as e:
+            #         issues.append(Issue(itype=3,
+            #                             description=str(e),
+            #                             location=IssueLocation(sheet_name=command_name, row=row, column=None)))
+            #         return
+            # else:
+            #     attributes = {}
+            #
 
-            # TODO
-            # If it is a context processor, create it as "local"
-            # Create accompanying "local-environment"
-            # Create non-local and non-local-environment
+            # Process specific fields
+
+            # Obtain the parent: it must exist. It could be created dynamically but it's important to specify attributes
+            parent_processor = None
+            field_value = fields_dict.get("parent_processor", None)
+            if field_value:
+                parent_processor = find_processor_by_name(state=glb_idx, processor_name=field_value)
+                if not parent_processor:
+                    issues.append(create_issue(3, f"Specified parent processor, '{field_value}', does not exist"))
+                    return
 
             # Find or create processor and REGISTER it in "glb_idx"
             # TODO Now, only Simple name allowed
@@ -243,23 +250,35 @@ class ProcessorsCommand(IExecutableCommand):
             # TODO Improve allowing CLONE(<processor name>)
             # TODO Pass the attributes:
             # TODO p_type, p_f_or_s, p_i_or_a, p_alias, p_description, p_copy_interfaces
-            if p_clone_processor:
+            if fields_dict.get("clone_processor", None):
                 # TODO Find origin processor
                 # TODO Clone it
                 pass
             else:
-                p = find_or_create_processor(state=glb_idx,
-                                             name=p_name,
-                                             proc_external=None,
-                                             proc_attributes=attributes,
-                                             proc_location=p_location)
+                processor_attributes = {f.name: fields_dict[f.name] for f in commands["Processors"] if f.attribute_of == Processor}
+
+                # If key "attributes" exist, expand it.
+                # E.g. {"a": 1, "b": 2, "attributes": {"c": 3, "d": 4}} -> {'a': 1, 'b': 2, 'c': 3, 'd': 4}
+                if "attributes" in processor_attributes:
+                    field_value = processor_attributes["attributes"]
+                    del processor_attributes["attributes"]
+                    if field_value:
+                        processor_attributes.update(field_value)
+
+                p = find_or_create_processor(
+                    state=glb_idx,
+                    name=fields_dict["processor"],
+                    proc_attributes=processor_attributes,
+                    proc_location=Geolocation.create(fields_dict["geolocation_ref"], fields_dict["geolocation_code"])
+                )
 
             # Add to ProcessorsGroup, if specified
-            if p_group:
-                p_set = p_sets.get(p_group, ProcessorsSet(p_group))
-                p_sets[p_group] = p_set
+            field_value = fields_dict.get("processor_group", None)
+            if field_value:
+                p_set = p_sets.get(field_value, ProcessorsSet(field_value))
+                p_sets[field_value] = p_set
                 if p_set.append(p, glb_idx):  # Appends codes to the pset if the processor was not member of the pset
-                    p_set.append_attributes_codes(attributes)
+                    p_set.append_attributes_codes(fields_dict["attributes"])
 
             # Add Relationship "part-of" if parent was specified
             # The processor may have previously other parent processors that will keep its parentship
@@ -268,9 +287,14 @@ class ProcessorsCommand(IExecutableCommand):
                 o1 = ProcessorsRelationPartOfObservation.create_and_append(parent_processor, p, None)  # Part-of
                 glb_idx.put(o1.key(), o1)
 
+        def create_issue(itype: int, description: str) -> Issue:
+            return Issue(itype=itype,
+                         description=description,
+                         location=IssueLocation(sheet_name=command_name, row=row, column=None))
+
         issues = []
         glb_idx, p_sets, hh, datasets, mappings = get_case_study_registry_objects(state)
-        name = self._content["command_name"]
+        command_name = self._content["command_name"]
 
         # CommandField definitions for the fields of Interface command
         fields = {f.name: f for f in commands["Processors"]}
@@ -281,7 +305,7 @@ class ProcessorsCommand(IExecutableCommand):
 
         # Process parsed information
         for line in self._content["items"]:
-            r = line["_row"]
+            row = line["_row"]
             for sub_line in parse_and_unfold_line(line):
                 process_line(sub_line)
 

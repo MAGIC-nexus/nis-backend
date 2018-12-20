@@ -44,31 +44,31 @@ def prepare_simple_processors_hierarchy():
     state = State()
     p1,_,_ = find_or_create_observable(state, "P1", "test_observer",
                                    aliases=None,
-                                   proc_external=None, proc_attributes=None, proc_location=None,
+                                   proc_attributes=None, proc_location=None,
                                    fact_roegen_type=None, fact_attributes=None,
                                    fact_incoming=None, fact_external=None, fact_location=None
                                    )
     p2,_,_ = find_or_create_observable(state, "P1.P2", "test_observer",
                                    aliases=None,
-                                   proc_external=None, proc_attributes=None, proc_location=None,
+                                   proc_attributes=None, proc_location=None,
                                    fact_roegen_type=None, fact_attributes=None,
                                    fact_incoming=None, fact_external=None, fact_location=None
                                    )
     p3,_,_ = find_or_create_observable(state, "P3", "test_observer",
                                    aliases=None,
-                                   proc_external=None, proc_attributes=None, proc_location=None,
+                                   proc_attributes=None, proc_location=None,
                                    fact_roegen_type=None, fact_attributes=None,
                                    fact_incoming=None, fact_external=None, fact_location=None
                                    )
     p4,_,_ = find_or_create_observable(state, "P1.P2.P3", "test_observer",
                                    aliases=None,
-                                   proc_external=None, proc_attributes=None, proc_location=None,
+                                   proc_attributes=None, proc_location=None,
                                    fact_roegen_type=None, fact_attributes=None,
                                    fact_incoming=None, fact_external=None, fact_location=None
                                    )
     p5,_,_ = find_or_create_observable(state, "P1.P2b", "test_observer",
                                    aliases=None,
-                                   proc_external=None, proc_attributes=None, proc_location=None,
+                                   proc_attributes=None, proc_location=None,
                                    fact_roegen_type=None, fact_attributes=None,
                                    fact_incoming=None, fact_external=None, fact_location=None
                                    )
@@ -346,14 +346,12 @@ class ModelBuildingProcessors(unittest.TestCase):
         self.assertFalse(h.get_node("T3") in p1.tags)
 
     def test_processor_with_attributes(self):
-        # Create a Processor
-        p1 = Processor("P1")
         # Create a Location
-        geo = Geolocation("Spain")
-        # Assign it as "location" attribute
-        p1.attributes_append("location", geo)
+        geo = Geolocation("NUTS", "ES")
+        # Create a Processor
+        p1 = Processor("P1", geolocation=geo)
         # Check
-        self.assertEqual(p1.attributes["location"], geo)
+        self.assertEqual(p1.geolocation, geo)
 
     def test_processors_with_factors(self):
         """ Processors adorned with factors. No need for connections.
