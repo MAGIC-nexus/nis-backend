@@ -189,13 +189,6 @@ class ProcessorsCommand(IExecutableCommand):
                 issues.append(create_issue(3, f"Mandatory field '{field}' is empty. Skipped."))
                 return
 
-            # # Processor must have a name
-            # if not fields_dict["name"]:
-            #     issues.append(Issue(itype=3,
-            #                         description="Empty processor name. Skipped.",
-            #                         location=IssueLocation(sheet_name=command_name, row=row, column=None)))
-            #     return
-
             # Transform text of "attributes" into a dictionary
             field_value = fields_dict.get("attributes", None)
             if field_value:
@@ -206,32 +199,6 @@ class ProcessorsCommand(IExecutableCommand):
                     return
             else:
                 fields_dict["attributes"] = {}
-
-            #
-            # # Read variables
-            # p_name = item.get("processor", None)  # Mandatory, simple_ident
-            # p_group = item.get("processor_group", None)  # Optional, simple_ident
-            # p_type = item.get("processor_type", processor_types[0])  # Optional, simple_ident
-            # p_f_or_s = item.get("functional_or_structural", functional_or_structural[0])  # Optional, simple_ident
-            # p_copy_interfaces = item.get("copy_interfaces_mode", copy_interfaces_mode[0])
-            # p_i_or_a = item.get("instance_or_archetype", instance_or_archetype[0])  # Optional, simple_ident
-            # p_parent = item.get("parent_processor", None)  # Optional, simple_ident
-            # p_clone_processor = item.get("clone_processor", None)  # Optional, simple_ident
-            # p_alias = item.get("alias", None)  # Optional, simple_ident
-            # p_description = item.get("description", None)  # Optional, unquoted_string
-            # p_location = item.get("location", None)  # Optional, geo_value
-            # p_attributes = item.get("attributes", None)  # Optional, key_value_list
-            # if p_attributes:
-            #     try:
-            #         attributes = dictionary_from_key_value_list(p_attributes, glb_idx)
-            #     except Exception as e:
-            #         issues.append(Issue(itype=3,
-            #                             description=str(e),
-            #                             location=IssueLocation(sheet_name=command_name, row=row, column=None)))
-            #         return
-            # else:
-            #     attributes = {}
-            #
 
             # Process specific fields
 

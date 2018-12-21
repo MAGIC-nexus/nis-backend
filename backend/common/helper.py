@@ -1200,7 +1200,7 @@ def ifnull(var, val):
 
 def first(l: List[Any]) -> Any:
     """
-    Returns the first element of the list or None if it is empty.
+    Returns the first element of the list or None if the list is empty.
     :param l: The input list
     :return: The first element of the list or None
     """
