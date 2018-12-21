@@ -1,5 +1,4 @@
-from backend.command_executors.version2.indicators_command import IndicatorsCommand
-
+from backend import CommandIssuesPairType
 from backend.command_executors.external_data.etl_external_dataset_command import ETLExternalDatasetCommand
 from backend.command_executors.external_data.mapping_command import MappingCommand
 from backend.command_executors.external_data.parameters_command import ParametersCommand
@@ -12,7 +11,6 @@ from backend.command_executors.specification.references_command import Reference
 from backend.command_executors.specification.scale_conversion_command import ScaleConversionCommand
 from backend.command_executors.specification.structure_command import StructureCommand
 from backend.command_executors.specification.upscale_command import UpscaleCommand
-
 from backend.command_executors.version2.attribute_sets_command import AttributeSetsCommand
 from backend.command_executors.version2.attribute_types_command import AttributeTypesCommand
 from backend.command_executors.version2.dataset_data_command import DatasetDataCommand
@@ -22,12 +20,13 @@ from backend.command_executors.version2.export_elements_commands import Exportab
 from backend.command_executors.version2.hierarchy_categories_command import HierarchyCategoriesCommand
 from backend.command_executors.version2.hierarchy_mapping_command import HierarchyMappingCommand
 from backend.command_executors.version2.import_elements_commands import ImportElementsCommand
-from backend.command_executors.version2.nested_commands_command import NestedCommandsCommand
-from backend.command_executors.version2.processor_scalings_command import ProcessorScalingsCommand
+from backend.command_executors.version2.indicators_command import IndicatorsCommand
 from backend.command_executors.version2.interface_types_command import InterfaceTypesCommand
 from backend.command_executors.version2.interfaces_command import InterfacesAndQualifiedQuantitiesCommand
+from backend.command_executors.version2.nested_commands_command import NestedCommandsCommand
 from backend.command_executors.version2.pedigree_matrices_command import PedigreeMatricesReferencesCommand
 from backend.command_executors.version2.problem_statement_command import ProblemSolvingCommand
+from backend.command_executors.version2.processor_scalings_command import ProcessorScalingsCommand
 from backend.command_executors.version2.processors_command import ProcessorsCommand
 from backend.command_executors.version2.references_v2_command import BibliographicReferencesCommand, \
     GeographicReferencesCommand, ProvenanceReferencesCommand
@@ -35,7 +34,7 @@ from backend.command_executors.version2.relationships_command import Relationshi
 from backend.command_executors.version2.scale_conversion_v2_command import ScaleConversionV2Command
 
 
-def create_command(cmd_type, name, json_input, source_block=None):
+def create_command(cmd_type, name, json_input, source_block=None) -> CommandIssuesPairType:
     """
     Factory creating and initializing a command from its type, optional name and parameters
 

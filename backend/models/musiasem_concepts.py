@@ -51,23 +51,21 @@ An interesting paper: "A survey of RDB to RDF translation approaches and tools"
 
 import collections
 import json
-import urllib
+import logging
 from collections import OrderedDict
 from enum import Enum
 from typing import *  # Type hints
-from uuid import UUID
-import pint  # Physical Units management
+
 import pandas as pd
-import logging
-from attr import attrs, attrib
+import pint  # Physical Units management
 
 from backend.common.helper import create_dictionary, strcmp, PartialRetrievalDictionary, \
     case_sensitive, is_boolean, is_integer, is_float, is_datetime, is_url, is_uuid, to_datetime, to_integer, to_float, \
     to_url, to_uuid, to_boolean, to_category, to_str, is_category, is_str, is_geo, to_geo, ascii2uuid, \
     Encodable, name_and_id_dict, ifnull
-from backend.models import ureg, log_level
 from backend.model_services import State, get_case_study_registry_objects, LocallyUniqueIDManager
 from backend.models import CodeImmutable
+from backend.models import ureg, log_level
 
 logger = logging.getLogger(__name__)
 logger.setLevel(log_level)

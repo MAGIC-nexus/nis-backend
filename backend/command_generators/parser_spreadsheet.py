@@ -1,14 +1,16 @@
+import io
 import mimetypes
 import urllib
 
 import openpyxl
-
-import io
 # import koala # An Excel files parser elaborating a graph allowing automatic evaluation
 import regex as re  # Improvement over standard "re"
-from backend import Issue
+
 import backend
-from backend.command_executors.version2.indicators_command import IndicatorsCommand
+from backend import Issue
+from backend.command_executors import create_command, DatasetDataCommand, DatasetQryCommand, AttributeTypesCommand, \
+    AttributeSetsCommand, InterfaceTypesCommand, ProcessorsCommand, InterfacesAndQualifiedQuantitiesCommand, \
+    RelationshipsCommand, ProcessorScalingsCommand, ScaleConversionV2Command, DatasetDefCommand, NestedCommandsCommand
 from backend.command_executors.external_data.etl_external_dataset_command import ETLExternalDatasetCommand
 from backend.command_executors.external_data.mapping_command import MappingCommand
 from backend.command_executors.external_data.parameters_command import ParametersCommand
@@ -22,26 +24,32 @@ from backend.command_executors.specification.structure_command import StructureC
 from backend.command_executors.specification.upscale_command import UpscaleCommand
 from backend.command_executors.version2.hierarchy_categories_command import HierarchyCategoriesCommand
 from backend.command_executors.version2.hierarchy_mapping_command import HierarchyMappingCommand
-from backend.command_executors import create_command, DatasetDataCommand, DatasetQryCommand, AttributeTypesCommand, \
-    AttributeSetsCommand, InterfaceTypesCommand, ProcessorsCommand, InterfacesAndQualifiedQuantitiesCommand, \
-    RelationshipsCommand, ProcessorScalingsCommand, ScaleConversionV2Command, DatasetDefCommand, NestedCommandsCommand
-from backend.command_executors.version2.references_v2_command import ProvenanceReferencesCommand, BibliographicReferencesCommand, \
+from backend.command_executors.version2.indicators_command import IndicatorsCommand
+from backend.command_executors.version2.references_v2_command import ProvenanceReferencesCommand, \
+    BibliographicReferencesCommand, \
     GeographicReferencesCommand
-from backend.command_generators.spreadsheet_command_parsers.analysis.indicators_spreadsheet_parse import parse_indicators_command
-from backend.command_generators.spreadsheet_command_parsers.external_data.mapping_spreadsheet_parse import parse_mapping_command
-from backend.command_generators.spreadsheet_command_parsers.external_data.etl_external_dataset_spreadsheet_parse import parse_etl_external_dataset_command
-from backend.command_generators.spreadsheet_command_parsers.specification.hierarchy_spreadsheet_parser import parse_hierarchy_command
-from backend.command_generators.spreadsheet_command_parsers.specification.metadata_spreadsheet_parse import parse_metadata_command
-from backend.command_generators.spreadsheet_command_parsers.specification.data_input_spreadsheet_parse import parse_data_input_command
+from backend.command_generators.parser_spreadsheet_utils import binary_mask_from_worksheet, \
+    obtain_rectangular_submatrices
+from backend.command_generators.spreadsheet_command_parsers.external_data.etl_external_dataset_spreadsheet_parse import \
+    parse_etl_external_dataset_command
+from backend.command_generators.spreadsheet_command_parsers.external_data.mapping_spreadsheet_parse import \
+    parse_mapping_command
+from backend.command_generators.spreadsheet_command_parsers.specification.data_input_spreadsheet_parse import \
+    parse_data_input_command
+from backend.command_generators.spreadsheet_command_parsers.specification.hierarchy_spreadsheet_parser import \
+    parse_hierarchy_command
+from backend.command_generators.spreadsheet_command_parsers.specification.metadata_spreadsheet_parse import \
+    parse_metadata_command
 from backend.command_generators.spreadsheet_command_parsers.specification.pedigree_matrix_spreadsheet_parse import \
     parse_pedigree_matrix_command
 from backend.command_generators.spreadsheet_command_parsers.specification.references_spreadsheet_parser import \
     parse_references_command
 from backend.command_generators.spreadsheet_command_parsers.specification.scale_conversion_spreadsheet_parse import \
     parse_scale_conversion_command
-from backend.command_generators.spreadsheet_command_parsers.specification.upscale_spreadsheet_parse import parse_upscale_command
-from backend.command_generators.spreadsheet_command_parsers.specification.structure_spreadsheet_parser import parse_structure_command
-from backend.command_generators.parser_spreadsheet_utils import binary_mask_from_worksheet, obtain_rectangular_submatrices
+from backend.command_generators.spreadsheet_command_parsers.specification.structure_spreadsheet_parser import \
+    parse_structure_command
+from backend.command_generators.spreadsheet_command_parsers.specification.upscale_spreadsheet_parse import \
+    parse_upscale_command
 from backend.command_generators.spreadsheet_command_parsers_v2.dataset_data_spreadsheet_parse import \
     parse_dataset_data_command
 from backend.command_generators.spreadsheet_command_parsers_v2.dataset_qry_spreadsheet_parse import \
@@ -53,7 +61,6 @@ from backend.command_generators.spreadsheet_command_parsers_v2.simple_parsers im
     parse_scale_changers_command, \
     parse_shared_elements_command, parse_reused_elements_command, parse_indicators_v2_command, parse_ref_provenance, \
     parse_ref_bibliographic, parse_ref_geographic, parse_import_commands_command, parse_list_of_commands_command
-
 # Most complex name
 # [namespace::][type:]var(.var)*[(@|#)var] : [namespace] + [type] + var + [attribute or tag]
 from backend.common.helper import create_dictionary
@@ -67,7 +74,7 @@ cplex_var = "((" + var_name + "::)?" + hvar_name + ")"
 # ############################### #
 
 
-def commands_generator_from_ooxml_file(input, state, sublist, stack):
+def commands_generator_from_ooxml_file(input, state, sublist, stack) -> backend.CommandIssuesPairType:
     """
     It reads an Office Open XML input
     Yields a sequence of command_executors

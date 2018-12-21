@@ -3,7 +3,9 @@ import uuid
 from abc import ABCMeta, abstractmethod  # Abstract Base Class
 
 import logging
+from typing import List, Union, Dict
 
+from backend import Issue, IssuesOutputPairType
 from backend.common.helper import create_dictionary, PartialRetrievalDictionary
 
 logger = logging.getLogger(__name__)
@@ -13,7 +15,7 @@ class IExecutableCommand(metaclass=ABCMeta):
     """ A command prepared for its execution. Commands have direct access to the current STATE """
 
     @abstractmethod
-    def execute(self, state: "State"):
+    def execute(self, state: "State") -> IssuesOutputPairType:
         """
         Execute the command. At the same time, generate a list of issues.
         At this point, it is assumed there are no syntactic errors
@@ -29,11 +31,11 @@ class IExecutableCommand(metaclass=ABCMeta):
         pass
 
     @abstractmethod
-    def json_serialize(self):
+    def json_serialize(self) -> Dict:
         pass
 
     @abstractmethod
-    def json_deserialize(self, json_input):
+    def json_deserialize(self, json_input: Union[dict, str, bytes, bytearray]) -> List[Issue]:
         """
         Read command parameters from a JSON string
         Check the validity of the JSON input

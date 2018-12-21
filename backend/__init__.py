@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import Optional, Any, List, Tuple
 
 import pint
 from collections import namedtuple
@@ -32,6 +32,11 @@ Issue = namedtuple("Issue",
                    "sheet_number sheet_name c_type type message")  # (Sheet #, Sheet name, command type, issue type, message)
 
 SDMXConcept = namedtuple('Concept', 'type name istime description code_list')
+
+# Global Types
+
+IssuesOutputPairType = Tuple[Optional[List[Issue]], Optional[Any]]
+CommandIssuesPairType = Tuple[Optional["IExecutableCommand"], List[Issue]]
 
 # ##################################
 # METADATA special variables
