@@ -8,6 +8,8 @@ import backend
 from backend.model_services import IExecutableCommand, get_case_study_registry_objects
 from backend.common.helper import obtain_dataset_metadata, strcmp, create_dictionary, \
     augment_dataframe_with_mapped_columns, translate_case
+from backend.models.musiasem_concepts import Hierarchy
+from backend.models.musiasem_concepts_helper import convert_code_list_to_hierarchy
 
 
 def obtain_reverse_codes(mapped, dst):
@@ -185,6 +187,19 @@ class ETLExternalDatasetCommand(IExecutableCommand):
                 # Put proper DIMENSION names
                 for ir, r in enumerate(rows):
                     rows[ir] = df_columns_dict[r]
+
+                # Create and register Hierarchy objects from origin Dataset dimensions: state, ds
+                ds_columns_dict = create_dictionary(data={c.code: c.code for c in ds.dimensions})
+                for r in rows:
+                    if r in ds_columns_dict:
+                        # Create hierarchy local to the dataset
+                        for d in ds.dimensions:
+                            if strcmp(r, d.code):
+                                if d.code_list:
+                                    h = convert_code_list_to_hierarchy(d.code_list)
+                                    h.name = result_name + "_" + r
+                                    glb_idx.put(h.key(), h)
+                                    break
 
                 # Pivot table using Group by
                 if True:

@@ -34,7 +34,7 @@ if __name__ == '__main__':
     print("Executing locally!")
     os.environ["MAGIC_NIS_SERVICE_CONFIG_FILE"] = "./nis_local.conf"
 
-from backend.common.helper import generate_json, obtain_dataset_source, gzipped, str2bool
+from backend.common.helper import generate_json, obtain_dataset_source, gzipped, str2bool, create_dictionary
 from backend.models.musiasem_methodology_support import *
 from backend.common.create_database import create_pg_database_engine, create_monet_database_engine
 from backend.restful_service import app, register_external_datasources
@@ -968,7 +968,32 @@ def reproducible_session_query_state_get_dataset(name, format):  # Query list of
                 # Obtain the data and the metadata
                 ds = datasets[name]  # type: Dataset
                 ds2 = ds.data
-                # TODO Elaborate Metadata
+                # Labels
+                labels_enabled = request.args.get("labels", "True") == "True"
+                if labels_enabled:
+                    print("Preparing Dataset labels")
+                    # Merge with Taxonomy LABELS, IF available
+                    for col in ds2.columns:
+                        hs = glb_idx.get(Hierarchy.partial_key(name + "_" + col))
+                        if len(hs) == 1:
+                            h = hs[0]
+                            nodes = h.get_all_nodes()
+                            tmp = []
+                            for nn in nodes:
+                                t = nodes[nn]
+                                tmp.append([t[0].lower(), t[1]])  # CSens
+                            if not backend.case_sensitive and ds2[col].dtype == 'O':
+                                ds2[col + "_l"] = ds2[col].str.lower()
+                                col = col + "_l"
+
+                            # Dataframe of codes and descriptions
+                            df_dst = pd.DataFrame(tmp, columns=['sou_rce', col + "_desc"])
+                            ds2 = pd.merge(ds2, df_dst, how='left', left_on=col, right_on='sou_rce')
+                            del ds2['sou_rce']
+                            if not backend.case_sensitive:
+                                del ds2[col]
+
+                # TODO Elaborate "meta-workbook" (workbook capable of reproducing dataset)
                 if format == "json":
                     tmp = json.loads('{"data": '+ds2.to_json(orient='split', date_format='iso', date_unit='s')+', "metadata": {}}')
                     del tmp["data"]["index"]
@@ -996,27 +1021,6 @@ def reproducible_session_query_state_get_dataset(name, format):  # Query list of
                     schema = dict(model=dict(fields=fields), cube=dict(dimensions=dimensions, measures=measures))
                     r = build_json_response(dict(data=data, schema=schema), 200)
                 elif format == "xlsx":
-                    # TODO Merge with Taxonomies IF some column appear
-                    if True:
-                        # Taxonomy definitions
-                        hs = glb_idx.get(Hierarchy.partial_key())
-                        # Hierarchies of Categories (not of Processors or of FactorTypes)
-                        hset = set([h.name.lower() for h in hs if h.hierarchy_type == Taxon])  # CSens?
-                        for col in ds2.columns:
-                            if col in hset:  # CSens ?
-                                for h in hs:
-                                    if h.hierarchy_type == Taxon:
-                                        if h.name.lower() == col:
-                                            nodes = h.get_all_nodes()
-                                            tmp = []
-                                            for nn in nodes:
-                                                t = nodes[nn]
-                                                tmp.append([t[0].lower(), t[1]])  # CSens
-                                            # Dataframe of codes and descriptions
-                                            df_dst = pd.DataFrame(tmp, columns=['sou_rce', col + "_desc"])
-                                            ds2 = pd.merge(ds2, df_dst, how='left', left_on=col, right_on='sou_rce')
-                                            del ds2['sou_rce']
-
                     # Generate XLSX from data & return it
                     output = io.BytesIO()
                     # from pyexcelerate import Workbook, Writer
@@ -1025,7 +1029,8 @@ def reproducible_session_query_state_get_dataset(name, format):  # Query list of
                     # wb.new_sheet(name, data=data)
                     # wr = Writer.Writer(wb)
                     # wr.save(output)
-                    ds2.to_excel(output, sheet_name=name, index=False, engine="xlsxwriter")
+                    print("Generating Excel")
+                    ds2.to_excel(output, sheet_name=name, index=False) #, engine="xlsxwriter")
                     r = Response(output.getvalue(), mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", status=200)
             else:
                 r = build_json_response({"error": "Could not find a Dataset with name '"+name+"' in the current state"}, 401)
