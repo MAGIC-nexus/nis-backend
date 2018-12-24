@@ -17,6 +17,8 @@ from backend.model_services import IExecutableCommand, get_case_study_registry_o
 # TODO Result parameter column also change a bit
 # TODO See "DatasetQry" command in "MuSIASEM case study commands" Google Spreadsheet
 #
+from backend.models.musiasem_concepts_helper import convert_code_list_to_hierarchy
+
 
 def obtain_reverse_codes(mapped, dst):
     """
@@ -176,6 +178,20 @@ class DatasetQryCommand(IExecutableCommand):
                         if not found:
                             group_by_dims.remove(r)
                             issues.append((2, "Dimension '" + r + "' removed from the list of dimensions because it is not present in the raw input dataset."))
+
+                # Create and register Hierarchy objects from origin Dataset dimensions: state, ds
+                ds_columns_dict = create_dictionary(data={c.code: c.code for c in ds.dimensions})
+                for r in group_by_dims:
+                    if r in ds_columns_dict:
+                        # Create hierarchy local to the dataset
+                        for d in ds.dimensions:
+                            if strcmp(r, d.code):
+                                if d.code_list:
+                                    h = convert_code_list_to_hierarchy(d.code_list)
+                                    h.name = result_name + "_" + r
+                                    glb_idx.put(h.key(), h)
+                                    break
+
                 # Pivot table using Group by
                 if True:
                     groups = df.groupby(by=group_by_dims, as_index=False)  # Split

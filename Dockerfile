@@ -53,6 +53,8 @@ FROM grahamdumpleton/mod-wsgi-docker:python-3.6
 # docker create --name nis-local --network=magic-net -l magic-postgis -l magic-redis -v /srv/docker/magic/data/nis:/srv
 #   -e VIRTUAL_HOST=one.nis.magic-nexus.eu -e VIRTUAL_PORT=80 -e LETSENCRYPT_HOST=one.nis.magic-nexus.eu
 #   -e LETSENCRYPT_EMAIL=rnebot@itccanarias.org -e MAGIC_NIS_SERVICE_CONFIG_FILE="nis_docker_naples.conf"
+#   -e MOD_WSGI_REQUEST_TIMEOUT=1500 -e MOD_WSGI_SOCKET_TIMEOUT=1500
+##   -e MOD_WSGI_CONNECT_TIMEOUT=1500 -e MOD_WSGI_INACTIVITY_TIMEOUT=1500
 #   magic-nis:latest
 #
 #
