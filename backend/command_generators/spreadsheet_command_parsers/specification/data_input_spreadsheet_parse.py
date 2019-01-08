@@ -1,10 +1,11 @@
 import regex as re
+from openpyxl.worksheet import Worksheet
 from uncertainties import ufloat_fromstr
 from pint.errors import UndefinedUnitError
 
 from backend.command_generators.parser_field_parsers import simple_ident
 from backend.common.helper import create_dictionary, case_sensitive
-from backend import ureg
+from backend import ureg, AreaTupleType, IssuesLabelContentTripleType
 from backend.command_generators import parser_field_parsers
 from backend.models.musiasem_concepts import allowed_ff_types
 
@@ -37,7 +38,7 @@ OUTPUT COMMANDS
 """
 
 
-def parse_data_input_command(sh, area, processors_type, state=None):
+def parse_data_input_command(sh: Worksheet, area: AreaTupleType, processors_type: str, state=None) -> IssuesLabelContentTripleType:
     """
     Scans the "area" of input worksheet "sh" where it is assumed a "data input" command
     is present.

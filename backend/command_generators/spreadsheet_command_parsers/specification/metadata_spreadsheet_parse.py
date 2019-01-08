@@ -1,9 +1,11 @@
-from backend import metadata_fields
+from openpyxl.worksheet import Worksheet
+
+from backend import metadata_fields, AreaTupleType, IssuesLabelContentTripleType
 from backend.common.helper import strcmp, create_dictionary, get_value_or_list
 from backend.command_executors.specification.metadata_command import MetadataCommand
 
 
-def parse_metadata_command(sh, area):
+def parse_metadata_command(sh: Worksheet, area: AreaTupleType, name: str = None) -> IssuesLabelContentTripleType:
     """
     Most "parse" methods are mostly syntactic (as opposed to semantic). They do not check existence of names.
     But in this case, the valid field names are fixed beforehand, so they are checked at this time.

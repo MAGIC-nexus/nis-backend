@@ -1,11 +1,13 @@
 import openpyxl
+from openpyxl.worksheet import Worksheet
 
+from backend import IssuesLabelContentTripleType, AreaTupleType
 from backend.command_generators import parser_field_parsers
 from backend.command_generators.parser_spreadsheet_utils import obtain_rectangular_submatrices, binary_mask_from_worksheet
 from backend.common.helper import strcmp
 
 
-def parse_scale_conversion_command(sh, area):
+def parse_scale_conversion_command(sh: Worksheet, area: AreaTupleType, name: str = None) -> IssuesLabelContentTripleType:
     """
     Analyze the input area
     Obtain the numerical part

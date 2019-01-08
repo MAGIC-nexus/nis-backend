@@ -1,17 +1,15 @@
 import json
 import re
 
-from backend import CommandField
 from backend.command_executors.execution_helpers import parse_line, classify_variables, \
     obtain_dictionary_with_literal_fields
 from backend.command_executors.version2.relationships_command import obtain_matching_processors
-from backend.command_field_definitions import processor_types, functional_or_structural, instance_or_archetype, \
-    copy_interfaces_mode, commands
+from backend.command_field_definitions import command_fields
 from backend.command_generators import Issue
 from backend.command_generators.parser_ast_evaluators import dictionary_from_key_value_list
 from backend.command_generators.parser_field_parsers import string_to_ast, processor_names
 from backend.command_generators.spreadsheet_command_parsers_v2 import IssueLocation
-from backend.common.helper import first
+from backend.common.helper import head
 from backend.model_services import IExecutableCommand, get_case_study_registry_objects
 from backend.models.musiasem_concepts import ProcessorsSet, ProcessorsRelationPartOfObservation, Parameter, Processor, \
     Geolocation
@@ -182,10 +180,10 @@ class ProcessorsCommand(IExecutableCommand):
                 yield item
 
         def process_line(item):
-            fields_dict = {f.name: item.get(f.name, first(f.allowed_values)) for f in commands["Processors"]}
+            fields_dict = {f.name: item.get(f.name, head(f.allowed_values)) for f in command_fields["BareProcessors"]}
 
             # Check if mandatory fields with no value exist
-            for field in [f.name for f in commands["Processors"] if f.mandatory and not fields_dict[f.name]]:
+            for field in [f.name for f in command_fields["BareProcessors"] if f.mandatory and not fields_dict[f.name]]:
                 issues.append(create_issue(3, f"Mandatory field '{field}' is empty. Skipped."))
                 return
 
@@ -222,7 +220,7 @@ class ProcessorsCommand(IExecutableCommand):
                 # TODO Clone it
                 pass
             else:
-                processor_attributes = {f.name: fields_dict[f.name] for f in commands["Processors"] if f.attribute_of == Processor}
+                processor_attributes = {f.name: fields_dict[f.name] for f in command_fields["BareProcessors"] if f.attribute_of == Processor}
 
                 # If key "attributes" exist, expand it.
                 # E.g. {"a": 1, "b": 2, "attributes": {"c": 3, "d": 4}} -> {'a': 1, 'b': 2, 'c': 3, 'd': 4}
@@ -264,7 +262,7 @@ class ProcessorsCommand(IExecutableCommand):
         command_name = self._content["command_name"]
 
         # CommandField definitions for the fields of Interface command
-        fields = {f.name: f for f in commands["Processors"]}
+        fields = {f.name: f for f in command_fields["BareProcessors"]}
         # Obtain the names of all parameters
         parameters = [p.name for p in glb_idx.get(Parameter.partial_key())]
         # Obtain the names of all processors

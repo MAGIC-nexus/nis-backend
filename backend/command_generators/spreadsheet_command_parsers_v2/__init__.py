@@ -1,9 +1,10 @@
 from attr import attrs, attrib
 from typing import List, Tuple
-from backend import CommandField
-from backend.command_field_definitions import commands
+
+from openpyxl.worksheet import Worksheet
+
+from backend import CommandField, IssuesLabelContentTripleType, AreaTupleType
 from backend.command_generators import Issue, parser_field_parsers
-from backend.common.helper import strcmp
 
 
 @attrs
@@ -72,7 +73,7 @@ def check_columns(sh, name: str, area: Tuple, cols: List[CommandField], command_
     return col_map, issues
 
 
-def parse_command(sh, area, name: str, cmd_name):
+def parse_command(sh: Worksheet, area: AreaTupleType, name: str, cmd_name: str) -> IssuesLabelContentTripleType:
     """
     Parse command in general
     Generate a JSON
@@ -81,13 +82,15 @@ def parse_command(sh, area, name: str, cmd_name):
     :param sh: Worksheet to read
     :param area: Area of the worksheet
     :param name: Name of the worksheet
-    :param cmd_name: Name of the command. Key to access "commands" variable. Also, shown in issue descriptions
+    :param cmd_name: Name of the command. Key to access "command_fields" variable. Also, shown in issue descriptions
     :return: issues List, None, content (JSON)
     """
 
     issues: List[Issue] = []
 
-    cols = commands[cmd_name]  # List of CommandField that will guide the parsing
+    from command_field_definitions import command_fields
+
+    cols = command_fields[cmd_name]  # List of CommandField that will guide the parsing
     col_map, local_issues = check_columns(sh, name, area, cols, cmd_name)
 
     if any([i.itype == 3 for i in local_issues]):

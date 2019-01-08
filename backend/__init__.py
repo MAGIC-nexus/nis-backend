@@ -1,4 +1,6 @@
-from typing import Optional, Any, List, Tuple
+import importlib
+import regex as re
+from typing import Optional, Any, List, Tuple, Callable, Dict
 
 import pint
 from collections import namedtuple
@@ -6,7 +8,6 @@ from attr import attrs, attrib
 
 # GLOBAL VARIABLES
 
-# Database containing domain model and metadata about datasets
 engine = None
 
 # Database containing OLAP data (cache of Data Cubes)
@@ -37,6 +38,9 @@ SDMXConcept = namedtuple('Concept', 'type name istime description code_list')
 
 IssuesOutputPairType = Tuple[Optional[List[Issue]], Optional[Any]]
 CommandIssuesPairType = Tuple[Optional["IExecutableCommand"], List[Issue]]
+IssuesLabelContentTripleType = Tuple[List[Issue], Optional[Any], Optional[Dict[str, Any]]]
+# Tuple (top, bottom, left, right) representing the rectangular area of the input worksheet where the command is present
+AreaTupleType = Tuple[int, int, int, int]
 
 # ##################################
 # METADATA special variables
@@ -71,8 +75,59 @@ metadata_fields = [("Case study name", "title", False, False, "case_study_name")
                    ("Version", None, True, False, "version")
                    ]
 
+# Regular expression definitions
+_var_name = "([a-zA-Z][a-zA-Z0-9_-]*)"
+_hvar_name = "(" + _var_name + r"(\." + _var_name + ")*)"
+_cplex_var = "((" + _var_name + "::)?" + _hvar_name + ")"
+_optional_alphanumeric = "([ a-zA-Z0-9_-]*)?"  # Whitespace also allowed
+
+
+# Regular expression for "worksheet name" in version 2
+def simple_regexp(names: List[str]):
+    return r"(" + "|".join(names) + ")" + _optional_alphanumeric
+
 # ##################################
 # Commands
+
+
+@attrs(cmp=False)  # Constant and Hashable by id
+class Command:
+    # Name
+    name = attrib()  # type: str
+    # Labels
+    labels = attrib()  # type: List[str]
+    # Subclass of IExecutableCommand in charge of the execution
+    execution_class_name = attrib()  # type: Optional[str]
+    # Alternative regular expression for worksheet name
+    alt_regex = attrib(default=None)
+    # Parse function, having params (Worksheet, Area) and returning a tuple (issues, label, content)
+    # Callable[[Worksheet, AreaTupleType, str, ...], IssuesLabelContentTripleType] = attrib(default=None)
+    parse_function: Callable[..., IssuesLabelContentTripleType] = attrib(default=None)
+    # List of commands fields
+    # fields = attrib(default=[])  # type: List[CommandField]
+    # In which version is this command allowed?
+    is_v1 = attrib(default=False)  # type: bool
+    is_v2 = attrib(default=False)  # type: bool
+
+    @property
+    def regex(self):
+        regexp_pattern = self.alt_regex
+        if not regexp_pattern:
+            regexp_pattern = simple_regexp(self.labels)
+
+        return re.compile(regexp_pattern, flags=re.IGNORECASE)
+
+    @property
+    def label(self):
+        return self.labels[0] if self.labels else ""
+
+    @property
+    def execution_class(self):
+        if self.execution_class_name:
+            module_name, class_name = self.execution_class_name.rsplit(".", 1)
+            return getattr(importlib.import_module(module_name), class_name)
+        else:
+            return None
 
 
 @attrs(cmp=False)  # Constant and Hashable by id
@@ -94,9 +149,16 @@ class CommandField:
     # Examples
     examples = attrib(default=None)  # type: list[str]
     # Compiled regex
-    regex_allowed_names = attrib(default=None)
+    # regex_allowed_names = attrib(default=None)
     # Is it directly an attribute of a Musiasem type? Which one?
     attribute_of = attrib(default=None)  # type: type
 
+    @property
+    def regex_allowed_names(self):
+        def contains_any(s, setc):
+            return 1 in [c in s for c in setc]
 
+        # Compile the regular expressions of column names
+        rep = [(r if contains_any(r, ".+") else re.escape(r))+"$" for r in self.allowed_names]
 
+        return re.compile("|".join(rep), flags=re.IGNORECASE)

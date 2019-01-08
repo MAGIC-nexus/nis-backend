@@ -12,7 +12,7 @@ import urllib.request
 import uuid
 from functools import partial
 from io import BytesIO
-from typing import IO, List, Tuple, Dict, Any, Optional
+from typing import IO, List, Tuple, Dict, Any, Optional, Iterable, Callable, TypeVar
 from uuid import UUID
 
 import jsonpickle
@@ -1196,16 +1196,40 @@ def ifnull(var, val):
     return var
 
 
-def first(l: List[Any]) -> Any:
+T = TypeVar('T')
+
+
+def head(l: List[T]) -> Optional[T]:
     """
-    Returns the first element of the list or None if the list is empty.
+    Returns the head element of the list or None if the list is empty.
     :param l: The input list
-    :return: The first element of the list or None
+    :return: The head element of the list or None
     """
     if l:
         return l[0]
     else:
         return None
+
+
+def first(iterable: Iterable[T],
+          condition: Callable[[T], bool] = lambda x: True,
+          default: Optional[T] = None) -> Optional[T]:
+    """
+    Returns the first item in the `iterable` that satisfies the `condition`.
+    If the condition is not given, returns the first item of the iterable.
+
+    Returns the `default` value if no item satisfying the condition is found.
+
+    >>> first( (1,2,3), condition=lambda x: x % 2 == 0)
+    2
+    >>> first(range(3, 100))
+    3
+    >>> first( () )
+    None
+    >>> first( (), default="Some" )
+    Some
+    """
+    return next((x for x in iterable if condition(x)), default)
 
 
 def translate_case(current_names: List[str], new_names: List[str]) -> List[str]:

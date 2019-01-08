@@ -5,10 +5,13 @@ Declaration of Observables and relations between Processors and/or Factors
 import collections
 import traceback
 
+from openpyxl.worksheet import Worksheet
+
+from backend import IssuesLabelContentTripleType, AreaTupleType
 from backend.command_generators import parser_field_parsers
 
 
-def parse_structure_command(sh, area):
+def parse_structure_command(sh: Worksheet, area: AreaTupleType, name: str = None) -> IssuesLabelContentTripleType:
     """
     Analyze the input to produce a JSON object with a list of Observables and relations to other Observables
 

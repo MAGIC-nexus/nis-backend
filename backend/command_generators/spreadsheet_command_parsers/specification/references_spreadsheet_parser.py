@@ -1,6 +1,8 @@
 import openpyxl
 import numpy as np
+from openpyxl.worksheet import Worksheet
 
+from backend import IssuesLabelContentTripleType, AreaTupleType
 from backend.command_generators.spreadsheet_command_parsers.specification import profile_field_name_sets, ref_prof
 from backend.command_generators.parser_spreadsheet_utils import worksheet_to_numpy_array, obtain_rectangular_submatrices
 
@@ -22,7 +24,7 @@ def validate(v, field):
     return True
 
 
-def parse_references_command(sh, area):
+def parse_references_command(sh: Worksheet, area: AreaTupleType, name: str = None) -> IssuesLabelContentTripleType:
     """
     Elaborate a list of dictionaries {key: value} which can be reused by other objects, referring them by a unique ref_id field
 

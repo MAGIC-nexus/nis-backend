@@ -1,11 +1,13 @@
 import openpyxl
 import numpy as np
+from openpyxl.worksheet import Worksheet
 
+from backend import IssuesLabelContentTripleType, AreaTupleType
 from backend.command_generators import parser_field_parsers
 from backend.command_generators.parser_spreadsheet_utils import worksheet_to_numpy_array, obtain_rectangular_submatrices
 
 
-def parse_pedigree_matrix_command(sh, area, name):
+def parse_pedigree_matrix_command(sh: Worksheet, area: AreaTupleType, name: str) -> IssuesLabelContentTripleType:
     """
     A pedigree matrix is formed by several columns, with a header naming a phase, and below a list of modes, normally in
     ascending qualitative order.
