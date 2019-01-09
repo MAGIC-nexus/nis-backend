@@ -1,9 +1,9 @@
-import openpyxl
 from openpyxl.worksheet import Worksheet
 
 from backend import IssuesLabelContentTripleType, AreaTupleType
 from backend.command_generators import parser_field_parsers
-from backend.command_generators.parser_spreadsheet_utils import obtain_rectangular_submatrices, binary_mask_from_worksheet
+from backend.command_generators.parser_spreadsheet_utils import obtain_rectangular_submatrices, \
+    binary_mask_from_worksheet
 from backend.common.helper import strcmp
 
 

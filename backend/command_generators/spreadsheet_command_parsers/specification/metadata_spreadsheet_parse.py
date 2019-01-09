@@ -1,8 +1,7 @@
 from openpyxl.worksheet import Worksheet
 
 from backend import metadata_fields, AreaTupleType, IssuesLabelContentTripleType
-from backend.common.helper import strcmp, create_dictionary, get_value_or_list
-from backend.command_executors.specification.metadata_command import MetadataCommand
+from backend.common.helper import create_dictionary
 
 
 def parse_metadata_command(sh: Worksheet, area: AreaTupleType, name: str = None) -> IssuesLabelContentTripleType:
@@ -62,14 +61,13 @@ def parse_metadata_command(sh: Worksheet, area: AreaTupleType, name: str = None)
             some_error = True
             issues.append((3, "The value '"+key+"' is mandatory in the definition of the metadata"))
 
-    if True:
-        return issues, None, content
-    else:
-        if not some_error:
-            cmd = MetadataCommand(None)
-            cmd.json_deserialize(content)
-        else:
-            cmd = None
-        return cmd, issues
+    return issues, None, content
+    # else:
+    #     if not some_error:
+    #         cmd = MetadataCommand(None)
+    #         cmd.json_deserialize(content)
+    #     else:
+    #         cmd = None
+    #     return cmd, issues
 
 

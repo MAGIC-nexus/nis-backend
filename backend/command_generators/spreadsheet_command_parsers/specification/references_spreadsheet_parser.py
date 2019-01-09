@@ -1,10 +1,7 @@
-import openpyxl
-import numpy as np
 from openpyxl.worksheet import Worksheet
 
 from backend import IssuesLabelContentTripleType, AreaTupleType
 from backend.command_generators.spreadsheet_command_parsers.specification import profile_field_name_sets, ref_prof
-from backend.command_generators.parser_spreadsheet_utils import worksheet_to_numpy_array, obtain_rectangular_submatrices
 
 
 def find_profile(col_names):

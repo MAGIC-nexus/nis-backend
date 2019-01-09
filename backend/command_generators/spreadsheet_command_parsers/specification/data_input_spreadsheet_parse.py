@@ -1,6 +1,5 @@
 import regex as re
 from openpyxl.worksheet import Worksheet
-from uncertainties import ufloat_fromstr
 from pint.errors import UndefinedUnitError
 
 from backend.command_generators.parser_field_parsers import simple_ident

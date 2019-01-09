@@ -1,9 +1,9 @@
 from openpyxl.worksheet import Worksheet
 
 from backend import IssuesLabelContentTripleType, AreaTupleType
-from backend.common.helper import strcmp, obtain_dataset_source, obtain_dataset_metadata, \
-                                      check_dataset_exists, create_dictionary
 from backend.command_generators import parser_field_parsers
+from backend.common.helper import strcmp, obtain_dataset_metadata, \
+    check_dataset_exists, create_dictionary
 
 
 def parse_mapping_command(sh: Worksheet, area: AreaTupleType, origin, destination) -> IssuesLabelContentTripleType:

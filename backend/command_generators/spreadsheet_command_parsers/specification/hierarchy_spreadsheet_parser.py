@@ -1,10 +1,7 @@
-import collections
-
 from openpyxl.worksheet import Worksheet
 
 from backend import AreaTupleType, IssuesLabelContentTripleType
 from backend.command_generators import parser_field_parsers
-from backend.common.helper import strcmp, create_dictionary
 
 
 def parse_hierarchy_command(sh: Worksheet, area: AreaTupleType, name: str, n_type: str) -> IssuesLabelContentTripleType:
