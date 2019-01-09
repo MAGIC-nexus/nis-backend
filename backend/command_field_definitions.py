@@ -10,7 +10,7 @@ from backend.command_generators.parser_field_parsers import simple_ident, unquot
     time_expression, indicator_expression, code_string, simple_h_name, domain_definition, unit_name, url_parser, \
     processor_names, value, list_simple_ident, reference
 from backend.models.musiasem_concepts import Processor
-from command_definitions import valid_v2_command_names
+from backend.command_definitions import valid_v2_command_names
 
 data_types = ["Number", "Boolean", "URL", "UUID", "Datetime", "String", "UnitName", "Code", "Geo"]
 concept_types = ["Dimension", "Measure", "Attribute"]
@@ -317,5 +317,5 @@ command_fields: Dict[str, List[CommandField]] = {
 #     for field in fields:
 #         for name in field.allowed_names:
 #             command_field_names[name] = field.name
-command_field_names = {name: f.name for fields in command_fields.values() for f in fields for name in f.allowed_names}
-print(f'command_field_names = {command_field_names}')
+_command_field_names = {name: f.name for fields in command_fields.values() for f in fields for name in f.allowed_names}
+print(f'command_field_names = {_command_field_names}')
