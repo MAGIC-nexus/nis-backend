@@ -1,8 +1,8 @@
-from typing import Dict, Optional
+from typing import Optional
 
 from backend import CommandIssuesPairType, Command
-from command_definitions import commands
-from common.helper import first
+from backend.command_definitions import commands
+from backend.common.helper import first
 
 
 def create_command(cmd_type, name, json_input, source_block=None) -> CommandIssuesPairType:

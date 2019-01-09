@@ -4,26 +4,26 @@
 from typing import List
 
 from backend import Command, _var_name, _hvar_name, _cplex_var
-from command_generators.spreadsheet_command_parsers.external_data.etl_external_dataset_spreadsheet_parse import \
+from backend.command_generators.spreadsheet_command_parsers.external_data.etl_external_dataset_spreadsheet_parse import \
     parse_etl_external_dataset_command
-from command_generators.spreadsheet_command_parsers.external_data.mapping_spreadsheet_parse import parse_mapping_command
-from command_generators.spreadsheet_command_parsers.specification.data_input_spreadsheet_parse import \
+from backend.command_generators.spreadsheet_command_parsers.external_data.mapping_spreadsheet_parse import parse_mapping_command
+from backend.command_generators.spreadsheet_command_parsers.specification.data_input_spreadsheet_parse import \
     parse_data_input_command
-from command_generators.spreadsheet_command_parsers.specification.hierarchy_spreadsheet_parser import \
+from backend.command_generators.spreadsheet_command_parsers.specification.hierarchy_spreadsheet_parser import \
     parse_hierarchy_command
-from command_generators.spreadsheet_command_parsers.specification.metadata_spreadsheet_parse import \
+from backend.command_generators.spreadsheet_command_parsers.specification.metadata_spreadsheet_parse import \
     parse_metadata_command
-from command_generators.spreadsheet_command_parsers.specification.pedigree_matrix_spreadsheet_parse import \
+from backend.command_generators.spreadsheet_command_parsers.specification.pedigree_matrix_spreadsheet_parse import \
     parse_pedigree_matrix_command
-from command_generators.spreadsheet_command_parsers.specification.references_spreadsheet_parser import \
+from backend.command_generators.spreadsheet_command_parsers.specification.references_spreadsheet_parser import \
     parse_references_command
-from command_generators.spreadsheet_command_parsers.specification.scale_conversion_spreadsheet_parse import \
+from backend.command_generators.spreadsheet_command_parsers.specification.scale_conversion_spreadsheet_parse import \
     parse_scale_conversion_command
-from command_generators.spreadsheet_command_parsers.specification.structure_spreadsheet_parser import \
+from backend.command_generators.spreadsheet_command_parsers.specification.structure_spreadsheet_parser import \
     parse_structure_command
-from command_generators.spreadsheet_command_parsers.specification.upscale_spreadsheet_parse import parse_upscale_command
-from command_generators.spreadsheet_command_parsers_v2.dataset_data_spreadsheet_parse import parse_dataset_data_command
-from command_generators.spreadsheet_command_parsers_v2.dataset_qry_spreadsheet_parse import parse_dataset_qry_command
+from backend.command_generators.spreadsheet_command_parsers.specification.upscale_spreadsheet_parse import parse_upscale_command
+from backend.command_generators.spreadsheet_command_parsers_v2.dataset_data_spreadsheet_parse import parse_dataset_data_command
+from backend.command_generators.spreadsheet_command_parsers_v2.dataset_qry_spreadsheet_parse import parse_dataset_qry_command
 
 commands: List[Command] = [
     Command(name="dummy", labels=["Dummy"], is_v1=True,

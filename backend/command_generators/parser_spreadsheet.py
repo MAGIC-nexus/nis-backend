@@ -12,8 +12,8 @@ from backend.command_executors import create_command
 from backend.command_generators.parser_spreadsheet_utils import binary_mask_from_worksheet, \
     obtain_rectangular_submatrices
 from backend.common.helper import create_dictionary, first
-from command_definitions import valid_v2_command_names, commands
-from command_generators.spreadsheet_command_parsers_v2 import parse_command
+from backend.command_definitions import valid_v2_command_names, commands
+from backend.command_generators.spreadsheet_command_parsers_v2 import parse_command
 
 
 def handle_import_commands(r):
