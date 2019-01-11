@@ -16,6 +16,8 @@ import sqlalchemy
 import backend
 from backend.command_generators import Issue
 from backend.command_generators.parsers_factory import commands_container_parser_factory
+from backend.model_services import IExecutableCommand
+from backend.model_services import State
 from backend.models.musiasem_methodology_support import (User,
                                                          CaseStudy,
                                                          CaseStudyVersion,
@@ -24,8 +26,6 @@ from backend.models.musiasem_methodology_support import (User,
                                                          force_load,
                                                          DBSession, ORMBase, load_table, Authenticator, CaseStudyStatus,
                                                          ObjectType, PermissionType)
-from backend.model_services import IExecutableCommand
-from backend.model_services import State
 from backend.restful_service import tm_default_users, tm_authenticators, tm_case_study_version_statuses, \
     tm_object_types, tm_permissions
 from backend.restful_service.serialization import serialize_state, deserialize_state
@@ -146,7 +146,7 @@ def persistable_to_executable_command(p_cmd: CommandsContainer, limit=1000):
             break
 
 
-def execute_command(state, e_cmd: "IExecutableCommand"):
+def execute_command(state, e_cmd: "IExecutableCommand") -> backend.IssuesOutputPairType:
     if e_cmd:
         return e_cmd.execute(state)
     else:
@@ -800,7 +800,7 @@ class ReproducibleSession:
 
     @property
     def commands(self):
-        self._session.commands
+        return self._session.commands
 
     @property
     def case_study(self):

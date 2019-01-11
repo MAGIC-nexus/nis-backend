@@ -1,12 +1,9 @@
+import os
 import unittest
 
-import os
-
 import backend
-from backend.command_generators import parser_field_parsers
 from backend.ie_exports.json import export_model_to_json
 from backend.model_services import get_case_study_registry_objects
-from backend.restful_service.serialization import serialize_state, deserialize_state
 from backend.model_services.workspace import execute_file, prepare_and_reset_database_for_tests
 from backend.models.musiasem_concepts import Observer, \
     Processor, FactorType, Factor, \
@@ -14,9 +11,9 @@ from backend.models.musiasem_concepts import Observer, \
     FactorQuantitativeObservation, ProcessorsRelationPartOfObservation, \
     ProcessorsRelationUndirectedFlowObservation, ProcessorsRelationUpscaleObservation, \
     FactorsRelationDirectedFlowObservation
-
 # Database (ORM)
 from backend.restful_service import register_external_datasources
+from backend.restful_service.serialization import serialize_state, deserialize_state
 from backend.solving import get_processor_names_to_processors_dictionary
 
 
@@ -461,7 +458,7 @@ if __name__ == '__main__':
     i = TestCommandFiles()
     prepare_and_reset_database_for_tests(prepare=True)
     backend.data_source_manager = register_external_datasources({"FAO_DATASETS_DIR": "/home/marco/temp/Data/FAOSTAT/"})
-    #i.test_006_execute_file_five()
+    # i.test_006_execute_file_five()  # TODO: This test from v1 has problems with the case sensitiveness!
     #i.test_008_execute_file_v2_two()
     #i.test_009_execute_file_v2_three()  # Soslaires. v2 syntax
     #i.test_011_execute_file_v2_five()  # Dataset

@@ -184,53 +184,54 @@ class ETLExternalDatasetCommand(IExecutableCommand):
                             issues.append((2, "Dimension '" + r + "' removed from the list of dimensions because it is not present in the raw input dataset."))
                 # Put proper DIMENSION names
                 for ir, r in enumerate(rows):
-                    rows[ir] = df_columns_dict[r]
+                    if r in df_columns_dict:
+                        rows[ir] = df_columns_dict[r]
 
                 # Pivot table using Group by
-                if True:
-                    groups = df.groupby(by=rows, as_index=False)  # Split
-                    d = OrderedDict([])
-                    lst_names = []
-                    if len(values) == len(aggs):
-                        for i, t in enumerate(zip(values, aggs)):
-                            v, agg = t
-                            if len(out_names) == len(values):
-                                if out_names[i]:
-                                    lst_names.append(out_names[i])
-                                else:
-                                    lst_names.append(agg_names[agg] + "_" + v)
+                # if True:
+                groups = df.groupby(by=rows, as_index=False)  # Split
+                d = OrderedDict([])
+                lst_names = []
+                if len(values) == len(aggs):
+                    for i, t in enumerate(zip(values, aggs)):
+                        v, agg = t
+                        if len(out_names) == len(values):
+                            if out_names[i]:
+                                lst_names.append(out_names[i])
                             else:
-                                lst_names.append(agg_names[agg] + "_" +v)
-                            lst = d.get(v, [])
-                            lst.append(agg)
-                            d[v] = lst
-                    else:
-                        for v in values:
-                            lst = d.get(v, [])
-                            for agg in aggs:
-                                lst.append(agg)
-                                lst_names.append(agg_names[agg] + "_" +v)
-                            d[v] = lst
-                    # Print NaN values for each value column
-                    for v in set(values):
-                        cnt = df[v].isnull().sum()
-                        print("NA count for col '"+v+"': "+str(cnt)+" of "+str(df.shape[0]))
-                    # AGGREGATE !!
-                    df2 = groups.agg(d)
-
-                    # Rename the aggregated columns
-                    df2.columns = rows + lst_names
+                                lst_names.append(agg_names[agg] + "_" + v)
+                        else:
+                            lst_names.append(agg_names[agg] + "_" +v)
+                        lst = d.get(v, [])
+                        lst.append(agg)
+                        d[v] = lst
                 else:
-                    # Pivot table
-                    df2 = pd.pivot_table(df,
-                                         values=values,
-                                         index=rows,
-                                         aggfunc=[aggs[0]], fill_value=np.NaN, margins=False,
-                                         dropna=True)
-                    # Remove the multiindex in columns
-                    df2.columns = [col[-1] for col in df2.columns.values]
-                    # Remove the index
-                    df2.reset_index(inplace=True)
+                    for v in values:
+                        lst = d.get(v, [])
+                        for agg in aggs:
+                            lst.append(agg)
+                            lst_names.append(agg_names[agg] + "_" +v)
+                        d[v] = lst
+                # Print NaN values for each value column
+                for v in set(values):
+                    cnt = df[v].isnull().sum()
+                    print("NA count for col '"+v+"': "+str(cnt)+" of "+str(df.shape[0]))
+                # AGGREGATE !!
+                df2 = groups.agg(d)
+
+                # Rename the aggregated columns
+                df2.columns = rows + lst_names
+                # else:
+                #     # Pivot table
+                #     df2 = pd.pivot_table(df,
+                #                          values=values,
+                #                          index=rows,
+                #                          aggfunc=[aggs[0]], fill_value=np.NaN, margins=False,
+                #                          dropna=True)
+                #     # Remove the multiindex in columns
+                #     df2.columns = [col[-1] for col in df2.columns.values]
+                #     # Remove the index
+                #     df2.reset_index(inplace=True)
                 # The result, all columns (no index), is stored for later use
                 ds.data = df2
             except Exception as e:

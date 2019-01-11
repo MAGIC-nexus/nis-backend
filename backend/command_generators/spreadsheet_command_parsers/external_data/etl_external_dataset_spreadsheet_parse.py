@@ -1,10 +1,13 @@
+from openpyxl.worksheet import Worksheet
+
+from backend import AreaTupleType, IssuesLabelContentTripleType
 from backend.command_generators import parser_field_parsers
 from backend.command_generators.parser_field_parsers import simple_ident
 from backend.common.helper import obtain_dataset_source, obtain_dataset_metadata, create_dictionary, strcmp
 from backend.model_services import get_case_study_registry_objects
 
 
-def parse_etl_external_dataset_command(sh, area, dataset_name, state):
+def parse_etl_external_dataset_command(sh: Worksheet, area: AreaTupleType, dataset_name: str, state) -> IssuesLabelContentTripleType:
     """
     Check that the syntax of the input spreadsheet is correct
     Return the analysis in JSON compatible format, for execution

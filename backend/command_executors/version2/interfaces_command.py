@@ -3,18 +3,16 @@ import re
 
 from backend.command_executors.execution_helpers import parse_line, classify_variables, \
     obtain_dictionary_with_literal_fields
-from backend.command_executors.version2.relationships_command import obtain_matching_processors
-from backend.command_field_definitions import commands
 from backend.command_generators import parser_field_parsers, Issue
 from backend.command_generators.parser_ast_evaluators import dictionary_from_key_value_list
-from backend.command_generators.parser_field_parsers import string_to_ast, processor_names
 from backend.command_generators.spreadsheet_command_parsers_v2 import IssueLocation
 from backend.common.helper import strcmp
 from backend.model_services import IExecutableCommand, get_case_study_registry_objects
-from backend.models.musiasem_concepts import FlowFundRoegenType, PedigreeMatrix, Reference, ProcessorsSet, FactorType, \
+from backend.models.musiasem_concepts import PedigreeMatrix, Reference, FactorType, \
     Processor, Factor, FactorInProcessorType, Observer, Parameter
-from backend.models.musiasem_concepts_helper import create_quantitative_observation, _create_quantitative_observation
+from backend.models.musiasem_concepts_helper import _create_quantitative_observation
 from backend.solving import get_processor_names_to_processors_dictionary
+from command_field_definitions import get_command_fields_from_class
 
 
 class InterfacesAndQualifiedQuantitiesCommand(IExecutableCommand):
@@ -357,7 +355,7 @@ class InterfacesAndQualifiedQuantitiesCommand(IExecutableCommand):
         name = self._content["command_name"]
 
         # CommandField definitions for the fields of Interface command
-        fields = {f.name: f for f in commands["Interfaces"]}
+        fields = {f.name: f for f in get_command_fields_from_class(self.__class__)}
         # Obtain the names of all parameters
         parameters = [p.name for p in glb_idx.get(Parameter.partial_key())]
         # Obtain the names of all processors

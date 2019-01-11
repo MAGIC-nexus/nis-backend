@@ -1,9 +1,10 @@
-from backend import metadata_fields
-from backend.common.helper import strcmp, create_dictionary, get_value_or_list
-from backend.command_executors.specification.metadata_command import MetadataCommand
+from openpyxl.worksheet import Worksheet
+
+from backend import metadata_fields, AreaTupleType, IssuesLabelContentTripleType
+from backend.common.helper import create_dictionary
 
 
-def parse_metadata_command(sh, area):
+def parse_metadata_command(sh: Worksheet, area: AreaTupleType, name: str = None) -> IssuesLabelContentTripleType:
     """
     Most "parse" methods are mostly syntactic (as opposed to semantic). They do not check existence of names.
     But in this case, the valid field names are fixed beforehand, so they are checked at this time.
@@ -60,14 +61,13 @@ def parse_metadata_command(sh, area):
             some_error = True
             issues.append((3, "The value '"+key+"' is mandatory in the definition of the metadata"))
 
-    if True:
-        return issues, None, content
-    else:
-        if not some_error:
-            cmd = MetadataCommand(None)
-            cmd.json_deserialize(content)
-        else:
-            cmd = None
-        return cmd, issues
+    return issues, None, content
+    # else:
+    #     if not some_error:
+    #         cmd = MetadataCommand(None)
+    #         cmd.json_deserialize(content)
+    #     else:
+    #         cmd = None
+    #     return cmd, issues
 
 

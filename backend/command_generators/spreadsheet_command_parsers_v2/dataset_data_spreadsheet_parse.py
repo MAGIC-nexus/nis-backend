@@ -1,14 +1,16 @@
 from io import StringIO
 from typing import List
-import numpy as np
-import pandas as pd
 
+import pandas as pd
+from openpyxl.worksheet import Worksheet
+
+from backend import IssuesLabelContentTripleType, AreaTupleType
 from backend.command_generators import Issue
 from backend.command_generators.spreadsheet_command_parsers_v2 import IssueLocation
 from backend.common.helper import strcmp, create_dictionary
 
 
-def parse_dataset_data_command(sh, area, name, state):
+def parse_dataset_data_command(sh: Worksheet, area: AreaTupleType, name: str, state) -> IssuesLabelContentTripleType:
     """
     Check that the syntax of the input spreadsheet is correct
     Return the analysis in JSON compatible format, for execution

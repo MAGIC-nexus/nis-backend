@@ -1,3 +1,6 @@
+from openpyxl.worksheet import Worksheet
+
+from backend import AreaTupleType, IssuesLabelContentTripleType
 from backend.command_generators import parser_field_parsers, Issue
 from backend.command_generators.parser_field_parsers import simple_ident
 from backend.command_generators.spreadsheet_command_parsers_v2 import IssueLocation
@@ -11,7 +14,7 @@ from backend.model_services import get_case_study_registry_objects
 # TODO Result parameter column also change a bit
 # TODO For a reference of fields, see "DatasetQry" command in "MuSIASEM case study commands" Google Spreadsheet
 
-def parse_dataset_qry_command(sh, area, name, state):
+def parse_dataset_qry_command(sh: Worksheet, area: AreaTupleType, name, state) -> IssuesLabelContentTripleType:
     """
     Check that the syntax of the input spreadsheet is correct
     Return the analysis in JSON compatible format, for execution
