@@ -12,7 +12,7 @@ from backend.models.musiasem_concepts import PedigreeMatrix, Reference, FactorTy
     Processor, Factor, FactorInProcessorType, Observer, Parameter
 from backend.models.musiasem_concepts_helper import _create_quantitative_observation
 from backend.solving import get_processor_names_to_processors_dictionary
-from command_field_definitions import command_fields
+from command_field_definitions import get_command_fields_from_class
 
 
 class InterfacesAndQualifiedQuantitiesCommand(IExecutableCommand):
@@ -355,7 +355,7 @@ class InterfacesAndQualifiedQuantitiesCommand(IExecutableCommand):
         name = self._content["command_name"]
 
         # CommandField definitions for the fields of Interface command
-        fields = {f.name: f for f in command_fields["Interfaces"]}
+        fields = {f.name: f for f in get_command_fields_from_class(self.__class__)}
         # Obtain the names of all parameters
         parameters = [p.name for p in glb_idx.get(Parameter.partial_key())]
         # Obtain the names of all processors

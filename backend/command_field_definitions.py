@@ -2,7 +2,7 @@
 #  LIST OF FIELDS FOR THE COMMANDS   #
 ######################################
 
-from typing import Dict, List
+from typing import Dict, List, Type
 
 from backend import CommandField
 from backend.command_generators.parser_field_parsers import simple_ident, unquoted_string, alphanums_string, \
@@ -10,7 +10,9 @@ from backend.command_generators.parser_field_parsers import simple_ident, unquot
     time_expression, indicator_expression, code_string, simple_h_name, domain_definition, unit_name, url_parser, \
     processor_names, value, list_simple_ident, reference
 from backend.models.musiasem_concepts import Processor
-from backend.command_definitions import valid_v2_command_names
+from backend.command_definitions import valid_v2_command_names, commands
+from backend.common.helper import first, class_full_name
+from backend.model_services import IExecutableCommand
 
 data_types = ["Number", "Boolean", "URL", "UUID", "Datetime", "String", "UnitName", "Code", "Geo"]
 concept_types = ["Dimension", "Measure", "Attribute"]
@@ -51,7 +53,7 @@ attributeRegex = "@.+"
 # Version 2 only
 command_fields: Dict[str, List[CommandField]] = {
         
-    "CatHierarchies": [
+    "cat_hierarchies": [
         CommandField(allowed_names=["Source"], name="source", mandatory=False, allowed_values=None, parser=simple_h_name),
         CommandField(allowed_names=["HierarchyGroup"], name="hierarchy_group", mandatory=False, allowed_values=None, parser=simple_ident),
         CommandField(allowed_names=["Hierarchy", "HierarchyName"], name="hierarchy_name", mandatory=True, allowed_values=None, parser=simple_ident),
@@ -70,7 +72,7 @@ command_fields: Dict[str, List[CommandField]] = {
         CommandField(allowed_names=[attributeRegex], name="attributes", mandatory=False, many_appearances=True, parser=value)
     ],
     
-    "CatHierarchiesMapping": [
+    "cat_hier_mapping": [
         CommandField(allowed_names=["OriginDataset"], name="source_dataset", mandatory=False, allowed_values=None, parser=simple_h_name),
         CommandField(allowed_names=["OriginHierarchy"], name="source_hierarchy", mandatory=True, allowed_values=None, parser=simple_h_name),
         CommandField(allowed_names=["OriginCode"], name="source_code", mandatory=True, allowed_values=None, parser=code_string),
@@ -79,14 +81,14 @@ command_fields: Dict[str, List[CommandField]] = {
         CommandField(allowed_names=["Weight"], name="weight", mandatory=True, allowed_values=None, parser=expression_with_parameters),
     ],
 
-    "AttributeTypes": [
+    "attribute_types": [
         CommandField(allowed_names=["AttributeType", "AttributeTypeName"], name="attribute_type_name", mandatory=True, allowed_values=None, parser=simple_ident),
         CommandField(allowed_names=["Type"], name="data_type", mandatory=True, allowed_values=data_types, parser=simple_ident),
         CommandField(allowed_names=["ElementTypes"], name="element_types", mandatory=False, allowed_values=element_types, parser=list_simple_ident),
         CommandField(allowed_names=["Domain"], name="domain", mandatory=False, allowed_values=None, parser=domain_definition)  # "domain_definition" for Category and NUmber. Boolean is only True or False. Other data types cannot be easily constrained (URL, UUID, Datetime, Geo, String)
     ],
 
-    "DatasetDef": [
+    "datasetdef": [
         CommandField(allowed_names=["Dataset", "DatasetName"], name="dataset_name", mandatory=True, allowed_values=None, parser=simple_ident),
         CommandField(allowed_names=["DatasetDataLocation"], name="dataset_data_location", mandatory=True, allowed_values=None, parser=url_parser),
         CommandField(allowed_names=["ConceptType"], name="concept_type", mandatory=True, allowed_values=concept_types, parser=simple_ident),
@@ -97,13 +99,13 @@ command_fields: Dict[str, List[CommandField]] = {
         CommandField(allowed_names=["Attributes"], name="attributes", mandatory=False, allowed_values=None, parser=key_value_list)
     ],
 
-    "AttributeSets": [
+    "attribute_sets": [
         CommandField(allowed_names=["AttributeSetName"], name="attribute_set_name", mandatory=True, allowed_values=None, parser=simple_ident),
         CommandField(allowed_names=["Attributes"], name="attributes", mandatory=False, allowed_values=None, parser=key_value_list),
         CommandField(allowed_names=[attributeRegex], name="attributes", mandatory=False, many_appearances=True, parser=value)
     ],
 
-    "Parameters": [
+    "parameters": [
         CommandField(allowed_names=["Parameter", "ParameterName"], name="name", mandatory=True, allowed_values=None, parser=simple_ident),
         CommandField(allowed_names=["Type"], name="type", mandatory=True, allowed_values=parameter_types, parser=simple_ident),
         CommandField(allowed_names=["Domain"], name="domain", mandatory=False, allowed_values=None, parser=domain_definition),
@@ -114,7 +116,7 @@ command_fields: Dict[str, List[CommandField]] = {
         CommandField(allowed_names=[attributeRegex], name="attributes", mandatory=False, many_appearances=True, parser=value)
     ],
 
-    "InterfaceTypes": [
+    "interface_types": [
         CommandField(allowed_names=["InterfaceTypeHierarchy"], name="interface_type_hierarchy", mandatory=False, allowed_values=None, parser=simple_ident),
         CommandField(allowed_names=["InterfaceType"], name="interface_type", mandatory=True, allowed_values=None, parser=simple_ident),
         CommandField(allowed_names=["Sphere"], name="sphere", mandatory=True, allowed_values=spheres, parser=simple_ident),
@@ -129,7 +131,7 @@ command_fields: Dict[str, List[CommandField]] = {
         CommandField(allowed_names=[attributeRegex], name="attributes", mandatory=False, many_appearances=True, parser=value)
     ],
 
-    "BareProcessors": [
+    "processors": [
         CommandField(allowed_names=["ProcessorGroup"], name="processor_group", mandatory=False, allowed_values=None, parser=simple_ident),
         CommandField(allowed_names=["Processor"], name="processor", mandatory=True, allowed_values=None, parser=simple_ident),
         CommandField(allowed_names=["ParentProcessor"], name="parent_processor", mandatory=False, allowed_values=None, parser=simple_ident),
@@ -147,7 +149,7 @@ command_fields: Dict[str, List[CommandField]] = {
         CommandField(allowed_names=[attributeRegex], name="attributes", mandatory=False, many_appearances=True, parser=value)
     ],
 
-    "Interfaces": [
+    "interfaces_and_qq": [
         CommandField(allowed_names=["Alias", "SpecificName"], name="alias", mandatory=False, allowed_values=None, parser=simple_ident),
         CommandField(allowed_names=["InterfaceType"], name="interface_type", mandatory=True, allowed_values=None, parser=simple_ident),
         CommandField(allowed_names=["Interface"], name="interface", mandatory=False, allowed_values=None, parser=simple_ident),  # Processor:InterfaceType
@@ -183,7 +185,7 @@ command_fields: Dict[str, List[CommandField]] = {
         CommandField(allowed_names=["Comments"], name="comments", mandatory=False, allowed_values=None, parser=unquoted_string)
     ],
 
-    "Relationships": [
+    "relationships": [
         CommandField(allowed_names=["OriginProcessors", "OriginProcessor"], name="source_processor", mandatory=False, allowed_values=None, parser=processor_names),
         CommandField(allowed_names=["OriginInterface"], name="source_interface", mandatory=False, allowed_values=None, parser=simple_ident),
         CommandField(allowed_names=["DestinationProcessors", "DestinationProcessor"], name="target_processor", mandatory=False, allowed_values=None, parser=processor_names),
@@ -198,7 +200,7 @@ command_fields: Dict[str, List[CommandField]] = {
         CommandField(allowed_names=["Attributes"], name="attributes", mandatory=False, allowed_values=None, parser=key_value_list)
     ],
 
-    "ProcessorScalings": [
+    "processor_scalings": [
         CommandField(allowed_names=["InvokingProcessor"], name="invoking_processor", mandatory=True, allowed_values=None, parser=simple_ident),
         CommandField(allowed_names=["RequestedProcessor"], name="requested_processor", mandatory=True, allowed_values=None, parser=simple_ident),
         CommandField(allowed_names=["ScalingType"], name="scaling_type", mandatory=True, allowed_values=processor_scaling_types, parser=simple_ident),
@@ -210,7 +212,7 @@ command_fields: Dict[str, List[CommandField]] = {
         #CommandField(allowed_names=["UpscaleChildContext"], name="upscale_child_context", mandatory=False, allowed_values=None, parser=upscale_context)
     ],
 
-    "ScaleChangeMap": [
+    "scale_conversion_v2": [
         CommandField(allowed_names=["OriginHierarchy"], name="source_hierarchy", mandatory=False, allowed_values=None, parser=simple_ident),
         CommandField(allowed_names=["OriginInterfaceType"], name="source_interface_type", mandatory=True, allowed_values=None, parser=simple_ident),
         CommandField(allowed_names=["DestinationHierarchy"], name="target_hierarchy", mandatory=False, allowed_values=None, parser=simple_ident),
@@ -224,18 +226,18 @@ command_fields: Dict[str, List[CommandField]] = {
         CommandField(allowed_names=["DestinationUnit"], name="target_unit", mandatory=False, allowed_values=None, parser=unit_name)
     ],
 
-    "ImportCommands": [
+    "import_commands": [
         CommandField(allowed_names=["Workbook", "WorkbookLocation"], name="workbook_name", mandatory=False, allowed_values=None, parser=url_parser),
         CommandField(allowed_names=["Worksheets"], name="worksheets", mandatory=False, allowed_values=None, parser=unquoted_string)
     ],
 
-    "ListOfCommands": [
+    "list_of_commands": [
         CommandField(allowed_names=["Worksheet", "WorksheetName"], name="worksheet", mandatory=True, allowed_values=None, parser=unquoted_string),
         CommandField(allowed_names=["Command"], name="command", mandatory=True, allowed_values=valid_v2_command_names, parser=simple_ident),
         CommandField(allowed_names=["Comment", "Description"], name="comment", mandatory=False, allowed_values=None, parser=unquoted_string)
     ],
 
-    "RefProvenance": [
+    "ref_provenance": [
         # Reduced, from W3C Provenance Recommendation
         CommandField(allowed_names=["RefID", "Reference"], name="ref_id", mandatory=True, allowed_values=None, parser=simple_ident),
         CommandField(allowed_names=["AgentType"], name="agent_type", mandatory=True, allowed_values=agent_types, parser=simple_ident),
@@ -244,7 +246,7 @@ command_fields: Dict[str, List[CommandField]] = {
         CommandField(allowed_names=["Entities"], name="entities", mandatory=False, allowed_values=None, parser=unquoted_string)
     ],
 
-    "RefGeographic": [
+    "ref_geographical": [
         # A subset of fields from INSPIRE regulation for metadata: https://eur-lex.europa.eu/legal-content/EN/TXT/PDF/?uri=CELEX:32008R1205&from=EN
         # Fields useful to elaborate graphical displays. Augment in the future as demanded
         CommandField(allowed_names=["RefID", "Reference"], name="ref_id", mandatory=True, allowed_values=None, parser=simple_ident),
@@ -258,7 +260,7 @@ command_fields: Dict[str, List[CommandField]] = {
         CommandField(allowed_names=["PointOfContact"], name="metadata_point_of_contact", mandatory=False, allowed_values=None, parser=unquoted_string)
     ],
 
-    "RefBibliographic": [
+    "ref_bibliographic": [
         # From BibTex. Mandatory fields depending on EntryType, at "https://en.wikipedia.org/wiki/BibTeX" (or search: "Bibtex entry field types")
         CommandField(allowed_names=["RefID", "Reference"], name="ref_id", mandatory=True, allowed_values=None, parser=simple_ident),
         CommandField(allowed_names=["EntryType"], name="entry_type", mandatory=True, allowed_values=bib_entry_types, parser=unquoted_string),
@@ -289,7 +291,7 @@ command_fields: Dict[str, List[CommandField]] = {
         CommandField(allowed_names=["Year"], name="year", mandatory="entry_type in ('article', 'book', 'inbook', 'incollection', 'inproceedings', 'mastersthesis', 'phdthesis', 'proceedings', 'techreport')", allowed_values=None, parser=unquoted_string)
     ],
 
-    "ScalarIndicators": [
+    "scalar_indicators": [
         CommandField(allowed_names=["Indicator"], name="indicator_name", mandatory=True, allowed_values=None, parser=simple_ident),
         CommandField(allowed_names=["Local"], name="local", mandatory=True, allowed_values=yes_no, parser=simple_ident),
         CommandField(allowed_names=["Formula", "Expression"], name="expression", mandatory=True, allowed_values=None, parser=indicator_expression),
@@ -297,19 +299,28 @@ command_fields: Dict[str, List[CommandField]] = {
         CommandField(allowed_names=["Description"], name="description", mandatory=False, allowed_values=None, parser=unquoted_string)
     ],
 
-    "MatrixIndicators": [
+    "matrix_indicators": [
         CommandField(allowed_names=["Indicator"], name="indicator_name", mandatory=True, allowed_values=None, parser=simple_ident),
         CommandField(allowed_names=["Formula", "Expression"], name="expression", mandatory=True, allowed_values=None, parser=indicator_expression),
         CommandField(allowed_names=["Description"], name="description", mandatory=False, allowed_values=None, parser=unquoted_string)
     ],
 
-    "ProblemStatement": [
+    "problem_statement": [
         CommandField(allowed_names=["Scenario"], name="scenario_name", mandatory=True, allowed_values=None, parser=simple_ident),
         CommandField(allowed_names=["Parameter"], name="parameter", mandatory=True, allowed_values=None, parser=simple_ident),
         CommandField(allowed_names=["Value"], name="parameter_value", mandatory=True, allowed_values=None, parser=expression_with_parameters),
         CommandField(allowed_names=["Description"], name="description", mandatory=False, allowed_values=None, parser=unquoted_string)
     ]
 }
+
+
+def get_command_fields_from_class(execution_class: Type[IExecutableCommand]) -> List[CommandField]:
+    execution_class_name: str = class_full_name(execution_class)
+    cmd = first(commands, condition=lambda c: c.execution_class_name == execution_class_name)
+    if cmd:
+        return command_fields.get(cmd.name, [])
+
+    return []
 
 
 # command_field_names = {}

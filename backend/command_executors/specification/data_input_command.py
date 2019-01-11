@@ -237,7 +237,8 @@ class DataInputCommand(IExecutableCommand):
                         else:
                             fixed_dict[k] = r[k]  # Special
                 # Check that the # names are in the Dataset
-                diff = set([v.lower() for v in list(var_dict.values())+list(var_taxa_dict.values())]).difference(set(ds.data.columns))
+                # TODO: treat case sensitiveness here
+                diff = set([v for v in list(var_dict.values())+list(var_taxa_dict.values())]).difference(set(ds.data.columns))
                 if diff:
                     # There are request fields in var_dict NOT in the input dataset "ds.data"
                     if len(diff) > 1:

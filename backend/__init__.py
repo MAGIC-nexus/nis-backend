@@ -1,6 +1,6 @@
 import importlib
 import regex as re
-from typing import Optional, Any, List, Tuple, Callable, Dict
+from typing import Optional, Any, List, Tuple, Callable, Dict, Union, Type
 
 import pint
 from collections import namedtuple
@@ -76,15 +76,15 @@ metadata_fields = [("Case study name", "title", False, False, "case_study_name")
                    ]
 
 # Regular expression definitions
-_var_name = "([a-zA-Z][a-zA-Z0-9_-]*)"
-_hvar_name = "(" + _var_name + r"(\." + _var_name + ")*)"
-_cplex_var = "((" + _var_name + "::)?" + _hvar_name + ")"
-_optional_alphanumeric = "([ a-zA-Z0-9_-]*)?"  # Whitespace also allowed
+regex_var_name = "([a-zA-Z][a-zA-Z0-9_-]*)"
+regex_hvar_name = "(" + regex_var_name + r"(\." + regex_var_name + ")*)"
+regex_cplex_var = "((" + regex_var_name + "::)?" + regex_hvar_name + ")"
+regex_optional_alphanumeric = "([ a-zA-Z0-9_-]*)?"  # Whitespace also allowed
 
 
 # Regular expression for "worksheet name" in version 2
-def simple_regexp(names: List[str]):
-    return r"(" + "|".join(names) + ")" + _optional_alphanumeric
+def simple_regex(names: List[str]):
+    return r"(" + "|".join(names) + ")" + regex_optional_alphanumeric
 
 # ##################################
 # Commands
@@ -92,34 +92,29 @@ def simple_regexp(names: List[str]):
 
 @attrs(cmp=False)  # Constant and Hashable by id
 class Command:
-    # Name
+    # Name, the lowercase unique name
     name = attrib()  # type: str
-    # Labels
-    labels = attrib()  # type: List[str]
-    # Subclass of IExecutableCommand in charge of the execution
+    # Allowed names for the worksheet. Used for simple regular expressions.
+    allowed_names = attrib()  # type: List[str]
+    # Name of the subclass of IExecutableCommand in charge of the execution
     execution_class_name = attrib()  # type: Optional[str]
-    # Alternative regular expression for worksheet name
+    # Alternative regular expression for worksheet name, otherwise the simple_regex() is used
     alt_regex = attrib(default=None)
     # Parse function, having params (Worksheet, Area) and returning a tuple (issues, label, content)
     # Callable[[Worksheet, AreaTupleType, str, ...], IssuesLabelContentTripleType] = attrib(default=None)
     parse_function: Callable[..., IssuesLabelContentTripleType] = attrib(default=None)
-    # List of commands fields
-    # fields = attrib(default=[])  # type: List[CommandField]
     # In which version is this command allowed?
     is_v1 = attrib(default=False)  # type: bool
     is_v2 = attrib(default=False)  # type: bool
 
     @property
     def regex(self):
-        regexp_pattern = self.alt_regex
-        if not regexp_pattern:
-            regexp_pattern = simple_regexp(self.labels)
+        if self.alt_regex:
+            pattern = self.alt_regex
+        else:
+            pattern = simple_regex(self.allowed_names)
 
-        return re.compile(regexp_pattern, flags=re.IGNORECASE)
-
-    @property
-    def label(self):
-        return self.labels[0] if self.labels else ""
+        return re.compile(pattern, flags=re.IGNORECASE)
 
     @property
     def execution_class(self):
@@ -133,11 +128,11 @@ class Command:
 @attrs(cmp=False)  # Constant and Hashable by id
 class CommandField:
     # Allowed names for the column
-    allowed_names = attrib()  # type: list[str]
+    allowed_names = attrib()  # type: List[str]
     # Internal name used during the parsing
     name = attrib()  # type: str
-    # Flag indicating if the column is mandatory or optional
-    mandatory = attrib()  # type: bool
+    # Flag indicating if the column is mandatory or optional. It can also be an expression (string).
+    mandatory = attrib()  # type: Union[bool, str]
     # Parser for the column
     parser = attrib()
     # Some columns have a predefined set of allowed strings
@@ -147,11 +142,11 @@ class CommandField:
     # Many appearances (the field can appear multiple times). A convenience to define a list
     many_appearances = attrib(default=False)
     # Examples
-    examples = attrib(default=None)  # type: list[str]
+    examples = attrib(default=None)  # type: List[str]
     # Compiled regex
     # regex_allowed_names = attrib(default=None)
     # Is it directly an attribute of a Musiasem type? Which one?
-    attribute_of = attrib(default=None)  # type: type
+    attribute_of = attrib(default=None)  # type: Type
 
     @property
     def regex_allowed_names(self):

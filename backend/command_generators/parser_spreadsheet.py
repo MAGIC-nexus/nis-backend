@@ -76,7 +76,7 @@ def commands_generator_from_ooxml_file(input, state, sublist, stack) -> backend.
     if sublist:
         # Force reading "ListOfCommands" commands
         for sheet_name in workbook.sheetnames:
-            if commands["ListOfCommands"].regex.search(sheet_name):
+            if first(commands, condition=lambda c: c.name == "list_of_commands" and c.regex.search(sheet_name)):
                 sublist.append(sheet_name)
 
     # For each worksheet, get the command type, convert into primitive JSON
@@ -115,9 +115,8 @@ def commands_generator_from_ooxml_file(input, state, sublist, stack) -> backend.
 
         c_type = cmd.name if cmd else None
         if not c_type:
-            # Unsupported command
-            print(f'Sheet name "{name}" is not a supported command')
-            pass
+            total_issues.append({"sheet_number": sheet_number, "sheet_name": sheet_name, "c_type": name, "type": 3,
+                                 "message": f"The worksheet name '{name}' has not a supported command associated."})
 
         elif c_type == "etl_dataset":
             if sheet.cell(row=t[0], column=t[2]).value:
@@ -126,13 +125,12 @@ def commands_generator_from_ooxml_file(input, state, sublist, stack) -> backend.
                 group2_name = cmd.regex.search(name).group(2)  # Get group name if any
                 issues, c_label, c_content = cmd.parse_function(sheet, t, group2_name, state)
             else:
-                # Syntax error: it seems there are no parameters
-                issue = {"sheet_number": sheet_number, "sheet_name": sheet_name, "c_type": c_type, "type": 3,
-                         "message": "It seems there are no parameters for the dataset import command at worksheet '" + sheet_name + "'"}
-                total_issues.append(issue)
+                total_issues.append(
+                    {"sheet_number": sheet_number, "sheet_name": sheet_name, "c_type": c_type, "type": 3,
+                     "message": f"It seems there are no parameters for the dataset import command at worksheet '{sheet_name}'"})
 
         elif c_type == "list_of_commands":
-            issues, c_label, c_content = cmd.parse_function(sheet, t)
+            issues, c_label, c_content = parse_command(sheet, t, None, cmd.name)
             c_type = None
             if 3 not in [issue.itype for issue in issues]:
                 for r in c_content["items"]:
@@ -146,7 +144,7 @@ def commands_generator_from_ooxml_file(input, state, sublist, stack) -> backend.
                         worksheet_to_command[worksheet] = command
 
         elif c_type == "import_commands":
-            issues, c_label, c_content = cmd.parse_function(sheet, t)
+            issues, c_label, c_content = parse_command(sheet, t, None, cmd.name)
             if 3 not in [issue.itype for issue in issues]:
                 # Declared at this point to avoid circular reference ("parsers_factory" imports "parsers_spreadsheet")
                 from backend.command_generators.parsers_factory import commands_container_parser_factory
@@ -185,7 +183,7 @@ def commands_generator_from_ooxml_file(input, state, sublist, stack) -> backend.
             if cmd.parse_function:
                 issues, c_label, c_content = cmd.parse_function(sheet, t, group2_name)
             else:
-                issues, c_label, c_content = parse_command(sheet, t, group2_name, cmd.label)
+                issues, c_label, c_content = parse_command(sheet, t, group2_name, cmd.name)
 
         # -------------------------------------------------------------------------------------------------------------
         # Command parsed, now append "issues"

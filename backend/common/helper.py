@@ -12,7 +12,7 @@ import urllib.request
 import uuid
 from functools import partial
 from io import BytesIO
-from typing import IO, List, Tuple, Dict, Any, Optional, Iterable, Callable, TypeVar
+from typing import IO, List, Tuple, Dict, Any, Optional, Iterable, Callable, TypeVar, Type
 from uuid import UUID
 
 import jsonpickle
@@ -1257,7 +1257,7 @@ def name_and_id_dict(obj: object) -> Optional[Dict]:
     if obj:
         return {"name": obj.name, "id": obj.uuid}
     else:
-        None
+        return None
 
 
 def get_value_or_list(current_value, additional_value):
@@ -1275,3 +1275,17 @@ def get_value_or_list(current_value, additional_value):
             return [current_value, additional_value]
     else:
         return additional_value
+
+
+def class_full_name(c: Type) -> str:
+    """ Get the full name of a class """
+    module = c.__module__
+    if module is None:
+        return c.__name__
+    else:
+        return module + '.' + c.__name__
+
+
+def object_full_name(o: object) -> str:
+    """ Get the full class name of an object """
+    return class_full_name(o.__class__)

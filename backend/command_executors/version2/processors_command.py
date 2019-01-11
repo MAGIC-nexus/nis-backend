@@ -4,7 +4,7 @@ import re
 from backend.command_executors.execution_helpers import parse_line, classify_variables, \
     obtain_dictionary_with_literal_fields
 from backend.command_executors.version2.relationships_command import obtain_matching_processors
-from backend.command_field_definitions import command_fields
+from backend.command_field_definitions import get_command_fields_from_class
 from backend.command_generators import Issue
 from backend.command_generators.parser_ast_evaluators import dictionary_from_key_value_list
 from backend.command_generators.parser_field_parsers import string_to_ast, processor_names
@@ -180,33 +180,33 @@ class ProcessorsCommand(IExecutableCommand):
                 yield item
 
         def process_line(item):
-            fields_dict = {f.name: item.get(f.name, head(f.allowed_values)) for f in command_fields["BareProcessors"]}
+            fields_value = {k: item.get(k, head(v.allowed_values)) for k, v in fields.items()}
 
             # Check if mandatory fields with no value exist
-            for field in [f.name for f in command_fields["BareProcessors"] if f.mandatory and not fields_dict[f.name]]:
+            for field in [k for k, v in fields.items() if v.mandatory and not fields_value[k]]:
                 issues.append(create_issue(3, f"Mandatory field '{field}' is empty. Skipped."))
                 return
 
             # Transform text of "attributes" into a dictionary
-            field_value = fields_dict.get("attributes", None)
-            if field_value:
+            field_val = fields_value.get("attributes", None)
+            if field_val:
                 try:
-                    fields_dict["attributes"] = dictionary_from_key_value_list(field_value, glb_idx)
+                    fields_value["attributes"] = dictionary_from_key_value_list(field_val, glb_idx)
                 except Exception as e:
                     issues.append(create_issue(3, str(e)))
                     return
             else:
-                fields_dict["attributes"] = {}
+                fields_value["attributes"] = {}
 
             # Process specific fields
 
             # Obtain the parent: it must exist. It could be created dynamically but it's important to specify attributes
             parent_processor = None
-            field_value = fields_dict.get("parent_processor", None)
-            if field_value:
-                parent_processor = find_processor_by_name(state=glb_idx, processor_name=field_value)
+            field_val = fields_value.get("parent_processor", None)
+            if field_val:
+                parent_processor = find_processor_by_name(state=glb_idx, processor_name=field_val)
                 if not parent_processor:
-                    issues.append(create_issue(3, f"Specified parent processor, '{field_value}', does not exist"))
+                    issues.append(create_issue(3, f"Specified parent processor, '{field_val}', does not exist"))
                     return
 
             # Find or create processor and REGISTER it in "glb_idx"
@@ -215,35 +215,32 @@ class ProcessorsCommand(IExecutableCommand):
             # TODO Improve allowing CLONE(<processor name>)
             # TODO Pass the attributes:
             # TODO p_type, p_f_or_s, p_i_or_a, p_alias, p_description, p_copy_interfaces
-            if fields_dict.get("clone_processor", None):
+            if fields_value.get("clone_processor", None):
                 # TODO Find origin processor
                 # TODO Clone it
                 pass
             else:
-                processor_attributes = {f.name: fields_dict[f.name] for f in command_fields["BareProcessors"] if f.attribute_of == Processor}
+                processor_attributes = {k: fields_value[k] for k, v in fields.items() if v.attribute_of == Processor}
 
                 # If key "attributes" exist, expand it.
                 # E.g. {"a": 1, "b": 2, "attributes": {"c": 3, "d": 4}} -> {'a': 1, 'b': 2, 'c': 3, 'd': 4}
-                if "attributes" in processor_attributes:
-                    field_value = processor_attributes["attributes"]
-                    del processor_attributes["attributes"]
-                    if field_value:
-                        processor_attributes.update(field_value)
+                processor_attributes.pop("attributes", None)
+                processor_attributes.update(fields_value["attributes"])
 
                 p = find_or_create_processor(
                     state=glb_idx,
-                    name=fields_dict["processor"],
+                    name=fields_value["processor"],
                     proc_attributes=processor_attributes,
-                    proc_location=Geolocation.create(fields_dict["geolocation_ref"], fields_dict["geolocation_code"])
+                    proc_location=Geolocation.create(fields_value["geolocation_ref"], fields_value["geolocation_code"])
                 )
 
             # Add to ProcessorsGroup, if specified
-            field_value = fields_dict.get("processor_group", None)
-            if field_value:
-                p_set = p_sets.get(field_value, ProcessorsSet(field_value))
-                p_sets[field_value] = p_set
+            field_val = fields_value.get("processor_group", None)
+            if field_val:
+                p_set = p_sets.get(field_val, ProcessorsSet(field_val))
+                p_sets[field_val] = p_set
                 if p_set.append(p, glb_idx):  # Appends codes to the pset if the processor was not member of the pset
-                    p_set.append_attributes_codes(fields_dict["attributes"])
+                    p_set.append_attributes_codes(fields_value["attributes"])
 
             # Add Relationship "part-of" if parent was specified
             # The processor may have previously other parent processors that will keep its parentship
@@ -262,7 +259,7 @@ class ProcessorsCommand(IExecutableCommand):
         command_name = self._content["command_name"]
 
         # CommandField definitions for the fields of Interface command
-        fields = {f.name: f for f in command_fields["BareProcessors"]}
+        fields = {f.name: f for f in get_command_fields_from_class(self.__class__)}
         # Obtain the names of all parameters
         parameters = [p.name for p in glb_idx.get(Parameter.partial_key())]
         # Obtain the names of all processors

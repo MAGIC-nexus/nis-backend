@@ -3,7 +3,7 @@ import re
 
 from backend.command_executors.execution_helpers import parse_line, classify_variables, \
     obtain_dictionary_with_literal_fields
-from backend.command_field_definitions import command_fields
+from backend.command_field_definitions import get_command_fields_from_class
 from backend.command_generators import Issue
 from backend.command_generators.parser_ast_evaluators import dictionary_from_key_value_list
 from backend.command_generators.parser_field_parsers import string_to_ast, processor_names
@@ -347,7 +347,7 @@ class RelationshipsCommand(IExecutableCommand):
             else:
                 create_relation_observations(glb_idx, source_interface, target_interface, r_relation_class, None, attributes=attributes)
 
-        fields = {f.name: f for f in command_fields["Relationships"]}
+        fields = {f.name: f for f in get_command_fields_from_class(self.__class__)}
 
         issues = []
         glb_idx, p_sets, hh, datasets, mappings = get_case_study_registry_objects(state)

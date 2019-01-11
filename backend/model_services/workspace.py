@@ -800,7 +800,7 @@ class ReproducibleSession:
 
     @property
     def commands(self):
-        self._session.commands
+        return self._session.commands
 
     @property
     def case_study(self):

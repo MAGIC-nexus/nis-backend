@@ -458,7 +458,7 @@ if __name__ == '__main__':
     i = TestCommandFiles()
     prepare_and_reset_database_for_tests(prepare=True)
     backend.data_source_manager = register_external_datasources({"FAO_DATASETS_DIR": "/home/marco/temp/Data/FAOSTAT/"})
-    #i.test_006_execute_file_five()
+    # i.test_006_execute_file_five()  # TODO: This test from v1 has problems with the case sensitiveness!
     #i.test_008_execute_file_v2_two()
     #i.test_009_execute_file_v2_three()  # Soslaires. v2 syntax
     #i.test_011_execute_file_v2_five()  # Dataset

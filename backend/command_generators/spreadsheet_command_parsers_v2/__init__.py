@@ -1,5 +1,5 @@
 from attr import attrs, attrib
-from typing import List, Tuple
+from typing import List, Tuple, Optional
 
 from openpyxl.worksheet import Worksheet
 
@@ -73,7 +73,7 @@ def check_columns(sh, name: str, area: Tuple, cols: List[CommandField], command_
     return col_map, issues
 
 
-def parse_command(sh: Worksheet, area: AreaTupleType, name: str, cmd_name: str) -> IssuesLabelContentTripleType:
+def parse_command(sh: Worksheet, area: AreaTupleType, name: Optional[str], cmd_name: str) -> IssuesLabelContentTripleType:
     """
     Parse command in general
     Generate a JSON
@@ -128,9 +128,11 @@ def parse_command(sh: Worksheet, area: AreaTupleType, name: str, cmd_name: str) 
 
                 if col.allowed_values:  # If the CommandField checks for a list of allowed values
                     if value.lower() not in [v.lower() for v in col.allowed_values]:  # TODO Case insensitive CI
-                        issues.append(Issue(itype=3,
-                                            description="Field '" + col_name + "' of command '" + cmd_name + "' has as allowed values: "+", ".join(col.allowed_values)+". Entered: " + value,
-                                            location=IssueLocation(sheet_name=name, row=r, column=col_idx)))
+                        issues.append(
+                            Issue(itype=3,
+                                  description=f"Field '{col_name}' of command '{cmd_name}' has invalid value '{value}'."
+                                              f" Allowed values are: {', '.join(col.allowed_values)}.",
+                                  location=IssueLocation(sheet_name=name, row=r, column=col_idx)))
                     else:
                         line[cname] = value
                 else:  # Instead of a list of values, check if a syntactic rule is met by the value
