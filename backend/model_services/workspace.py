@@ -231,7 +231,7 @@ def transform_issues(issues: List[Union[dict, backend.Issue, tuple, Issue]], cmd
         if issue.itype == IType.error():
             errors_exist = True
 
-        if not issue.ctype:
+        if not issue.ctype and cmd:  # "cmd" may be "None", in case the Issue is produced by the commands container loop
             issue.ctype = cmd._serialization_type
 
         if not issue.location.sheet_name or issue.location.sheet_name == "":
