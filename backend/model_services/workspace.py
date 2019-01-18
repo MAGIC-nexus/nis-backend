@@ -9,16 +9,15 @@ import json
 import logging
 import uuid
 from enum import Enum
-from typing import List
+from typing import List, Union
 
 import sqlalchemy
 
 import backend
-from backend.command_generators import Issue
+from backend.command_generators import Issue, IssueLocation, IType
 from backend.command_generators.parsers_factory import commands_container_parser_factory
-from backend.common.helper import create_dictionary
-from backend.models.musiasem_concepts import Processor, Factor, FactorsRelationDirectedFlowObservation, \
-    ProblemStatement, Parameter
+from backend.model_services import IExecutableCommand
+from backend.model_services import State
 from backend.models.musiasem_methodology_support import (User,
                                                          CaseStudy,
                                                          CaseStudyVersion,
@@ -27,8 +26,6 @@ from backend.models.musiasem_methodology_support import (User,
                                                          force_load,
                                                          DBSession, ORMBase, load_table, Authenticator, CaseStudyStatus,
                                                          ObjectType, PermissionType)
-from backend.model_services import IExecutableCommand, get_case_study_registry_objects
-from backend.model_services import State
 from backend.restful_service import tm_default_users, tm_authenticators, tm_case_study_version_statuses, \
     tm_object_types, tm_permissions
 from backend.restful_service.serialization import serialize_state, deserialize_state
@@ -151,7 +148,7 @@ def persistable_to_executable_command(p_cmd: CommandsContainer, limit=1000):
             break
 
 
-def execute_command(state, e_cmd: "IExecutableCommand"):
+def execute_command(state, e_cmd: "IExecutableCommand") -> backend.IssuesOutputPairType:
     if e_cmd:
         return e_cmd.execute(state)
     else:
@@ -181,64 +178,68 @@ def execute_command_container_file(state, generator_type, file_type: str, file):
     # Loop over the IExecutableCommand instances
     issues_aggreg = []
     outputs = []
-    cont = 0
+    cmd_number = 0
     for cmd, issues in commands_generator:
-        cont += 1  # Command counter
-        # If there are ERRORS, STOP!!!
-        stop = False
+        cmd_number += 1  # Command counter
+
+        errors_exist = False
+
         if issues and len(issues) > 0:
-            for t in issues:
-                if isinstance(t, dict):
-                    if t["type"] == 3:
-                        stop = True
-                elif isinstance(t, tuple):
-                    if t[0] == 3:  # Error
-                        stop = True
+            new_issues, errors_exist = transform_issues(issues, cmd, cmd_number)
+            issues_aggreg.extend(new_issues)
 
-        if issues:
-            issues_aggreg.extend(issues)
-
-        if stop:
+        if errors_exist:
             break
 
         # ## COMMAND EXECUTION ## #
         issues, output = execute_command(state, cmd)
 
-        if issues:
-            stop = False
-            # Process the new issues
-            for i in issues:
-                if isinstance(i, dict):
-                    if i["type"] == 3:
-                        stop = True
-                    tp = i["type"]
-                    msg = i["message"]
-                elif isinstance(i, tuple):
-                    if i[0] == 3:  # Error
-                        stop = True
-                    tp = i[0]
-                    msg = i[1]
-                elif isinstance(i, Issue):
-                    if i.itype == 3:  # Error
-                        stop = True
-                    tp = i.itype
-                    msg = i.description
-                # TODO Issue fields for the location of issues should depend on the file format
-                issue = {"sheet_number": cont,
-                         "sheet_name": cmd._source_block_name if hasattr(cmd, "_source_block_name") else "",
-                         "c_type": cmd._serialization_type,
-                         "type": tp,
-                         "message": msg
-                         }
-                issues_aggreg.append(issue)
+        if issues and len(issues) > 0:
+            new_issues, errors_exist = transform_issues(issues, cmd, cmd_number)
+            issues_aggreg.extend(new_issues)
 
         if output:
             outputs.append(output)
 
-        if stop:
+        if errors_exist:
             break
 
     return issues_aggreg, outputs
+
+
+def transform_issues(issues: List[Union[dict, backend.Issue, tuple, Issue]], cmd, sheet_number: int) -> (List[Issue], bool):
+
+    errors_exist = False
+    new_issues: List[Issue] = []
+
+    for i in issues:
+        if isinstance(i, dict):
+            issue = Issue(itype=i["type"], description=i["message"], ctype=i["c_type"],
+                          location=IssueLocation(sheet_name=i["sheet_name"], sheet_number=i["sheet_number"]))
+        elif isinstance(i, backend.Issue):  # namedtuple
+            issue = Issue(itype=i.type, description=i.message, ctype=i.c_type,
+                          location=IssueLocation(sheet_name=i.sheet_name, sheet_number=i.sheet_number))
+        elif isinstance(i, tuple):
+            issue = Issue(itype=i[0], description=i[1],
+                          location=IssueLocation(sheet_name=""))
+        else:  # isinstance(i, Issue):
+            issue = i
+
+        if issue.itype == IType.error():
+            errors_exist = True
+
+        if not issue.ctype:
+            issue.ctype = cmd._serialization_type
+
+        if not issue.location.sheet_name or issue.location.sheet_name == "":
+            issue.location.sheet_name = cmd._source_block_name if hasattr(cmd, "_source_block_name") else ""
+
+        if not issue.location.sheet_number:
+            issue.location.sheet_number = sheet_number
+
+        new_issues.append(issue)
+
+    return new_issues, errors_exist
 
 
 def convert_generator_to_native(generator_type, file_type: str, file):
@@ -932,7 +933,7 @@ class ReproducibleSession:
 
     @property
     def commands(self):
-        self._session.commands
+        return self._session.commands
 
     @property
     def case_study(self):

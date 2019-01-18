@@ -51,23 +51,21 @@ An interesting paper: "A survey of RDB to RDF translation approaches and tools"
 
 import collections
 import json
-import urllib
+import logging
 from collections import OrderedDict
 from enum import Enum
 from typing import *  # Type hints
-from uuid import UUID
-import pint  # Physical Units management
+
 import pandas as pd
-import logging
-from attr import attrs, attrib
+import pint  # Physical Units management
 
 from backend.common.helper import create_dictionary, strcmp, PartialRetrievalDictionary, \
     case_sensitive, is_boolean, is_integer, is_float, is_datetime, is_url, is_uuid, to_datetime, to_integer, to_float, \
     to_url, to_uuid, to_boolean, to_category, to_str, is_category, is_str, is_geo, to_geo, ascii2uuid, \
-    Encodable, name_and_id_dict
-from backend.models import ureg, log_level
+    Encodable, name_and_id_dict, ifnull
 from backend.model_services import State, get_case_study_registry_objects, LocallyUniqueIDManager
 from backend.models import CodeImmutable
+from backend.models import ureg, log_level
 
 logger = logging.getLogger(__name__)
 logger.setLevel(log_level)
@@ -246,51 +244,105 @@ def convert_and_infer_attribute_type(v: str):
 
 
 class Qualifiable(Encodable):
-    """ An entity with a dictionary of Attributes """
-    def __init__(self, attributes=None):
-        # "name" property of AttributeType -> to Value
-        self._attributes = create_dictionary()  # type: Dict[str, object]
-        # "name" property of AttributeType -> to AttributeType
-        self._name_to_attribute_type = create_dictionary()  # type: Dict[str, AttributeType]
-        if attributes:
-            for k in attributes:
-                self.attributes_append(k, attributes[k])
-                # TODO From the attribute name obtain the AttributeType (in the global registry)
+    """
+    Add properties to another class, which can be accessed through the new attribute "attributes".
+    Some properties can be marked as internal and can also be accessed with dot notation.
+
+    Example: obj = MyClassInheritingFromQualifiable(attributes={'id':1, 'custom':'ACustomValue'}, internal_names={'id'})
+             print(obj.attributes['custom'])
+             print(obj.attributes['id'])
+             print(obj.id)
+             obj.id = 2
+             obj.attributes['id'] = 3
+             obj.attributes['custom'] = 'AnotherCustomValue'
+             obj.attributes['new_custom'] = 'newCustomValue'
+    """
+    def __init__(self, attributes: Dict[str, Any], internal_names: FrozenSet[str] = frozenset({})):
+        # Setting attributes avoiding a call to the custom __setattr__()
+        object.__setattr__(self, "_internal_names", ifnull(internal_names, frozenset({})))
+        object.__setattr__(self, "_attributes", ifnull(attributes, {}))
 
     def encode(self):
-        return {
-            "attributes": self.attributes
-        }
+        d = self.internal_attributes()
+
+        d.update({
+            "attributes": self.custom_attributes()
+        })
+
+        return d
+
+    def __getattr__(self, name):
+        if name in self.internal_names:
+            return self._attributes.get(name, None)
+        else:
+            # Default behaviour
+            raise AttributeError
+
+    def __setattr__(self, key, value):
+        if key in self.internal_names:
+            self._attributes[key] = value
+        else:
+            # Default behaviour
+            object.__setattr__(self, key, value)
+
+    def get_attribute(self, name):
+        """
+        Get the value of an object attribute no matter it has been defined directly (with dot notation) or
+        in the '_attributes' dictionary. It raises the AttributeError exception if not found.
+        :param name: string with the name of the attribute
+        :return: the value of the attribute
+        """
+        try:
+            return object.__getattribute__(self, name)
+        except AttributeError:
+            if name in self._internal_names:
+                return self._attributes.get(name, None)
+            else:
+                try:
+                    return self._attributes[name]
+                except KeyError:
+                    raise AttributeError from None
 
     @property
-    def attributes(self):
+    def internal_names(self) -> FrozenSet[str]:
+        try:
+            return object.__getattribute__(self, "_internal_names")
+        except AttributeError:
+            return frozenset({})
+
+    @property
+    def attributes(self) -> Dict[str, Any]:
         return self._attributes
 
-    def attributes_append(self, name, value, attribute_type=None):
-        if value:
-            self._attributes[name] = value
-        if attribute_type:
-            self._name_to_attribute_type[name] = attribute_type
+    def custom_attributes(self) -> Dict[str, Any]:
+        return {k: v for k, v in self.attributes.items() if k not in self.internal_names}
+
+    def internal_attributes(self) -> Dict[str, Any]:
+        return {k: self.attributes.get(k, None) for k in self.internal_names}
 
 
 class Observable(Encodable):
     """ An entity which can be structurally (relations with other observables) or quantitatively observed.
         It can have none to infinite possible observations
     """
-    def __init__(self, location: "Geolocation"):
-        self._location = location  # Definition of where the observable is
+    def __init__(self):
+        # self._location = location  # Definition of where the observable is
         self._physical_nature = None
         self._observations = []  # type: List[Union[FactorQuantitativeObservation, RelationObservation]]
 
     def encode(self):
         return {
-            "observations": [o for o in self.observations if not isinstance(o, RelationObservation)]
+            "observations": self.quantitative_observations
         }
 
     # Methods to manage the properties
     @property
     def observations(self):
         return self._observations
+
+    @property
+    def quantitative_observations(self) -> List["FactorQuantitativeObservation"]:
+        return [o for o in self.observations if isinstance(o, FactorQuantitativeObservation)]
 
     def observations_append(self, observation):
         if isinstance(observation, (list, set)):
@@ -299,6 +351,21 @@ class Observable(Encodable):
             lst = [observation]
 
         self._observations.extend(lst)
+
+
+class Geolocatable(Encodable):
+    def __init__(self, geolocation: "Geolocation"):
+        self._geolocation = geolocation
+
+    def encode(self):
+        return {
+            "geolocation_ref": getattr(self.geolocation, "reference", None),
+            "geolocation_code": getattr(self.geolocation, "code", None)
+        }
+
+    @property
+    def geolocation(self):
+        return self._geolocation
 
 
 class HierarchyNode(Nameable, Encodable):
@@ -330,7 +397,7 @@ class HierarchyNode(Nameable, Encodable):
         if self.referred_node:
             encoded_referred_node = {
                 "name": self.referred_node.name,
-                "hierarchy": self.referred_node.hierarchy.name if self.referred_node.hierarchy else None
+                "hierarchy": getattr(self.referred_node.hierarchy, "name", None)
             }
 
         d = {
@@ -405,48 +472,20 @@ class HierarchyNode(Nameable, Encodable):
 
 class Geolocation:
     """ For the geolocation of processors. Factors and Observations could also be qualified with Geolocation """
-    def __init__(self, name, region_name=None, projection=None, shape=None):
-        self._name = name
-        self._region_name = region_name
-        self._projection = projection
-        self._shape = shape
+    def __init__(self, reference, code):
+        self.reference = reference
+        self.code = code
 
     def __eq__(self, other):
-        return self.region_name == other.region_name and \
-               self.projection == other.projection and \
-               self.shape == other.shape
+        return self.reference == other.reference and \
+               self.code == other.code
 
-    @property
-    def name(self):
-        return self._name
-
-    @name.setter
-    def name(self, name):
-        self._name = name
-
-    @property
-    def region_name(self):
-        return self._region_name
-
-    @region_name.setter
-    def region_name(self, region_name):
-        self._region_name = region_name
-
-    @property
-    def projection(self):
-        return self._projection
-
-    @projection.setter
-    def projection(self, projection):
-        self._projection = projection
-
-    @property
-    def shape(self):
-        return self._shape
-
-    @shape.setter
-    def shape(self, shape):
-        self._shape = shape
+    @staticmethod
+    def create(reference, code) -> Optional["Geolocation"]:
+        if reference and code:
+            return Geolocation(reference, code)
+        else:
+            return None
 
 
 class TimeExtent:
@@ -474,40 +513,6 @@ class TimeExtent:
     @end.setter
     def end(self, end):
         self._end = end
-
-
-class QualifiedQuantityExpression:
-    """ The base class for quantitative observations
-    """
-    def __init__(self, e: Union[str, dict]):
-        self._expression = e
-
-    @property
-    def expression(self):
-        return self._expression
-
-    @expression.setter
-    def expression(self, expression):
-        self._expression = expression
-
-    @staticmethod
-    def n(n: float):
-        """ "N" of NUSAP """
-        return QualifiedQuantityExpression(json.dumps({'n': n}))
-
-    @staticmethod
-    def nu(n: float, u: str):
-        """ "NU" of NUSAP """
-        # Check that "u" is a recognized unit type
-        try:
-            ureg(u)
-        except pint.errors.UndefinedUnitError:
-            # The user should know that the specified unit is not recognized
-            raise Exception("The specified unit '" + u + "' is not recognized")
-        return QualifiedQuantityExpression(json.dumps({'n': n, 'u': u}))
-
-    def __repr__(self):
-        return str(self.expression)
 
 # #################################################################################################################### #
 # HIERARCHIES and TAXA
@@ -808,7 +813,7 @@ class Hierarchy(Nameable, Identifiable, Encodable):
 
 
 class HierarchyExpression(Encodable):
-    def __init__(self, expression: QualifiedQuantityExpression=None):
+    def __init__(self, expression: float=None):
         # Defines how to compute a HierarchyNode relative to other HierarchyNodes
         # The hierarchical relation implies a parent = SUM children expression. If specified, this implicit relation
         # would be overriden
@@ -825,7 +830,7 @@ class HierarchyExpression(Encodable):
         return self._expression
 
     @expression.setter
-    def expression(self, e: QualifiedQuantityExpression=None):
+    def expression(self, e: float=None):
         self._expression = e
 
 
@@ -1065,6 +1070,8 @@ class Source(Nameable, Qualifiable):
 
 class FactorType(Identifiable, HierarchyNode, HierarchyExpression, Taggable, Qualifiable, Encodable):  # Flow or fund type (not attached to a Processor)
     """ A Factor as type, in a hierarchy, a Taxonomy """
+    INTERNAL_ATTRIBUTE_NAMES = frozenset({})
+
     def __init__(self, name, parent=None, hierarchy=None,
                  tipe: FlowFundRoegenType=FlowFundRoegenType.flow,
                  tags=None, attributes=None, expression=None,
@@ -1072,7 +1079,7 @@ class FactorType(Identifiable, HierarchyNode, HierarchyExpression, Taggable, Qua
         Identifiable.__init__(self)
         HierarchyNode.__init__(self, name, parent, hierarchy=hierarchy)
         Taggable.__init__(self, tags)
-        Qualifiable.__init__(self, attributes)
+        Qualifiable.__init__(self, attributes, self.INTERNAL_ATTRIBUTE_NAMES)
         HierarchyExpression.__init__(self, expression)
         self._roegen_type = tipe
         self._orientation = orientation
@@ -1085,7 +1092,7 @@ class FactorType(Identifiable, HierarchyNode, HierarchyExpression, Taggable, Qua
         d = Encodable.parents_encode(self, __class__)
 
         d.update({
-            'roegen_type': self.roegen_type.name if self.roegen_type else None,
+            'roegen_type': getattr(self.roegen_type, "name", None),
             'orientation': self.orientation
         })
 
@@ -1164,25 +1171,24 @@ class FactorType(Identifiable, HierarchyNode, HierarchyExpression, Taggable, Qua
         return {"_t": "ft", "_n": self.name, "__id": self.ident}
 
 
-class Processor(Identifiable, Nameable, Taggable, Qualifiable, Automatable, Observable, Encodable):
-    def __init__(self, name, external: bool=False,
-                 location: "Geolocation"=None, tags=None, attributes=None,
-                 referenced_processor: "Processor"=None):
+class Processor(Identifiable, Nameable, Taggable, Qualifiable, Automatable, Observable, Geolocatable, Encodable):
+    INTERNAL_ATTRIBUTE_NAMES = frozenset({
+        'processor_type', 'functional_or_structural', 'instance_or_archetype', 'stock'
+    })
+
+    def __init__(self, name, attributes: Dict[str, Any] = None, geolocation: Geolocation = None, tags=None,
+                 referenced_processor: "Processor" = None):
         Identifiable.__init__(self)
         Nameable.__init__(self, name)
         Taggable.__init__(self, tags)
-        Qualifiable.__init__(self, attributes)
+        Qualifiable.__init__(self, attributes, self.INTERNAL_ATTRIBUTE_NAMES)
         Automatable.__init__(self)
-        Observable.__init__(self, location)
+        Observable.__init__(self)
+        Geolocatable.__init__(self, geolocation)
 
         self._factors = []  # type: List[Factor]
         self._relationships = []  # type: List[ProcessorsRelationObservation]
         self._local_indicators = []  # type: List[Indicator]
-
-        self._type = None  # Environment, Society
-        self._external = external  # Either external (True) or internal (False)
-        self._stock = None  # True, False
-        self._instantiation_type = None  # Instance, "Unit processor" (Intensive Processor), "Function"
 
         # The processor references a previously defined processor
         # * If a factor is defined, do not look in the referenced
@@ -1197,25 +1203,14 @@ class Processor(Identifiable, Nameable, Taggable, Qualifiable, Automatable, Obse
         d = Identifiable.encode(self)
         d.update(Nameable.encode(self))
         d.update(Qualifiable.encode(self))
+        d.update(Geolocatable.encode(self))
         d.update(Automatable.encode(self))
 
         d.update({
-            'type': self.type_processor,
-            'external': self.external,
-            'stock': self.stock,
-            'instantiation_type': self.instantiation_type,
             'interfaces': self.factors
         })
 
         return d
-
-    @property
-    def instantiation_type(self):
-        return self._instantiation_type
-
-    @property
-    def stock(self):
-        return self._stock
 
     @property
     def referenced_processor(self):
@@ -1244,40 +1239,40 @@ class Processor(Identifiable, Nameable, Taggable, Qualifiable, Automatable, Obse
     def intensive(self):
         return not self.extensive
 
-    @property
-    def external(self):
-        tmp = self._external
-        if tmp is None and self.referenced_processor:
-            tmp = self.referenced_processor.external
+    # @property
+    # def external(self):
+    #     tmp = self._external
+    #     if tmp is None and self.referenced_processor:
+    #         tmp = self.referenced_processor.external
+    #
+    #     return tmp
 
-        return tmp
+    # @property
+    # def internal(self):
+    #     return not self._external
 
-    @property
-    def internal(self):
-        return not self._external
-
-    @property
-    def type_processor(self):
-        # True if the processor is a type. The alternative is the processor being real. Type abstracts a function
-        # "type" and function are similar. But it depends on the analyst, who can also define the processor as
-        # structural and "type" at the same time
-        tmp = self._type
-        if tmp is None and self.referenced_processor:
-            tmp = self.referenced_processor.type_processor
-
-        return tmp
-
-    @type_processor.setter
-    def type_processor(self, v: bool):
-        self._type = v
-
-    @property
-    def real_processor(self):
-        return not self.type_processor
-
-    @real_processor.setter
-    def real_processor(self, v: bool):
-        self.type_processor = not v
+    # @property
+    # def type_processor(self):
+    #     # True if the processor is a type. The alternative is the processor being real. Type abstracts a function
+    #     # "type" and function are similar. But it depends on the analyst, who can also define the processor as
+    #     # structural and "type" at the same time
+    #     tmp = self._type
+    #     if tmp is None and self.referenced_processor:
+    #         tmp = self.referenced_processor.type_processor
+    #
+    #     return tmp
+    #
+    # @type_processor.setter
+    # def type_processor(self, v: bool):
+    #     self._type = v
+    #
+    # @property
+    # def real_processor(self):
+    #     return not self.type_processor
+    #
+    # @real_processor.setter
+    # def real_processor(self, v: bool):
+    #     self.type_processor = not v
 
     def simple_name(self):
         parts = self.name.split(".")
@@ -1286,24 +1281,27 @@ class Processor(Identifiable, Nameable, Taggable, Qualifiable, Automatable, Obse
         else:
             return self.name
 
-    def full_hierarchy_names(self, registry: PartialRetrievalDictionary):
+    def full_hierarchy_names(self, registry: PartialRetrievalDictionary) -> List[str]:
         """
         Obtain the full hierarchy name of the current processor
         It looks for the PART-OF relations in which the processor is in the child side
+        It can return multiple names because the same processor can be child of different processors
 
         :param registry:
         :return:
         """
-        # Get matching relations
-        part_of_relations = registry.get(ProcessorsRelationPartOfObservation.partial_key(child=self))
+        # Get matching parent relations
+        parent_relations = registry.get(ProcessorsRelationPartOfObservation.partial_key(child=self))
 
         # Compose the name, recursively
-        if len(part_of_relations) == 0:
+        if len(parent_relations) == 0:
             return [self.name]
         else:
             # Take last part of the name
-            last_part = self.name.split(".")[-1]
-            return [(p+"."+last_part) for rel in part_of_relations for p in rel.parent_processor.full_hierarchy_names(registry)]
+            # last_part = self.name.split(".")[-1]
+            return [(parent_name+"."+self.name)
+                    for parent_relation in parent_relations
+                    for parent_name in parent_relation.parent_processor.full_hierarchy_names(registry)]
 
     def clone(self, state: Union[PartialRetrievalDictionary, State], objects_processed: dict=None, level=0):
         """
@@ -1333,17 +1331,13 @@ class Processor(Identifiable, Nameable, Taggable, Qualifiable, Automatable, Obse
 
         # Create new Processor
         p = Processor(self.name,
-                      external=self.external,
-                      location=self._location,
+                      attributes=self.attributes,
+                      geolocation=self.geolocation,
                       tags=self._tags,
-                      attributes=self._attributes,
                       referenced_processor=self.referenced_processor
                       )
-        p._type = self._type
-        p._external = self._external
-        p._stock = self._stock
 
-        glb_idx.put(p.key(), p)
+        # glb_idx.put(p.key(), p)
 
         if not objects_processed:
             objects_processed = {}
@@ -1352,7 +1346,7 @@ class Processor(Identifiable, Nameable, Taggable, Qualifiable, Automatable, Obse
 
         # Factors
         for f in self.factors:
-            f_ = Factor.clone_and_append(f, p) # The Factor is cloned and appended into the Processor "p"
+            f_ = Factor.clone_and_append(f, p)  # The Factor is cloned and appended into the Processor "p"
             glb_idx.put(f_.key(), f_)
             if f not in objects_processed:
                 objects_processed[f] = f_
@@ -1485,20 +1479,22 @@ class Processor(Identifiable, Nameable, Taggable, Qualifiable, Automatable, Obse
         return {"_t": "p", "_n": self.name, "__id": self.ident}
 
 
-class Factor(Identifiable, Nameable, Taggable, Qualifiable, Observable, Automatable, Encodable):
+class Factor(Identifiable, Nameable, Taggable, Qualifiable, Observable, Automatable, Geolocatable, Encodable):
     """ A Flow or Fund, when attached to a Processor
         It is automatable because an algorithm emulating an expert could inject Factors into Processors (as well as
         associated Observations)
     """
     def __init__(self, name, processor: Processor, in_processor_type: FactorInProcessorType, taxon: FactorType=None,
                  referenced_factor: "Factor" = None,
-                 location: "Geolocation"=None, tags=None, attributes=None):
+                 geolocation: Geolocation = None, tags=None, attributes=None):
         Identifiable.__init__(self)
         Nameable.__init__(self, name)
         Taggable.__init__(self, tags)
         Qualifiable.__init__(self, attributes)
-        Observable.__init__(self, location)
+        Observable.__init__(self)
         Automatable.__init__(self)
+        Geolocatable.__init__(self, geolocation)
+
         self._processor = processor
         self._taxon = taxon
         self._type = in_processor_type
@@ -1529,8 +1525,8 @@ class Factor(Identifiable, Nameable, Taggable, Qualifiable, Observable, Automata
 
     @staticmethod
     def create_and_append(name, processor: Processor, in_processor_type: FactorInProcessorType, taxon: FactorType,
-                          location: "Geolocation"=None, tags=None, attributes=None):
-        f = Factor(name, processor, in_processor_type, taxon, location, tags, attributes)
+                          geolocation: Geolocation = None, tags=None, attributes=None):
+        f = Factor(name, processor, in_processor_type, taxon, geolocation, tags, attributes)
         if processor:
             processor.factors_append(f)
         if taxon:
@@ -1573,11 +1569,11 @@ class Factor(Identifiable, Nameable, Taggable, Qualifiable, Observable, Automata
     @staticmethod
     def clone_and_append(factor: "Factor", processor: Processor):
         f = Factor.create_and_append(factor.name, processor, in_processor_type=factor.type, taxon=factor._taxon,
-                                     location=factor._location, tags=factor._tags, attributes=factor._attributes)
+                                     geolocation=factor.geolocation, tags=factor._tags, attributes=factor.attributes)
         # Observations (only Quantities, because they are owned by the Factor)
         for o in factor.observations:
             if isinstance(o, FactorQuantitativeObservation):
-                FactorQuantitativeObservation.create_and_append(o.value, o.factor, o.observer, o.tags, o.attributes)
+                FactorQuantitativeObservation.create_and_append(o.value, f, o.observer, o.tags, o.attributes)
 
         return f
 
@@ -1763,7 +1759,7 @@ class RelationClassType(Enum):
 
 class FactorQuantitativeObservation(Taggable, Qualifiable, Automatable, Encodable):
     """ An expression or quantity assigned to an Observable (Factor) """
-    def __init__(self, v: QualifiedQuantityExpression, factor: Factor=None, observer: Observer=None, tags=None, attributes=None):
+    def __init__(self, v: float, factor: Factor=None, observer: Observer=None, tags=None, attributes=None):
         Taggable.__init__(self, tags)
         Qualifiable.__init__(self, attributes)
         Automatable.__init__(self)
@@ -1780,7 +1776,7 @@ class FactorQuantitativeObservation(Taggable, Qualifiable, Automatable, Encodabl
         return d
 
     @staticmethod
-    def create_and_append(v: QualifiedQuantityExpression, factor: Factor, observer: Observer, tags=None, attributes=None):
+    def create_and_append(v: float, factor: Factor, observer: Observer, tags=None, attributes=None):
         o = FactorQuantitativeObservation(v, factor, observer, tags, attributes)
         if factor:
             factor.observations_append(o)
@@ -1799,6 +1795,10 @@ class FactorQuantitativeObservation(Taggable, Qualifiable, Automatable, Encodabl
     @property
     def value(self):
         return self._value
+
+    @value.setter
+    def value(self, v):
+        self._value = v
 
     @staticmethod
     def partial_key(factor: Factor=None, observer: Observer=None, relative: bool=False):
@@ -2054,7 +2054,7 @@ class ProcessorsRelationPartOfObservation(ProcessorsRelationObservation, Encodab
         return d
 
     @staticmethod
-    def create_and_append(parent: Processor, child: Processor, observer: Observer, tags=None, attributes=None):
+    def create_and_append(parent: Processor, child: Processor, observer: Optional[Observer] = None, tags=None, attributes=None):
         o = ProcessorsRelationPartOfObservation(parent, child, observer, tags, attributes)
         if parent:
             parent.observations_append(o)
@@ -2187,7 +2187,7 @@ class ProcessorsRelationUpscaleObservation(ProcessorsRelationObservation):
         return d
 
     @staticmethod
-    def create_and_append(parent: Processor, child: Processor, observer: Observer, factor_name: str, quantity: str, tags=None, attributes=None):
+    def create_and_append(parent: Processor, child: Processor, observer: Optional[Observer], factor_name: str, quantity: str, tags=None, attributes=None):
         o = ProcessorsRelationUpscaleObservation(parent, child, observer, factor_name, quantity, tags, attributes)
         if parent:
             parent.observations_append(o)
@@ -2217,47 +2217,6 @@ class ProcessorsRelationUpscaleObservation(ProcessorsRelationObservation):
     @property
     def observer(self):
         return self._observer
-
-    def activate(self, state):
-        """
-        Materialize the relation into something computable.
-        In this case, create an Factor (if it does not exist) and an Observation associated to it
-
-        :param state:
-        :return:
-        """
-        # TODO Look for the factor in the child processor
-        processor = self._child
-        factor = None
-        for f in processor.factors:
-            if strcmp(f.name, self._factor_name) and f.processor == processor:
-                factor = f
-                break
-        # If the factor is not found, create it
-        if not factor:
-            factor = Factor(self._factor_name, processor)
-            # TODO Store Factor in the global index glb_idx.put(f_key, f)
-
-        # Add the observation. The value is an expression involving the factor of the parent
-        parent_name = self._parent.full_hierarchy_names()
-        if len(parent_name) > 0:
-            parent_name = parent_name[0]
-            if len(parent_name) > 1:
-                logger
-        fo = FactorQuantitativeObservation.create_and_append(v=QualifiedQuantityExpression(parent_name + ":" + self._factor_name+" * ("+self._quantity+")"),
-                                                             factor=f,
-                                                             observer=self._observer,
-                                                             tags=None,
-                                                             attributes={"relative_to": None,
-                                                                         "time": None,
-                                                                         "geolocation": None,
-                                                                         "spread": None,
-                                                                         "assessment": None,
-                                                                         "pedigree": None,
-                                                                         "pedigree_template": None,
-                                                                         "comments": None
-                                                                         }
-                                                             )
 
     @staticmethod
     def partial_key(parent: Processor=None, child: Processor=None, observer: Observer=None):
@@ -2645,7 +2604,7 @@ class Indicator(Nameable, Identifiable, Encodable):
             'formula': self._formula,
             'from_indicator': self._from_indicator,
             'benchmark': self._benchmark,
-            'indicator_category': self._indicator_category.name if self._indicator_category else None,
+            'indicator_category': getattr(self._indicator_category, "name", None),
             'description': self._description
         })
 

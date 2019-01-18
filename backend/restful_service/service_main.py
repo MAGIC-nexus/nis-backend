@@ -26,8 +26,7 @@ import json
 # >>>>>>>>>> IMPORTANT <<<<<<<<<
 # For debugging in local mode, prepare an environment variable "MAGIC_NIS_SERVICE_CONFIG_FILE", with value "./nis_local.conf"
 # >>>>>>>>>> IMPORTANT <<<<<<<<<
-from backend.command_field_definitions import commands
-from backend.command_generators import Issue
+from backend.command_field_definitions import command_fields
 from backend.command_generators.parser_field_parsers import string_to_ast
 from backend.command_generators.parser_spreadsheet_utils import rewrite_xlsx_file
 
@@ -2602,7 +2601,7 @@ def obtain_commands_and_their_fields():
         return isess
 
     j = {}
-    for k, v in commands.items():
+    for k, v in command_fields.items():
         j["name"] = k
         flds = []
         for f in v:
@@ -2630,11 +2629,11 @@ def validate_command_record():
     result = {}
     if "command" in command_content_to_validate:
         command = command_content_to_validate["command"]
-        if command in commands:
+        if command in command_fields:
             if "fields" in command_content_to_validate:
                 fields = command_content_to_validate["fields"]
                 for f in fields:  # Validate field by field
-                    for f2 in commands[command]:  # Find corresponding field in the command
+                    for f2 in command_fields[command]:  # Find corresponding field in the command
                         if f.lower() in [f3.lower() for f3 in f2.allowed_names]:
                             fld = f2
                             break
@@ -2659,11 +2658,11 @@ def validate_command_record():
                                 result[f] = s
 
                     else:
-                        result[f] = "Field '"+f+"' not found in command '"+command+"'. Possible field names: "+", ".join([item for f2 in commands[command] for item in f2.allowed_names])
+                        result[f] = "Field '"+f+"' not found in command '"+command+"'. Possible field names: "+", ".join([item for f2 in command_fields[command] for item in f2.allowed_names])
             else:
                 raise Exception("Must specify 'fields'")
         else:
-            raise Exception("Command '"+command+"' not found in the list of commands: "+", ".join([c for c in commands]))
+            raise Exception("Command '" + command +"' not found in the list of commands: " +", ".join([c for c in command_fields]))
     else:
         raise Exception("Must specify 'command'")
 

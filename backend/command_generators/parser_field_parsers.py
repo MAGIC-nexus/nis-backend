@@ -222,7 +222,13 @@ domain_definition << Or([simple_ident, number_interval])
 
 
 # RULES - reference
-reference = (lbracket + simple_ident.setResultsName("ident") + rbracket
+reference = (Optional(lbracket) + simple_ident.setResultsName("ident") + Optional(rbracket)
+             ).setParseAction(lambda _s, l, t: {'type': 'reference',
+                                                'ref_id': t.ident
+                                                }
+                              )
+
+bracketed_reference = (lbracket + simple_ident.setResultsName("ident") + rbracket
              ).setParseAction(lambda _s, l, t: {'type': 'reference',
                                                 'ref_id': t.ident
                                                 }
@@ -248,7 +254,7 @@ value = Group(arith_boolean_expression).setParseAction(lambda t:
                                                         'value': t[0]
                                                         }
                                                        )
-key_value = Group(simple_ident + equals.suppress() + arith_boolean_expression).setParseAction(lambda t: {'type': 'key_value', 'key': t[0][0], 'value': t[0][1]})
+key_value = Group(simple_ident + equals.suppress() + Or(arith_boolean_expression, bracketed_reference)).setParseAction(lambda t: {'type': 'key_value', 'key': t[0][0], 'value': t[0][1]})
 key_value_list = delimitedList(key_value, ",").setParseAction(
     lambda _s, l, t: {'type': 'key_value_list',
                       'parts': {t2["key"]: t2["value"] for t2 in t}

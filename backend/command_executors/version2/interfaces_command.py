@@ -1,20 +1,20 @@
 import json
 import re
 
+from pint import UndefinedUnitError
+
+from backend import ureg
 from backend.command_executors.execution_helpers import parse_line, classify_variables, \
     obtain_dictionary_with_literal_fields
-from backend.command_executors.version2.relationships_command import obtain_matching_processors
-from backend.command_field_definitions import commands
-from backend.command_generators import parser_field_parsers, Issue
-from backend.command_generators.parser_ast_evaluators import dictionary_from_key_value_list
-from backend.command_generators.parser_field_parsers import string_to_ast, processor_names
-from backend.command_generators.spreadsheet_command_parsers_v2 import IssueLocation
-from backend.common.helper import strcmp
+from backend.command_generators import parser_field_parsers, Issue, IssueLocation, IType
+from backend.command_generators.parser_ast_evaluators import dictionary_from_key_value_list, ast_to_string
+from backend.common.helper import strcmp, first
 from backend.model_services import IExecutableCommand, get_case_study_registry_objects
-from backend.models.musiasem_concepts import FlowFundRoegenType, PedigreeMatrix, Reference, ProcessorsSet, FactorType, \
+from backend.models.musiasem_concepts import PedigreeMatrix, Reference, FactorType, \
     Processor, Factor, FactorInProcessorType, Observer, Parameter
-from backend.models.musiasem_concepts_helper import create_quantitative_observation, _create_quantitative_observation
+from backend.models.musiasem_concepts_helper import _create_quantitative_observation
 from backend.solving import get_processor_names_to_processors_dictionary
+from command_field_definitions import get_command_fields_from_class
 
 
 class InterfacesAndQualifiedQuantitiesCommand(IExecutableCommand):
@@ -178,9 +178,7 @@ class InterfacesAndQualifiedQuantitiesCommand(IExecutableCommand):
                 try:
                     iface_attributes = dictionary_from_key_value_list(f_interface_attributes, glb_idx)
                 except Exception as e:
-                    issues.append(Issue(itype=3,
-                                        description=str(e),
-                                        location=IssueLocation(sheet_name=name, row=i, column=None)))
+                    add_issue(IType.error(), str(e))
                     return
             else:
                 iface_attributes = {}
@@ -189,9 +187,7 @@ class InterfacesAndQualifiedQuantitiesCommand(IExecutableCommand):
                 try:
                     number_attributes = dictionary_from_key_value_list(f_number_attributes, glb_idx)
                 except Exception as e:
-                    issues.append(Issue(itype=3,
-                                        description=str(e),
-                                        location=IssueLocation(sheet_name=name, row=i, column=None)))
+                    add_issue(IType.error(), str(e))
                     return
             else:
                 number_attributes = {}
@@ -202,9 +198,7 @@ class InterfacesAndQualifiedQuantitiesCommand(IExecutableCommand):
                 if f_processor_name and f_interface_type_name:
                     f_interface_name = f_processor_name+":"+f_interface_type_name
                 else:
-                    issues.append(Issue(itype=3,
-                                        description="When 'Interface' column is not defined, both 'Processor' and 'InterfaceType' must",
-                                        location=IssueLocation(sheet_name=name, row=i, column=None)))
+                    add_issue(IType.error(), "When 'Interface' column is not defined, both 'Processor' and 'InterfaceType' must")
                     return
             else:
                 # TODO Split using syntax analysis. Each of the parts may contain advanced syntactic expressions. For now, only literals are considered
@@ -215,22 +209,16 @@ class InterfacesAndQualifiedQuantitiesCommand(IExecutableCommand):
             if f_pedigree_matrix and f_pedigree:
                 pm = glb_idx.get(PedigreeMatrix.partial_key(name=f_pedigree_matrix))
                 if len(pm) == 0:
-                    issues.append(Issue(itype=3,
-                                        description="Could not find Pedigree Matrix '"+f_pedigree_matrix+"'",
-                                        location=IssueLocation(sheet_name=name, row=i, column=None)))
+                    add_issue(IType.error(), "Could not find Pedigree Matrix '" + f_pedigree_matrix + "'")
                     return
                 else:
                     try:
                         lst = pm[0].get_modes_for_code(f_pedigree)
                     except:
-                        issues.append(Issue(itype=3,
-                                            description="Could not decode Pedigree '"+f_pedigree+"' for Pedigree Matrix '"+f_pedigree_matrix+"'",
-                                            location=IssueLocation(sheet_name=name, row=i, column=None)))
+                        add_issue(IType.error(), "Could not decode Pedigree '" + f_pedigree + "' for Pedigree Matrix '" + f_pedigree_matrix + "'")
                         return
             elif f_pedigree and not f_pedigree_matrix:
-                issues.append(Issue(itype=3,
-                                    description="Pedigree specified without accompanying Pedigree Matrix",
-                                    location=IssueLocation(sheet_name=name, row=i, column=None)))
+                add_issue(IType.error(), "Pedigree specified without accompanying Pedigree Matrix")
                 return
 
             # Source
@@ -265,14 +253,10 @@ class InterfacesAndQualifiedQuantitiesCommand(IExecutableCommand):
             # TODO Allow creating a basic Processor if it is not found
             p = glb_idx.get(Processor.partial_key(f_processor_name))
             if len(p) == 0:
-                issues.append(Issue(itype=3,
-                                    description="Processor '"+f_processor_name+"' not declared previously",
-                                    location=IssueLocation(sheet_name=name, row=i, column=None)))
+                add_issue(IType.error(), "Processor '" + f_processor_name + "' not declared previously")
                 return
             elif len(p) > 1:
-                issues.append(Issue(itype=3,
-                                    description="Processor '"+f_processor_name+"' found "+str(len(p))+" times. It must be uniquely identified.",
-                                    location=IssueLocation(sheet_name=name, row=i, column=None)))
+                add_issue(IType.error(), "Processor '" + f_processor_name + "' found " + str(len(p)) + " times. It must be uniquely identified.")
                 return
             else:
                 p = p[0]
@@ -294,14 +278,11 @@ class InterfacesAndQualifiedQuantitiesCommand(IExecutableCommand):
                 # TODO Allow creating a basic FactorType if it is not found
                 ft = glb_idx.get(FactorType.partial_key(f_interface_type_name))
                 if len(ft) == 0:
-                    issues.append(Issue(itype=3,
-                                        description="InterfaceType '"+f_interface_type_name+"' not declared previously",
-                                        location=IssueLocation(sheet_name=name, row=i, column=None)))
+                    add_issue(IType.error(), f"InterfaceType '{f_interface_type_name}' not declared previously")
                     return
                 elif len(ft) > 1:
-                    issues.append(Issue(itype=3,
-                                        description="InterfaceType '"+f_interface_type_name+"' found "+str(len(ft))+" times. It must be uniquely identified.",
-                                        location=IssueLocation(sheet_name=name, row=i, column=None)))
+                    add_issue(IType.error(), f"InterfaceType '{f_interface_type_name}' found {str(len(ft))} times. "
+                                             f"It must be uniquely identified.")
                     return
                 else:
                     ft = ft[0]
@@ -321,7 +302,7 @@ class InterfacesAndQualifiedQuantitiesCommand(IExecutableCommand):
                                                      incoming=f_orientation
                                                  ),
                                                  taxon=ft,
-                                                 location=f_location,
+                                                 geolocation=f_location,
                                                  tags=None,
                                                  attributes=iface_attributes)
                     glb_idx.put(f.key(), f)
@@ -331,11 +312,28 @@ class InterfacesAndQualifiedQuantitiesCommand(IExecutableCommand):
             # Find Observer
             oer = glb_idx.get(Observer.partial_key(f_source))
             if not oer:
-                issues.append(Issue(itype=2,
-                                    description=f"Observer '{f_source}' has not been found.",
-                                    location=IssueLocation(sheet_name=name, row=i, column=None)))
+                add_issue(IType.warning(), f"Observer '{f_source}' has not been found.")
             else:
                 oer = oer[0]
+
+            if f_relative_to:
+                ast = parser_field_parsers.string_to_ast(parser_field_parsers.factor_unit, f_relative_to)
+                relative_to_interface_name = ast_to_string(ast["factor"])
+
+                rel_unit_name = ast["unparsed_unit"]
+                try:
+                    f_unit = str((ureg(f_unit) / ureg(rel_unit_name)).units)
+                except (UndefinedUnitError, AttributeError) as ex:
+                    add_issue(3, f"The final unit could not be computed, interface '{f_unit}' / "
+                                 f"relative_to '{rel_unit_name}': {str(ex)}")
+                    return
+
+                f_relative_to = first(f.processor.factors, lambda ifc: strcmp(ifc.name, relative_to_interface_name))
+
+                if not f_relative_to:
+                    add_issue(IType.error(), f"Interface specified in 'relative_to' column "
+                                             f"'{relative_to_interface_name}' has not been found.")
+                    return
 
             # Create quantitative observation
             if f_value:
@@ -352,12 +350,21 @@ class InterfacesAndQualifiedQuantitiesCommand(IExecutableCommand):
                 # TODO Register? Disable for now. Observation can be obtained from a pass over all Interfaces
                 # glb_idx.put(o.key(), o)
 
+        def add_issue(itype: int, description: str):
+            issues.append(
+                Issue(itype=itype,
+                      description=description,
+                      location=IssueLocation(sheet_name=name,
+                                             row=i, column=None))
+            )
+            return
+
         issues = []
         glb_idx, p_sets, hh, datasets, mappings = get_case_study_registry_objects(state)
         name = self._content["command_name"]
 
         # CommandField definitions for the fields of Interface command
-        fields = {f.name: f for f in commands["Interfaces"]}
+        fields = {f.name: f for f in get_command_fields_from_class(self.__class__)}
         # Obtain the names of all parameters
         parameters = [p.name for p in glb_idx.get(Parameter.partial_key())]
         # Obtain the names of all processors

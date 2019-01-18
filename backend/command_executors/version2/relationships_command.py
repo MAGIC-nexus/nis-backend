@@ -3,16 +3,14 @@ import re
 
 from backend.command_executors.execution_helpers import parse_line, classify_variables, \
     obtain_dictionary_with_literal_fields
-from backend.command_field_definitions import commands
-from backend.command_generators import Issue, parser_field_parsers
-from backend.command_generators.parser_field_parsers import string_to_ast, processor_names
+from backend.command_field_definitions import get_command_fields_from_class
+from backend.command_generators import Issue, IssueLocation
 from backend.command_generators.parser_ast_evaluators import dictionary_from_key_value_list
-from backend.command_generators.spreadsheet_command_parsers_v2 import IssueLocation
-from backend.common.helper import create_dictionary, strcmp
+from backend.command_generators.parser_field_parsers import string_to_ast, processor_names
+from backend.common.helper import strcmp
 from backend.model_services import IExecutableCommand, get_case_study_registry_objects
 from backend.models.musiasem_concepts import FactorType, Factor, FactorInProcessorType, \
-    ProcessorsRelationIsAObservation, ProcessorsRelationPartOfObservation, FactorsRelationDirectedFlowObservation, \
-    RelationClassType, Parameter, Processor
+    RelationClassType, Parameter
 from backend.models.musiasem_concepts_helper import create_relation_observations, find_processor_by_name
 from backend.solving import get_processor_names_to_processors_dictionary
 
@@ -364,7 +362,7 @@ class RelationshipsCommand(IExecutableCommand):
                                              attributes=attributes
                                              )
 
-        fields = {f.name: f for f in commands["Relationships"]}
+        fields = {f.name: f for f in get_command_fields_from_class(self.__class__)}
 
         issues = []
         glb_idx, p_sets, hh, datasets, mappings = get_case_study_registry_objects(state)

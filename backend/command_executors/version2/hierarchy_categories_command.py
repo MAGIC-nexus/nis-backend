@@ -1,7 +1,6 @@
 import json
 
-from backend.command_generators import Issue
-from backend.command_generators.spreadsheet_command_parsers_v2 import IssueLocation
+from backend.command_generators import Issue, IssueLocation
 from backend.common.helper import strcmp
 from backend.model_services import IExecutableCommand, get_case_study_registry_objects
 from backend.models.musiasem_concepts import HierarchySource, HierarchyGroup, Hierarchy, HierarchyLevel, HierarchyNode, \

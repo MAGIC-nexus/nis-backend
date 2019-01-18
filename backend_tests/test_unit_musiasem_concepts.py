@@ -44,31 +44,31 @@ def prepare_simple_processors_hierarchy():
     state = State()
     p1,_,_ = find_or_create_observable(state, "P1", "test_observer",
                                    aliases=None,
-                                   proc_external=None, proc_attributes=None, proc_location=None,
+                                   proc_attributes=None, proc_location=None,
                                    fact_roegen_type=None, fact_attributes=None,
                                    fact_incoming=None, fact_external=None, fact_location=None
                                    )
     p2,_,_ = find_or_create_observable(state, "P1.P2", "test_observer",
                                    aliases=None,
-                                   proc_external=None, proc_attributes=None, proc_location=None,
+                                   proc_attributes=None, proc_location=None,
                                    fact_roegen_type=None, fact_attributes=None,
                                    fact_incoming=None, fact_external=None, fact_location=None
                                    )
     p3,_,_ = find_or_create_observable(state, "P3", "test_observer",
                                    aliases=None,
-                                   proc_external=None, proc_attributes=None, proc_location=None,
+                                   proc_attributes=None, proc_location=None,
                                    fact_roegen_type=None, fact_attributes=None,
                                    fact_incoming=None, fact_external=None, fact_location=None
                                    )
     p4,_,_ = find_or_create_observable(state, "P1.P2.P3", "test_observer",
                                    aliases=None,
-                                   proc_external=None, proc_attributes=None, proc_location=None,
+                                   proc_attributes=None, proc_location=None,
                                    fact_roegen_type=None, fact_attributes=None,
                                    fact_incoming=None, fact_external=None, fact_location=None
                                    )
     p5,_,_ = find_or_create_observable(state, "P1.P2b", "test_observer",
                                    aliases=None,
-                                   proc_external=None, proc_attributes=None, proc_location=None,
+                                   proc_attributes=None, proc_location=None,
                                    fact_roegen_type=None, fact_attributes=None,
                                    fact_incoming=None, fact_external=None, fact_location=None
                                    )
@@ -129,7 +129,6 @@ class ModelBuildingHierarchies(unittest.TestCase):
         # An interface cannot be linked to a interface type
         with self.assertRaises(Exception):
             Taxon("Node3", interface_type)
-
 
     def test_hierarchy_of_processors(self):
         state = prepare_simple_processors_hierarchy()
@@ -346,14 +345,12 @@ class ModelBuildingProcessors(unittest.TestCase):
         self.assertFalse(h.get_node("T3") in p1.tags)
 
     def test_processor_with_attributes(self):
-        # Create a Processor
-        p1 = Processor("P1")
         # Create a Location
-        geo = Geolocation("Spain")
-        # Assign it as "location" attribute
-        p1.attributes_append("location", geo)
+        geo = Geolocation("NUTS", "ES")
+        # Create a Processor
+        p1 = Processor("P1", geolocation=geo)
         # Check
-        self.assertEqual(p1.attributes["location"], geo)
+        self.assertEqual(p1.geolocation, geo)
 
     def test_processors_with_factors(self):
         """ Processors adorned with factors. No need for connections.
@@ -449,13 +446,6 @@ class ModelBuildingFactors(unittest.TestCase):
         self.assertTrue(cs in f12.observations)
         self.assertTrue(cs in f3.observations)
 
-    def test_create_qq(self):
-        # Create a value with incorrect unit
-        with self.assertRaises(Exception) as ctx:
-            QualifiedQuantityExpression.nu(5, "non existent unit")
-
-        q2 = QualifiedQuantityExpression.nu(5, "m²")
-
     def test_processors_with_factors_with_one_observation(self):
         # Create a Hierarchy of FactorType
         prd = PartialRetrievalDictionary()
@@ -468,7 +458,7 @@ class ModelBuildingFactors(unittest.TestCase):
         # Observer of the Value
         oer = Observer("oer1")
         # Create an Observation with its value
-        fo = FactorQuantitativeObservation(QualifiedQuantityExpression.nu(5, "m²"), oer, f1)
+        fo = FactorQuantitativeObservation(5, oer, f1, attributes={"unit": "m²"})
         # Assign to the factor
         f1.observations_append(fo)
         # Check
@@ -487,8 +477,8 @@ class ModelBuildingFactors(unittest.TestCase):
         oer1 = Observer("oer1")
         oer2 = Observer("oer2")
         # Create a Value
-        fo1 = FactorQuantitativeObservation.create_and_append(QualifiedQuantityExpression.nu(5, "m²"), f1, oer1)
-        fo2 = FactorQuantitativeObservation.create_and_append(QualifiedQuantityExpression.nu(5, "m²"), f1, oer2)
+        fo1 = FactorQuantitativeObservation.create_and_append(5, f1, oer1, attributes={"unit": "m²"})
+        fo2 = FactorQuantitativeObservation.create_and_append(5, f1, oer2, attributes={"unit": "m²"})
         f1.observations_append(fo1)
         f1.observations_append(fo2)
         # Check
