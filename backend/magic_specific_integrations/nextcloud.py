@@ -9,6 +9,7 @@
 
 >> pip install webdavclient
 
+UPLOAD:
 
 import webdav.client as wc
 options = {
@@ -18,6 +19,19 @@ options = {
 }
 client = wc.Client(options)
 client.upload_sync(remote_path="/NIS_exports/r.xlsx", local_path="/home/rnebot/GoogleDrive/AA_MAGIC/nis-backend/backend_tests/z_input_files/reproduce_million_rows.xlsx")
+
+------------
+
+DOWNLOAD:
+
+options = {
+    "webdav_hostname": "https://nextcloud.data.magic-nexus.eu/",
+    "webdav_login": "NIS_agent",
+    "webdav_password": "***"
+}
+
+client = wc.Client(options)
+client.download_sync(remote_path="/remote.php/webdav/NIS_beta/CS_format_examples/08_caso_energia_eu_new_commands.xlsx", local_path="/home/rnebot/r3.xlsx")
 
 """
 from backend.models.musiasem_methodology_support import CaseStudy

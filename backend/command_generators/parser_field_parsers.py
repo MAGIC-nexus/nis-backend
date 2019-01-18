@@ -509,20 +509,28 @@ url_parser = (
 
 # #################################################################################################################### #
 
-def clean_str(us):
-    # "En dash"                 character is replaced by minus (-)
-    # "Left/Right double quote" character is replaced by double quote (")
-    # "Left/Right single quote" character is replaced by single quote (')
-    # "€"                       character is replaced by "eur"
-    # "$"                       character is replaced by "usd"
-    return us.replace(u'\u2013', '-').\
-              replace(u'\u201d', '"').replace(u'\u201c', '"').\
-              replace(u'\u2018', "'").replace(u'\u2019', "'"). \
-              replace('€', 'eur').\
-              replace('$', 'usd')
-
 
 def string_to_ast(rule: ParserElement, input_: str):
+    """
+    Convert the input string "input_" into an AST, according to "rule"
+
+    :param rule:
+    :param input_:
+    :return: a dictionary conforming the AST (the format changes from rule to rule)
+    """
+
+    def clean_str(us):
+        # "En dash"                 character is replaced by minus (-)
+        # "Left/Right double quote" character is replaced by double quote (")
+        # "Left/Right single quote" character is replaced by single quote (')
+        # "€"                       character is replaced by "eur"
+        # "$"                       character is replaced by "usd"
+        return us.replace(u'\u2013', '-'). \
+            replace(u'\u201d', '"').replace(u'\u201c', '"'). \
+            replace(u'\u2018', "'").replace(u'\u2019', "'"). \
+            replace('€', 'eur'). \
+            replace('$', 'usd')
+
     res = rule.parseString(clean_str(input_), parseAll=True)
     res = res.asList()[0]
     while isinstance(res, list):

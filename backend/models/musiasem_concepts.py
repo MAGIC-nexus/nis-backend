@@ -1386,6 +1386,25 @@ class Processor(Identifiable, Nameable, Taggable, Qualifiable, Automatable, Obse
                 o2 = ProcessorsRelationUpscaleObservation.create_and_append(p, p2, rel.observer, factor_name, quantity)
                 glb_idx.put(o2.key(), o2)
 
+            # If there are F2F-Scale relations, clone them
+            scale_relations = glb_idx.get(FactorsRelationScaleObservation.partial_key(origin=self, destination=rel.child_processor))
+            if scale_relations:
+                origin = scale_relations[0].origin
+                destination = scale_relations[0].destination
+                # Find equivalent destination factor in the clone Processor
+                for f in p2.factors:
+                    if destination.name == f.name and destination.taxon == f.taxon:
+                        destination2 = f
+                        break
+                else:
+                    destination2 = None
+                if destination2:
+                    quantity = scale_relations[0].quantity
+                    o2 = FactorsRelationScaleObservation.create_and_append(origin, destination2, rel.observer, quantity)
+                    glb_idx.put(o2.key(), o2)
+                else:
+                    raise Exception("Could not find Interface for Scale relationship, during clone operation")
+
         # PROCESS FLOW relations: directed and undirected (if at entry level, i.e., level == 0)
         # This step is needed because flow relations may involve processors and flows outside of the clone processor.
         # If a flow is totally contained, pointing to two cloned elements, the cloned flow will point to the two new elements.
@@ -1737,7 +1756,9 @@ class RelationClassType(Enum):
 
     ff_directed_flow = 10
     ff_reverse_directed_flow = 11
-    ft_directed_linear_transform = 12
+    ff_scale = 12
+
+    ftft_directed_linear_transform = 20  # InterfaceType to InterfaceType
 
 
 class FactorQuantitativeObservation(Taggable, Qualifiable, Automatable, Encodable):
@@ -1780,8 +1801,8 @@ class FactorQuantitativeObservation(Taggable, Qualifiable, Automatable, Encodabl
         return self._value
 
     @staticmethod
-    def partial_key(factor: Factor=None, observer: Observer=None):
-        d = {"_t": "qq"}
+    def partial_key(factor: Factor=None, observer: Observer=None, relative: bool=False):
+        d = {"_t": "qq", "__rt": relative}
         if factor:
             d["__f"] = factor.ident
 
@@ -1791,7 +1812,7 @@ class FactorQuantitativeObservation(Taggable, Qualifiable, Automatable, Encodabl
         return d
 
     def key(self):
-        d = {"_t": "qq", "__f": self._factor.ident}
+        d = {"_t": "qq", "__f": self._factor.ident, "__rt": self._relative_to != None}
         if self._observer:
             d["__oer"] = self._observer.ident
         return d
@@ -1927,7 +1948,7 @@ class FactorTypesRelationUnidirectionalLinearTransformObservation(FactorTypesRel
 
     @staticmethod
     def partial_key(origin: FactorType=None, destination: FactorType=None, observer: Observer=None):
-        d = {"_t": RelationClassType.ft_directed_linear_transform.name}
+        d = {"_t": RelationClassType.ftft_directed_linear_transform.name}
         if origin:
             d["__o"] = origin.ident
 
@@ -1940,7 +1961,7 @@ class FactorTypesRelationUnidirectionalLinearTransformObservation(FactorTypesRel
         return d
 
     def key(self):
-        d = {"_t": RelationClassType.ft_directed_linear_transform.name,
+        d = {"_t": RelationClassType.ftft_directed_linear_transform.name,
              "__o": self._origin.ident, "__d": self._destination.ident}
         if self._observer:
             d["__oer"] = self._observer.ident
@@ -2336,6 +2357,78 @@ class FactorsRelationDirectedFlowObservation(FactorsRelationObservation, Encodab
             d["__oer"] = self._observer.ident
         return d
 
+
+class FactorsRelationScaleObservation(FactorsRelationObservation):
+    def __init__(self, origin: Factor, destination: Factor, observer: Observer, quantity: str=None, tags=None, attributes=None):
+        Taggable.__init__(self, tags)
+        Qualifiable.__init__(self, attributes)
+        Automatable.__init__(self)
+        self._origin = origin
+        self._destination = destination
+        self._observer = observer
+        self._quantity = quantity
+
+    def encode(self):
+        d = Encodable.parents_encode(self, __class__)
+
+        d.update({
+            "origin": name_and_id_dict(self._origin),
+            "destination": name_and_id_dict(self._destination),
+            "observer": name_and_id_dict(self._observer),
+            "quantity": self._quantity
+        })
+
+        return d
+
+    @staticmethod
+    def create_and_append(origin: Factor, destination: Factor, observer: Observer, quantity: str, tags=None, attributes=None):
+        o = FactorsRelationScaleObservation(origin, destination, observer, quantity, tags, attributes)
+        if origin:
+            origin.observations_append(o)
+        if destination:
+            destination.observations_append(o)
+        if observer:
+            observer.observables_append(origin)
+            observer.observables_append(destination)
+        return o
+
+    @property
+    def origin(self):
+        return self._origin
+
+    @property
+    def destination(self):
+        return self._destination
+
+    @property
+    def quantity(self):
+        return self._quantity
+
+    @property
+    def observer(self):
+        return self._observer
+
+    @staticmethod
+    def partial_key(origin: Factor=None, destination: Factor=None, observer: Observer=None):
+        d = {"_t": RelationClassType.ff_scale.name}
+        if origin:
+            d["__o"] = origin.ident
+
+        if destination:
+            d["__d"] = destination.ident
+
+        if observer:
+            d["__oer"] = observer.ident
+
+        return d
+
+    def key(self):
+        d = {"_t": RelationClassType.ff_scale.name, "__o": self._origin.ident, "__d": self._destination.ident}
+        if self._observer:
+            d["__oer"] = self._observer.ident
+        return d
+
+
 # #################################################################################################################### #
 # NUSAP PedigreeMatrix
 # #################################################################################################################### #
@@ -2420,7 +2513,7 @@ class PedigreeMatrix(Nameable, Identifiable):
 
 
 # #################################################################################################################### #
-# PARAMETERS, BENCHMARKS, INDICATORS
+# PARAMETERS, SOLVING, BENCHMARKS, INDICATORS
 # #################################################################################################################### #
 
 
@@ -2449,6 +2542,10 @@ class Parameter(Nameable, Identifiable, Encodable):
 
         return d
 
+    @property
+    def default_value(self):
+        return self._default_value
+
     @staticmethod
     def partial_key(name: str=None):
         d = dict(_t="param")
@@ -2458,6 +2555,44 @@ class Parameter(Nameable, Identifiable, Encodable):
 
     def key(self):
         return {"_t": "param", "_n": self.name, "__o": self.ident}
+
+
+class ProblemStatement(Encodable):
+    """
+    Contains the parameters for the different scenarios, plus parameters needed to launch a solving process
+    """
+    def __init__(self, parameters=None, scenarios=None):
+        # Parameters characterizing the solver to be used and the parameters it receives
+        self._solving_parameters = parameters  # type: Dict[str, str]
+        # Each scenario is a set of parameter values (expressions)
+        self._scenarios = scenarios  # type: Dict[str, Dict[str, str]]
+
+    def encode(self):
+        d = Encodable.parents_encode(self, __class__)
+        # d.update({})
+        return d
+
+    @staticmethod
+    def partial_key():
+        d = dict(_t="ps")
+        return d
+
+    def key(self):
+        """
+        Return a Key for the identification of the ProblemStatement in the registry
+
+        :param registry:
+        :return:
+        """
+        return {"_t": "ps", "__id": self.ident}
+
+    @property
+    def solving_parameters(self):
+        return self._solving_parameters
+
+    @property
+    def scenarios(self):
+        return self._scenarios
 
 
 class Benchmark(Encodable):

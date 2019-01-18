@@ -27,7 +27,7 @@ from backend.command_executors.version2.processor_scalings_command import Proces
 from backend.command_executors.version2.interface_types_command import InterfaceTypesCommand
 from backend.command_executors.version2.interfaces_command import InterfacesAndQualifiedQuantitiesCommand
 from backend.command_executors.version2.pedigree_matrices_command import PedigreeMatricesReferencesCommand
-from backend.command_executors.version2.problem_statement_command import ProblemSolvingCommand
+from backend.command_executors.version2.problem_statement_command import ProblemStatementCommand
 from backend.command_executors.version2.processors_command import ProcessorsCommand
 from backend.command_executors.version2.references_v2_command import BibliographicReferencesCommand, \
     GeographicReferencesCommand, ProvenanceReferencesCommand
@@ -82,7 +82,7 @@ def create_command(cmd_type, name, json_input, source_block=None):
             "ref_geographical":      GeographicReferencesCommand,
             "ref_provenance":        ProvenanceReferencesCommand,
             "indicators":            IndicatorsCommand,
-            "problem_statement":     ProblemSolvingCommand
+            "problem_statement":     ProblemStatementCommand
             }
     if cmd_type in cmds:
         tmp = cmds[cmd_type](name)  # Reflective CALL to construct the empty command instance

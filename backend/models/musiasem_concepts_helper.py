@@ -13,7 +13,7 @@ from backend.models.musiasem_concepts import \
     ProcessorsRelationPartOfObservation, ProcessorsRelationUndirectedFlowObservation, \
     ProcessorsRelationUpscaleObservation, \
     FactorsRelationDirectedFlowObservation, Hierarchy, Taxon, QualifiedQuantityExpression, \
-    FactorQuantitativeObservation, HierarchyLevel
+    FactorQuantitativeObservation, HierarchyLevel, FactorsRelationScaleObservation
 from backend.models.statistical_datasets import CodeList, CodeListLevel, Code
 
 
@@ -755,6 +755,7 @@ def create_relation_observations(state: Union[State, PartialRetrievalDictionary]
         origin_obj = initial_origin_obj
         # Destination
         dst_obj = None
+        # PART-OF
         if isinstance(origin_obj, Processor) and relation_class == RelationClassType.pp_part_of:
             # Find dst[0]. If it does not exist, create dest UNDER (hierarchically) origin
             dst_obj = find_observable_by_name(dst[0], glb_idx)
@@ -781,7 +782,7 @@ def create_relation_observations(state: Union[State, PartialRetrievalDictionary]
                 ft = dst[0].taxon
                 f = dst[0]
             else:
-                raise Exception("'dst[0]' must be String, Processor or Interface")
+                raise Exception("'dst[0]' must be String, Processor or Interface, type: "+str(type(dst[0]))+":: "+str(dst[0]))
 
             dst_obj = get_requested_object(p, ft, f)
             # If origin is Processor and destination is Factor, create Factor in origin (if it does not exist). Or viceversa
@@ -979,6 +980,9 @@ def _find_or_create_relation(origin, destination, rel_type: Union[str, RelationC
                 glb_idx.put(r.key(), r)
             else:
                 r = r[0]
+                r._quantity = weight
+                r._observer = oer
+                r._attributes = attributes
     elif rel_type in (RelationClassType.ff_directed_flow, RelationClassType.ff_reverse_directed_flow):
         if isinstance(origin, Factor) and isinstance(destination, Factor):
             if rel_type == RelationClassType.ff_reverse_directed_flow:
@@ -993,6 +997,21 @@ def _find_or_create_relation(origin, destination, rel_type: Union[str, RelationC
                 glb_idx.put(r.key(), r)
             else:
                 r = r[0]
+                r._weight = weight
+                r._observer = oer
+                r._attributes = attributes
+    elif rel_type == RelationClassType.ff_scale:
+        if isinstance(origin, Factor) and isinstance(destination, Factor):
+            # Find or Create the relation
+            r = glb_idx.get(FactorsRelationScaleObservation.partial_key(origin=origin, destination=destination))
+            if not r:
+                r = FactorsRelationScaleObservation.create_and_append(origin, destination, oer, weight, attributes=attributes)  # Directed flow
+                glb_idx.put(r.key(), r)
+            else:
+                r = r[0]
+                r._quantity = weight
+                r._observer = oer
+                r._attributes = attributes
 
     return r
 

@@ -120,7 +120,8 @@ commands = {
      CommandField(allowed_names=[attributeRegex], name="attributes", mandatory=False, many_appearances=True, parser=value)
      ],
     "Processors":
-    [CommandField(allowed_names=["ProcessorContextType", "ProcessorType"], name="processor_type", mandatory=False, allowed_values=processor_types, parser=simple_ident),
+    [CommandField(allowed_names=["SubsystemType", "ProcessorContextType", "ProcessorType"], name="subsystem_type", mandatory=False, allowed_values=processor_types, parser=simple_ident),
+     CommandField(allowed_names=["System"], name="processor_system", mandatory=False, allowed_values=None, parser=simple_ident),
      CommandField(allowed_names=["ProcessorGroup"], name="processor_group", mandatory=False, allowed_values=None, parser=simple_ident),
      CommandField(allowed_names=["Processor"], name="processor", mandatory=True, allowed_values=None, parser=simple_ident),
      CommandField(allowed_names=["ParentProcessor"], name="parent_processor", mandatory=False, allowed_values=None, parser=simple_ident),

@@ -231,10 +231,12 @@ class RelationshipsCommand(IExecutableCommand):
                 r_relation_class = RelationClassType.ff_directed_flow
             elif r_relation_type in ["<"]:
                 r_relation_class = RelationClassType.ff_reverse_directed_flow
+            elif r_relation_type in ["scale"]:
+                r_relation_class = RelationClassType.ff_scale
 
             if r_relation_type in ["is_a", "isa", "part_of", "partof", "|", "aggregate", "associate"]:
                 between_processors = True
-            else:  # "flow", ">", "<"
+            else:  # "flow", ">", "<", "scale"
                 between_processors = False
 
             # Look for source Processor
@@ -344,9 +346,23 @@ class RelationshipsCommand(IExecutableCommand):
                 attributes = None
 
             if between_processors:
-                create_relation_observations(glb_idx, source_processor, target_processor, r_relation_class, None, attributes=attributes)
+                create_relation_observations(glb_idx,
+                                             source_processor,
+                                             [(p, r_relation_class) for p in target_processor] if isinstance(
+                                                 target_processor, list) else [(target_processor, r_relation_class)],
+                                             r_relation_class,
+                                             None,
+                                             attributes=attributes
+                                             )
             else:
-                create_relation_observations(glb_idx, source_interface, target_interface, r_relation_class, None, attributes=attributes)
+                create_relation_observations(glb_idx,
+                                             source_interface,
+                                             [(i, r_relation_class, r_flow_weight) for i in target_interface] if isinstance(
+                                                 target_interface, list) else [(target_interface, r_relation_class, r_flow_weight)],
+                                             r_relation_class,
+                                             None,
+                                             attributes=attributes
+                                             )
 
         fields = {f.name: f for f in commands["Relationships"]}
 
