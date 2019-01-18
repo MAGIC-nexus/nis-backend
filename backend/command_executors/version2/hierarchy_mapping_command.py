@@ -1,11 +1,9 @@
 import json
-from anytree import Node
 from dotted.collection import DottedDict
 
-from backend.command_generators import Issue
-from backend.command_generators.spreadsheet_command_parsers_v2 import IssueLocation
+from backend.command_generators import Issue, IssueLocation
 from backend.model_services import IExecutableCommand, get_case_study_registry_objects
-from backend.common.helper import obtain_dataset_metadata, strcmp, create_dictionary, obtain_dataset_source
+from backend.common.helper import obtain_dataset_metadata, create_dictionary, obtain_dataset_source
 from backend.models.musiasem_concepts import Mapping
 
 

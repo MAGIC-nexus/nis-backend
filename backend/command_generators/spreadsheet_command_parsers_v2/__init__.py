@@ -1,17 +1,9 @@
-from attr import attrs, attrib
 from typing import List, Tuple, Optional
 
 from openpyxl.worksheet import Worksheet
 
 from backend import CommandField, IssuesLabelContentTripleType, AreaTupleType
-from backend.command_generators import Issue, parser_field_parsers
-
-
-@attrs
-class IssueLocation:
-    sheet_name = attrib()
-    row = attrib()
-    column = attrib()
+from backend.command_generators import Issue, parser_field_parsers, IssueLocation
 
 
 def check_columns(sh, name: str, area: Tuple, cols: List[CommandField], command_name: str, ignore_not_found=False):

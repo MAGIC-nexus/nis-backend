@@ -134,7 +134,7 @@ command_fields: Dict[str, List[CommandField]] = {
     "processors": [
         CommandField(allowed_names=["ProcessorGroup"], name="processor_group", mandatory=False, allowed_values=None, parser=simple_ident),
         CommandField(allowed_names=["Processor"], name="processor", mandatory=True, allowed_values=None, parser=simple_ident),
-        CommandField(allowed_names=["ParentProcessor"], name="parent_processor", mandatory=False, allowed_values=None, parser=simple_ident),
+        CommandField(allowed_names=["ParentProcessor"], name="parent_processor", mandatory=False, allowed_values=None, parser=simple_h_name),
         CommandField(allowed_names=["CopyInterfaces"], name="copy_interfaces_mode", mandatory=False, allowed_values=copy_interfaces_mode, parser=simple_ident),
         CommandField(allowed_names=["CloneProcessor"], name="clone_processor", mandatory=False, allowed_values=None, parser=simple_ident),
         CommandField(allowed_names=["ProcessorContextType", "ProcessorType"], name="processor_type", mandatory=False, allowed_values=processor_types, parser=simple_ident, attribute_of=Processor),
@@ -201,8 +201,8 @@ command_fields: Dict[str, List[CommandField]] = {
     ],
 
     "processor_scalings": [
-        CommandField(allowed_names=["InvokingProcessor"], name="invoking_processor", mandatory=True, allowed_values=None, parser=simple_ident),
-        CommandField(allowed_names=["RequestedProcessor"], name="requested_processor", mandatory=True, allowed_values=None, parser=simple_ident),
+        CommandField(allowed_names=["InvokingProcessor"], name="invoking_processor", mandatory=True, allowed_values=None, parser=simple_h_name),
+        CommandField(allowed_names=["RequestedProcessor"], name="requested_processor", mandatory=True, allowed_values=None, parser=simple_h_name),
         CommandField(allowed_names=["ScalingType"], name="scaling_type", mandatory=True, allowed_values=processor_scaling_types, parser=simple_ident),
         CommandField(allowed_names=["InvokingInterface"], name="invoking_interface", mandatory=True, allowed_values=None, parser=simple_ident),
         CommandField(allowed_names=["RequestedInterface"], name="requested_interface", mandatory=True, allowed_values=None, parser=simple_ident),

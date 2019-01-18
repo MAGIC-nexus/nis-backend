@@ -453,6 +453,19 @@ class TestCommandFiles(unittest.TestCase):
         print(json_string)
         isess.close_db_session()
 
+    def test_022_processor_scalings(self):
+        file_path = os.path.dirname(
+            os.path.abspath(__file__)) + "/z_input_files/v2/14_processor_scalings_example.xlsx"
+        isess = execute_file(file_path, generator_type="spreadsheet")
+        json_string = export_model_to_json(isess.state)
+        print(json_string)
+        # Check State of things
+        glb_idx, p_sets, hh, datasets, mappings = get_case_study_registry_objects(isess.state)
+        # TODO Check things!!!
+        # self.assertEqual(len(p_sets), 3)
+        # Close interactive session
+        isess.close_db_session()
+
 
 if __name__ == '__main__':
     i = TestCommandFiles()
@@ -468,4 +481,5 @@ if __name__ == '__main__':
     #i.test_018_many_to_many_mappings()
     #i.test_019_import_commands()
     #i.test_020_list_of_commands()
-    i.test_021_export_to_json()
+    #i.test_021_export_to_json()
+    i.test_022_processor_scalings()

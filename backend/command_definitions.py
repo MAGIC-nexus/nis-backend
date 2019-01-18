@@ -29,6 +29,11 @@ from backend.command_generators.spreadsheet_command_parsers_v2.dataset_data_spre
 from backend.command_generators.spreadsheet_command_parsers_v2.dataset_qry_spreadsheet_parse import \
     parse_dataset_qry_command
 
+# BE CAREFUL: the order of the commands in the list MATTERS because it is used to prioritize the detection
+# of the command based on the worksheet name and the allowed_names / alt_regex of the command.
+# E.g. the command "cat_hier_mapping" allows a worksheet name with the pattern "HierarchiesMappings.*" and the command
+# "cat_hierarchies" allows the pattern "Hierarchies.*". An actual worksheet named "HierarchiesMappings Spain" would
+# match both patterns, so the command of the larger pattern should come first in the list below.
 commands: List[Command] = [
     Command(name="dummy", allowed_names=["Dummy"], is_v1=True,
             execution_class_name="backend.command_executors.specification.dummy_command.DummyCommand"),

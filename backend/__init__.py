@@ -30,14 +30,14 @@ ureg.define("dollar = [] = USD = Usd = usd = Dollar = Dollars = $")
 
 # Named tuples
 Issue = namedtuple("Issue",
-                   "sheet_number sheet_name c_type type message")  # (Sheet #, Sheet name, command type, issue type, message)
+                   "sheet_number sheet_name c_type type message")
 
 SDMXConcept = namedtuple('Concept', 'type name istime description code_list')
 
 # Global Types
 
 IssuesOutputPairType = Tuple[Optional[List[Issue]], Optional[Any]]
-CommandIssuesPairType = Tuple[Optional["IExecutableCommand"], List[Issue]]
+ExecutableCommandIssuesPairType = Tuple[Optional["IExecutableCommand"], List[Issue]]
 IssuesLabelContentTripleType = Tuple[List[Issue], Optional[Any], Optional[Dict[str, Any]]]
 # Tuple (top, bottom, left, right) representing the rectangular area of the input worksheet where the command is present
 AreaTupleType = Tuple[int, int, int, int]
