@@ -16,8 +16,11 @@ import sqlalchemy
 import backend
 from backend.command_generators import Issue, IssueLocation, IType
 from backend.command_generators.parsers_factory import commands_container_parser_factory
-from backend.model_services import IExecutableCommand
+from backend.common.helper import create_dictionary
+from backend.model_services import IExecutableCommand, get_case_study_registry_objects
 from backend.model_services import State
+from backend.models.musiasem_concepts import ProblemStatement, FactorsRelationDirectedFlowObservation, Processor, \
+    Factor, Parameter
 from backend.models.musiasem_methodology_support import (User,
                                                          CaseStudy,
                                                          CaseStudyVersion,
