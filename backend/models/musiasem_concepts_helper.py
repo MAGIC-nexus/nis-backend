@@ -12,7 +12,7 @@ from backend.models.musiasem_concepts import \
     Processor, FactorType, Observer, Factor, \
     ProcessorsRelationPartOfObservation, ProcessorsRelationUndirectedFlowObservation, \
     ProcessorsRelationUpscaleObservation, \
-    FactorsRelationDirectedFlowObservation, Hierarchy, Taxon, QualifiedQuantityExpression, \
+    FactorsRelationDirectedFlowObservation, Hierarchy, Taxon, \
     FactorQuantitativeObservation, HierarchyLevel, Geolocation
 from backend.models.statistical_datasets import CodeList, CodeListLevel, Code
 
@@ -203,7 +203,7 @@ def find_observable_by_name(name: str, idx: PartialRetrievalDictionary, processo
     return res
 
 
-def find_processor_by_name(state: Union[State, PartialRetrievalDictionary], processor_name: str):
+def find_processor_by_name(state: Union[State, PartialRetrievalDictionary], processor_name: str) -> Optional[Processor]:
     """
     Find a processor by its name
 
@@ -375,7 +375,6 @@ def find_or_create_observable(state: Union[State, PartialRetrievalDictionary],
             else:
                 oer = oer[0]
 
-    result = None
     p = None  # Processor to which the Factor is connected
     ft = None  # FactorType
     f = None  # Factor
@@ -414,21 +413,19 @@ def find_or_create_observable(state: Union[State, PartialRetrievalDictionary],
                 attrs = proc_attributes if last else None
                 location = proc_location if last else None
                 # Create processor
-                p = Processor(acum_name,
+                p = Processor(p_name,  # acum_name,
                               geolocation=location,
                               tags=None,
                               attributes=attrs
                               )
                 # Index it, with its multiple names, adding the attributes only if it is the processor in play
-                for alt_name in hierarchical_name_variants(acum_name):
-                    p_key = Processor.partial_key(alt_name, p.ident)
-                    if last and proc_attributes:
-                        p_key.update({k: ("" if v is None else v) for k, v in proc_attributes.items()})
-                    glb_idx.put(p_key, p)
+                # for alt_name in hierarchical_name_variants(acum_name):
+                p_key = Processor.partial_key(acum_name, p.ident)
+                if last and proc_attributes:
+                    p_key.update({k: ("" if v is None else v) for k, v in proc_attributes.items()})
+                glb_idx.put(p_key, p)
             else:
                 p = p[0]
-
-            result = p
 
             if parent:
                 # Create PART-OF relation
@@ -481,12 +478,9 @@ def find_or_create_observable(state: Union[State, PartialRetrievalDictionary],
             else:
                 f = f[0]
 
-            result = f
-
         parent = ft
 
     return p, ft, f  # Return all the observables (some may be None)
-    # return result  # Return either a Processor or a Factor, to which Observations can be attached
 
 
 def find_or_create_factor(state: Union[State, PartialRetrievalDictionary],
@@ -651,11 +645,13 @@ def create_quantitative_observation(state: Union[State, PartialRetrievalDictiona
         if relative_to:
             ast = parser_field_parsers.string_to_ast(parser_field_parsers.factor_unit, relative_to)
             factor_type = ast_to_string(ast["factor"])
+
             unit_name = ast["unparsed_unit"]
-            ureg(unit_name)
+            unit = str((ureg(unit) / ureg(unit_name)).units)
+
             ft = find_or_create_factor_type(glb_idx, ":"+factor_type, fact_roegen_type=None, fact_attributes=None)
-            f = find_or_create_factor(glb_idx, p, ft,
-                                      fact_external=None, fact_incoming=None, fact_location=None, fact_attributes=None)
+            relative_to = find_or_create_factor(glb_idx, p, ft, fact_external=None, fact_incoming=None,
+                                                fact_location=None, fact_attributes=None)
 
         # Create the observation (and append it to the Interface)
         o = _create_quantitative_observation(factor,
@@ -845,9 +841,9 @@ def _create_quantitative_observation(factor: Factor,
                                      value: str, unit: str,
                                      spread: str, assessment: str, pedigree: str, pedigree_template: str,
                                      observer: Observer,
-                                     relative_to: Union[str, Factor],
+                                     relative_to: Optional[Factor],
                                      time: str,
-                                     geolocation: str,
+                                     geolocation: Optional[str],
                                      comments: str,
                                      tags, other_attributes):
     f_name = get_factor_id(factor)
@@ -856,16 +852,11 @@ def _create_quantitative_observation(factor: Factor,
         attrs = other_attributes.copy()
     else:
         attrs = {}
-    if relative_to:
-        if isinstance(relative_to, str):
-            rel2 = relative_to
-        else:
-            rel2 = relative_to.name
-    else:
-        rel2 = None
-    attrs.update({"relative_to": rel2,
+
+    attrs.update({"relative_to": relative_to,
                   "time": time,
                   "geolocation": geolocation,
+                  "unit": unit,
                   "spread": spread,
                   "assessment": assessment,
                   "pedigree": pedigree,
@@ -874,7 +865,7 @@ def _create_quantitative_observation(factor: Factor,
                   }
                  )
 
-    fo = FactorQuantitativeObservation.create_and_append(v=QualifiedQuantityExpression(value + " " + unit),
+    fo = FactorQuantitativeObservation.create_and_append(v=value,
                                                          factor=factor,
                                                          observer=observer,
                                                          tags=tags,

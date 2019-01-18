@@ -1,9 +1,8 @@
 from openpyxl.worksheet import Worksheet
 
 from backend import AreaTupleType, IssuesLabelContentTripleType
-from backend.command_generators import parser_field_parsers, Issue
+from backend.command_generators import parser_field_parsers, Issue, IssueLocation
 from backend.command_generators.parser_field_parsers import simple_ident
-from backend.command_generators.spreadsheet_command_parsers_v2 import IssueLocation
 from backend.common.helper import obtain_dataset_source, obtain_dataset_metadata, create_dictionary, strcmp
 from backend.model_services import get_case_study_registry_objects
 

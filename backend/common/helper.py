@@ -24,6 +24,7 @@ from pandas import DataFrame
 
 import backend
 from backend import case_sensitive, SDMXConcept
+from backend.command_generators import Issue
 
 
 # #####################################################################################################################
@@ -41,7 +42,9 @@ def _json_serial(obj):
         return str(obj)
     elif isinstance(obj, np.int64):
         return int(obj)
-    raise TypeError("Type not serializable")
+    elif isinstance(obj, Issue):
+        return obj.__repr__()
+    raise TypeError(f"Type {type(obj)} not serializable")
 
 
 JSON_INDENT = 4

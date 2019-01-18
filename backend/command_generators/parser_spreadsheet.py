@@ -55,7 +55,7 @@ def handle_import_commands(r):
 # ############################### #
 
 
-def commands_generator_from_ooxml_file(input, state, sublist, stack) -> backend.CommandIssuesPairType:
+def commands_generator_from_ooxml_file(input, state, sublist, stack) -> backend.ExecutableCommandIssuesPairType:
     """
     It reads an Office Open XML input
     Yields a sequence of command_executors
@@ -86,11 +86,10 @@ def commands_generator_from_ooxml_file(input, state, sublist, stack) -> backend.
                 continue
 
         issues = []
-        total_issues = []  # type: List[Issue]
+        total_issues: List[Issue] = []
         sheet = workbook[sheet_name]
 
-        c_type = None
-        c_label = None
+        c_label: str = None
         c_content = None
 
         name = sheet.title
@@ -113,21 +112,21 @@ def commands_generator_from_ooxml_file(input, state, sublist, stack) -> backend.
         # Find which COMMAND to parse, then parse it
         cmd: Optional[backend.Command] = first(commands, condition=lambda c: c.regex.search(name))
 
-        c_type = cmd.name if cmd else None
+        c_type: str = cmd.name if cmd else None
         if not c_type:
-            total_issues.append({"sheet_number": sheet_number, "sheet_name": sheet_name, "c_type": name, "type": 3,
-                                 "message": f"The worksheet name '{name}' has not a supported command associated."})
+            total_issues.append(Issue(sheet_number, sheet_name, None, 3,
+                                f"The worksheet name '{sheet_name}' has not a supported command associated."))
 
         elif c_type == "etl_dataset":
             if sheet.cell(row=t[0], column=t[2]).value:
                 t = (1, m.shape[0] + 1, 1, m.shape[1] + 1)
                 # Parse to read parameters
-                group2_name = cmd.regex.search(name).group(2)  # Get group name if any
-                issues, c_label, c_content = cmd.parse_function(sheet, t, group2_name, state)
+                dataset_name = cmd.regex.search(name).group(2)
+                issues, c_label, c_content = cmd.parse_function(sheet, t, dataset_name, state)
             else:
                 total_issues.append(
-                    {"sheet_number": sheet_number, "sheet_name": sheet_name, "c_type": c_type, "type": 3,
-                     "message": f"It seems there are no parameters for the dataset import command at worksheet '{sheet_name}'"})
+                    Issue(sheet_number, sheet_name, c_type, 3,
+                          f"It seems there are no parameters for the dataset import command at worksheet '{sheet_name}'"))
 
         elif c_type == "list_of_commands":
             issues, c_label, c_content = parse_command(sheet, t, None, cmd.name)
@@ -138,8 +137,9 @@ def commands_generator_from_ooxml_file(input, state, sublist, stack) -> backend.
                     command = r.get("command", None)
                     # Check if valid command
                     if command not in command_names:
-                        issue = Issue(sheet_number, sheet_name, 3, None,
-                                      "Command '" + command + "' not recognized in List of Commands.")
+                        total_issues.append(
+                            Issue(sheet_number, sheet_name, None, 3,
+                                  "Command '" + command + "' not recognized in List of Commands."))
                     else:
                         worksheet_to_command[worksheet] = command
 
@@ -163,9 +163,10 @@ def commands_generator_from_ooxml_file(input, state, sublist, stack) -> backend.
                 origin = None
                 destination = None
             else:
-                issue = {"sheet_number": sheet_number, "sheet_name": sheet_name, "c_type": c_type, "type": 3,
-                         "message": "Either origin or destination are not correctly specified in the sheet name '" + sheet_name + "'"}
-                total_issues.append(issue)
+                total_issues.append(
+                    Issue(sheet_number, sheet_name, c_type, 3,
+                          f"Either origin or destination are not correctly specified in the sheet name '{sheet_name}'"))
+
             issues, c_label, c_content = cmd.parse_function(sheet, t, origin, destination)
 
         elif c_type in ["datasetqry", "datasetdata"]:
@@ -177,13 +178,16 @@ def commands_generator_from_ooxml_file(input, state, sublist, stack) -> backend.
             c_label = res.group(3)
             issues, _, c_content = cmd.parse_function(sheet, t, c_label, h_type)
 
+        elif c_type == "data_input":
+            group2_name = cmd.regex.search(name).group(2)
+            issues, c_label, c_content = cmd.parse_function(sheet, t, group2_name)
+
         else:
             # GENERIC command parser
-            group2_name = cmd.regex.search(name).group(2)  # Get group name if any
             if cmd.parse_function:
-                issues, c_label, c_content = cmd.parse_function(sheet, t, group2_name)
+                issues, c_label, c_content = cmd.parse_function(sheet, t, sheet_name)
             else:
-                issues, c_label, c_content = parse_command(sheet, t, group2_name, cmd.name)
+                issues, c_label, c_content = parse_command(sheet, t, sheet_name, cmd.name)
 
         # -------------------------------------------------------------------------------------------------------------
         # Command parsed, now append "issues"
@@ -193,12 +197,13 @@ def commands_generator_from_ooxml_file(input, state, sublist, stack) -> backend.
                 if isinstance(i, backend.command_generators.Issue):
                     if i.itype == 3:
                         errors += 1
-                    issue = {"sheet_number": sheet_number, "sheet_name": sheet_name, "c_type": c_type, "type": i.itype, "message": i.description}
+                    issue = Issue(sheet_number, sheet_name, c_type, i.itype, i.description)
                 else:
                     if i[0] == 3:
                         errors += 1
-                    issue = {"sheet_number": sheet_number, "sheet_name": sheet_name, "c_type": c_type, "type": i[0], "message": i[1]}
+                    issue = Issue(sheet_number, sheet_name, c_type, i[0], i[1])
                 total_issues.append(issue)
+
         if errors == 0:
             try:
                 if c_type:
@@ -212,13 +217,12 @@ def commands_generator_from_ooxml_file(input, state, sublist, stack) -> backend.
             if issues:
                 for i in issues:
                     if isinstance(i, backend.command_generators.Issue):
-                        issue = {"sheet_number": sheet_number, "sheet_name": sheet_name, "c_type": c_type, "type": i.itype,
-                                 "message": i.description}
+                        issue = Issue(sheet_number, sheet_name, c_type, i.itype, i.description)
                     else:
-                        issue = {"sheet_number": sheet_number, "sheet_name": sheet_name, "c_type": c_type, "type": i[0],
-                                 "message": i[1]}
+                        issue = Issue(sheet_number, sheet_name, c_type, i[0], i[1])
 
                     total_issues.append(issue)
+
         else:
             print(issues)  # Convenient for debugging purposes
             cmd = None  # cmd, _ = create_command(c_type, c_label, {}, sh_name)

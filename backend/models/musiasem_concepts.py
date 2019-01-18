@@ -332,13 +332,17 @@ class Observable(Encodable):
 
     def encode(self):
         return {
-            "observations": [o for o in self.observations if not isinstance(o, RelationObservation)]
+            "observations": self.quantitative_observations
         }
 
     # Methods to manage the properties
     @property
     def observations(self):
         return self._observations
+
+    @property
+    def quantitative_observations(self) -> List["FactorQuantitativeObservation"]:
+        return [o for o in self.observations if isinstance(o, FactorQuantitativeObservation)]
 
     def observations_append(self, observation):
         if isinstance(observation, (list, set)):
@@ -509,40 +513,6 @@ class TimeExtent:
     @end.setter
     def end(self, end):
         self._end = end
-
-
-class QualifiedQuantityExpression:
-    """ The base class for quantitative observations
-    """
-    def __init__(self, e: Union[str, dict]):
-        self._expression = e
-
-    @property
-    def expression(self):
-        return self._expression
-
-    @expression.setter
-    def expression(self, expression):
-        self._expression = expression
-
-    @staticmethod
-    def n(n: float):
-        """ "N" of NUSAP """
-        return QualifiedQuantityExpression(json.dumps({'n': n}))
-
-    @staticmethod
-    def nu(n: float, u: str):
-        """ "NU" of NUSAP """
-        # Check that "u" is a recognized unit type
-        try:
-            ureg(u)
-        except pint.errors.UndefinedUnitError:
-            # The user should know that the specified unit is not recognized
-            raise Exception("The specified unit '" + u + "' is not recognized")
-        return QualifiedQuantityExpression(json.dumps({'n': n, 'u': u}))
-
-    def __repr__(self):
-        return str(self.expression)
 
 # #################################################################################################################### #
 # HIERARCHIES and TAXA
@@ -843,7 +813,7 @@ class Hierarchy(Nameable, Identifiable, Encodable):
 
 
 class HierarchyExpression(Encodable):
-    def __init__(self, expression: QualifiedQuantityExpression=None):
+    def __init__(self, expression: float=None):
         # Defines how to compute a HierarchyNode relative to other HierarchyNodes
         # The hierarchical relation implies a parent = SUM children expression. If specified, this implicit relation
         # would be overriden
@@ -860,7 +830,7 @@ class HierarchyExpression(Encodable):
         return self._expression
 
     @expression.setter
-    def expression(self, e: QualifiedQuantityExpression=None):
+    def expression(self, e: float=None):
         self._expression = e
 
 
@@ -1311,24 +1281,27 @@ class Processor(Identifiable, Nameable, Taggable, Qualifiable, Automatable, Obse
         else:
             return self.name
 
-    def full_hierarchy_names(self, registry: PartialRetrievalDictionary):
+    def full_hierarchy_names(self, registry: PartialRetrievalDictionary) -> List[str]:
         """
         Obtain the full hierarchy name of the current processor
         It looks for the PART-OF relations in which the processor is in the child side
+        It can return multiple names because the same processor can be child of different processors
 
         :param registry:
         :return:
         """
-        # Get matching relations
-        part_of_relations = registry.get(ProcessorsRelationPartOfObservation.partial_key(child=self))
+        # Get matching parent relations
+        parent_relations = registry.get(ProcessorsRelationPartOfObservation.partial_key(child=self))
 
         # Compose the name, recursively
-        if len(part_of_relations) == 0:
+        if len(parent_relations) == 0:
             return [self.name]
         else:
             # Take last part of the name
-            last_part = self.name.split(".")[-1]
-            return [(p+"."+last_part) for rel in part_of_relations for p in rel.parent_processor.full_hierarchy_names(registry)]
+            # last_part = self.name.split(".")[-1]
+            return [(parent_name+"."+self.name)
+                    for parent_relation in parent_relations
+                    for parent_name in parent_relation.parent_processor.full_hierarchy_names(registry)]
 
     def clone(self, state: Union[PartialRetrievalDictionary, State], objects_processed: dict=None, level=0):
         """
@@ -1364,7 +1337,7 @@ class Processor(Identifiable, Nameable, Taggable, Qualifiable, Automatable, Obse
                       referenced_processor=self.referenced_processor
                       )
 
-        glb_idx.put(p.key(), p)
+        # glb_idx.put(p.key(), p)
 
         if not objects_processed:
             objects_processed = {}
@@ -1373,7 +1346,7 @@ class Processor(Identifiable, Nameable, Taggable, Qualifiable, Automatable, Obse
 
         # Factors
         for f in self.factors:
-            f_ = Factor.clone_and_append(f, p) # The Factor is cloned and appended into the Processor "p"
+            f_ = Factor.clone_and_append(f, p)  # The Factor is cloned and appended into the Processor "p"
             glb_idx.put(f_.key(), f_)
             if f not in objects_processed:
                 objects_processed[f] = f_
@@ -1581,7 +1554,7 @@ class Factor(Identifiable, Nameable, Taggable, Qualifiable, Observable, Automata
         # Observations (only Quantities, because they are owned by the Factor)
         for o in factor.observations:
             if isinstance(o, FactorQuantitativeObservation):
-                FactorQuantitativeObservation.create_and_append(o.value, o.factor, o.observer, o.tags, o.attributes)
+                FactorQuantitativeObservation.create_and_append(o.value, f, o.observer, o.tags, o.attributes)
 
         return f
 
@@ -1765,7 +1738,7 @@ class RelationClassType(Enum):
 
 class FactorQuantitativeObservation(Taggable, Qualifiable, Automatable, Encodable):
     """ An expression or quantity assigned to an Observable (Factor) """
-    def __init__(self, v: QualifiedQuantityExpression, factor: Factor=None, observer: Observer=None, tags=None, attributes=None):
+    def __init__(self, v: float, factor: Factor=None, observer: Observer=None, tags=None, attributes=None):
         Taggable.__init__(self, tags)
         Qualifiable.__init__(self, attributes)
         Automatable.__init__(self)
@@ -1782,7 +1755,7 @@ class FactorQuantitativeObservation(Taggable, Qualifiable, Automatable, Encodabl
         return d
 
     @staticmethod
-    def create_and_append(v: QualifiedQuantityExpression, factor: Factor, observer: Observer, tags=None, attributes=None):
+    def create_and_append(v: float, factor: Factor, observer: Observer, tags=None, attributes=None):
         o = FactorQuantitativeObservation(v, factor, observer, tags, attributes)
         if factor:
             factor.observations_append(o)
@@ -1801,6 +1774,10 @@ class FactorQuantitativeObservation(Taggable, Qualifiable, Automatable, Encodabl
     @property
     def value(self):
         return self._value
+
+    @value.setter
+    def value(self, v):
+        self._value = v
 
     @staticmethod
     def partial_key(factor: Factor=None, observer: Observer=None):
@@ -2056,7 +2033,7 @@ class ProcessorsRelationPartOfObservation(ProcessorsRelationObservation, Encodab
         return d
 
     @staticmethod
-    def create_and_append(parent: Processor, child: Processor, observer: Optional[Observer], tags=None, attributes=None):
+    def create_and_append(parent: Processor, child: Processor, observer: Optional[Observer] = None, tags=None, attributes=None):
         o = ProcessorsRelationPartOfObservation(parent, child, observer, tags, attributes)
         if parent:
             parent.observations_append(o)
@@ -2189,7 +2166,7 @@ class ProcessorsRelationUpscaleObservation(ProcessorsRelationObservation):
         return d
 
     @staticmethod
-    def create_and_append(parent: Processor, child: Processor, observer: Observer, factor_name: str, quantity: str, tags=None, attributes=None):
+    def create_and_append(parent: Processor, child: Processor, observer: Optional[Observer], factor_name: str, quantity: str, tags=None, attributes=None):
         o = ProcessorsRelationUpscaleObservation(parent, child, observer, factor_name, quantity, tags, attributes)
         if parent:
             parent.observations_append(o)
@@ -2219,47 +2196,6 @@ class ProcessorsRelationUpscaleObservation(ProcessorsRelationObservation):
     @property
     def observer(self):
         return self._observer
-
-    def activate(self, state):
-        """
-        Materialize the relation into something computable.
-        In this case, create an Factor (if it does not exist) and an Observation associated to it
-
-        :param state:
-        :return:
-        """
-        # TODO Look for the factor in the child processor
-        processor = self._child
-        factor = None
-        for f in processor.factors:
-            if strcmp(f.name, self._factor_name) and f.processor == processor:
-                factor = f
-                break
-        # If the factor is not found, create it
-        if not factor:
-            factor = Factor(self._factor_name, processor)
-            # TODO Store Factor in the global index glb_idx.put(f_key, f)
-
-        # Add the observation. The value is an expression involving the factor of the parent
-        parent_name = self._parent.full_hierarchy_names()
-        if len(parent_name) > 0:
-            parent_name = parent_name[0]
-            if len(parent_name) > 1:
-                logger
-        fo = FactorQuantitativeObservation.create_and_append(v=QualifiedQuantityExpression(parent_name + ":" + self._factor_name+" * ("+self._quantity+")"),
-                                                             factor=f,
-                                                             observer=self._observer,
-                                                             tags=None,
-                                                             attributes={"relative_to": None,
-                                                                         "time": None,
-                                                                         "geolocation": None,
-                                                                         "spread": None,
-                                                                         "assessment": None,
-                                                                         "pedigree": None,
-                                                                         "pedigree_template": None,
-                                                                         "comments": None
-                                                                         }
-                                                             )
 
     @staticmethod
     def partial_key(parent: Processor=None, child: Processor=None, observer: Observer=None):

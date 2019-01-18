@@ -130,7 +130,6 @@ class ModelBuildingHierarchies(unittest.TestCase):
         with self.assertRaises(Exception):
             Taxon("Node3", interface_type)
 
-
     def test_hierarchy_of_processors(self):
         state = prepare_simple_processors_hierarchy()
         glb_idx, p_sets, hh, datasets, mappings = get_case_study_registry_objects(state)
@@ -447,13 +446,6 @@ class ModelBuildingFactors(unittest.TestCase):
         self.assertTrue(cs in f12.observations)
         self.assertTrue(cs in f3.observations)
 
-    def test_create_qq(self):
-        # Create a value with incorrect unit
-        with self.assertRaises(Exception) as ctx:
-            QualifiedQuantityExpression.nu(5, "non existent unit")
-
-        q2 = QualifiedQuantityExpression.nu(5, "m²")
-
     def test_processors_with_factors_with_one_observation(self):
         # Create a Hierarchy of FactorType
         prd = PartialRetrievalDictionary()
@@ -466,7 +458,7 @@ class ModelBuildingFactors(unittest.TestCase):
         # Observer of the Value
         oer = Observer("oer1")
         # Create an Observation with its value
-        fo = FactorQuantitativeObservation(QualifiedQuantityExpression.nu(5, "m²"), oer, f1)
+        fo = FactorQuantitativeObservation(5, oer, f1, attributes={"unit": "m²"})
         # Assign to the factor
         f1.observations_append(fo)
         # Check
@@ -485,8 +477,8 @@ class ModelBuildingFactors(unittest.TestCase):
         oer1 = Observer("oer1")
         oer2 = Observer("oer2")
         # Create a Value
-        fo1 = FactorQuantitativeObservation.create_and_append(QualifiedQuantityExpression.nu(5, "m²"), f1, oer1)
-        fo2 = FactorQuantitativeObservation.create_and_append(QualifiedQuantityExpression.nu(5, "m²"), f1, oer2)
+        fo1 = FactorQuantitativeObservation.create_and_append(5, f1, oer1, attributes={"unit": "m²"})
+        fo2 = FactorQuantitativeObservation.create_and_append(5, f1, oer2, attributes={"unit": "m²"})
         f1.observations_append(fo1)
         f1.observations_append(fo2)
         # Check

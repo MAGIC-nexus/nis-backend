@@ -5,8 +5,7 @@ import pandas as pd
 from openpyxl.worksheet import Worksheet
 
 from backend import IssuesLabelContentTripleType, AreaTupleType
-from backend.command_generators import Issue
-from backend.command_generators.spreadsheet_command_parsers_v2 import IssueLocation
+from backend.command_generators import Issue, IssueLocation
 from backend.common.helper import strcmp, create_dictionary
 
 

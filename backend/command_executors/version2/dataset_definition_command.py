@@ -1,9 +1,8 @@
 import json
 
-from backend.command_generators import Issue, parser_field_parsers
+from backend.command_generators import Issue, IssueLocation, parser_field_parsers
 from backend.command_generators.parser_ast_evaluators import dictionary_from_key_value_list
 from backend.command_generators.parser_field_parsers import url_parser
-from backend.command_generators.spreadsheet_command_parsers_v2 import IssueLocation
 from backend.common.helper import create_dictionary, load_dataset, prepare_dataframe_after_external_read
 from backend.model_services import IExecutableCommand, get_case_study_registry_objects
 from backend.models.musiasem_concepts import Hierarchy
