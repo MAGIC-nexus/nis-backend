@@ -13,7 +13,7 @@ from backend.models.musiasem_concepts import \
     ProcessorsRelationPartOfObservation, ProcessorsRelationUndirectedFlowObservation, \
     ProcessorsRelationUpscaleObservation, \
     FactorsRelationDirectedFlowObservation, Hierarchy, Taxon, \
-    FactorQuantitativeObservation, HierarchyLevel, Geolocation
+    FactorQuantitativeObservation, HierarchyLevel, Geolocation, FactorsRelationScaleObservation
 from backend.models.statistical_datasets import CodeList, CodeListLevel, Code
 
 

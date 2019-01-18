@@ -114,7 +114,7 @@ commands: List[Command] = [
             execution_class_name=None),
 
     Command(name="problem_statement", allowed_names=["ProblemStatement"], is_v2=True,
-            execution_class_name="backend.command_executors.version2.problem_statement_command.ProblemSolvingCommand"),
+            execution_class_name="backend.command_executors.version2.problem_statement_command.ProblemStatementCommand"),
 
     Command(name="datasetdata", allowed_names=["DatasetData"], is_v2=True,
             execution_class_name="backend.command_executors.version2.dataset_data_command.DatasetDataCommand",
