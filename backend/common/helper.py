@@ -1,31 +1,30 @@
 # -*- coding: utf-8 -*-
+import ast
 import base64
 import collections
-import mimetypes
-import uuid
-from io import BytesIO
-
-import jsonpickle
-import pandas as pd
-from pandas import DataFrame
-import urllib.request
 import functools
 import gzip
 import itertools
-# from numba import jit
-import ast
 import json
+import mimetypes
 import urllib
-from typing import IO, List, Tuple, Dict, Any, Optional
+import urllib.request
+import uuid
+from functools import partial
+from io import BytesIO
+from typing import IO, List, Tuple, Dict, Any, Optional, Iterable, Callable, TypeVar, Type
 from uuid import UUID
+
+import jsonpickle
 import numpy as np
+import pandas as pd
 from flask import after_this_request, request
 from multidict import MultiDict, CIMultiDict
-from functools import partial
+from pandas import DataFrame
 
 import backend
-from backend import case_sensitive, \
-                    SDMXConcept
+from backend import case_sensitive, SDMXConcept
+from backend.command_generators import Issue
 
 
 # #####################################################################################################################
@@ -43,7 +42,9 @@ def _json_serial(obj):
         return str(obj)
     elif isinstance(obj, np.int64):
         return int(obj)
-    raise TypeError("Type not serializable")
+    elif isinstance(obj, Issue):
+        return obj.__repr__()
+    raise TypeError(f"Type {type(obj)} not serializable")
 
 
 JSON_INDENT = 4
@@ -1198,6 +1199,42 @@ def ifnull(var, val):
     return var
 
 
+T = TypeVar('T')
+
+
+def head(l: List[T]) -> Optional[T]:
+    """
+    Returns the head element of the list or None if the list is empty.
+    :param l: The input list
+    :return: The head element of the list or None
+    """
+    if l:
+        return l[0]
+    else:
+        return None
+
+
+def first(iterable: Iterable[T],
+          condition: Callable[[T], bool] = lambda x: True,
+          default: Optional[T] = None) -> Optional[T]:
+    """
+    Returns the first item in the `iterable` that satisfies the `condition`.
+    If the condition is not given, returns the first item of the iterable.
+
+    Returns the `default` value if no item satisfying the condition is found.
+
+    >>> first( (1,2,3), condition=lambda x: x % 2 == 0)
+    2
+    >>> first(range(3, 100))
+    3
+    >>> first( () )
+    None
+    >>> first( (), default="Some" )
+    Some
+    """
+    return next((x for x in iterable if condition(x)), default)
+
+
 def translate_case(current_names: List[str], new_names: List[str]) -> List[str]:
     """
     Translate the names in the current_names list according the existing names in the new_names list that
@@ -1223,7 +1260,7 @@ def name_and_id_dict(obj: object) -> Optional[Dict]:
     if obj:
         return {"name": obj.name, "id": obj.uuid}
     else:
-        None
+        return None
 
 
 def get_value_or_list(current_value, additional_value):
@@ -1241,3 +1278,17 @@ def get_value_or_list(current_value, additional_value):
             return [current_value, additional_value]
     else:
         return additional_value
+
+
+def class_full_name(c: Type) -> str:
+    """ Get the full name of a class """
+    module = c.__module__
+    if module is None:
+        return c.__name__
+    else:
+        return module + '.' + c.__name__
+
+
+def object_full_name(o: object) -> str:
+    """ Get the full class name of an object """
+    return class_full_name(o.__class__)

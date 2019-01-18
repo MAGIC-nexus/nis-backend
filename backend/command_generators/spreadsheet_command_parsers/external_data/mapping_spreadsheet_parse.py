@@ -1,9 +1,12 @@
-from backend.common.helper import strcmp, obtain_dataset_source, obtain_dataset_metadata, \
-                                      check_dataset_exists, create_dictionary
+from openpyxl.worksheet import Worksheet
+
+from backend import IssuesLabelContentTripleType, AreaTupleType
 from backend.command_generators import parser_field_parsers
+from backend.common.helper import strcmp, obtain_dataset_metadata, \
+    check_dataset_exists, create_dictionary
 
 
-def parse_mapping_command(sh, area, origin, destination):
+def parse_mapping_command(sh: Worksheet, area: AreaTupleType, origin, destination) -> IssuesLabelContentTripleType:
     """
     Map from a set of categories from an external dataset into a set of MuSIASEM categories
     If the categories do not exist, they are created flat. Later they can be turned into a hierarchy and the mapping

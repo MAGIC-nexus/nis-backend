@@ -2,11 +2,9 @@ import json
 from io import StringIO
 import pandas as pd
 
-from backend.command_generators import Issue
-from backend.command_generators.spreadsheet_command_parsers_v2 import IssueLocation
+from backend.command_generators import Issue, IssueLocation
 from backend.model_services import IExecutableCommand, get_case_study_registry_objects
 from backend.common.helper import strcmp, prepare_dataframe_after_external_read
-from backend.models.statistical_datasets import Dataset
 
 
 class DatasetDataCommand(IExecutableCommand):
