@@ -1173,7 +1173,7 @@ class FactorType(Identifiable, HierarchyNode, HierarchyExpression, Taggable, Qua
 
 class Processor(Identifiable, Nameable, Taggable, Qualifiable, Automatable, Observable, Geolocatable, Encodable):
     INTERNAL_ATTRIBUTE_NAMES = frozenset({
-        'processor_type', 'functional_or_structural', 'instance_or_archetype', 'stock'
+        'subsystem_type', 'processor_system', 'functional_or_structural', 'instance_or_archetype', 'stock'
     })
 
     def __init__(self, name, attributes: Dict[str, Any] = None, geolocation: Geolocation = None, tags=None,
