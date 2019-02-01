@@ -1,5 +1,6 @@
 **/__pycache__
 .idea
+.mypy_cache
 
 dump\.rdb
 backend/restful_service/nis_docker_protagoras.conf

@@ -230,7 +230,7 @@ def serialize_isession_and_close_db_session(sess: InteractiveSession):
         csvs = sess._reproducible_session._session
         # csvs.version.state = st  # TODO New
         # sess._reproducible_session.state = st  # TODO New
-        if csvs.version:
+        if csvs and csvs.version:  # FIX: "csvs" may be None in some situations
             o_list = [csvs.version.case_study, csvs.version, csvs]
             o_list.extend(csvs.commands)
             d_list = serialize(o_list)
@@ -2545,8 +2545,12 @@ def data_source_database_dataset_detail(source_id, database_id, dataset_id):
         if d.get_hierarchy():
             # CodeList has one or more levels ".levels" property
             # CodeListLevel has zero or more Codes ".codes" property
-            for code in d.get_hierarchy().codes:
-                cl.append(dict(code=code.name, description=code.description, level=code.level.name if code.level else None))
+            if isinstance(d.get_hierarchy, list):
+                for v in d.get_hierarchy().codes:
+                    cl.append(dict(code=v.name, description=v.description, level=v.level.name if v.level else None))
+            else:  # Fix: codes can be in a dictionary
+                for v in d.get_hierarchy().codes.values():
+                    cl.append(dict(code=v.name, description=v.description, level=v.level.name if v.level else None))
 
         dims.append(dict(code=d.code, description=d.description, is_time=d.is_time, is_measure=d.is_measure, attributes=d.attributes, code_list=cl))
 

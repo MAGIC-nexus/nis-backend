@@ -999,7 +999,7 @@ def build_hierarchy(name, type_name, registry: PartialRetrievalDictionary, h: di
     """
     if type_name.lower() in ["p"]:
         type_name = "processor"
-    elif type_name.lower() in ["i"]:
+    elif type_name.lower() in ["i", "f"]:
         type_name = "factortype"
     elif type_name.lower() in ["c", "t"]:
         type_name = "taxon"
