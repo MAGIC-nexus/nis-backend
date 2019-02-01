@@ -1,3 +1,5 @@
+from collections import OrderedDict
+
 from openpyxl.worksheet import Worksheet
 
 from backend import AreaTupleType, IssuesLabelContentTripleType
@@ -97,63 +99,72 @@ def parse_dataset_qry_command(sh: Worksheet, area: AreaTupleType, name, state) -
     # TODO - Generate Schema for Mondrian
     # TODO - Write the Schema for Mondrian
 
-    measures = []
     out_dims = []
-    agg_funcs = []
-    measures_as = []
+
+    out_measures = OrderedDict()
+    for r in range(area[0]+1, area[1]+1):
+        out_measures[r] = dict(measure=None, agg_func=None, measure_as=None)
+
     filter_ = {}  # Cannot use "create_dictionary()" because CaseInsensitiveDict is NOT serializable (which is a requirement)
     result_name = None  # By default, no name for the result. It will be dynamically obtained
-    for c in range(area[2], area[3]):
+    measure_names_column = None
+    aggregations_column = None
+    for c in range(area[2], area[3]):  # Each column
         col_name = sh.cell(row=1, column=c).value
         if not col_name:
             continue
         if col_name.lower().strip() in ["resultdimensions", "dimensions"]:  # "GROUP BY"
             lst = obtain_column(c, area[0] + 1, area[1])
-            for d in lst:
+            for r, d in enumerate(lst):
                 if not d:
                     continue
                 if d not in cl:
                     issues.append(Issue(itype=3,
                                         description="The dimension specified for output, '"+d+"' is neither a dataset dimension nor a mapped dimension. ["+', '.join([d2 for d2 in cl])+"]",
-                                        location=IssueLocation(sheet_name=name, row=c + 1, column=None)))
+                                        location=IssueLocation(sheet_name=name, row=r + 1, column=c + 1)))
                 else:
                     out_dims.append(d)
         elif col_name.lower().strip() in ["resultmeasures", "measures"]:  # "SELECT"
+            measure_names_column = c
             lst = obtain_column(c, area[0] + 1, area[1])
             # Check for measures
             # TODO (and attributes?)
-            for m in lst:
+            for r, m in enumerate(lst):
                 if not m:
                     continue
                 if m not in meas:
                     issues.append(Issue(itype=3,
                                         description="The specified measure, '"+m+"' is not a measure available in the dataset. ["+', '.join([m2 for m2 in measures])+"]",
-                                        location=IssueLocation(sheet_name=name, row=c + 1, column=None)))
+                                        location=IssueLocation(sheet_name=name, row=r + 1, column=c + 1)))
                 else:
-                    measures.append(m)
+                    out_measures[r+area[0]+1]["measure"] = m
         elif col_name.lower().strip() in ["resultmeasuresaggregation", "resultmeasuresaggregator", "aggregation"]:  # "SELECT AGGREGATORS"
+            aggregations_column = c
             lst = obtain_column(c, area[0] + 1, area[1])
-            for f in lst:
+            for r, f in enumerate(lst):
+                if not f:
+                    continue
+
                 if f.lower() not in ["sum", "avg", "count", "sumna", "countav", "avgna", "pctna"]:
                     issues.append(Issue(itype=3,
                                         description="The specified aggregation function, '"+f+"' is not one of the supported ones: 'sum', 'avg', 'count', 'sumna', 'avgna', 'countav', 'pctna'",
-                                        location=IssueLocation(sheet_name=name, row=c + 1, column=None)))
+                                        location=IssueLocation(sheet_name=name, row=r + 1, column=c + 1)))
                 else:
-                    agg_funcs.append(f)
-        elif col_name.lower().strip() in ["resultmeasuresas", "measuresas"]:  # "AS <name>"
+                    out_measures[r+area[0]+1]["agg_func"] = f
+        elif col_name.lower().strip() in ["resultmeasurename", "resultmeasuresnames", "resultmeasuresas", "measuresas"]:  # "AS <name>"
             lst = obtain_column(c, area[0] + 1, area[1])
-            for m in lst:
-                measures_as.append(m)
+            for r, m in enumerate(lst):
+                out_measures[r+area[0]+1]["measure_as"] = m
         elif col_name in cl:  # A dimension -> "WHERE"
             # Check codes, and add them to the "filter"
             lst = obtain_column(c, area[0] + 1, area[1])
-            for cd in lst:
+            for r, cd in enumerate(lst):
                 if not cd:
                     continue
                 if str(cd) not in cl[col_name]:
                     issues.append(Issue(itype=3,
                                         description="The code '"+cd+"' is not present in the codes declared for dimension '"+col_name+"'. Please, check them.",
-                                        location=IssueLocation(sheet_name=name, row=c + 1, column=None)))
+                                        location=IssueLocation(sheet_name=name, row=r + 1, column=c + 1)))
                 else:
                     if col_name not in filter_:
                         lst2 = []
@@ -176,24 +187,63 @@ def parse_dataset_qry_command(sh: Worksheet, area: AreaTupleType, name, state) -
                 except:
                     issues.append(Issue(itype=3,
                                         description="Column '" + col_name + "' has an invalid dataset name '" + result_name + "'",
-                                        location=IssueLocation(sheet_name=name, row=c + 1, column=None)))
+                                        location=IssueLocation(sheet_name=name, row=2, column=c + 1)))
+
+    # If more than one agg function defined -> all must be defined
+    # If no agg func defined -> assume AVG
+    # If agg func defined only in first row -> extend to other columns
+    agg_funcs = [v["agg_func"] for v in out_measures.values() if v["agg_func"]]
+    if len(agg_funcs) > 1:
+        first_agg_func = None
+    elif len(agg_funcs) == 0:
+        issues.append(Issue(itype=2,
+                            description="No aggregation function specified. Assuming 'average'",
+                            location=IssueLocation(sheet_name=name, row=1, column=aggregations_column)))
+        first_agg_func = "avg"
+    else:  # One aggregation function
+        first_agg_func = out_measures[area[0]+1]["agg_func"]
+        if not first_agg_func:
+            issues.append(Issue(itype=3,
+                                description="The aggregation function must be defined in the first row",
+                                location=IssueLocation(sheet_name=name, row=1, column=aggregations_column)))
+
+    if first_agg_func:
+        for v in out_measures.values():
+            if v.get("measure", None):
+                v["agg_func"] = first_agg_func
+
+    # Uniform rows, with the three values defined: measure, aggregation function and "measure as"
+    for r, v in out_measures.items():
+        measure = v.get("measure", None)
+        agg_func = v.get("agg_func", None)
+        measure_as = v.get("measure_as", None)
+        if measure and not agg_func or not measure and agg_func:
+            issues.append(Issue(itype=3,
+                                description="Each measure must be associated with an aggregation function",
+                                location=IssueLocation(sheet_name=name, row=r, column=measure_names_column)))
+        elif measure and not measure_as:
+            v["measure_as"] = measure + "_" + agg_func
+
+    measures = [v["measure"] for v in out_measures.values() if v["measure"]]
+    measures_as = [v["measure_as"] for v in out_measures.values() if v["measure_as"]]
+    agg_funcs = [v["agg_func"] for v in out_measures.values() if v["agg_func"]]
 
     if len(measures) == 0:
         issues.append(Issue(itype=3,
                             description="At least one measure should be specified",
-                            location=IssueLocation(sheet_name=name, row=c + 1, column=None)))
+                            location=IssueLocation(sheet_name=name, row=1, column=measure_names_column)))
 
-    if len(agg_funcs) == 0:
-        issues.append(Issue(itype=2,
-                            description="No aggregation function specified. Assuming 'average'",
-                            location=IssueLocation(sheet_name=name, row=c + 1, column=None)))
-        agg_funcs.append("average")
+    # measures != agg_funcs && len(agg_funcs) == 1 --> OK
+    if len(measures) != len(agg_funcs) and len(agg_funcs) != 1:
+        issues.append(Issue(itype=3,
+                            description="There must be one aggregation function (used for all measures) or one aggregation per measure",
+                            location=IssueLocation(sheet_name=name, row=1, column=aggregations_column)))
 
     if not result_name:
         result_name = source + "_" + dataset_name
         issues.append(Issue(itype=2,
                             description="No result name specified. Assuming '"+result_name+"'",
-                            location=IssueLocation(sheet_name=name, row=c + 1, column=None)))
+                            location=IssueLocation(sheet_name=name, row=2, column=c + 1)))
 
     content = {"dataset_source": source,
                "dataset_name": dataset_name,
