@@ -5,12 +5,12 @@ from backend import IssuesOutputPairType, CommandField
 from backend.command_field_definitions import get_command_fields_from_class
 from backend.common.helper import head, strcmp, PartialRetrievalDictionary
 from backend.model_services import IExecutableCommand, State, get_case_study_registry_objects
-from command_generators import Issue, IType, IssueLocation
-from command_generators.parser_ast_evaluators import ast_evaluator
-from command_generators.parser_field_parsers import string_to_ast, expression_with_parameters
-from models.musiasem_concepts import Processor, ProcessorsRelationPartOfObservation, Factor, \
+from backend.command_generators import Issue, IType, IssueLocation
+from backend.command_generators.parser_ast_evaluators import ast_evaluator
+from backend.command_generators.parser_field_parsers import string_to_ast, expression_with_parameters
+from backend.models.musiasem_concepts import Processor, ProcessorsRelationPartOfObservation, Factor, \
     ProcessorsRelationUpscaleObservation
-from models.musiasem_concepts_helper import find_processor_by_name
+from backend.models.musiasem_concepts_helper import find_processor_by_name
 
 
 class CommandExecutionError(Exception):

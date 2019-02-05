@@ -1,4 +1,6 @@
 import importlib
+from enum import Enum
+
 import regex as re
 from typing import Optional, Any, List, Tuple, Callable, Dict, Union, Type
 
@@ -90,6 +92,25 @@ def simple_regex(names: List[str]):
 # Commands
 
 
+class CommandType(Enum):
+    input = (1, "Input")
+    core = (2, "Core")
+    convenience = (3, "Convenience")
+    metadata = (4, "Metadata")
+    analysis = (5, "Analysis")
+    misc = (99, "Miscellaneous")
+
+    def __str__(self):
+        return self.value[1]
+
+    @classmethod
+    def from_string(cls, s):
+        for ct in cls:
+            if ct.value[1] == s:
+                return ct
+        raise ValueError(cls.__name__ + ' has no value matching "' + s + '"')
+
+
 @attrs(cmp=False)  # Constant and Hashable by id
 class Command:
     # Name, the lowercase unique name
@@ -98,6 +119,12 @@ class Command:
     allowed_names = attrib()  # type: List[str]
     # Name of the subclass of IExecutableCommand in charge of the execution
     execution_class_name = attrib()  # type: Optional[str]
+    # Command type
+    cmd_type = attrib()  # type: CommandType
+    # Direct examples
+    direct_examples = attrib(default=[])  # type: Optional[List[str]]
+    # URLs of files where it is used
+    files = attrib(default=[])  # type: Optional[List[str]]
     # Alternative regular expression for worksheet name, otherwise the simple_regex() is used
     alt_regex = attrib(default=None)
     # Parse function, having params (Worksheet, Area) and returning a tuple (issues, label, content)

@@ -26,6 +26,7 @@ import json
 # >>>>>>>>>> IMPORTANT <<<<<<<<<
 # For debugging in local mode, prepare an environment variable "MAGIC_NIS_SERVICE_CONFIG_FILE", with value "./nis_local.conf"
 # >>>>>>>>>> IMPORTANT <<<<<<<<<
+from backend.command_definitions import commands
 from backend.command_field_definitions import command_fields
 from backend.command_generators import Issue
 from backend.command_generators.parser_field_parsers import string_to_ast
@@ -2619,6 +2620,11 @@ def validate_command_record():
     (the client can send what the user just entered, the server, this function, will respond
      None the field is ok, and an error message if not)
 
+    The input comes in a JSON field "content":
+    {"command": "<command name",
+     "fields": {"<field name>": "<value", ...}
+    }
+
     :return: A dictionary with the same fields of the input dictionary, whose values are the diagnosis, None being
             everything-ok, and a string being a message describing the problem.
     """
@@ -2671,12 +2677,98 @@ def validate_command_record():
     return build_json_response(result)
 
 
+def get_misc_cmd_help(cmd_name):
+    if cmd_name == "metadata":
+        return {"type": "Metadata", "by_rows": False, "name": "Metadata", "template":
+"Case study code\n\
+Case study name\n\
+Title\n\
+Subject, topic and/or keywords\n\
+Description\n\
+Geographical level\n\
+Dimensions\n\
+Reference documentation\n\
+Authors\n\
+Date of elaboration\n\
+Temporal situation\n\
+Geographical location\n\
+DOI\n\
+Language\n\
+Restriction level\n\
+Version", "examples": [
+"Case study code\tCS3_R_WEF_P-0.1\n\
+Case study name\n\
+Title\tSoslaires\n\
+Subject, topic and/or keywords\n\
+Description\tA small scale system combining Energy, Water and Food\n\
+Geographical level\tLocal\n\
+Dimensions\tEnergy\tWater\tFood\n\
+Reference documentation\n\
+Authors\tAna Musicki\tBaltasar Peñate\tTarik Serrrano\n\
+Date of elaboration\t2016\n\
+Temporal situation\t2016\n\
+Geographical location\tGran Canaria\n\
+DOI\n\
+Language\tEnglish\n\
+Restriction level\tPublic\n\
+Version\tV0.1"]}
+    elif cmd_name == "pedigree_matrix":
+        return {"type": "Metadata", "name": "NUSAP.PM", "template":
+"Code\t<Phase name #1>\t<Phase name #2>\t<Phase name #3>\t...",
+         "examples": [
+"Code\tTheoreticalStructures\tDataInput\tPeerAcceptance\tColleagueConsensus\n\
+4\tEstablishedTheory\tExperimentalData\tTotal\tAllButCranks\n\
+3\tTheoreticallyBasedModel\tHistoricFieldData\tHigh\tAllButRebels\n\
+2\tComputationalModel\tCalculatedData\tMedium\tCompetingSchools\n\
+1\tStatisticalProcessing\tEducatedGuess\tLow\tEmbryonicField\n\
+0\tDefinitions\tUneducatedGuess\tNone\tNoOpinion",
+"Code\tModelStructure\tDataInput\tTesting\n\
+4\tComprehensive\tReview\tCorroboration\n\
+3\tFiniteElementApproximation\tHistoricField\tComparison\n\
+2\tTransferFunction\tExperimental\tUncertaintyAnalysis\n\
+1\tStatisticalProcessing\tCalculated\tSensitivityAnalysis\n\
+0\tDefinitions\tExpertGuess\tNone",
+"Code\tDefinitionsAndStandards\tDataCollectionAndAnalysis\tInstitutionalCulture\tReview\n\
+5\tNegotiation\tTaskForce\tDialogue\tExternal\n\
+4\tScience\tDirectSurvey\tAccomodation\tIndependent\n\
+3\tConvenience\tIndirectEstimate\tObedience\tRegular\n\
+2\tSymbolism\tEducatedGuess\tEvasion\tOccasional\n\
+1\tInertia\tFiat\tNoContact\tNone\n\
+0\tUnknown\tUnknown\tUnknown\tUnknown"
+         ]
+         }
+
+
+def get_regular_cmd_help(cmd: backend.Command):
+    ctype = str(cmd.cmd_type)
+    cmdflds = command_fields.get(cmd.name, None)
+    examples = cmd.direct_examples
+    files = cmd.files
+    return dict(type=ctype,
+                name=cmd.allowed_names[0],
+                template="\t".join([f.allowed_names[0] for f in cmdflds if "@" not in f.allowed_names[0]]),
+                examples=[]
+                )
+
+
 @app.route(nis_api_base + "/commands_reference.json", methods=["GET"])
 def obtain_commands_reference():
     # Recover InteractiveSession
     isess = deserialize_isession_and_prepare_db_session()
     if isess and isinstance(isess, Response):
         return isess
+
+    d = []
+    for cmd in commands:
+        if cmd.is_v2:
+            if command_fields.get(cmd.name, None):
+                d.append(get_regular_cmd_help(cmd))
+            else:
+                d.append(get_misc_cmd_help(cmd.name))
+
+    return build_json_response([e for e in d if e])
+
+"""
     d = [
         {"type": "External dataset", "name": "Mapping", "template":
             "<Source dimension from external dataset>\t<Target internal taxonomy>\t<Weight (optional, default 1 (many-to-one), <1 for many-to-many mappings)>",
@@ -2894,8 +2986,8 @@ Society\tEncompassess the human realm\n\
          "examples": []
          }
     ]
+"""
 
-    return build_json_response(d)
 # @app.route(nis_api_base + "/sources/<id>/databases/<database_id>/datasets/<dataset_id>", methods=["GET"])
 # def data_source_database_dataset_query(id, database_id, dataset_id):
 #     """
