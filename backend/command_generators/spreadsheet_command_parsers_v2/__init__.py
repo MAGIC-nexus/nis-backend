@@ -80,7 +80,7 @@ def parse_command(sh: Worksheet, area: AreaTupleType, name: Optional[str], cmd_n
 
     issues: List[Issue] = []
 
-    from command_field_definitions import command_fields
+    from backend.command_field_definitions import command_fields
 
     cols = command_fields[cmd_name]  # List of CommandField that will guide the parsing
     col_map, local_issues = check_columns(sh, name, area, cols, cmd_name)

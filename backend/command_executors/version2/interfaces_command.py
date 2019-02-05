@@ -14,7 +14,7 @@ from backend.models.musiasem_concepts import PedigreeMatrix, Reference, FactorTy
     Processor, Factor, FactorInProcessorType, Observer, Parameter
 from backend.models.musiasem_concepts_helper import _create_quantitative_observation
 from backend.solving import get_processor_names_to_processors_dictionary
-from command_field_definitions import get_command_fields_from_class
+from backend.command_field_definitions import get_command_fields_from_class
 
 
 class InterfacesAndQualifiedQuantitiesCommand(IExecutableCommand):

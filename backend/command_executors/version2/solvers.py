@@ -1,3 +1,4 @@
+import json
 from backend.model_services import IExecutableCommand, get_case_study_registry_objects
 from backend.solving.solver_one import solver_one
 
