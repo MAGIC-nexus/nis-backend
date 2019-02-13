@@ -1,10 +1,35 @@
-import networkx as nx
 
 # ######################################################################################################################
 # GRAPH PARTITIONING - SCENARIO (PARAMETERS), SINGLE SCENARIO PARTITION CATEGORIES, IN-SCENARIO OBSERVATIONS VARIATION
 # ######################################################################################################################
-from backend.model_services import get_case_study_registry_objects
+from model_services import get_case_study_registry_objects
+import networkx as nx
 
+
+def get_contexts(objects):
+    """
+
+    :param objects:
+    :return:
+    """
+    pass
+
+
+def get_graph_partitioning_categories(objects):
+    """
+    Obtain categories known to partition the graph (into components)
+
+    The most important one is usually "GEO"
+
+    :param objects:
+    :return: A list of partition categories
+    """
+    return ["GEO"]  # TODO Ensure that processors get category "GEO"
+
+
+# ######################################################################################################################
+# PARAMETERS - SCENARIOS. Global parameters. Scenarios to make
+# ######################################################################################################################
 
 def get_parameters(objects):
     """
@@ -21,24 +46,12 @@ def get_parameters(objects):
 def map_parameters(params, objects):
     """
     Scan all occurrences of parameters
-    Put a list in each parameter pointing to the parameter occurrence
+    Put a list in each parameter pointing to the parameter occurrence (expressions)
 
     :param params:
     :param objects:
     :return:
     """
-
-
-def get_graph_partitioning_categories(objects):
-    """
-    Obtain categories known to partition the graph (into components)
-
-    The most important one is usually "GEO"
-
-    :param objects:
-    :return: A list of partition categories
-    """
-    return ["GEO"]  # TODO Ensure that processors get category "GEO"
 
 
 def get_observation_variation_categories(objects):
@@ -229,6 +242,8 @@ def solve(g):
     """
     #
     # Elaborate square matrix?
+
+
 
 
 def solver_one(state):

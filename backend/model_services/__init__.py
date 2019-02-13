@@ -3,7 +3,7 @@ import uuid
 from abc import ABCMeta, abstractmethod  # Abstract Base Class
 
 import logging
-from typing import List, Union, Dict
+from typing import List, Union, Dict, Any
 
 from backend import Issue, IssuesOutputPairType
 from backend.common.helper import create_dictionary, PartialRetrievalDictionary
@@ -251,6 +251,17 @@ class State:
             namespace_name = self._default_namespace
 
         return self._namespaces[namespace_name].list_all()
+
+    def update(self, d: Dict[str, Any], namespace_name=None):
+        if namespace_name is None:
+            namespace_name = self._default_namespace
+
+        if namespace_name not in self._namespaces:
+            self.new_namespace(namespace_name)
+
+        for name, entity in d.items():
+            self._namespaces[namespace_name].set(name, entity)
+        # self._namespaces[namespace_name].update(d)
 
     def set(self, name, entity, namespace_name=None):
         if namespace_name is None:

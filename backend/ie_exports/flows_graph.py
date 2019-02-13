@@ -3,7 +3,7 @@ import networkx as nx
 from backend.solving import *
 from backend import ureg
 from backend.command_generators.parser_ast_evaluators import ast_to_string
-from backend.models.musiasem_concepts_helper import find_or_create_observable
+from backend.models.musiasem_concepts_helper import find_or_create_observable, find_quantitative_observations
 from backend.restful_service.serialization import deserialize_state
 from backend.command_generators import parser_field_parsers
 
@@ -96,7 +96,6 @@ def construct_flow_graph(state: State, query: IQueryObjects, filt: Union[str, di
 
     # Obtain the information needed to elaborate the graph
     objs = query.execute([Processor, Factor, FactorType,
-                          FactorQuantitativeObservation,
                           FactorTypesRelationUnidirectionalLinearTransformObservation,
                           ProcessorsRelationPartOfObservation, ProcessorsRelationUpscaleObservation,
                           ProcessorsRelationUndirectedFlowObservation,
@@ -138,7 +137,7 @@ def construct_flow_graph(state: State, query: IQueryObjects, filt: Union[str, di
     qqs = {}
     qq_cont = 0
     factors_with_some_observation = set()
-    for o in objs[FactorQuantitativeObservation]:
+    for o in find_quantitative_observations(glb_idx):
         # Index quantitative observations.
         if "relative_to" in o.attributes and o.attributes["relative_to"]:
             continue  # Do not index intensive quantities, because they are translated as edges in the graph

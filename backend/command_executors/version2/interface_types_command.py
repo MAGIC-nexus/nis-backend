@@ -23,8 +23,7 @@ class InterfaceTypesCommand(IExecutableCommand):
             ft_formula = item.get("formula", None)
             ft_description = item.get("description", None)
             ft_unit = item.get("unit", None)
-            ft_orientation = item.get("orientation", None)
-            ft_opposite_processor_type = item.get("opposite_processor_type", None)
+            # ft_orientation = item.get("orientation", None)
             ft_unit = item.get("unit", None)
             ft_attributes = item.get("attributes", {})
             if ft_attributes:
@@ -98,12 +97,12 @@ class InterfaceTypesCommand(IExecutableCommand):
 
                 ft = FactorType(ft_name,
                                 parent=parent, hierarchy=hie,
-                                tipe=roegen_type,
+                                roegen_type=roegen_type,
                                 tags=None,  # No tags
-                                attributes=dict(sphere=ft_sphere, unit=ft_unit, description=ft_description, **ft_attributes),
+                                attributes=dict(unit=ft_unit, description=ft_description, **ft_attributes),
                                 expression=ft_formula,
-                                orientation=ft_orientation,
-                                opposite_processor_type=ft_opposite_processor_type
+                                # orientation=ft_orientation,
+                                sphere=ft_sphere
                                 )
                 # Simple name
                 glb_idx.put(FactorType.partial_key(ft_name, ft.ident), ft)

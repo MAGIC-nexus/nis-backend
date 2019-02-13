@@ -6,9 +6,10 @@ https://gist.github.com/cynici/5865326
 
 """
 import importlib
-
+from typing import Dict
 from pyparsing import quotedString
 
+from backend.model_services import State
 from backend.command_generators.parser_field_parsers import string_to_ast, arith_boolean_expression, key_value_list, \
     simple_ident, expression_with_parameters
 from backend.common.helper import create_dictionary, PartialRetrievalDictionary
@@ -38,17 +39,17 @@ opMap = {
         }
 
 
-def ast_evaluator(exp, state, obj, issue_lst, evaluation_type="numeric"):
+def ast_evaluator(exp: Dict, state: State, obj, issue_lst, evaluation_type="numeric"):
     """
     Numerically evaluate the result of the parse of "expression" rule (not valid for the other "expression" rules)
 
-    :param exp: Input dictionary
-    :param state: State used to obtain variables/objects
+    :param exp: Dictionary representing the AST (output of "string_to_ast" function)
+    :param state: "State" used to obtain variables/objects
     :param obj: An object used when evaluating hierarchical variables. simple names, functions and datasets are considered members of this object
     :param issue_lst: List in which issues have to be annotated
     :param evaluation_type: "numeric" for full evaluation, "static" to return True if the expression can be evaluated
             (explicitly mentioned variables are defined previously)
-    :return: value (scalar EXCEPT for named parameters, which return a tuple "parameter name - parameter value"
+    :return: value (scalar EXCEPT for named parameters, which return a tuple "parameter name - parameter value"), list of unresolved variables
     """
     val = None
     unresolved_vars = set()
@@ -168,7 +169,7 @@ def ast_evaluator(exp, state, obj, issue_lst, evaluation_type="numeric"):
                     if obj is None:
                         obj = state.get(o, _namespace)
                         if not obj:
-                            issue_lst.append((3, "'" + o + "' is not globally declared in namespace '" + _namespace if _namespace else "default" + "'"))
+                            issue_lst.append((3, "'" + o + "' is not globally declared in namespace '" + (_namespace if _namespace else "default") + "'"))
                             if _namespace:
                                 unresolved_vars.add(_namespace+"::"+o)
                             else:
@@ -192,7 +193,8 @@ def ast_evaluator(exp, state, obj, issue_lst, evaluation_type="numeric"):
                     obj = ast_evaluator(o, state, obj, issue_lst, evaluation_type)
             if obj is None or isinstance(obj, (str, int, float, bool)):
                 return obj, unresolved_vars
-            # TODO elif isinstance(obj, ...) depending on core object types, invoke a default method, or issue ERROR if it is not possible to cast to something simple
+            # TODO elif isinstance(obj, ...) depending on core object types, invoke a default method, or
+            #  issue ERROR if it is not possible to cast to something simple
             else:
                 return obj, unresolved_vars
         elif t in ("u+", "u-", "multipliers", "adders", "comparison", "not", "and", "or"):  # Arithmetic and Boolean
@@ -220,7 +222,6 @@ def ast_evaluator(exp, state, obj, issue_lst, evaluation_type="numeric"):
                             pass  # Do nothing
                         else:  # In others cases, CAST to the operand of the left. This may result in an Exception
                             following = type(current)(following)
-
 
                         op = exp["ops"][i].lower()
                         if op in ("+", "-", "u+", "u-"):
@@ -412,7 +413,7 @@ def dictionary_from_key_value_list(kvl, state: PartialRetrievalDictionary = None
 
 
 if __name__ == '__main__':
-    from backend.model_services import State
+    from backend.model_services import State, State, State, State
     from dotted.collection import DottedDict
 
     issues = []
@@ -436,14 +437,15 @@ if __name__ == '__main__':
     for e in examples:
         try:
             ast = string_to_ast(arith_boolean_expression, e)
+            issues = []
             res, unres = ast_evaluator(ast, s, None, issues)
-            print(ast)
+            print(e+":: AST: "+str(ast))
             if len(unres) > 0:
                 print("Unresolved variables: "+str(unres))
             else:
                 print(str(type(res)) + ": " + str(res))
-        except:
-            print("Incorrect")
+        except Exception as e2:
+            print("Incorrect: "+e+": "+str(e2))
 
     s.set("HH", DottedDict({"Power": {"p": 34.5, "Price": 2.3}}))
     s.set("EN", DottedDict({"Power": {"Price": 1.5}}))
@@ -472,8 +474,8 @@ if __name__ == '__main__':
     ]
     for example in examples:
         print(example)
-        res = string_to_ast(expression, example)
+        res = string_to_ast(arith_boolean_expression, example)
         print(res)
         issues = []
-        value = ast_evaluator(res, s, None, issues)
-        print(str(type(value))+": "+str(value))
+        value, unres = ast_evaluator(res, s, None, issues)
+        print(str(type(value))+": "+str(value)+"; unresolved: "+unres)

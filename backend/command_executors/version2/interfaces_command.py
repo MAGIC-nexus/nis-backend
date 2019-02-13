@@ -2,17 +2,18 @@ import json
 import re
 
 from pint import UndefinedUnitError
+from typing import Dict
 
-from backend import ureg
+from backend import ureg, CommandField
 from backend.command_executors.execution_helpers import parse_line, classify_variables, \
     obtain_dictionary_with_literal_fields
 from backend.command_generators import parser_field_parsers, Issue, IssueLocation, IType
 from backend.command_generators.parser_ast_evaluators import dictionary_from_key_value_list, ast_to_string
-from backend.common.helper import strcmp, first
+from backend.common.helper import strcmp, first, ifnull
 from backend.model_services import IExecutableCommand, get_case_study_registry_objects
 from backend.models.musiasem_concepts import PedigreeMatrix, Reference, FactorType, \
     Processor, Factor, FactorInProcessorType, Observer, Parameter
-from backend.models.musiasem_concepts_helper import _create_quantitative_observation
+from backend.models.musiasem_concepts_helper import _create_or_append_quantitative_observation
 from backend.solving import get_processor_names_to_processors_dictionary
 from backend.command_field_definitions import get_command_fields_from_class
 
@@ -136,7 +137,7 @@ class InterfacesAndQualifiedQuantitiesCommand(IExecutableCommand):
                         #     # yield item
                         #     raise Exception("If 'complex' is signaled, it should not pass by this line")
             else:
-                print("Single: "+str(item))
+                # print("Single: "+str(item))
                 yield item
 
         def process_row(item):
@@ -148,40 +149,44 @@ class InterfacesAndQualifiedQuantitiesCommand(IExecutableCommand):
 
             :param row: dictionary
             """
-            # Gather variables
+            # Gather variables in one dictionary
+            fields_value = {k: item.get(k, v.default_value) for k, v in fields.items()}
+
+            # Check if mandatory fields with no value exist
+            for field in [k for k, v in fields.items() if v.mandatory and not fields_value[k]]:
+                add_issue(IType.error(), f"Mandatory field '{field}' is empty. Skipped.")
+                return
+
             # Interface
-            f_alias = item.get("alias", None)  # Optional, simple_ident
-            f_interface_name = item.get("interface", None)  # Optional, simple_ident
-            f_interface_type_name = item.get("interface_type", None)  # Optional, simple_ident
-            f_processor_name = item.get("processor", None)  # Optional, simple_ident
-            f_sphere = item.get("sphere", None)  # Optional, simple_ident
-            f_roegen_type = item.get("roegen_type", None)  # Optional, simple_ident
-            f_orientation = item.get("orientation", None)  # Optional, simple_ident
-            f_opposite_processor_type = item.get("opposite_processor_type", None)
-            f_interface_attributes = item.get("interface_attributes", {})  # Optional, simple_ident
-            f_location = item.get("location", None)  # Optional, simple_ident
+            f_alias = item.get("alias", None)
+            f_interface_name = item.get("interface", None)
+            f_interface_type_name = item.get("interface_type", None)
+            f_processor_name = item.get("processor", None)
+            f_location = item.get("location", None)
 
             # Qualified Quantity
-            f_value = item.get("value", None)  # Optional, simple_ident
-            f_unit = item.get("unit", None)  # Optional, simple_ident
-            f_uncertainty = item.get("uncertainty", None)  # Optional, simple_ident
-            f_assessment = item.get("assessment", None)  # Optional, simple_ident
-            f_pedigree_matrix = item.get("pedigree_matrix", None)  # Optional, simple_ident
-            f_pedigree = item.get("pedigree", None)  # Optional, simple_ident
-            f_relative_to = item.get("relative_to", None)  # Optional, simple_ident
-            f_time = item.get("time", None)  # Optional, simple_ident
-            f_source = item.get("qq_source", None)  # Optional, simple_ident
-            f_number_attributes = item.get("number_attributes", {})  # Optional, simple_ident
-            f_comments = item.get("comments", None)  # Optional, simple_ident
+            f_value = item.get("value", None)
+            f_unit = item.get("unit", None)
+            f_uncertainty = item.get("uncertainty", None)
+            f_assessment = item.get("assessment", None)
+            f_pedigree_matrix = item.get("pedigree_matrix", None)
+            f_pedigree = item.get("pedigree", None)
+            f_relative_to = item.get("relative_to", None)
+            f_time = item.get("time", None)
+            f_source = item.get("qq_source", None)
+            f_number_attributes = item.get("number_attributes", {})
+            f_comments = item.get("comments", None)
 
-            if f_interface_attributes:
+            # Transform text of "interface_attributes" into a dictionary
+            field_val = fields_value.get("interface_attributes", None)
+            if field_val:
                 try:
-                    iface_attributes = dictionary_from_key_value_list(f_interface_attributes, glb_idx)
+                    fields_value["interface_attributes"] = dictionary_from_key_value_list(field_val, glb_idx)
                 except Exception as e:
                     add_issue(IType.error(), str(e))
                     return
             else:
-                iface_attributes = {}
+                fields_value["interface_attributes"] = {}
 
             if f_number_attributes:
                 try:
@@ -268,10 +273,10 @@ class InterfacesAndQualifiedQuantitiesCommand(IExecutableCommand):
                 for ff in p.factors:
                     if strcmp(f.name, possibly_local_interface_name):
                         f = ff
-                        ft = f.taxon
+                        ft: FactorType = f.taxon
                         break
             else:
-                ft = None
+                ft: FactorType = None
 
             if not ft:
                 # Find FactorType
@@ -288,23 +293,33 @@ class InterfacesAndQualifiedQuantitiesCommand(IExecutableCommand):
                     ft = ft[0]
 
             if not f:
-                if not f_orientation and ft.orientation:
-                    f_orientation = ft.orientation
-                if not f_opposite_processor_type and ft.opposite_processor_type:
-                    f_orientation = ft.opposite_processor_type
                 # Find or Create Interface
                 f = glb_idx.get(Factor.partial_key(processor=p, factor_type=ft))
+
                 if not f:
+                    # Get attributes default values taken from Interface Type or Processor attributes
+                    default_values = {
+                        # "orientation": ft.orientation,
+                        "sphere": ft.sphere,
+                        "roegen_type": ft.roegen_type,
+                        "opposite_processor_type": p.subsystem_type
+                    }
+
+                    # Get internal and user-defined attributes in one dictionary
+                    attributes = {k: ifnull(fields_value[k], default_values.get(k, None))
+                                  for k, v in fields.items() if v.attribute_of == Factor}
+                    attributes.update(fields_value["interface_attributes"])
+
                     f = Factor.create_and_append(f_interface_type_name,
                                                  p,
                                                  in_processor_type=FactorInProcessorType(
-                                                     external=f_opposite_processor_type,
-                                                     incoming=f_orientation
+                                                     external=False,
+                                                     incoming=False
                                                  ),
                                                  taxon=ft,
                                                  geolocation=f_location,
                                                  tags=None,
-                                                 attributes=iface_attributes)
+                                                 attributes=attributes)
                     glb_idx.put(f.key(), f)
                 else:
                     f = f[0]
@@ -337,15 +352,21 @@ class InterfacesAndQualifiedQuantitiesCommand(IExecutableCommand):
 
             # Create quantitative observation
             if f_value:
-                o = _create_quantitative_observation(f,
-                                                     f_value, f_unit, f_uncertainty, f_assessment, f_pedigree, f_pedigree_matrix,
-                                                     oer,
-                                                     f_relative_to,
-                                                     f_time,
-                                                     None,
-                                                     f_comments,
-                                                     None, number_attributes
-                                                     )
+
+                # If an observation exists then "time" is mandatory
+                if not f_time:
+                    add_issue(IType.error(), f"Field 'time' needs to be specified for the given observation.")
+                    return
+
+                o = _create_or_append_quantitative_observation(f,
+                                                               f_value, f_unit, f_uncertainty, f_assessment, f_pedigree, f_pedigree_matrix,
+                                                               oer,
+                                                               f_relative_to,
+                                                               f_time,
+                                                               None,
+                                                               f_comments,
+                                                               None, number_attributes
+                                                               )
 
                 # TODO Register? Disable for now. Observation can be obtained from a pass over all Interfaces
                 # glb_idx.put(o.key(), o)
@@ -364,7 +385,7 @@ class InterfacesAndQualifiedQuantitiesCommand(IExecutableCommand):
         name = self._content["command_name"]
 
         # CommandField definitions for the fields of Interface command
-        fields = {f.name: f for f in get_command_fields_from_class(self.__class__)}
+        fields: Dict[str, CommandField] = {f.name: f for f in get_command_fields_from_class(self.__class__)}
         # Obtain the names of all parameters
         parameters = [p.name for p in glb_idx.get(Parameter.partial_key())]
         # Obtain the names of all processors
@@ -412,28 +433,28 @@ class InterfacesAndQualifiedQuantitiesCommand(IExecutableCommand):
             # """
             # # Gather variables
             # # Interface
-            # f_alias = r.get("alias", None)  # Optional, simple_ident
-            # f_interface_name = r.get("interface", None)  # Optional, simple_ident
-            # f_interface_type_name = r.get("interface_type", None)  # Optional, simple_ident
-            # f_processor_name = r.get("processor", None)  # Optional, simple_ident
-            # f_sphere = r.get("sphere", None)  # Optional, simple_ident
-            # f_roegen_type = r.get("roegen_type", None)  # Optional, simple_ident
-            # f_orientation = r.get("orientation", None)  # Optional, simple_ident
-            # f_interface_attributes = r.get("interface_attributes", {})  # Optional, simple_ident
-            # f_location = r.get("location", None)  # Optional, simple_ident
+            # f_alias = r.get("alias", None)
+            # f_interface_name = r.get("interface", None)
+            # f_interface_type_name = r.get("interface_type", None)
+            # f_processor_name = r.get("processor", None)
+            # f_sphere = r.get("sphere", None)
+            # f_roegen_type = r.get("roegen_type", None)
+            # f_orientation = r.get("orientation", None)
+            # f_interface_attributes = r.get("interface_attributes", {})
+            # f_location = r.get("location", None)
             #
             # # Qualified Quantity
-            # f_value = r.get("value", None)  # Optional, simple_ident
-            # f_unit = r.get("unit", None)  # Optional, simple_ident
-            # f_uncertainty = r.get("uncertainty", None)  # Optional, simple_ident
-            # f_assessment = r.get("assessment", None)  # Optional, simple_ident
-            # f_pedigree_matrix = r.get("pedigree_matrix", None)  # Optional, simple_ident
-            # f_pedigree = r.get("pedigree", None)  # Optional, simple_ident
-            # f_relative_to = r.get("relative_to", None)  # Optional, simple_ident
-            # f_time = r.get("time", None)  # Optional, simple_ident
-            # f_source = r.get("qq_source", None)  # Optional, simple_ident
-            # f_number_attributes = r.get("number_attributes", {})  # Optional, simple_ident
-            # f_comments = r.get("comments", None)  # Optional, simple_ident
+            # f_value = r.get("value", None)
+            # f_unit = r.get("unit", None)
+            # f_uncertainty = r.get("uncertainty", None)
+            # f_assessment = r.get("assessment", None)
+            # f_pedigree_matrix = r.get("pedigree_matrix", None)
+            # f_pedigree = r.get("pedigree", None)
+            # f_relative_to = r.get("relative_to", None)
+            # f_time = r.get("time", None)
+            # f_source = r.get("qq_source", None)
+            # f_number_attributes = r.get("number_attributes", {})
+            # f_comments = r.get("comments", None)
             #
             # # Check if row contains a reference to dataset and/or category hierarchy, or something
             # # If a row contains a reference to a dataset, expand it

@@ -135,7 +135,7 @@ commands: List[Command] = [
 
     Command(name="problem_statement", allowed_names=["ProblemStatement"], is_v2=True,
             cmd_type=CommandType.analysis,
-            execution_class_name="backend.command_executors.version2.problem_statement_command.ProblemSolvingCommand"),
+            execution_class_name="backend.command_executors.version2.problem_statement_command.ProblemStatementCommand"),
 
     Command(name="datasetdata", allowed_names=["DatasetData"], is_v2=True,
             cmd_type=CommandType.input,

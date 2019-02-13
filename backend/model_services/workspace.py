@@ -9,15 +9,18 @@ import json
 import logging
 import uuid
 from enum import Enum
-from typing import List, Union
+from typing import List, Union, Dict, Set
 
 import sqlalchemy
 
 import backend
 from backend.command_generators import Issue, IssueLocation, IType
 from backend.command_generators.parsers_factory import commands_container_parser_factory
-from backend.model_services import IExecutableCommand
+from backend.common.helper import create_dictionary
+from backend.model_services import IExecutableCommand, get_case_study_registry_objects
 from backend.model_services import State
+from backend.models.musiasem_concepts import ProblemStatement, FactorsRelationDirectedFlowObservation, Processor, \
+    Factor, Parameter, FactorInProcessorType
 from backend.models.musiasem_methodology_support import (User,
                                                          CaseStudy,
                                                          CaseStudyVersion,
@@ -29,6 +32,8 @@ from backend.models.musiasem_methodology_support import (User,
 from backend.restful_service import tm_default_users, tm_authenticators, tm_case_study_version_statuses, \
     tm_object_types, tm_permissions
 from backend.restful_service.serialization import serialize_state, deserialize_state
+from backend.solving import BasicQuery
+from backend.solving.flow_graph_solver import flow_graph_solver
 
 logger = logging.getLogger(__name__)
 
@@ -226,7 +231,7 @@ def transform_issues(issues: List[Union[dict, backend.Issue, tuple, Issue]], cmd
         if issue.itype == IType.error():
             errors_exist = True
 
-        if not issue.ctype:
+        if not issue.ctype and cmd:  # "cmd" may be "None", in case the Issue is produced by the commands container loop
             issue.ctype = cmd._serialization_type
 
         if not issue.location.sheet_name or issue.location.sheet_name == "":
@@ -277,6 +282,163 @@ def convert_generator_to_native(generator_type, file_type: str, file):
                 break
 
     return output
+
+
+# ######################################################################################################################
+# SOLVING (PREPARATION AND CALL SOLVER)
+# ######################################################################################################################
+
+def prepare_and_solve_model(state: State):
+    """
+    Modify the state so that:
+    * Implicit references of Interfaces to subcontexts are materialized
+      * Creating processors
+      * Creating interfaces in these processors
+      * Creating relationships in these processors
+
+    * The ProblemStatement class is considered for solving
+    q* State is modified to contain the scalar and matrix indicators
+
+    :param state:
+    :return:
+    """
+    systems = prepare_model(state)
+    issues = call_solver(state, systems)
+
+    return issues
+
+
+def call_solver(state: State, systems: Dict[str, Set[Processor]]):
+    """
+    Solve the problem
+    """
+
+    def obtain_problem_statement() -> ProblemStatement:
+        """
+        Obtain a ProblemStatement instance
+        Obtain the solver parameters plus a list of scenarios
+        :param state:
+        :return:
+        """
+        ps_list: List[ProblemStatement] = glb_idx.get(ProblemStatement.partial_key())
+        if len(ps_list) == 0:
+            # No scenarios (dummy), and use the default solver
+            scenarios = create_dictionary()
+            scenarios["default"] = create_dictionary()
+            return ProblemStatement(scenarios=scenarios)
+        else:
+            return ps_list[0]
+
+    # Registry and the other objects also
+    glb_idx, _, _, _, _ = get_case_study_registry_objects(state)
+
+    global_parameters: List[Parameter] = glb_idx.get(Parameter.partial_key())
+
+    problem_statement = obtain_problem_statement()
+
+    solver_type = problem_statement.solving_parameters.get("solver", "flow_graph").lower()
+
+    issues = []
+    if solver_type == "flow_graph":
+        issues = flow_graph_solver(global_parameters, problem_statement, systems, state)
+
+    return issues
+
+
+def prepare_model(state) -> Dict[str, Set[Processor]]:
+    """
+    Modify the state so that:
+    * Implicit references of Interfaces to subcontexts are materialized
+      * Creating processors
+      * Creating interfaces in these processors
+      * Creating relationships in these processors
+
+    :param state:
+    :return: A dictionary of systems each containing a set of the Processors inside it ("local" and "environment")
+    """
+    # Registry and the other objects also
+    glb_idx, _, _, _, _ = get_case_study_registry_objects(state)
+    # Prepare a Query to obtain ALL interfaces
+    query = BasicQuery(state)
+    filt = {}
+    objs = query.execute([Factor], filt)
+    processors_by_system = create_dictionary()
+    for iface in objs[Factor]:  # type: Factor
+        system = iface.processor.processor_system
+
+        processors = processors_by_system.get(system, set())
+        if system not in processors_by_system:
+            processors_by_system[system] = processors
+
+        if iface.processor not in processors:
+            processors.add(iface.processor)
+
+        # If the Interface is connected to a "Subcontext" different than the owning Processor
+        if iface.opposite_processor_type and \
+           iface.opposite_processor_type.lower() != iface.processor.subsystem_type.lower():
+
+            # Check if the interface has flow relationships
+            # TODO An alternative is to search "observations" of type FactorsRelationDirectedFlowObservation
+            #      in the same "iface"
+
+            if iface.orientation.lower() == "input":
+                parameter = {"target": iface}
+            else:
+                parameter = {"source": iface}
+
+            relations = glb_idx.get(FactorsRelationDirectedFlowObservation.partial_key(**parameter))
+
+            # If not, define Processor name, check if exists, if not create it
+            # Then create an Interface and a Relationship
+            if len(relations) == 0:
+                # Define the name of a Processor in the same context but in different subcontext
+                p_name = system + "_" + iface.opposite_processor_type
+                p = glb_idx.get(Processor.partial_key(p_name))
+                if len(p) == 0:
+                    attributes = {
+                        'subsystem_type': iface.opposite_processor_type,
+                        'processor_system': iface.processor.processor_system,
+                        'functional_or_structural': 'Functional',
+                        'instance_or_archetype': 'Instance'
+                        # 'stock': None
+                    }
+
+                    p = Processor(p_name, attributes=attributes)
+                    glb_idx.put(p.key(), p)
+
+                    if p.subsystem_type.lower() in ["local", "environment"]:
+                        processors.add(p)
+                else:
+                    p = p[0]
+
+                attributes = {
+                    'sphere': 'Technosphere' if iface.opposite_processor_type.lower() in ["local", "external"] else 'Biosphere',
+                    'roegen_type': iface.roegen_type,
+                    'orientation': "Input" if iface.orientation.lower() == "output" else "Output",
+                    'opposite_processor_type': iface.processor.subsystem_type
+                }
+
+                # Create Interface
+                f = Factor.create_and_append(name=iface.taxon.name,
+                                             processor=p,
+                                             in_processor_type=FactorInProcessorType(external=False, incoming=False),
+                                             attributes=attributes,
+                                             taxon=iface.taxon)
+
+                glb_idx.put(f.key(), f)
+
+                # Create Flow Relationship
+                if iface.orientation.lower() == "output":
+                    source = iface
+                    target = f
+                else:
+                    source = f
+                    target = iface
+
+                fr = FactorsRelationDirectedFlowObservation.create_and_append(source=source, target=target, observer=None)
+                glb_idx.put(fr.key(), fr)
+
+    return processors_by_system
 
 # #####################################################################################################################
 # >>>> INTERACTIVE SESSION <<<<
@@ -632,7 +794,7 @@ class ReproducibleSession:
                 force_load(cs)
 
             if recover_previous_state:
-                # Load state if it is persisted
+                # Load state if it is persisted (if not EXECUTE, POTENTIALLY VERY SLOW)
                 if vs.state:
                     # Deserialize
                     self._isess._state = deserialize_state(vs.state, vs.state_version)

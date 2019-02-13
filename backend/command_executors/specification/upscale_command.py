@@ -1,14 +1,13 @@
 import json
-import pandas as pd
-import numpy as np
-from openpyxl.chart import reference
 import math
 
+from backend.common.helper import strcmp
 from backend.model_services import IExecutableCommand, State, get_case_study_registry_objects
-from backend.models.musiasem_concepts import Observer, Processor, Factor, \
-    ProcessorsRelationUndirectedFlowObservation, ProcessorsRelationPartOfObservation, \
+from backend.models.musiasem_concepts import Observer, Processor, \
+    FactorsRelationScaleObservation, \
+    ProcessorsRelationPartOfObservation, \
     ProcessorsRelationUpscaleObservation, \
-    FactorsRelationDirectedFlowObservation, FactorQuantitativeObservation, ProcessorsSet
+    ProcessorsSet
 
 
 class UpscaleCommand(IExecutableCommand):
@@ -169,18 +168,40 @@ class UpscaleCommand(IExecutableCommand):
                     glb_idx.put(cloned_child.key(), cloned_child)
 
                     # Create the new Relation Observations
-                    # TODO
                     # - Part-of Relation
                     o1 = ProcessorsRelationPartOfObservation.create_and_append(parent, cloned_child, oer)  # Part-of
                     glb_idx.put(o1.key(), o1)
-                    # TODO
                     # - Upscale Relation
                     quantity = str(sc_dict["weight"])
-                    o3 = ProcessorsRelationUpscaleObservation.create_and_append(parent, cloned_child,
-                                                                                observer=None,
-                                                                                factor_name=scaled_factor,
-                                                                                quantity=quantity)
-                    glb_idx.put(o3.key(), o3)
+                    if True:
+                        # Find Interface named "scaled_factor"
+                        for f in parent.factors:
+                            if strcmp(f.name, scaled_factor):
+                                origin = f
+                                break
+                        else:
+                            origin = None
+                        for f in cloned_child.factors:
+                            if strcmp(f.name, scaled_factor):
+                                destination = f
+                                break
+                        else:
+                            destination = None
+
+                        if origin and destination:
+                            o3 = FactorsRelationScaleObservation.create_and_append(origin, destination,
+                                                                                   observer=None,
+                                                                                   quantity=quantity)
+                            glb_idx.put(o3.key(), o3)
+                        else:
+                            raise Exception("Could not find Interfaces to define a Scale relation. Processors: " +
+                                            parent.name+", "+cloned_child.name+"; Interface name: "+scaled_factor)
+                    else:
+                        o3 = ProcessorsRelationUpscaleObservation.create_and_append(parent, cloned_child,
+                                                                                    observer=None,
+                                                                                    factor_name=scaled_factor,
+                                                                                    quantity=quantity)
+                        glb_idx.put(o3.key(), o3)
             else:
                 # TODO
                 parent_dict = str({attr: codes[i] for attr, i in parent_attrs})

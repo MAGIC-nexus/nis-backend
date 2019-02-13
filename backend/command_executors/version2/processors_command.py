@@ -1,6 +1,8 @@
 import json
 import re
+from typing import Dict
 
+from backend import CommandField
 from backend.command_executors.execution_helpers import parse_line, classify_variables, \
     obtain_dictionary_with_literal_fields
 from backend.command_executors.version2.relationships_command import obtain_matching_processors
@@ -8,7 +10,7 @@ from backend.command_field_definitions import get_command_fields_from_class
 from backend.command_generators import Issue, IssueLocation
 from backend.command_generators.parser_ast_evaluators import dictionary_from_key_value_list
 from backend.command_generators.parser_field_parsers import string_to_ast, processor_names
-from backend.common.helper import head, strcmp
+from backend.common.helper import head, strcmp, ifnull
 from backend.model_services import IExecutableCommand, get_case_study_registry_objects
 from backend.models.musiasem_concepts import ProcessorsSet, ProcessorsRelationPartOfObservation, Parameter, Processor, \
     Geolocation
@@ -175,11 +177,11 @@ class ProcessorsCommand(IExecutableCommand):
                             # yield item
                             raise Exception("If 'complex' is signaled, it should not pass by this line")
             else:
-                print("Single: "+str(item))
+                # print("Single: "+str(item))
                 yield item
 
         def process_line(item):
-            fields_value = {k: item.get(k, head(v.allowed_values)) for k, v in fields.items()}
+            fields_value = {k: item.get(k, v.default_value) for k, v in fields.items()}
 
             # Check if mandatory fields with no value exist
             for field in [k for k, v in fields.items() if v.mandatory and not fields_value[k]]:
@@ -219,17 +221,14 @@ class ProcessorsCommand(IExecutableCommand):
                 # TODO Clone it
                 pass
             else:
-                processor_attributes = {k: fields_value[k] for k, v in fields.items() if v.attribute_of == Processor}
-
-                # If key "attributes" exist, expand it.
-                # E.g. {"a": 1, "b": 2, "attributes": {"c": 3, "d": 4}} -> {'a': 1, 'b': 2, 'c': 3, 'd': 4}
-                processor_attributes.pop("attributes", None)
-                processor_attributes.update(fields_value["attributes"])
+                # Get internal and user-defined attributes in one dictionary
+                attributes = {k: fields_value[k] for k, v in fields.items() if v.attribute_of == Processor}
+                attributes.update(fields_value["attributes"])
 
                 p = find_or_create_processor(
                     state=glb_idx,
                     name=fields_value["processor"],  # TODO: add parent hierarchical name
-                    proc_attributes=processor_attributes,
+                    proc_attributes=attributes,
                     proc_location=Geolocation.create(fields_value["geolocation_ref"], fields_value["geolocation_code"])
                 )
 
@@ -258,7 +257,7 @@ class ProcessorsCommand(IExecutableCommand):
         command_name = self._content["command_name"]
 
         # CommandField definitions for the fields of Interface command
-        fields = {f.name: f for f in get_command_fields_from_class(self.__class__)}
+        fields: Dict[str, CommandField] = {f.name: f for f in get_command_fields_from_class(self.__class__)}
         # Obtain the names of all parameters
         parameters = [p.name for p in glb_idx.get(Parameter.partial_key())]
         # Obtain the names of all processors

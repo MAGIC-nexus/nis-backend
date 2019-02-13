@@ -152,7 +152,14 @@ class ProcessorScalingsCommand(IExecutableCommand):
         return processor
 
     def _clone_processor_as_child(self, processor: Processor, parent_processor: Processor) -> Processor:
-            processor_clone = processor.clone(state=self._glb_idx)
+            # Clone inherits some attributes from parent
+            inherited_attributes = dict(
+                subsystem_type=parent_processor.subsystem_type,
+                processor_system=parent_processor.processor_system,
+                instance_or_archetype=parent_processor.instance_or_archetype
+            )
+
+            processor_clone = processor.clone(state=self._glb_idx, inherited_attributes=inherited_attributes)
 
             # Create PART-OF relation
             relationship = ProcessorsRelationPartOfObservation.create_and_append(parent=parent_processor,

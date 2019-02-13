@@ -4,7 +4,7 @@ import unittest
 import backend
 from backend.ie_exports.json import export_model_to_json
 from backend.model_services import get_case_study_registry_objects
-from backend.model_services.workspace import execute_file, prepare_and_reset_database_for_tests
+from backend.model_services.workspace import execute_file, prepare_and_reset_database_for_tests, prepare_and_solve_model
 from backend.models.musiasem_concepts import Observer, \
     Processor, FactorType, Factor, \
     Hierarchy, \
@@ -466,6 +466,20 @@ class TestCommandFiles(unittest.TestCase):
         # Close interactive session
         isess.close_db_session()
 
+    def test_023_solving(self):
+        file_path = os.path.dirname(
+            os.path.abspath(__file__)) + "/z_input_files/v2/06_upscale_almeria_NEW.xlsx"
+
+        isess = execute_file(file_path, generator_type="spreadsheet")
+
+        issues = prepare_and_solve_model(isess.state)
+
+        # Check State of things
+        glb_idx, p_sets, hh, datasets, mappings = get_case_study_registry_objects(isess.state)
+
+        # Close interactive session
+        isess.close_db_session()
+
 
 if __name__ == '__main__':
     i = TestCommandFiles()
@@ -482,4 +496,5 @@ if __name__ == '__main__':
     #i.test_019_import_commands()
     #i.test_020_list_of_commands()
     #i.test_021_export_to_json()
-    i.test_022_processor_scalings()
+    #i.test_022_processor_scalings()
+    i.test_023_solving()

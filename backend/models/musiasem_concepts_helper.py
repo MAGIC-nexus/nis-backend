@@ -13,7 +13,7 @@ from backend.models.musiasem_concepts import \
     ProcessorsRelationPartOfObservation, ProcessorsRelationUndirectedFlowObservation, \
     ProcessorsRelationUpscaleObservation, \
     FactorsRelationDirectedFlowObservation, Hierarchy, Taxon, \
-    FactorQuantitativeObservation, HierarchyLevel, Geolocation
+    FactorQuantitativeObservation, HierarchyLevel, Geolocation, FactorsRelationScaleObservation
 from backend.models.statistical_datasets import CodeList, CodeListLevel, Code
 
 
@@ -132,6 +132,18 @@ def hierarchical_name_variants(h_name: str):
         return [h_name, parts[-1]]
     else:
         return [h_name]  # A simple name
+
+
+def find_quantitative_observations(idx: PartialRetrievalDictionary, processor_instances_only=False) -> List[FactorQuantitativeObservation]:
+    """ Find all available quantitative observations """
+    interfaces: List[Factor] = idx.get(Factor.partial_key())
+
+    if processor_instances_only:
+        return [o for i in interfaces if i.processor.instance_or_archetype == "Instance"
+                  for o in i.quantitative_observations]
+    else:
+        return [o for i in interfaces
+                  for o in i.quantitative_observations]
 
 
 def find_observable_by_name(name: str, idx: PartialRetrievalDictionary, processor: Processor = None,
@@ -450,7 +462,7 @@ def find_or_create_observable(state: Union[State, PartialRetrievalDictionary],
             attrs = fact_attributes if last else None
             ft = FactorType(acum_name,  #
                             parent=parent, hierarchy=None,
-                            tipe=fact_roegen_type,  #
+                            roegen_type=fact_roegen_type,
                             tags=None,  # No tags
                             attributes=attrs,
                             expression=None  # No expression
@@ -552,20 +564,20 @@ def find_or_create_processor(state: Union[State, PartialRetrievalDictionary],
         raise Exception("It has to be a Processor name, received '" + name + "'")
 
 
-def create_quantitative_observation(state: Union[State, PartialRetrievalDictionary],
-                                    factor: Union[str, Factor],
-                                    value: str, unit: str,
-                                    observer: Union[str, Observer]=Observer.no_observer_specified,
-                                    spread: str=None, assessment: str=None, pedigree: str=None, pedigree_template: str=None,
-                                    relative_to: Union[str, Factor]=None,
-                                    time: str=None,
-                                    geolocation: str=None,
-                                    comments: str=None,
-                                    tags=None, other_attributes=None,
-                                    proc_aliases: str=None,
-                                    proc_external: bool=None, proc_attributes: dict=None, proc_location=None,
-                                    ftype_roegen_type: FlowFundRoegenType=None, ftype_attributes: dict=None,
-                                    fact_incoming: bool=None, fact_external: bool=None, fact_location=None):
+def create_or_append_quantitative_observation(state: Union[State, PartialRetrievalDictionary],
+                                              factor: Union[str, Factor],
+                                              value: str, unit: str,
+                                              observer: Union[str, Observer]=Observer.no_observer_specified,
+                                              spread: str=None, assessment: str=None, pedigree: str=None, pedigree_template: str=None,
+                                              relative_to: Union[str, Factor]=None,
+                                              time: str=None,
+                                              geolocation: str=None,
+                                              comments: str=None,
+                                              tags=None, other_attributes=None,
+                                              proc_aliases: str=None,
+                                              proc_external: bool=None, proc_attributes: dict=None, proc_location=None,
+                                              ftype_roegen_type: FlowFundRoegenType=None, ftype_attributes: dict=None,
+                                              fact_incoming: bool=None, fact_external: bool=None, fact_location=None):
     """
     Creates an Observation of a Factor
     If the containing Processor does not exist, it is created
@@ -654,17 +666,17 @@ def create_quantitative_observation(state: Union[State, PartialRetrievalDictiona
                                                 fact_location=None, fact_attributes=None)
 
         # Create the observation (and append it to the Interface)
-        o = _create_quantitative_observation(factor,
-                                             value, unit, spread, assessment, pedigree, pedigree_template,
-                                             oer,
-                                             relative_to,
-                                             time,
-                                             geolocation,
-                                             comments,
-                                             tags, other_attributes
-                                             )
+        o = _create_or_append_quantitative_observation(factor,
+                                                       value, unit, spread, assessment, pedigree, pedigree_template,
+                                                       oer,
+                                                       relative_to,
+                                                       time,
+                                                       geolocation,
+                                                       comments,
+                                                       tags, other_attributes
+                                                       )
         # Register
-        glb_idx.put(o.key(), o)
+        # glb_idx.put(o.key(), o)
 
         # Return the observation
         return p, ft, factor, o
@@ -745,6 +757,7 @@ def create_relation_observations(state: Union[State, PartialRetrievalDictionary]
         origin_obj = initial_origin_obj
         # Destination
         dst_obj = None
+        # PART-OF
         if isinstance(origin_obj, Processor) and relation_class == RelationClassType.pp_part_of:
             # Find dst[0]. If it does not exist, create dest UNDER (hierarchically) origin
             dst_obj = find_observable_by_name(dst[0], glb_idx)
@@ -771,7 +784,7 @@ def create_relation_observations(state: Union[State, PartialRetrievalDictionary]
                 ft = dst[0].taxon
                 f = dst[0]
             else:
-                raise Exception("'dst[0]' must be String, Processor or Interface")
+                raise Exception("'dst[0]' must be String, Processor or Interface, type: "+str(type(dst[0]))+":: "+str(dst[0]))
 
             dst_obj = get_requested_object(p, ft, f)
             # If origin is Processor and destination is Factor, create Factor in origin (if it does not exist). Or viceversa
@@ -837,17 +850,17 @@ def get_factor_id(f_: Union[Factor, Processor], ft: FactorType=None):
         return (f_.name + ":" + ft.name).lower()
 
 
-def _create_quantitative_observation(factor: Factor,
-                                     value: str, unit: str,
-                                     spread: str, assessment: str, pedigree: str, pedigree_template: str,
-                                     observer: Observer,
-                                     relative_to: Optional[Factor],
-                                     time: str,
-                                     geolocation: Optional[str],
-                                     comments: str,
-                                     tags, other_attributes):
+def _create_or_append_quantitative_observation(factor: Factor,
+                                               value: str, unit: str,
+                                               spread: str, assessment: str, pedigree: str, pedigree_template: str,
+                                               observer: Observer,
+                                               relative_to: Optional[Factor],
+                                               time: str,
+                                               geolocation: Optional[str],
+                                               comments: str,
+                                               tags, other_attributes):
     f_name = get_factor_id(factor)
-    print(f_name)
+    # print(f_name)
     if other_attributes:
         attrs = other_attributes.copy()
     else:
@@ -964,6 +977,9 @@ def _find_or_create_relation(origin, destination, rel_type: Union[str, RelationC
                 glb_idx.put(r.key(), r)
             else:
                 r = r[0]
+                r._quantity = weight
+                r._observer = oer
+                r._attributes = attributes
     elif rel_type in (RelationClassType.ff_directed_flow, RelationClassType.ff_reverse_directed_flow):
         if isinstance(origin, Factor) and isinstance(destination, Factor):
             if rel_type == RelationClassType.ff_reverse_directed_flow:
@@ -978,6 +994,21 @@ def _find_or_create_relation(origin, destination, rel_type: Union[str, RelationC
                 glb_idx.put(r.key(), r)
             else:
                 r = r[0]
+                r._weight = weight
+                r._observer = oer
+                r._attributes = attributes
+    elif rel_type == RelationClassType.ff_scale:
+        if isinstance(origin, Factor) and isinstance(destination, Factor):
+            # Find or Create the relation
+            r = glb_idx.get(FactorsRelationScaleObservation.partial_key(origin=origin, destination=destination))
+            if not r:
+                r = FactorsRelationScaleObservation.create_and_append(origin, destination, oer, weight, attributes=attributes)  # Directed flow
+                glb_idx.put(r.key(), r)
+            else:
+                r = r[0]
+                r._quantity = weight
+                r._observer = oer
+                r._attributes = attributes
 
     return r
 
@@ -1090,10 +1121,9 @@ def _build_hierarchy(name, type_name, registry: PartialRetrievalDictionary, h: d
             n = registry.get(FactorType.partial_key(name=acum_name2))
             if not n:
                 attrs = None
-                fact_roegen_type = FlowFundRoegenType.flow
                 n = FactorType(acum_name2,  #
                                parent=parent, hierarchy=hie,
-                               tipe=fact_roegen_type,  #
+                               roegen_type=FlowFundRoegenType.flow,
                                tags=None,  # No tags
                                attributes=attrs,
                                expression=exp

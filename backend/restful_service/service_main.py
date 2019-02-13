@@ -36,7 +36,7 @@ if __name__ == '__main__':
     print("Executing locally!")
     os.environ["MAGIC_NIS_SERVICE_CONFIG_FILE"] = "./nis_local.conf"
 
-from backend.common.helper import generate_json, obtain_dataset_source, gzipped, str2bool, create_dictionary
+from backend.common.helper import generate_json, obtain_dataset_source, gzipped, str2bool
 from backend.models.musiasem_methodology_support import *
 from backend.common.create_database import create_pg_database_engine, create_monet_database_engine
 from backend.restful_service import app, register_external_datasources
@@ -45,7 +45,7 @@ from backend.command_executors import create_command
 from backend.command_executors.specification.metadata_command import generate_dublin_core_xml
 from backend.model_services import State, get_case_study_registry_objects
 from backend.model_services.workspace import InteractiveSession, CreateNew, ReproducibleSession, \
-    execute_command_container, convert_generator_to_native
+    execute_command_container, convert_generator_to_native, prepare_and_solve_model
 from backend.restful_service import nis_api_base, nis_client_base, nis_external_client_base, tm_default_users, \
     tm_authenticators, \
     tm_object_types, \
@@ -53,9 +53,9 @@ from backend.restful_service import nis_api_base, nis_client_base, nis_external_
     tm_case_study_version_statuses
 from backend.models import log_level
 from backend.restful_service.serialization import serialize, deserialize, serialize_state, deserialize_state
-from backend.solving.flows_graph import BasicQuery, construct_flow_graph
-from backend.solving.processors_graph import construct_processors_graph
-from backend.models.musiasem_concepts import Taxon, Hierarchy
+from backend.ie_exports.flows_graph import BasicQuery, construct_flow_graph
+from backend.ie_exports.processors_graph import construct_processors_graph
+from backend.models.musiasem_concepts import Hierarchy
 
 
 # #####################################################################################################################
@@ -1167,6 +1167,7 @@ def receive_file_submission(req):
     return generator_type, content_type, buffer, execute, register
 
 
+# MAIN POINT OF EXECUTION BY THE GENERIC CLIENT ("ANGULAR FRONTEND")
 @app.route(nis_api_base + "/isession/rsession/generator", methods=["POST"])
 def reproducible_session_append_command_generator():  # Receive a command_executors generator, like a Spreadsheet file, an R script, or a full JSON command_executors list (or other)
     def convert_issues(iss_lst):
@@ -1192,13 +1193,30 @@ def reproducible_session_append_command_generator():  # Receive a command_execut
     if isess.reproducible_session_opened():
         generator_type, content_type, buffer, execute, register = receive_file_submission(request)
 
-        # EXECUTE IT!!!
+        # PARSE AND BUILD!!!
 
         ret = isess.register_andor_execute_command_generator(generator_type, content_type, buffer, register, execute)
         if isinstance(ret, tuple):
             issues = ret[0]
         else:
             issues = []
+
+        stop = False
+        for i in issues:
+            if isinstance(i, dict):
+                if i["type"] == 3:
+                    stop = True
+            elif isinstance(i, tuple):
+                if i[0] == 3:  # Error
+                    stop = True
+            elif isinstance(i, Issue):
+                if i.itype == 3:  # Error
+                    stop = True
+
+        # SOLVE !!!!
+        if not stop:
+            issues2 = prepare_and_solve_model(isess.state)
+            issues.extend(issues2)
 
         # STORE the issues in the state
         # TODO If issues are produced by different generators, this will overwrite results from the previous generator
@@ -1933,7 +1951,7 @@ def case_study_version(cs_uuid, v_uuid):  # Information about a case study versi
                 act_sess = []
             act_sess.append(s)
 
-        # Load state
+        # Load state (or EXECUTE IT!!! -CAN BE VERY SLOW!!-)
         if vs.state:
             # Deserialize
             st = deserialize_to_object(vs.state)
