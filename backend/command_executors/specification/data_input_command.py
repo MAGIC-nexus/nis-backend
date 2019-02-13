@@ -3,7 +3,7 @@ import json
 from backend.common.helper import create_dictionary
 from backend.model_services import IExecutableCommand, State, get_case_study_registry_objects
 from backend.command_generators import parser_field_parsers
-from backend.models.musiasem_concepts_helper import create_quantitative_observation
+from backend.models.musiasem_concepts_helper import create_or_append_quantitative_observation
 from backend.models.musiasem_concepts import FlowFundRoegenType, ProcessorsSet, PedigreeMatrix, Reference
 
 
@@ -127,7 +127,7 @@ class DataInputCommand(IExecutableCommand):
 
             # CREATE FactorType, A Type of Observable, IF it does not exist
             # AND ADD Quantitative Observation
-            p, ft, f, o = create_quantitative_observation(
+            p, ft, f, o = create_or_append_quantitative_observation(
                 glb_idx,
                 factor=row["processor"]+":"+row["factor"],
                 value=row["value"] if "value" in row else None,

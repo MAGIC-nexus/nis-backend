@@ -35,7 +35,7 @@ if __name__ == '__main__':
     print("Executing locally!")
     os.environ["MAGIC_NIS_SERVICE_CONFIG_FILE"] = "./nis_local.conf"
 
-from backend.common.helper import generate_json, obtain_dataset_source, gzipped, str2bool, create_dictionary
+from backend.common.helper import generate_json, obtain_dataset_source, gzipped, str2bool
 from backend.models.musiasem_methodology_support import *
 from backend.common.create_database import create_pg_database_engine, create_monet_database_engine
 from backend.restful_service import app, register_external_datasources
@@ -52,9 +52,9 @@ from backend.restful_service import nis_api_base, nis_client_base, nis_external_
     tm_case_study_version_statuses
 from backend.models import log_level
 from backend.restful_service.serialization import serialize, deserialize, serialize_state, deserialize_state
-from backend.solving.flows_graph import BasicQuery, construct_flow_graph
-from backend.solving.processors_graph import construct_processors_graph
-from backend.models.musiasem_concepts import Taxon, Hierarchy
+from backend.ie_exports.flows_graph import BasicQuery, construct_flow_graph
+from backend.ie_exports.processors_graph import construct_processors_graph
+from backend.models.musiasem_concepts import Hierarchy
 
 
 # #####################################################################################################################

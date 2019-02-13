@@ -131,10 +131,12 @@ class CommandField:
     allowed_names = attrib()  # type: List[str]
     # Internal name used during the parsing
     name = attrib()  # type: str
-    # Flag indicating if the column is mandatory or optional. It can also be an expression (string).
-    mandatory = attrib()  # type: Union[bool, str]
     # Parser for the column
     parser = attrib()
+    # Flag indicating if the column is mandatory or optional. It can also be an expression (string).
+    mandatory = attrib(default=False)  # type: Union[bool, str]
+    # A default value for the field
+    default_value = attrib(default=None)
     # Some columns have a predefined set of allowed strings
     allowed_values = attrib(default=None)  # type: Optional[list[str]]
     # Many values or just one

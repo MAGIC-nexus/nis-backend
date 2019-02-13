@@ -33,7 +33,8 @@ class BasicQuery(IQueryObjects):
     def execute(self, object_classes: List[Union[type, str]], filt: Union[dict, str]) -> Dict[type, List[object]]:
         requested = {}
         supported_types = [Observer, Processor, FactorType, Factor,
-                           FactorQuantitativeObservation, FactorTypesRelationUnidirectionalLinearTransformObservation,
+                           # FactorQuantitativeObservation, --> Use find_quantitative_observations() instead
+                           FactorTypesRelationUnidirectionalLinearTransformObservation,
                            ProcessorsRelationPartOfObservation, ProcessorsRelationUpscaleObservation,
                            ProcessorsRelationUndirectedFlowObservation, ProcessorsRelationIsAObservation,
                            FactorsRelationDirectedFlowObservation, Hierarchy, Parameter]

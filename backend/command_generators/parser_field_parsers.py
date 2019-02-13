@@ -6,12 +6,15 @@ https://gist.github.com/cynici/5865326
 
 """
 from functools import partial
+
+import pyparsing
 from pyparsing import (ParserElement, Regex,
                        oneOf, srange, operatorPrecedence, opAssoc,
                        Forward, Regex, Suppress, Literal, Word,
                        Optional, OneOrMore, ZeroOrMore, Or, alphas, alphanums, White,
                        Combine, Group, delimitedList, nums, quotedString, NotAny,
                        Keyword, removeQuotes, CaselessKeyword, OnlyOnce)
+from typing import Dict
 
 from backend import ureg
 from backend.common.helper import create_dictionary, PartialRetrievalDictionary
@@ -453,6 +456,7 @@ date = Group(Or([four_digits_year.setResultsName("y") +
                  ]
                 )
              )
+date_month = Or([four_digits_year + year_month_separator + month, month + year_month_separator + four_digits_year])
 two_dates_separator = oneOf("- /")
 time_expression = Or([(date + Optional(two_dates_separator.suppress()+date)
                        ).setParseAction(
@@ -516,7 +520,7 @@ url_parser = (
 # #################################################################################################################### #
 
 
-def string_to_ast(rule: ParserElement, input_: str):
+def string_to_ast(rule: ParserElement, input_: str) -> Dict:
     """
     Convert the input string "input_" into an AST, according to "rule"
 
@@ -542,6 +546,22 @@ def string_to_ast(rule: ParserElement, input_: str):
     while isinstance(res, list):
         res = res[0]
     return res
+
+
+def is_year(s: str) -> bool:
+    try:
+        four_digits_year.parseString(s, parseAll=True)
+    except pyparsing.ParseException:
+        return False
+    return True
+
+
+def is_month(s: str) -> bool:
+    try:
+        date_month.parseString(s, parseAll=True)
+    except pyparsing.ParseException:
+        return False
+    return True
 
 
 if __name__ == '__main__':
@@ -572,16 +592,22 @@ if __name__ == '__main__':
 
     s = State()
     examples = [
+        "5-2017",
+        "2017-5",
+        "2017/5",
         "2017-05 - 2018-01",
         "2017",
-        "5-2017",
         "5-2017 - 2018-1",
-        "2017-2018"
+        "2017-2018",
+        "Year",
+        "Month"
     ]
     for example in examples:
         print(example)
         res = string_to_ast(time_expression, example)
         print(res)
+        print(f'Is year = {is_year(example)}')
+        print(f'Is month = {is_month(example)}')
         print("-------------------")
 
     s.set("HH", DottedDict({"Power": {"p": 34.5, "Price": 2.3}}))

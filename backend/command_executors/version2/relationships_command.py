@@ -189,7 +189,7 @@ class RelationshipsCommand(IExecutableCommand):
                             # yield item
                             raise Exception("If 'complex' is signaled, it should not pass by this line")
             else:
-                print("Single: "+str(item))
+                # print("Single: "+str(item))
                 yield item
 
         def process_line(item):

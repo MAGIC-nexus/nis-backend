@@ -1194,6 +1194,7 @@ def ascii2uuid(s: str) -> str:
 
 
 def ifnull(var, val):
+    """ Returns first value if not None, otherwise returns second value """
     if var is None:
         return val
     return var

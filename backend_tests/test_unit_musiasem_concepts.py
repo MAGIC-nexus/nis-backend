@@ -203,17 +203,17 @@ class ModelBuildingQuantativeObservations(unittest.TestCase):
              "fact_external": None,
              "fact_location": None
              }
-        create_quantitative_observation(state, "WindFarm:LU.cost", "17160", "€", **(k.copy()))
-        create_quantitative_observation(state, "WindFarm:HA.cost", "1800", "€", **(k.copy()))
-        create_quantitative_observation(state, "WindFarm:PC.cost", "85600", "€", **(k.copy()))
-        create_quantitative_observation(state, "WindFarm:LU", "8800", "m2", **(k.copy()))
-        create_quantitative_observation(state, "WindFarm:HA", "660", "hours", **(k.copy()))
-        create_quantitative_observation(state, "WindFarm:PC", "2.64", "MW", **(k.copy()))
+        create_or_append_quantitative_observation(state, "WindFarm:LU.cost", "17160", "€", **(k.copy()))
+        create_or_append_quantitative_observation(state, "WindFarm:HA.cost", "1800", "€", **(k.copy()))
+        create_or_append_quantitative_observation(state, "WindFarm:PC.cost", "85600", "€", **(k.copy()))
+        create_or_append_quantitative_observation(state, "WindFarm:LU", "8800", "m2", **(k.copy()))
+        create_or_append_quantitative_observation(state, "WindFarm:HA", "660", "hours", **(k.copy()))
+        create_or_append_quantitative_observation(state, "WindFarm:PC", "2.64", "MW", **(k.copy()))
         k["ftype_roegen_type"] = FlowFundRoegenType.flow
-        create_quantitative_observation(state, "WindFarm:WindElectricity", "9.28", "GWh", **(k.copy()))
-        create_quantitative_observation(state, "WindFarm:WindElectricity.max_production", "23.2", "GWh", **(k.copy()))
+        create_or_append_quantitative_observation(state, "WindFarm:WindElectricity", "9.28", "GWh", **(k.copy()))
+        create_or_append_quantitative_observation(state, "WindFarm:WindElectricity.max_production", "23.2", "GWh", **(k.copy()))
         k["proc_external"] = True
-        create_quantitative_observation(state, "ElectricGrid:GridElectricity", "6.6", "GWh", **(k.copy()))
+        create_or_append_quantitative_observation(state, "ElectricGrid:GridElectricity", "6.6", "GWh", **(k.copy()))
         # ============================= READS AND ASSERTIONS =============================
         glb_idx, p_sets, hh, datasets, mappings = get_case_study_registry_objects(state)
         # Check function "get_factor_or_processor_or_factor_type"
@@ -235,13 +235,19 @@ class ModelBuildingQuantativeObservations(unittest.TestCase):
         self.assertEqual(wf_lu.name, "LU")
         # Get observations from the Factor
         obs = glb_idx.get(FactorQuantitativeObservation.partial_key(wf_lu))
+        self.assertEqual(len(obs), 0)
+        obs = [o for o in find_quantitative_observations(glb_idx) if o.factor.ident == wf_lu.ident]
         self.assertEqual(len(obs), 1)
         # Get observations from the Observer
         oer = _get_observer(Observer.no_observer_specified, glb_idx)
         obs = glb_idx.get(FactorQuantitativeObservation.partial_key(observer=oer))
+        self.assertEqual(len(obs), 0)  # NINE !!!!
+        obs = [o for o in find_quantitative_observations(glb_idx) if o.observer.ident == oer.ident]
         self.assertEqual(len(obs), 9)  # NINE !!!!
         # Get observations from both Factor and Observer
         obs = glb_idx.get(FactorQuantitativeObservation.partial_key(factor=wf_lu, observer=oer))
+        self.assertEqual(len(obs), 0)
+        obs = [o for o in find_quantitative_observations(glb_idx) if o.factor.ident == wf_lu.ident and o.observer.ident == oer.ident]
         self.assertEqual(len(obs), 1)
 
 
