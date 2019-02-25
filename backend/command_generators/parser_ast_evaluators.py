@@ -11,7 +11,8 @@ from pyparsing import quotedString
 
 from backend.command_generators.parser_field_parsers import string_to_ast, arith_boolean_expression, key_value_list, \
     simple_ident, expression_with_parameters
-from backend.common.helper import create_dictionary, PartialRetrievalDictionary
+from backend.common.helper import create_dictionary
+from backend.model_services import State
 from backend.models.musiasem_concepts import ExternalDataset
 
 
@@ -38,7 +39,7 @@ opMap = {
         }
 
 
-def ast_evaluator(exp, state, obj, issue_lst, evaluation_type="numeric"):
+def ast_evaluator(exp, state: State, obj, issue_lst, evaluation_type="numeric"):
     """
     Numerically evaluate the result of the parse of "expression" rule (not valid for the other "expression" rules)
 
@@ -195,6 +196,28 @@ def ast_evaluator(exp, state, obj, issue_lst, evaluation_type="numeric"):
             # TODO elif isinstance(obj, ...) depending on core object types, invoke a default method, or issue ERROR if it is not possible to cast to something simple
             else:
                 return obj, unresolved_vars
+        elif t == "condition":  # Evaluate IF part to a Boolean. If True, return the evaluation of the THEN part; if False, return None
+            if_result, tmp = ast_evaluator(exp["if"], state, obj, issue_lst, evaluation_type)
+            unresolved_vars.update(tmp)
+            if len(tmp) == 0:
+                if if_result:
+                    then_result, tmp = ast_evaluator(exp["then"], state, obj, issue_lst, evaluation_type)
+                    unresolved_vars.update(tmp)
+                    if len(tmp) > 0:
+                        then_result = None
+                    return then_result, unresolved_vars
+            else:
+                return None, unresolved_vars
+        elif t == "conditions":
+            for c in exp["parts"]:
+                cond_result, tmp = ast_evaluator(c, state, obj, issue_lst, evaluation_type)
+                unresolved_vars.update(tmp)
+                if len(tmp) == 0:
+                    if cond_result:
+                        return cond_result, unresolved_vars
+            return None, unresolved_vars
+        elif t == "reference":
+            return "[" + exp["ref_id"] + "]", unresolved_vars  # TODO Return a special type
         elif t in ("u+", "u-", "multipliers", "adders", "comparison", "not", "and", "or"):  # Arithmetic and Boolean
             # Evaluate recursively the left and right operands
             if t in ("u+", "u-"):
@@ -220,7 +243,6 @@ def ast_evaluator(exp, state, obj, issue_lst, evaluation_type="numeric"):
                             pass  # Do nothing
                         else:  # In others cases, CAST to the operand of the left. This may result in an Exception
                             following = type(current)(following)
-
 
                         op = exp["ops"][i].lower()
                         if op in ("+", "-", "u+", "u-"):
@@ -371,7 +393,7 @@ def ast_to_string(exp):
     return val
 
 
-def dictionary_from_key_value_list(kvl, state: PartialRetrievalDictionary = None):
+def dictionary_from_key_value_list(kvl, state: State = None):
     """
     From a string containing a list of keys and values, return a dictionary
     Keys must be literals, values can be expressions, to be evaluated at a later moment
@@ -412,7 +434,7 @@ def dictionary_from_key_value_list(kvl, state: PartialRetrievalDictionary = None
 
 
 if __name__ == '__main__':
-    from backend.model_services import State
+    from backend.model_services import State, State, State, State
     from dotted.collection import DottedDict
 
     issues = []
@@ -423,8 +445,14 @@ if __name__ == '__main__':
     s.set("Param1", 2.1)
     # s.set("Param", 0.1)
     s.set("Param2", 0.2)
-    examples = [
-                "(Param * 3 >= 0.3) AND (Param2 * 2 <= 0.345)",
+    s.set("p1", 2.3)
+
+    ej = "level='n+1', r=[Ref2019], a=5*p1, c=?p1>3 -> 'T1', p1<=3 -> 'T2'?"
+    ast = string_to_ast(key_value_list, ej)
+    res, unres = ast_evaluator(ast, s, None, issues)
+
+    examples = ["?Param1 > 3 -> 5, Param1 <=3 -> 2?",
+                "(Param1 * 3 >= 0.3) AND (Param2 * 2 <= 0.345)",
                 "cos(Param*3.1415)",
                 "{Param} * 3 >= 0.3",
                 "'Hola'",
@@ -470,10 +498,10 @@ if __name__ == '__main__':
         "b.EN[d1='C11', d2='C21'].d1",  # Hierachical Dataset slice
         "tns::EN(p1=1.5+param2, p2=2.3 * 0.3)[d1='C11', d2='C21'].v2",  # Simply sliced Variable Dataset (function call)
     ]
-    for example in examples:
-        print(example)
-        res = string_to_ast(expression, example)
-        print(res)
-        issues = []
-        value = ast_evaluator(res, s, None, issues)
-        print(str(type(value))+": "+str(value))
+    # for example in examples:
+    #     print(example)
+    #     res = string_to_ast(expression, example)
+    #     print(res)
+    #     issues = []
+    #     value = ast_evaluator(res, s, None, issues)
+    #     print(str(type(value))+": "+str(value))

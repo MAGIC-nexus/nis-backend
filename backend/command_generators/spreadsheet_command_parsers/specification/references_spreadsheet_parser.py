@@ -1,4 +1,4 @@
-from openpyxl.worksheet import Worksheet
+from openpyxl.worksheet.worksheet import Worksheet
 
 from backend import IssuesLabelContentTripleType, AreaTupleType
 from backend.command_generators.spreadsheet_command_parsers.specification import profile_field_name_sets, ref_prof

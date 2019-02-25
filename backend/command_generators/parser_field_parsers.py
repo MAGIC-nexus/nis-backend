@@ -27,6 +27,7 @@ ParserElement.enablePackrat()
 # FORWARD DECLARATIONS
 arith_expression = Forward()
 arith_boolean_expression = Forward()
+conditions_list = Forward()
 expression = Forward()  # Generic expression (boolean, string, numeric)
 expression_with_parameters = Forward()  # TODO Parameter value definition. An expression potentially referring to other parameters. Boolean operators. Simulation of IF ELIF ELSE or SWITCH
 hierarchy_expression = Forward()
@@ -54,6 +55,8 @@ andop = CaselessKeyword("AND")
 orop = CaselessKeyword("OR")
 notop = CaselessKeyword("NOT")
 processor_factor_separator = Literal(":")
+conditions_opening = Literal("?")
+conditions_closing = Literal("?")
 
 # Boolean constants
 true = Keyword("True")
@@ -254,7 +257,7 @@ value = Group(arith_boolean_expression).setParseAction(lambda t:
                                                         'value': t[0]
                                                         }
                                                        )
-key_value = Group(simple_ident + equals.suppress() + Or(arith_boolean_expression, bracketed_reference)).setParseAction(lambda t: {'type': 'key_value', 'key': t[0][0], 'value': t[0][1]})
+key_value = Group(simple_ident + equals.suppress() + arith_boolean_expression).setParseAction(lambda t: {'type': 'key_value', 'key': t[0][0], 'value': t[0][1]})
 key_value_list = delimitedList(key_value, ",").setParseAction(
     lambda _s, l, t: {'type': 'key_value_list',
                       'parts': {t2["key"]: t2["value"] for t2 in t}
@@ -316,7 +319,7 @@ arith_expression << operatorPrecedence(Or([positive_float, positive_int, string,
                                  lpar=lparen.suppress(),
                                  rpar=rparen.suppress())
 
-arith_boolean_expression << operatorPrecedence(Or([positive_float, positive_int, string, boolean, code_string_reference,
+arith_boolean_expression << operatorPrecedence(Or([positive_float, positive_int, string, boolean, code_string_reference, bracketed_reference, conditions_list,
                                      Optional(Literal('{')).suppress() + simple_h_name + Optional(Literal('}')).suppress(),
                                      func_call]),  # Operand types (REMOVED h_name: no "namespace" and no "datasets")
                                  [(signop, 1, opAssoc.RIGHT, lambda _s, l, t: {
@@ -359,11 +362,11 @@ arith_boolean_expression << operatorPrecedence(Or([positive_float, positive_int,
                                  rpar=rparen.suppress())
 
 # RULES - Expression varying value depending on conditions
-condition = Optional(arith_boolean_expression("if") + Literal("->")) + arith_boolean_expression("then")
-conditions_list = delimitedList(condition, ",").setParseAction(lambda _s, l, t:
+condition = Group(arith_boolean_expression + Literal("->").suppress() + arith_boolean_expression)
+conditions_list << Group(conditions_opening.suppress() + delimitedList(condition, ",") + conditions_closing.suppress()).setParseAction(lambda _s, l, t:
                                                                {
-                                                                   'type': 'conditional',
-                                                                   'parts': t.asList()[0]
+                                                                   'type': 'conditions',
+                                                                   'parts': [{"type": "condition", "if": c[0], "then": c[1]} for c in t.asList()[0]]
                                                                })
 
 # RULES - Expression type 2
@@ -540,7 +543,7 @@ if __name__ == '__main__':
     from backend.model_services import State
     from dotted.collection import DottedDict
 
-    examples = [
+    examples = ["a * 3 >= 0.3", "?a > 5 -> 3, a> 10 -> 6?",
                 "'Hola'",
                 "'Hola' + 'Adios'",
                 "{Param} * 3 >= 0.3",

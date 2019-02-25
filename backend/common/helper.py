@@ -4,15 +4,18 @@ import base64
 import collections
 import functools
 import gzip
+import io
 import itertools
 import json
 import mimetypes
+import tempfile
 import urllib
 import urllib.request
 import uuid
 from functools import partial
 from io import BytesIO
 from typing import IO, List, Tuple, Dict, Any, Optional, Iterable, Callable, TypeVar, Type
+from urllib.parse import urlparse
 from uuid import UUID
 
 import jsonpickle
@@ -25,6 +28,7 @@ from pandas import DataFrame
 import backend
 from backend import case_sensitive, SDMXConcept
 from backend.command_generators import Issue
+#import webdav.client as wc
 
 
 # #####################################################################################################################
@@ -1068,9 +1072,33 @@ def load_dataset(location:str=None):
     if not location:
         df = None
     else:
-        # Try to load the Dataset from the specified location
-        data = urllib.request.urlopen(location).read()
-        data = BytesIO(data)
+        pr = urlparse(location)
+        if False: #pr.netloc.lower() == "nextcloud.data.magic-nexus.eu":
+            # # WebDAV
+            # parts = location.split("/")
+            # for i, p in enumerate(parts):
+            #     if p == "nextcloud.data.magic-nexus.eu":
+            #         url = "/".join(parts[:i + 1]) + "/"
+            #         fname = "/" + "/".join(parts[i + 1:])
+            #         break
+            #
+            # options = {
+            #     "webdav_hostname": url,
+            #     "webdav_login": user,
+            #     "webdav_password": password
+            # }
+            # client = wc.Client(options)
+            # with tempfile.NamedTemporaryFile(delete=True) as temp:
+            #     client.download_sync(remote_path=fname, local_path=temp.name)
+            #     f = open(temp.name, "rb")
+            #     data = io.BytesIO(f.read())
+            #     f.close()
+            pass
+        else:
+            # Try to load the Dataset from the specified location
+            data = urllib.request.urlopen(location).read()
+            data = BytesIO(data)
+
         # Then, try to read it
         t = mimetypes.guess_type(location, strict=True)
         if t[0] == "text/csv":

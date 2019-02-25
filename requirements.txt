@@ -37,6 +37,7 @@ lxml==4.1.0
 jsonpickle==0.9.6
 matplotlib==2.1.0  # To be removed, used only by a test, module "faomap"
 python_magic==0.4.13  # To be removed, it is used only by the Magic Box file type detection
+#webdavclient==1.0.8
 #cachier==1.2.2
 #tablib <- dictmapper (convert nested dict's to CSV)
 

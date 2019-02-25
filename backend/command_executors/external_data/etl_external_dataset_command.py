@@ -66,6 +66,7 @@ class ETLExternalDatasetCommand(IExecutableCommand):
         dims, attrs, meas = obtain_dataset_metadata(dataset_name, source)
         # Obtain filter parameters
         params = create_dictionary()  # Native dimension name to list of values the filter will allow to pass
+        joined_dimensions = []
         for dim in self._content["where"]:
             lst = self._content["where"][dim]
             native_dim = None
@@ -79,6 +80,7 @@ class ETLExternalDatasetCommand(IExecutableCommand):
                             strcmp(mappings[m].source, source) and \
                             strcmp(mappings[m].dataset, dataset_name) and \
                             mappings[m].origin in dims:
+                        joined_dimensions.append(mappings[m].destination)  # Store dimension in the original case
                         native_dim = mappings[m].origin
                         lst = obtain_reverse_codes(mappings[m].map, lst)
                         break
@@ -137,6 +139,16 @@ class ETLExternalDatasetCommand(IExecutableCommand):
             values = [m.lower() if m.lower() != "obs_value" else "value" for m in self._content["measures"]]
             out_names = self._content["measures_as"]
             rows = translate_case(self._content["group_by"], params)  # Group by dimension names
+            lcase_rows = [d.lower() for d in rows]
+            # Now joined_dimensions
+            for d in joined_dimensions:
+                if d.lower() in lcase_rows:
+                    # Find and replace
+                    for i, d2 in enumerate(rows):
+                        if strcmp(d, d2):
+                            rows[i] = d
+                            break
+
             aggs = []  # Aggregation functions
             agg_names = {}
             for f in self._content["agg_funcs"]:

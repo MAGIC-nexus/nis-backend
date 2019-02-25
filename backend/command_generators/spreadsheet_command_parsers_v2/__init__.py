@@ -1,6 +1,6 @@
 from typing import List, Tuple, Optional
 
-from openpyxl.worksheet import Worksheet
+from openpyxl.worksheet.worksheet import Worksheet
 
 from backend import CommandField, IssuesLabelContentTripleType, AreaTupleType
 from backend.command_generators import Issue, parser_field_parsers, IssueLocation
