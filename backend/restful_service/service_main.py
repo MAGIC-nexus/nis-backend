@@ -927,6 +927,8 @@ def reproducible_session_query_state_everything_executed():  # Query if all comm
     return r
 
 
+# Obtain a list of ALL possible outputs
+@app.route(nis_api_base + "/isession/rsession/state_query/outputs", methods=["GET"])
 @app.route(nis_api_base + "/isession/rsession/state_query/datasets", methods=["GET"])
 def reproducible_session_query_state_list_datasets():  # Query list of datasets IN the current state
     # Recover InteractiveSession
@@ -934,15 +936,51 @@ def reproducible_session_query_state_list_datasets():  # Query list of datasets 
     if isess and isinstance(isess, Response):
         return isess
 
+    dataset_formats = ["CSV", "XLSX"] #, "XLSXwithPivotTable", "NISembedded", "NISdetached"]
+    graph_formats = ["VisJS"] #, "GraphML", "GML"]
+    ontology_formats = ["OWL", "RDF/XML"]
+    geo_formats = ["KMZ", "KML", "GeoJSON"]
     # A reproducible session must be open, signal about it if not
     if isess.reproducible_session_opened():
         if isess.state:
             glb_idx, p_sets, hh, datasets, mappings = get_case_study_registry_objects(isess.state)
             r = build_json_response({"datasets":
                                          [dict(name=k,
-                                               nelements=datasets[k].data.size,
-                                               nrows=datasets[k].data.shape[0],
-                                               size=datasets[k].data.memory_usage(True).sum()) for k in datasets
+                                               type="dataset",
+                                               description=F"Dataset with {datasets[k].data.shape[0]} rows, {datasets[k].data.size} cells, {datasets[k].data.memory_usage(True).sum()} bytes",
+                                               # nelements=datasets[k].data.size,
+                                               # nrows=datasets[k].data.shape[0],
+                                               # size=datasets[k].data.memory_usage(True).sum(),
+                                               formats=[dict(format=f, url=nis_api_base + F"/isession/rsession/state_query/datasets/{k}.{f.lower()}") for f in dataset_formats],
+                                               ) for k in datasets
+                                          ] +
+                                         [dict(name="FG",
+                                               type="graph",
+                                               description="Interfaces and exchanges graph",
+                                               formats=[dict(format=f, url=nis_api_base + F"/isession/rsession/query/flow_graph.{f.lower()}") for f in graph_formats]),
+                                          dict(name="PG",
+                                               type="graph",
+                                               description="Processors and exchanges graph",
+                                               formats=[dict(format=f, url=nis_api_base + F"/isession/rsession/query/processors_graph.{f.lower()}") for f in graph_formats]),
+                                          ] +
+                                         [dict(name="P_GIS",
+                                               type="geolayer",
+                                               description="Processor locations",
+                                               formats=[dict(format=f, url="") for f in geo_formats])
+                                          ] +
+                                         [dict(name="Ontology",
+                                               type="ontology",
+                                               description="OWL ontology",
+                                               formats=[dict(format=f, url="") for f in ontology_formats])
+                                          ] +
+                                         [dict(name="Python script",
+                                               type="script",
+                                               description="Python script",
+                                               formats=[dict(format=f, url="") for f in ["Python", "JupyterNotebook"]]),
+                                          dict(name="R script",
+                                               type="script",
+                                               description="R script",
+                                               formats=[dict(format=f, url="") for f in ["R", "JupyterNotebook"]])
                                           ]
                                      },
                                     200)
@@ -1310,7 +1348,7 @@ def obtain_flow_graph_visjs_format():
     # Generate graph from State
     if isess.state:
         query = BasicQuery(isess.state)
-        json = construct_flow_graph(isess.state, query, None)
+        json = construct_flow_graph(isess.state, query, None, "visjs")
         r = build_json_response(json, 200)
     else:
         r = build_json_response({}, 200)
@@ -2651,48 +2689,86 @@ def validate_command_record():
     if isess and isinstance(isess, Response):
         return isess
 
-    command_content_to_validate = request.form.get("content")
-    result = {}
+    # Read request
+    command_content_to_validate = request.get_json()
     if "command" in command_content_to_validate:
         command = command_content_to_validate["command"]
-        if command in command_fields:
-            if "fields" in command_content_to_validate:
-                fields = command_content_to_validate["fields"]
-                for f in fields:  # Validate field by field
-                    for f2 in command_fields[command]:  # Find corresponding field in the command
-                        if f.lower() in [f3.lower() for f3 in f2.allowed_names]:
-                            fld = f2
-                            break
-                    else:
-                        fld = None
-                    if fld:  # If found, can validate syntax
-                        # Validate Syntax
-                        content = fields[f]
-                        if fld.allowed_values:
-                            if content.lower().strip() in fld.allowed_values:
-                                result[f] = None
-                            else:
-                                result[f] = "'"+content+"' in field '"+f+"' must be one of: "+", ".join(fld.allowed_values)
-                        else:
-                            try:
-                                string_to_ast(fld.parser, content)
-                                result[f] = None
-                            except:
-                                s = "Invalid syntax in field '"+f+"' with value: "+content
-                                if fld.examples:
-                                    s += ". Possible examples: "+", ".join(fld.examples)
-                                result[f] = s
-
-                    else:
-                        result[f] = "Field '"+f+"' not found in command '"+command+"'. Possible field names: "+", ".join([item for f2 in command_fields[command] for item in f2.allowed_names])
-            else:
-                raise Exception("Must specify 'fields'")
-        else:
-            raise Exception("Command '" + command +"' not found in the list of commands: " +", ".join([c for c in command_fields]))
     else:
         raise Exception("Must specify 'command'")
 
-    return build_json_response(result)
+    if "fields" in command_content_to_validate:
+        fields = command_content_to_validate["fields"]
+    else:
+        raise Exception("Must specify 'fields'")
+
+    alternative_command_names = command_content_to_validate.get("alternative_command_names", {})
+
+    result = {}
+    # Find command from the worksheet name ("command")
+    match = None
+    for cmd in commands:
+        for cmd_name in cmd.allowed_names:
+            if cmd_name.lower() in command.lower():
+                if match:
+                    if match[1] < len(cmd_name):
+                        match = (cmd.name, len(cmd_name))
+                else:
+                    match = (cmd.name, len(cmd_name))
+    if not match:
+        for k, v in alternative_command_names:
+            if k.lower() in command.lower():
+                for cmd in commands:
+                    for cmd_name in cmd.allowed_names:
+                        if cmd_name.lower() in v.lower():
+                            match = (cmd.name, 0)
+                            break
+                    if match:
+                        break
+                if match:
+                    break
+
+    # Fields in the command
+    status = 200
+    if match:
+        for f in fields:  # Validate field by field
+            for f2 in command_fields[match[0]]:  # Find corresponding field in the command
+                if f.lower() in [f3.lower() for f3 in f2.allowed_names]:
+                    fld = f2
+                    break
+            else:
+                fld = None
+            if fld:  # If found, can validate syntax
+                # Validate Syntax
+                content = fields[f]
+                if isinstance(content, (int, float)):
+                    content = str(content)
+                if fld.allowed_values:
+                    # TODO Case insensitive comparison
+                    if content.lower().strip() in [f.lower().strip() for f in fld.allowed_values]:
+                        result[f] = None
+                    else:
+                        result[f] = "'"+content+"' in field '"+f+"' must be one of: "+", ".join(fld.allowed_values)
+                        status = 400
+                else:
+                    try:
+                        string_to_ast(fld.parser, content)
+                        result[f] = None
+                    except:
+                        s = "Invalid syntax in field '"+f+"' with value: "+content
+                        if fld.examples:
+                            s += ". Examples: "+", ".join(fld.examples)
+                        result[f] = s
+                        status = 400
+
+            else:
+                result[f] = "Field '"+f+"' not found in command '"+command+"'. Possible field names: "+", ".join([item for f2 in command_fields[command] for item in f2.allowed_names])
+                status = 400
+    else:
+        for f in fields:  # Validate field by field
+            result[f] = "Command '" + command +"' not found in the list of command names: " +", ".join([n for c in commands for n in c.allowed_names])
+        status = 400
+
+    return build_json_response(result, status)
 
 
 def get_misc_cmd_help(cmd_name):
@@ -2755,6 +2831,8 @@ Version\tV0.1"]}
 0\tUnknown\tUnknown\tUnknown\tUnknown"
          ]
          }
+    else:
+        return None
 
 
 def get_regular_cmd_help(cmd: backend.Command):
@@ -2779,10 +2857,11 @@ def obtain_commands_reference():
     d = []
     for cmd in commands:
         if cmd.is_v2:
-            if command_fields.get(cmd.name, None):
+            tmp = get_misc_cmd_help(cmd.name)
+            if tmp:
+                d.append(tmp)
+            elif command_fields.get(cmd.name, None):
                 d.append(get_regular_cmd_help(cmd))
-            else:
-                d.append(get_misc_cmd_help(cmd.name))
 
     return build_json_response([e for e in d if e])
 

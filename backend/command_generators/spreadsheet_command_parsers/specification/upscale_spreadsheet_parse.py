@@ -1,4 +1,4 @@
-from openpyxl.worksheet import Worksheet
+from openpyxl.worksheet.worksheet import Worksheet
 
 from backend import IssuesLabelContentTripleType, AreaTupleType
 from backend.command_generators.parser_spreadsheet_utils import obtain_rectangular_submatrices, \

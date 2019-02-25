@@ -8,7 +8,7 @@ from backend import CommandField
 from backend.command_generators.parser_field_parsers import simple_ident, unquoted_string, alphanums_string, \
     hierarchy_expression_v2, key_value_list, key_value, expression_with_parameters, \
     time_expression, indicator_expression, code_string, simple_h_name, domain_definition, unit_name, url_parser, \
-    processor_names, value, list_simple_ident, reference
+    processor_names, value, list_simple_ident, reference, processor_name
 from backend.models.musiasem_concepts import Processor, Factor
 from backend.command_definitions import valid_v2_command_names, commands
 from backend.common.helper import first, class_full_name
@@ -127,16 +127,15 @@ command_fields: Dict[str, List[CommandField]] = {
         CommandField(allowed_names=["Formula", "Expression"], name="formula", parser=unquoted_string),
         CommandField(allowed_names=["Description"], name="description", parser=unquoted_string),
         CommandField(allowed_names=["Unit"], name="unit", parser=unit_name),
-        # CommandField(allowed_names=["Orientation"], name="orientation",  mandatory=True, allowed_values=orientations,
-        #              parser=simple_ident),
+        # CommandField(allowed_names=["Orientation"], name="orientation",  mandatory=True, allowed_values=orientations, parser=simple_ident),
         CommandField(allowed_names=["Attributes"], name="attributes", parser=key_value_list),
         CommandField(allowed_names=[attributeRegex], name="attributes", many_appearances=True, parser=value)
     ],
 
     "processors": [
         CommandField(allowed_names=["ProcessorGroup"], name="processor_group", parser=simple_ident),
-        CommandField(allowed_names=["Processor"], name="processor", mandatory=True, parser=simple_ident),
-        CommandField(allowed_names=["ParentProcessor"], name="parent_processor", parser=simple_h_name),
+        CommandField(allowed_names=["Processor"], name="processor", mandatory=True, parser=processor_name),
+        CommandField(allowed_names=["ParentProcessor"], name="parent_processor", parser=processor_name),
         CommandField(allowed_names=["CopyInterfaces"], name="copy_interfaces_mode",
                      default_value=copy_interfaces_mode[0], allowed_values=copy_interfaces_mode, parser=simple_ident),
         CommandField(allowed_names=["CloneProcessor"], name="clone_processor", parser=simple_ident),
@@ -183,16 +182,14 @@ command_fields: Dict[str, List[CommandField]] = {
                      parser=value),
         # Qualified Quantification
         CommandField(allowed_names=["Value"], name="value", parser=expression_with_parameters),
-        # TODO
-        #CommandField(allowed_names=["Unit"], name="unit", parser=unit_name),
-        CommandField(allowed_names=["Unit"], name="unit", parser=unquoted_string),
+        CommandField(allowed_names=["Unit"], name="unit", parser=unit_name),
         CommandField(allowed_names=["Uncertainty"], name="uncertainty", parser=unquoted_string),
         CommandField(allowed_names=["Assessment"], name="assessment", parser=unquoted_string),
         # TODO
         #CommandField(allowed_names=["PedigreeMatrix"], name="pedigree_matrix", parser=reference_name),
         #CommandField(allowed_names=["Pedigree"], name="pedigree", parser=pedigree_code),
         #CommandField(allowed_names=["RelativeTo"], name="relative_to", parser=simple_ident_plus_unit_name),
-        CommandField(allowed_names=["PedigreeMatrix"], name="pedigree_matrix", parser=simple_ident),
+        CommandField(allowed_names=["PedigreeMatrix"], name="pedigree_matrix", parser=reference),
         CommandField(allowed_names=["Pedigree"], name="pedigree", parser=unquoted_string),
         CommandField(allowed_names=["RelativeTo"], name="relative_to", parser=unquoted_string),
         CommandField(allowed_names=["Time"], name="time", parser=time_expression),
@@ -219,13 +216,14 @@ command_fields: Dict[str, List[CommandField]] = {
     ],
 
     "processor_scalings": [
-        CommandField(allowed_names=["InvokingProcessor"], name="invoking_processor", mandatory=True, parser=simple_h_name),
-        CommandField(allowed_names=["RequestedProcessor"], name="requested_processor", mandatory=True, parser=simple_h_name),
+        CommandField(allowed_names=["InvokingProcessor"], name="invoking_processor", mandatory=True, parser=processor_name),
+        CommandField(allowed_names=["RequestedProcessor"], name="requested_processor", mandatory=True, parser=processor_name),
         CommandField(allowed_names=["ScalingType"], name="scaling_type", mandatory=True, allowed_values=processor_scaling_types, parser=simple_ident),
         CommandField(allowed_names=["InvokingInterface"], name="invoking_interface", mandatory=True, parser=simple_ident),
         CommandField(allowed_names=["RequestedInterface"], name="requested_interface", mandatory=True, parser=simple_ident),
+        CommandField(allowed_names=["NewProcessorName"], name="new_processor_name", mandatory=True, allowed_values=None, parser=processor_name),
         CommandField(allowed_names=["Scale"], name="scale", mandatory=True, parser=expression_with_parameters)
-        # TODO
+        # TODO Add other BareProcessor fields
         #CommandField(allowed_names=["UpscaleParentContext"], name="upscale_parent_context", parser=upscale_context),
         #CommandField(allowed_names=["UpscaleChildContext"], name="upscale_child_context", parser=upscale_context)
     ],

@@ -61,7 +61,7 @@ G2 = (1-W1)*F1 + (1-W2)*F2
 """
 
 
-def construct_flow_graph(state: State, query: IQueryObjects, filt: Union[str, dict]):
+def construct_flow_graph(state: State, query: IQueryObjects, filt: Union[str, dict], format: str="visjs"):
     """
     Prepare a graph from which conclusions about factors can be extracted
 

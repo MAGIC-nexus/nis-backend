@@ -197,6 +197,28 @@ def ast_evaluator(exp: Dict, state: State, obj, issue_lst, evaluation_type="nume
             #  issue ERROR if it is not possible to cast to something simple
             else:
                 return obj, unresolved_vars
+        elif t == "condition":  # Evaluate IF part to a Boolean. If True, return the evaluation of the THEN part; if False, return None
+            if_result, tmp = ast_evaluator(exp["if"], state, obj, issue_lst, evaluation_type)
+            unresolved_vars.update(tmp)
+            if len(tmp) == 0:
+                if if_result:
+                    then_result, tmp = ast_evaluator(exp["then"], state, obj, issue_lst, evaluation_type)
+                    unresolved_vars.update(tmp)
+                    if len(tmp) > 0:
+                        then_result = None
+                    return then_result, unresolved_vars
+            else:
+                return None, unresolved_vars
+        elif t == "conditions":
+            for c in exp["parts"]:
+                cond_result, tmp = ast_evaluator(c, state, obj, issue_lst, evaluation_type)
+                unresolved_vars.update(tmp)
+                if len(tmp) == 0:
+                    if cond_result:
+                        return cond_result, unresolved_vars
+            return None, unresolved_vars
+        elif t == "reference":
+            return "[" + exp["ref_id"] + "]", unresolved_vars  # TODO Return a special type
         elif t in ("u+", "u-", "multipliers", "adders", "comparison", "not", "and", "or"):  # Arithmetic and Boolean
             # Evaluate recursively the left and right operands
             if t in ("u+", "u-"):
@@ -372,7 +394,7 @@ def ast_to_string(exp):
     return val
 
 
-def dictionary_from_key_value_list(kvl, state: PartialRetrievalDictionary = None):
+def dictionary_from_key_value_list(kvl, state: State = None):
     """
     From a string containing a list of keys and values, return a dictionary
     Keys must be literals, values can be expressions, to be evaluated at a later moment
@@ -413,7 +435,7 @@ def dictionary_from_key_value_list(kvl, state: PartialRetrievalDictionary = None
 
 
 if __name__ == '__main__':
-    from backend.model_services import State, State, State, State
+    from backend.model_services import State
     from dotted.collection import DottedDict
 
     issues = []
@@ -424,8 +446,14 @@ if __name__ == '__main__':
     s.set("Param1", 2.1)
     # s.set("Param", 0.1)
     s.set("Param2", 0.2)
-    examples = [
-                "(Param * 3 >= 0.3) AND (Param2 * 2 <= 0.345)",
+    s.set("p1", 2.3)
+
+    ej = "level='n+1', r=[Ref2019], a=5*p1, c=?p1>3 -> 'T1', p1<=3 -> 'T2'?"
+    ast = string_to_ast(key_value_list, ej)
+    res, unres = ast_evaluator(ast, s, None, issues)
+
+    examples = ["?Param1 > 3 -> 5, Param1 <=3 -> 2?",
+                "(Param1 * 3 >= 0.3) AND (Param2 * 2 <= 0.345)",
                 "cos(Param*3.1415)",
                 "{Param} * 3 >= 0.3",
                 "'Hola'",

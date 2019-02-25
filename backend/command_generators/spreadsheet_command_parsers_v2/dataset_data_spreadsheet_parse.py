@@ -2,7 +2,7 @@ from io import StringIO
 from typing import List
 
 import pandas as pd
-from openpyxl.worksheet import Worksheet
+from openpyxl.worksheet.worksheet import Worksheet
 
 from backend import IssuesLabelContentTripleType, AreaTupleType
 from backend.command_generators import Issue, IssueLocation

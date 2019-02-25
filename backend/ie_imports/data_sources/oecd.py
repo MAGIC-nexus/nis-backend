@@ -85,8 +85,11 @@ class OECD(IDataSourceManager):
             c_dict[cl.id] = CodeList.construct(cl.id, cl.name("en"), [""], codes=codes)
 
         # Time dimension name
-        t_dim = kfam.time_dimension().concept_ref()
-        t_dim_cl = kfam.time_dimension().code_list_id()
+        if kfam.time_dimension():
+            t_dim = kfam.time_dimension().concept_ref()
+            t_dim_cl = kfam.time_dimension().code_list_id()
+        else:
+            t_dim = None
 
         # Dimensions
         for d in kfam.dimensions():

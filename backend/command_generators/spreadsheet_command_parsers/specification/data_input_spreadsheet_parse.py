@@ -1,5 +1,5 @@
 import regex as re
-from openpyxl.worksheet import Worksheet
+from openpyxl.worksheet.worksheet import Worksheet
 from pint.errors import UndefinedUnitError
 
 from backend.command_generators.parser_field_parsers import simple_ident

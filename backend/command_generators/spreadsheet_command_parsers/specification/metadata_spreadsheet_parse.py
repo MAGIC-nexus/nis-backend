@@ -1,4 +1,4 @@
-from openpyxl.worksheet import Worksheet
+from openpyxl.worksheet.worksheet import Worksheet
 
 from backend import metadata_fields, AreaTupleType, IssuesLabelContentTripleType
 from backend.common.helper import create_dictionary

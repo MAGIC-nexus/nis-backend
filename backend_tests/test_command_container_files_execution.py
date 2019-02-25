@@ -480,6 +480,16 @@ class TestCommandFiles(unittest.TestCase):
         # Close interactive session
         isess.close_db_session()
 
+    def test_024_maddalena_dataset(self):
+        file_path = "/home/rnebot/Downloads/MAGIC_n_1_CC_Spain.xlsx"
+        isess = execute_file(file_path, generator_type="spreadsheet")
+        # Check State of things
+        glb_idx, p_sets, hh, datasets, mappings = get_case_study_registry_objects(isess.state)
+        # TODO Check things!!!
+        # self.assertEqual(len(p_sets), 3)
+        # Close interactive session
+        isess.close_db_session()
+
 
 if __name__ == '__main__':
     i = TestCommandFiles()
@@ -497,4 +507,5 @@ if __name__ == '__main__':
     #i.test_020_list_of_commands()
     #i.test_021_export_to_json()
     #i.test_022_processor_scalings()
-    i.test_023_solving()
+    #i.test_023_solving()
+    #i.test_024_maddalena_dataset()

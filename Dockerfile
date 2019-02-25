@@ -75,6 +75,14 @@ RUN apt-get update && \
         libblas3  \
 	python3-scipy
 
+#RUN apt-get -y install wget && \
+#    TEMP_DEB="$(mktemp)" && \
+#    wget -O "$TEMP_DEB" 'http://security-cdn.debian.org/pool/updates/main/c/curl/curl_7.38.0-4+deb8u14_amd64.deb' && \
+#    dpkg -i "$TEMP_DEB" && \
+#    rm -f "$TEMP_DEB"
+
+#RUN apt-get -y install libcurl3-openssl-dev
+
 # Generate "requirements.txt" with "pipreqs --force ."
 COPY requirements.txt /app
 RUN pip3 install -r requirements.txt
