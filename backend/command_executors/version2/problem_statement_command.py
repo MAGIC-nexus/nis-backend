@@ -38,7 +38,7 @@ class ProblemStatementCommand(IExecutableCommand):
             else:
                 name = parameter
             value = param["parameter_value"]
-            description = param["description"]  # For readability of the workbook. Not used for solving
+            description = param.get("description", None)  # For readability of the workbook. Not used for solving
             if scenario:
                 if scenario in scenarios:
                     sp = scenarios[scenario]

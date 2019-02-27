@@ -34,7 +34,7 @@ from backend.command_generators.parser_spreadsheet_utils import rewrite_xlsx_fil
 
 if __name__ == '__main__':
     print("Executing locally!")
-    os.environ["MAGIC_NIS_SERVICE_CONFIG_FILE"] = "./nis_local.conf"
+    os.environ["MAGIC_NIS_SERVICE_CONFIG_FILE"] = "../../../nis-backend-config/nis_local.conf"
 
 from backend.common.helper import generate_json, obtain_dataset_source, gzipped, str2bool
 from backend.models.musiasem_methodology_support import *
