@@ -16,7 +16,7 @@ from backend.model_services import IExecutableCommand
 
 data_types = ["Number", "Boolean", "URL", "UUID", "Datetime", "String", "UnitName", "Code", "Geo"]
 concept_types = ["Dimension", "Measure", "Attribute"]
-parameter_types = ["Number", "Code", "Boolean"]
+parameter_types = ["Number", "Code", "Boolean", "String"]
 element_types = ["Parameter", "Processor", "InterfaceType", "Interface"]
 spheres = ["Biosphere", "Technosphere"]
 roegen_types = ["Flow", "Fund"]
@@ -127,7 +127,8 @@ command_fields: Dict[str, List[CommandField]] = {
         CommandField(allowed_names=["Formula", "Expression"], name="formula", parser=unquoted_string),
         CommandField(allowed_names=["Description"], name="description", parser=unquoted_string),
         CommandField(allowed_names=["Unit"], name="unit", parser=unit_name),
-        # CommandField(allowed_names=["Orientation"], name="orientation",  mandatory=True, allowed_values=orientations, parser=simple_ident),
+        CommandField(allowed_names=["OppositeProcessorType"], name="opposite_processor_type",
+                     allowed_values=processor_types, parser=simple_ident, attribute_of=Factor),
         CommandField(allowed_names=["Attributes"], name="attributes", parser=key_value_list),
         CommandField(allowed_names=[attributeRegex], name="attributes", many_appearances=True, parser=value)
     ],
@@ -221,7 +222,7 @@ command_fields: Dict[str, List[CommandField]] = {
         CommandField(allowed_names=["ScalingType"], name="scaling_type", mandatory=True, allowed_values=processor_scaling_types, parser=simple_ident),
         CommandField(allowed_names=["InvokingInterface"], name="invoking_interface", mandatory=True, parser=simple_ident),
         CommandField(allowed_names=["RequestedInterface"], name="requested_interface", mandatory=True, parser=simple_ident),
-        CommandField(allowed_names=["NewProcessorName"], name="new_processor_name", mandatory=True, allowed_values=None, parser=processor_name),
+        CommandField(allowed_names=["NewProcessorName"], name="new_processor_name", allowed_values=None, parser=processor_name),
         CommandField(allowed_names=["Scale"], name="scale", mandatory=True, parser=expression_with_parameters)
         # TODO Add other BareProcessor fields
         #CommandField(allowed_names=["UpscaleParentContext"], name="upscale_parent_context", parser=upscale_context),

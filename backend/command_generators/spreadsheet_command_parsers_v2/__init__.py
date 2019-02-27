@@ -29,6 +29,8 @@ def check_columns(sh, name: str, area: Tuple, cols: List[CommandField], command_
     # Check columns
     col_map = {}  # From CommandField to a list of column index
     for c in range(area[2], area[3]):  # For each column of row 0 (Header Row)
+        if not sh.cell(row=area[0], column=c).value:
+            continue
         col_name = sh.cell(row=area[0], column=c).value.strip()
         for col in cols:  # Find matching CommandField from the attribute "regex_allowed_names"
             if col.regex_allowed_names.match(col_name):

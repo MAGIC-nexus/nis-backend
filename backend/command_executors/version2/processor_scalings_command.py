@@ -9,7 +9,7 @@ from backend.command_generators import Issue, IType, IssueLocation
 from backend.command_generators.parser_ast_evaluators import ast_evaluator
 from backend.command_generators.parser_field_parsers import string_to_ast, expression_with_parameters
 from backend.models.musiasem_concepts import Processor, ProcessorsRelationPartOfObservation, Factor, \
-    ProcessorsRelationUpscaleObservation
+    ProcessorsRelationUpscaleObservation, FactorsRelationScaleObservation
 from backend.models.musiasem_concepts_helper import find_processor_by_name
 
 
@@ -95,15 +95,21 @@ class ProcessorScalingsCommand(IExecutableCommand):
         invoking_interface_name: str = self._fields_values["invoking_interface"]
         requested_interface_name: str = self._fields_values["requested_interface"]
 
+        requested_new_processor_name: str = self._fields_values["new_processor_name"]
+
+        print(f"Invoking: {invoking_processor.name}:{invoking_interface_name}, Requested: {requested_processor.name}:{requested_interface_name}")
+
         if strcmp(scaling_type, "CloneAndScale"):
             # TODO: check “RequestedProcessor” must be an archetype
             # 1. Clones “RequestedProcessor” as a child of “InvokingProcessor”
             requested_processor_clone = self._clone_processor_as_child(processor=requested_processor,
-                                                                       parent_processor=invoking_processor)
+                                                                       parent_processor=invoking_processor,
+                                                                       name=requested_new_processor_name)
 
             # 2. Constrains the value of “RequestedInterface” to the value of “InvokingInterface”, scaled by “Scale”
-            # TODO: change the constraining to use the "requested_interface_name"
-            self._constrains_interface(scale=scale, interface_name=invoking_interface_name,
+            self._constrains_interface(scale=scale,
+                                       invoking_interface_name=invoking_interface_name,
+                                       requested_interface_name=requested_interface_name,
                                        parent_processor=invoking_processor,
                                        child_processor=requested_processor_clone)
 
@@ -114,8 +120,9 @@ class ProcessorScalingsCommand(IExecutableCommand):
                                             "(both instance or_archetype)")
 
             # 1. Constrains the value of “RequestedInterface” to the value of “InvokingInterface”, scaled by “Scale”
-            # TODO: change the constraining to use the "requested_interface_name"
-            self._constrains_interface(scale=scale, interface_name=invoking_interface_name,
+            self._constrains_interface(scale=scale,
+                                       invoking_interface_name=invoking_interface_name,
+                                       requested_interface_name=requested_interface_name,
                                        parent_processor=invoking_processor,
                                        child_processor=requested_processor)
 
@@ -151,7 +158,7 @@ class ProcessorScalingsCommand(IExecutableCommand):
                                         f"has not been previously declared.")
         return processor
 
-    def _clone_processor_as_child(self, processor: Processor, parent_processor: Processor) -> Processor:
+    def _clone_processor_as_child(self, processor: Processor, parent_processor: Processor, name: str = None) -> Processor:
             # Clone inherits some attributes from parent
             inherited_attributes = dict(
                 subsystem_type=parent_processor.subsystem_type,
@@ -159,7 +166,7 @@ class ProcessorScalingsCommand(IExecutableCommand):
                 instance_or_archetype=parent_processor.instance_or_archetype
             )
 
-            processor_clone = processor.clone(state=self._glb_idx, inherited_attributes=inherited_attributes)
+            processor_clone = processor.clone(state=self._glb_idx, name=name, inherited_attributes=inherited_attributes)
 
             # Create PART-OF relation
             relationship = ProcessorsRelationPartOfObservation.create_and_append(parent=parent_processor,
@@ -173,12 +180,36 @@ class ProcessorScalingsCommand(IExecutableCommand):
 
             return processor_clone
 
-    def _constrains_interface(self, scale: str, interface_name: str, parent_processor: Processor, child_processor: Processor):
-        relationship = ProcessorsRelationUpscaleObservation.create_and_append(parent=parent_processor,
-                                                                              child=child_processor,
-                                                                              observer=None,
-                                                                              factor_name=interface_name,
-                                                                              quantity=scale)
+    def _constrains_interface(self,
+                              scale: str,
+                              invoking_interface_name: str,
+                              requested_interface_name: str,
+                              parent_processor: Processor,
+                              child_processor: Processor):
+        for f in parent_processor.factors:
+            if strcmp(f.name, invoking_interface_name):
+                origin_factor = f
+                break
+        else:
+            raise Exception("Invoking interface name '"+invoking_interface_name+"' not found for processor '"+parent_processor.name+"'")
+
+        for f in child_processor.factors:
+            if strcmp(f.name, requested_interface_name):
+                destination_factor = f
+                break
+        else:
+            raise Exception("Requested interface name '"+invoking_interface_name+"' not found for processor '"+parent_processor.name+"'")
+
+        relationship = FactorsRelationScaleObservation.create_and_append(origin=origin_factor,
+                                                                         destination=destination_factor,
+                                                                         observer=None,
+                                                                         quantity=scale)
+
+        # relationship = ProcessorsRelationUpscaleObservation.create_and_append(parent=parent_processor,
+        #                                                                       child=child_processor,
+        #                                                                       observer=None,
+        #                                                                       factor_name=interface_name,
+        #                                                                       quantity=scale)
 
         self._glb_idx.put(relationship.key(), relationship)
 
