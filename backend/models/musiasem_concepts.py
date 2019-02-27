@@ -1273,8 +1273,8 @@ class Processor(Identifiable, Nameable, Taggable, Qualifiable, Automatable, Obse
                     for parent_relation in parent_relations
                     for parent_name in parent_relation.parent_processor.full_hierarchy_names(registry)]
 
-    def clone(self, state: Union[PartialRetrievalDictionary, State], objects_processed: dict=None, level=0,
-              inherited_attributes: Dict[str, Any] = {}):
+    def clone(self, state: Union[PartialRetrievalDictionary, State], objects_already_cloned: Dict = None, level=0,
+              inherited_attributes: Dict[str, Any] = {}, name: str = None):
         """
         Processor elements:
          - Attributes. Generic; type, external, stock
@@ -1291,8 +1291,10 @@ class Processor(Identifiable, Nameable, Taggable, Qualifiable, Automatable, Obse
         = Register in Processor Set (or not)
 
         :param state: Global state
-        :param objects_processed: Dictionary containing already processed Processors and Factors (INTERNAL USE)
+        :param objects_already_cloned: Dictionary containing already cloned Processors and Factors (INTERNAL USE)
         :param level: Recursion level (INTERNAL USE)
+        :param inherited_attributes: Attributes for the new Processor
+        :param name: Name for the new Processor (if None, adopt the name of the cloned Processor)
         :return:
         """
         if isinstance(state, PartialRetrievalDictionary):
@@ -1301,26 +1303,29 @@ class Processor(Identifiable, Nameable, Taggable, Qualifiable, Automatable, Obse
             glb_idx, _, _, _, _ = get_case_study_registry_objects(state)
 
         # Create new Processor
-        p = Processor(self.name,
+        if not name:
+            name = self.name
+        p = Processor(name,
                       attributes={**self.attributes, **inherited_attributes},
                       geolocation=self.geolocation,
                       tags=self._tags,
                       referenced_processor=self.referenced_processor
                       )
 
-        # glb_idx.put(p.key(), p)
+        if name != self.name:
+            glb_idx.put(p.key(), p)
 
-        if not objects_processed:
-            objects_processed = {}
+        if not objects_already_cloned:
+            objects_already_cloned = {}
 
-        objects_processed[self] = p
+        objects_already_cloned[self] = p
 
         # Factors
         for f in self.factors:
             f_ = Factor.clone_and_append(f, p)  # The Factor is cloned and appended into the Processor "p"
             glb_idx.put(f_.key(), f_)
-            if f not in objects_processed:
-                objects_processed[f] = f_
+            if f not in objects_already_cloned:
+                objects_already_cloned[f] = f_
             else:
                 raise Exception("Unexpected: the factor "+f.processor.name+":"+f.taxon.name+" should not be cloned again.")
 
@@ -1333,11 +1338,11 @@ class Processor(Identifiable, Nameable, Taggable, Qualifiable, Automatable, Obse
         # Clone child Processors (look for part-of relations)
         part_of_relations = glb_idx.get(ProcessorsRelationPartOfObservation.partial_key(parent=self))
         for rel in part_of_relations:
-            if rel.child_processor not in objects_processed:
-                p2 = rel.child_processor.clone(state, objects_processed, level+1, inherited_attributes)  # Recursive call
-                objects_processed[rel.child_processor] = p2
+            if rel.child_processor not in objects_already_cloned:
+                p2 = rel.child_processor.clone(state, objects_already_cloned, level + 1, inherited_attributes)  # Recursive call
+                objects_already_cloned[rel.child_processor] = p2
             else:
-                p2 = objects_processed[rel.child_processor]
+                p2 = objects_already_cloned[rel.child_processor]
 
             # Clone part-of relation
             o1 = ProcessorsRelationPartOfObservation.create_and_append(p, p2, rel.observer)
@@ -1376,38 +1381,49 @@ class Processor(Identifiable, Nameable, Taggable, Qualifiable, Automatable, Obse
         # If a flow points to an element out, the cloned flow will point have at one side a new element, at the other an existing one.
         if level == 0:
             considered_flows = set()  # Set of already processed flows
-            for o in objects_processed:
+            for o in objects_already_cloned:
                 if isinstance(o, Factor):
-                    for f in glb_idx.get(FactorsRelationDirectedFlowObservation.partial_key(source=o)): # As Source
+                    # Flows where the Interface is origin
+                    for f in glb_idx.get(FactorsRelationDirectedFlowObservation.partial_key(source=o)):
                         if f not in considered_flows:
-                            if f.target_factor in objects_processed:
-                                new_f = FactorsRelationDirectedFlowObservation(source=o, target=objects_processed[f.target_factor], observer=f.observer, weight=f.weight, tags=f.tags, attributes=f.attributes)
+                            if f.target_factor in objects_already_cloned:
+                                new_f = FactorsRelationDirectedFlowObservation(source=objects_already_cloned[o],
+                                                                               target=objects_already_cloned[f.target_factor],
+                                                                               observer=f.observer,
+                                                                               weight=f.weight,
+                                                                               tags=f.tags,
+                                                                               attributes=f.attributes)
                             else:
-                                new_f = FactorsRelationDirectedFlowObservation(source=o, target=f.target_factor, observer=f.observer, weight=f.weight, tags=f.tags, attributes=f.attributes)
+                                new_f = FactorsRelationDirectedFlowObservation(source=objects_already_cloned[o],
+                                                                               target=f.target_factor,
+                                                                               observer=f.observer,
+                                                                               weight=f.weight,
+                                                                               tags=f.tags,
+                                                                               attributes=f.attributes)
                             glb_idx.put(new_f.key(), new_f)
                             considered_flows.add(f)
-                    for f in glb_idx.get(FactorsRelationDirectedFlowObservation.partial_key(target=o)): # As Target
+                    for f in glb_idx.get(FactorsRelationDirectedFlowObservation.partial_key(target=o)):  # Destination
                         if f not in considered_flows:
-                            if f.source_factor in objects_processed:
-                                new_f = FactorsRelationDirectedFlowObservation(source=objects_processed[f.source_factor], target=o, observer=f.observer, weight=f.weight, tags=f.tags, attributes=f.attributes)
+                            if f.source_factor in objects_already_cloned:
+                                new_f = FactorsRelationDirectedFlowObservation(source=objects_already_cloned[f.source_factor], target=objects_already_cloned[o], observer=f.observer, weight=f.weight, tags=f.tags, attributes=f.attributes)
                             else:
-                                new_f = FactorsRelationDirectedFlowObservation(source=f.source_factor, target=o, observer=f.observer, weight=f.weight, tags=f.tags, attributes=f.attributes)
+                                new_f = FactorsRelationDirectedFlowObservation(source=f.source_factor, target=objects_already_cloned[o], observer=f.observer, weight=f.weight, tags=f.tags, attributes=f.attributes)
 
                             glb_idx.put(new_f.key(), new_f)
                             considered_flows.add(f)
                 else:  # "o" is a Processor
                     for f in glb_idx.get(ProcessorsRelationUndirectedFlowObservation.partial_key(source=o)): # As Source
                         if f not in considered_flows:
-                            if f.target_factor in objects_processed:
-                                new_f = ProcessorsRelationUndirectedFlowObservation(source=o, target=objects_processed[f.target_factor], observer=f.observer, weight=f.weight, tags=f.tags, attributes=f.attributes)
+                            if f.target_factor in objects_already_cloned:
+                                new_f = ProcessorsRelationUndirectedFlowObservation(source=o, target=objects_already_cloned[f.target_factor], observer=f.observer, weight=f.weight, tags=f.tags, attributes=f.attributes)
                             else:
                                 new_f = ProcessorsRelationUndirectedFlowObservation(source=o, target=f.target_factor, observer=f.observer, weight=f.weight, tags=f.tags, attributes=f.attributes)
                             glb_idx.put(new_f.key(), new_f)
                             considered_flows.add(f)
                     for f in glb_idx.get(FactorsRelationDirectedFlowObservation.partial_key(target=o)): # As Target
                         if f not in considered_flows:
-                            if f.source_factor in objects_processed:
-                                new_f = ProcessorsRelationUndirectedFlowObservation(source=objects_processed[f.source_factor], target=o, observer=f.observer, weight=f.weight, tags=f.tags, attributes=f.attributes)
+                            if f.source_factor in objects_already_cloned:
+                                new_f = ProcessorsRelationUndirectedFlowObservation(source=objects_already_cloned[f.source_factor], target=o, observer=f.observer, weight=f.weight, tags=f.tags, attributes=f.attributes)
                             else:
                                 new_f = ProcessorsRelationUndirectedFlowObservation(source=f.source_factor, target=o, observer=f.observer, weight=f.weight, tags=f.tags, attributes=f.attributes)
 
@@ -2503,11 +2519,12 @@ class Parameter(Nameable, Identifiable, Encodable):
         return {"_t": "param", "_n": self.name, "__o": self.ident}
 
 
-class ProblemStatement(Encodable):
+class ProblemStatement(Identifiable, Encodable):
     """
     Contains the parameters for the different scenarios, plus parameters needed to launch a solving process
     """
     def __init__(self, parameters=None, scenarios=None):
+        Identifiable.__init__(self)
         # Parameters characterizing the solver to be used and the parameters it receives
         self._solving_parameters = ifnull(parameters, {})  # type: Dict[str, str]
         # Each scenario is a set of parameter values (expressions)

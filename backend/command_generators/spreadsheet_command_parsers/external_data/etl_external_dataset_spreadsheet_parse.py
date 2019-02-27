@@ -1,4 +1,4 @@
-from openpyxl.worksheet import Worksheet
+from openpyxl.worksheet.worksheet import Worksheet
 
 from backend import AreaTupleType, IssuesLabelContentTripleType
 from backend.command_generators import parser_field_parsers
@@ -123,7 +123,7 @@ def parse_etl_external_dataset_command(sh: Worksheet, area: AreaTupleType, datas
                     else:
                         lst2 = filter_[col_name]
                     lst2.append(cd)
-        elif we_have_time and col_name.lower() in ["StartPeriod", "EndPeriod"]:  # SPECIAL "WHERE" FOR TIME
+        elif we_have_time and col_name.lower() in ["startperiod", "endperiod"]:  # SPECIAL "WHERE" FOR TIME
             # TODO Instead, should use a single column, "Time", using the interval syntax of the Time column in the Data Input command
             # Interval of time periods
             lst = obtain_column(c, area[0] + 1, area[1])

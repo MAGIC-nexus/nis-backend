@@ -1,6 +1,6 @@
 import json
 from collections import OrderedDict
-
+import traceback
 import numpy as np
 import pandas as pd
 
@@ -76,6 +76,7 @@ class DatasetQryCommand(IExecutableCommand):
 
         # Obtain filter parameters
         params = create_dictionary()  # Native dimension name to list of values the filter will allow to pass
+        joined_dimensions = []
         for dim in self._content["where"]:
             lst = self._content["where"][dim]
             native_dim = None
@@ -89,6 +90,7 @@ class DatasetQryCommand(IExecutableCommand):
                             strcmp(mappings[m].source, source) and \
                             strcmp(mappings[m].dataset, dataset_name) and \
                             mappings[m].origin in dims:
+                        joined_dimensions.append(mappings[m].destination)  # Store dimension in the original case
                         native_dim = mappings[m].origin
                         lst = obtain_reverse_codes(mappings[m].map, lst)
                         break
@@ -131,6 +133,16 @@ class DatasetQryCommand(IExecutableCommand):
             # values = self._content["measures"]
             out_names = self._content["measures_as"]
             group_by_dims = translate_case(self._content["group_by"], params)  # Group by dimension names
+            lcase_group_by_dims = [d.lower() for d in group_by_dims]
+            # Now joined_dimensions
+            for d in joined_dimensions:
+                if d.lower() in lcase_group_by_dims:
+                    # Find and replace
+                    for i, d2 in enumerate(group_by_dims):
+                        if strcmp(d, d2):
+                            group_by_dims[i] = d
+                            break
+
             agg_funcs = []  # Aggregation functions
             agg_names = {}
             for f in self._content["agg_funcs"]:
@@ -236,6 +248,7 @@ class DatasetQryCommand(IExecutableCommand):
                 # The result, all columns (no index), is stored for later use
                 ds.data = df2
             except Exception as e:
+                traceback.print_exc()
                 issues.append((3, "There was a problem: "+str(e)))
 
         # Store the dataset in State

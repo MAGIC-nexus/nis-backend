@@ -54,6 +54,12 @@ commands: List[Command] = [
             execution_class_name="backend.command_executors.specification.metadata_command.MetadataCommand",
             parse_function=parse_metadata_command),
 
+    Command(name="pedigree_matrix", allowed_names=["Pedigree"], is_v1=True, is_v2=True,
+            cmd_type=CommandType.metadata,
+            execution_class_name="backend.command_executors.specification.pedigree_matrix_command.PedigreeMatrixCommand",
+            parse_function=parse_pedigree_matrix_command,
+            alt_regex=r"(PedigreeV1|Ped|NUSAP\.PM)[ _]+" + regex_var_name),
+
     # Version 2 only
 
     Command(name="cat_hier_mapping",
@@ -61,7 +67,7 @@ commands: List[Command] = [
             is_v2=True, cmd_type=CommandType.core,
             execution_class_name="backend.command_executors.version2.hierarchy_mapping_command.HierarchyMappingCommand"),
 
-    Command(name="cat_hierarchies", allowed_names=["Hierarchies", "CodeHierarchies"],
+    Command(name="cat_hierarchies", allowed_names=["CodeHierarchies", "Hierarchies"],
             is_v2=True, cmd_type=CommandType.core,
             execution_class_name="backend.command_executors.version2.hierarchy_categories_command.HierarchyCategoriesCommand"),
 
@@ -186,12 +192,6 @@ commands: List[Command] = [
             execution_class_name="backend.command_executors.specification.scale_conversion_command.ScaleConversionCommand",
             parse_function=parse_scale_conversion_command,
             alt_regex=r"Scale"),
-
-    Command(name="pedigree_matrix", allowed_names=["Pedigree"], is_v1=True,
-            cmd_type=CommandType.metadata,
-            execution_class_name="backend.command_executors.specification.pedigree_matrix_command.PedigreeMatrixCommand",
-            parse_function=parse_pedigree_matrix_command,
-            alt_regex=r"(Pedigree|Ped|NUSAP\.PM)[ _]+" + regex_var_name),
 
     Command(name="etl_dataset", allowed_names=["Dataset"], is_v1=True,
             cmd_type=CommandType.input,

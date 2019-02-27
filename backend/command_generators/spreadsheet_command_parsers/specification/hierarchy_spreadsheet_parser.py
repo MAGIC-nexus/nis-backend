@@ -1,4 +1,4 @@
-from openpyxl.worksheet import Worksheet
+from openpyxl.worksheet.worksheet import Worksheet
 
 from backend import AreaTupleType, IssuesLabelContentTripleType
 from backend.command_generators import parser_field_parsers

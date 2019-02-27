@@ -5,7 +5,7 @@ Declaration of Observables and relations between Processors and/or Factors
 import collections
 import traceback
 
-from openpyxl.worksheet import Worksheet
+from openpyxl.worksheet.worksheet import Worksheet
 
 from backend import IssuesLabelContentTripleType, AreaTupleType
 from backend.command_generators import parser_field_parsers
