@@ -5,7 +5,7 @@ from backend.models.musiasem_concepts import Processor, Observer, FactorType, Fa
     FactorQuantitativeObservation, FactorTypesRelationUnidirectionalLinearTransformObservation, \
     ProcessorsRelationPartOfObservation, ProcessorsRelationUndirectedFlowObservation, \
     ProcessorsRelationUpscaleObservation, FactorsRelationDirectedFlowObservation, Hierarchy, Parameter, \
-    ProcessorsRelationIsAObservation
+    ProcessorsRelationIsAObservation, FactorsRelationScaleObservation
 from backend.model_services import get_case_study_registry_objects, State
 from backend.common.helper import create_dictionary, PartialRetrievalDictionary
 
@@ -37,6 +37,7 @@ class BasicQuery(IQueryObjects):
                            FactorTypesRelationUnidirectionalLinearTransformObservation,
                            ProcessorsRelationPartOfObservation, ProcessorsRelationUpscaleObservation,
                            ProcessorsRelationUndirectedFlowObservation, ProcessorsRelationIsAObservation,
+                           FactorsRelationScaleObservation,
                            FactorsRelationDirectedFlowObservation, Hierarchy, Parameter]
         supported_types_names = {t.__name__.lower(): t for t in supported_types}
 
@@ -96,11 +97,19 @@ def get_processor_unique_label(p: Processor, reg: PartialRetrievalDictionary):
     return p.full_hierarchy_names(reg)[0]
 
 
-def get_factor_id(f_: Union[Factor, Processor], ft: FactorType=None):
+def get_factor_id(f_: Union[Factor, Processor], ft: FactorType=None, prd: PartialRetrievalDictionary=None):
     if isinstance(f_, Factor):
-        return (f_.processor.name + ":" + f_.taxon.name).lower()
+        if prd:
+            name = f_.processor.full_hierarchy_names(prd)[0]
+        else:
+            name = f_.processor.name
+        return (name + ":" + f_.taxon.name).lower()
     elif isinstance(f_, Processor) and isinstance(ft, FactorType):
-        return (f_.name + ":" + ft.name).lower()
+        if prd:
+            name = f_.full_hierarchy_names(prd)[0]
+        else:
+            name = f_.name
+        return (name + ":" + ft.name).lower()
 
 
 def get_factor_type_id(ft: (FactorType, Factor)):
