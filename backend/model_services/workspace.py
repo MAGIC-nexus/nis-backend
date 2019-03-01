@@ -340,7 +340,8 @@ def call_solver(state: State, systems: Dict[str, Set[Processor]]):
 
     issues = []
     if solver_type == "flow_graph":
-        issues = flow_graph_solver(global_parameters, problem_statement, systems, state)
+        pass
+        #issues = flow_graph_solver(global_parameters, problem_statement, systems, state)
 
     return issues
 

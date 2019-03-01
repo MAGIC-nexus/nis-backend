@@ -1,4 +1,4 @@
-from typing import List, Tuple, Optional
+from typing import List, Tuple, Optional, Dict
 
 from openpyxl.worksheet.worksheet import Worksheet
 
@@ -29,9 +29,11 @@ def check_columns(sh, name: str, area: Tuple, cols: List[CommandField], command_
     # Check columns
     col_map = {}  # From CommandField to a list of column index
     for c in range(area[2], area[3]):  # For each column of row 0 (Header Row)
-        if not sh.cell(row=area[0], column=c).value:
+        ##val = sh.get((area[0], c), None)
+        val = sh.cell(row=area[0], column=c).value
+        if not val:
             continue
-        col_name = sh.cell(row=area[0], column=c).value.strip()
+        col_name = val.strip()
         for col in cols:  # Find matching CommandField from the attribute "regex_allowed_names"
             if col.regex_allowed_names.match(col_name):
                 # Found matching CommandField "col". Process
@@ -67,6 +69,18 @@ def check_columns(sh, name: str, area: Tuple, cols: List[CommandField], command_
     return col_map, issues
 
 
+def read_worksheet(sh: Worksheet) -> Dict:
+    rows = sh.rows
+    data = {}
+    for r, row in enumerate(rows):
+        for c, cell in enumerate(row):
+            if cell.data_type == 's':
+                data[(r+1, c+1)] = cell.value.strip()
+            else:
+                data[(r+1, c+1)] = cell.value
+    return data
+
+
 def parse_command(sh: Worksheet, area: AreaTupleType, name: Optional[str], cmd_name: str) -> IssuesLabelContentTripleType:
     """
     Parse command in general
@@ -85,6 +99,8 @@ def parse_command(sh: Worksheet, area: AreaTupleType, name: Optional[str], cmd_n
     from backend.command_field_definitions import command_fields
 
     cols = command_fields[cmd_name]  # List of CommandField that will guide the parsing
+    ##sh_dict = read_worksheet(sh)
+    ##col_map, local_issues = check_columns(sh_dict, name, area, cols, cmd_name)
     col_map, local_issues = check_columns(sh, name, area, cols, cmd_name)
 
     if any([i.itype == 3 for i in local_issues]):
@@ -112,6 +128,7 @@ def parse_command(sh: Worksheet, area: AreaTupleType, name: Optional[str], cmd_n
             # Appearances of field (normally just once, there attributes allowing more than one appearance)
             for col_name, col_idx in col_map[col]:
                 # Read and prepare "value"
+                ##value = sh_dict.get((r, col_idx), None)
                 value = sh.cell(row=r, column=col_idx).value
                 if value:
                     if not isinstance(value, str):
@@ -151,6 +168,7 @@ def parse_command(sh: Worksheet, area: AreaTupleType, name: Optional[str], cmd_n
                                 else:
                                     line[cname] = value  # Store the value
                         except:
+                            ##col_header = sh_dict.get((1, col_idx), None)
                             col_header = sh.cell(row=1, column=col_idx).value
                             issues.append(Issue(itype=3,
                                                 description="The value in field '" + col_header + "' of command '" + cmd_name + "' is not syntactically correct. Entered: " + value,

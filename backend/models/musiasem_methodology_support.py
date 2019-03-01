@@ -29,6 +29,7 @@ import uuid
 import jsonpickle
 
 from backend.models import MODEL_VERSION
+import sys
 
 __author__ = 'rnebot'
 
@@ -75,11 +76,19 @@ class GUID(TypeDecorator):
 
 
 def serialize_from_object(obj):
-    return jsonpickle.encode(obj)  # .encode("ascii")
+    tmp = sys.getrecursionlimit()
+    sys.setrecursionlimit(10000)
+    tmp_str = jsonpickle.encode(obj)  # .encode("ascii")
+    sys.setrecursionlimit(tmp)
+    return tmp_str
 
 
 def deserialize_to_object(s):
-    return jsonpickle.decode(s)
+    tmp = sys.getrecursionlimit()
+    sys.setrecursionlimit(10000)
+    tmp_str = jsonpickle.decode(s)
+    sys.setrecursionlimit(tmp)
+    return tmp_str
 
 
 class BaseMixin(object):

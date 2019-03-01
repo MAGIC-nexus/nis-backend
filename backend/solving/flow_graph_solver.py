@@ -26,7 +26,7 @@ Before the elaboration of flow graphs, several preparatory steps:
 
 """
 
-import matplotlib.pyplot as plt
+#import matplotlib.pyplot as plt
 import networkx as nx
 from typing import Dict, List, Set, Any, Tuple, Union, Optional
 
