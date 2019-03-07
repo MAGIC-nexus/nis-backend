@@ -33,9 +33,13 @@ class FlowGraph:
        * Direct weight: a weight affecting the amount of data flowing Top-Down
        * Reverse weight: a weight affecting the amount of data flowing Bottom-Up
     """
-    def __init__(self):
+    def __init__(self, graph: Optional[nx.DiGraph] = None):
         self._direct_graph = nx.DiGraph()
         self._reverse_graph = nx.DiGraph()
+
+        if graph:
+            for u, v, data in graph.edges(data=True):
+                self.add_edge(u, v, data["weight"], None)
 
     def add_edge(self, u: Node, v: Node, weight: Optional[Weight], reverse_weight: Optional[Weight]) -> NoReturn:
         """ Add an edge with weight attributes to the flow graph """

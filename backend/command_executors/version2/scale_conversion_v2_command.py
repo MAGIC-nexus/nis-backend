@@ -14,15 +14,15 @@ class ScaleConversionV2Command(IExecutableCommand):
 
     def execute(self, state: "State"):
         def process_line(item):
-            sc_src_hierarchy = item.get("source_hierarchy", None)
-            sc_src_interface_type = item.get("source_interface_type", None)
-            sc_tgt_hierarchy = item.get("target_hierarchy", None)
-            sc_tgt_interface_type = item.get("target_interface_type", None)
-            sc_scale = item.get("source_hierarchy", None)
-            sc_src_context = item.get("source_context", None)
-            sc_tgt_context = item.get("target_context", None)
-            sc_src_unit = item.get("source_unit", None)
-            sc_tgt_unit = item.get("target_unit", None)
+            sc_src_hierarchy = item.get("source_hierarchy")
+            sc_src_interface_type = item.get("source_interface_type")
+            sc_tgt_hierarchy = item.get("target_hierarchy")
+            sc_tgt_interface_type = item.get("target_interface_type")
+            sc_scale = item.get("scale")
+            sc_src_context = item.get("source_context")
+            sc_tgt_context = item.get("target_context")
+            sc_src_unit = item.get("source_unit")
+            sc_tgt_unit = item.get("target_unit")
 
             # Check the existence of the interface types
 
@@ -32,29 +32,29 @@ class ScaleConversionV2Command(IExecutableCommand):
 
             # Check if FactorTypes exist
             fts = []
-            for i, t in enumerate([(sc_src_hierarchy, sc_src_interface_type),
-                                   (sc_tgt_hierarchy, sc_tgt_interface_type)]):
+            for i, (hierarchy, interface_type) in enumerate([(sc_src_hierarchy, sc_src_interface_type),
+                                                             (sc_tgt_hierarchy, sc_tgt_interface_type)]):
                 m = "origin" if i == 0 else "destination"
-                if not t[1]:
+                if not interface_type:
                     issues.append(Issue(itype=3,
                                         description="The "+m+ "interface type name has not been specified",
                                         location=IssueLocation(sheet_name=name, row=r, column=None)))
                     return
 
                 # Check if FactorType exists
-                ft = glb_idx.get(FactorType.partial_key(t[1]))
+                ft = glb_idx.get(FactorType.partial_key(interface_type))
                 if len(ft) > 0:
                     if len(ft) == 1:
                         fts.append(ft[0])
                     else:
-                        if not t[0]:
+                        if not hierarchy:
                             issues.append(Issue(itype=3,
                                                 description="The hierarchy of the " + m + "interface type name has not been specified and the interface type name is not unique",
                                                 location=IssueLocation(sheet_name=name, row=r, column=None)))
                             return
 
                         for ft2 in ft:
-                            if strcmp(ft2.hierarchy.name, t[0]):
+                            if strcmp(ft2.hierarchy.name, hierarchy):
                                 fts.append(ft2)
 
             if len(fts) != 2:

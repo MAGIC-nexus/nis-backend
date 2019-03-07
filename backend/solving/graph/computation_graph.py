@@ -49,12 +49,21 @@ class ComputationGraph:
         """ Add an edge with weight attributes to the computation graph """
         self.graph.add_edge(u, v, weight=weight, type=EdgeType.DIRECT)
         self.graph.add_edge(v, u, weight=reverse_weight, type=EdgeType.REVERSE)
+        self.init_node_split(u)
+        self.init_node_split(v)
 
-    def mark_node_split(self, n: Node, split: bool, graph_type: EdgeType) -> NoReturn:
-        """ Set the attribute 'split' to a node """
+    def add_edges(self, edges: List[Tuple[Node, Node]], weight: Optional[Weight], reverse_weight: Optional[Weight]):
+        """ Add several edges with same weight attributes to the computation graph """
+        self.graph.add_edges_from(edges, weight=weight, type=EdgeType.DIRECT)
+        self.graph.add_edges_from(edges, weight=reverse_weight, type=EdgeType.REVERSE)
+
+    def init_node_split(self, n: Node) -> NoReturn:
+        """ Set the default value for attribute 'split' to a node """
         if not self.graph.nodes[n].get("split"):
             self.graph.nodes[n]["split"] = [False, False]
 
+    def mark_node_split(self, n: Node, split: bool, graph_type: EdgeType) -> NoReturn:
+        """ Set the attribute 'split' to a node """
         self.graph.nodes[n]["split"][graph_type.value] = split
 
     def compute_param_conflicts(self, params: Set[Node]) -> Dict[Node, Set[Node]]:
