@@ -55,7 +55,7 @@ from backend.restful_service import nis_api_base, nis_client_base, nis_external_
 from backend.models import log_level
 from backend.restful_service.serialization import serialize, deserialize, serialize_state, deserialize_state
 from backend.ie_exports.flows_graph import BasicQuery, construct_flow_graph, construct_flow_graph_2
-from backend.ie_exports.processors_graph import construct_processors_graph
+from backend.ie_exports.processors_graph import construct_processors_graph, construct_processors_graph_2
 from backend.models.musiasem_concepts import Hierarchy
 
 
@@ -929,86 +929,121 @@ def reproducible_session_query_state_everything_executed():  # Query if all comm
 
 
 # Obtain a list of ALL possible outputs
-@app.route(nis_api_base + "/isession/rsession/state_query/outputs", methods=["GET"])
-@app.route(nis_api_base + "/isession/rsession/state_query/datasets", methods=["GET"])
-def reproducible_session_query_state_list_datasets():  # Query list of datasets IN the current state
-    # Recover InteractiveSession
-    isess = deserialize_isession_and_prepare_db_session()
-    if isess and isinstance(isess, Response):
-        return isess
 
+def query_state_list_results(isess):
     dataset_formats = ["CSV", "XLSX"] #, "XLSXwithPivotTable", "NISembedded", "NISdetached"]
     graph_formats = ["VisJS", "GML"] #, "GraphML"]
-    ontology_formats = ["OWL", "RDF/XML"]
+    ontology_formats = ["OWL"]
     geo_formats = ["KMZ", "KML", "GeoJSON"]
     # A reproducible session must be open, signal about it if not
     if isess.reproducible_session_opened():
         if isess.state:
             glb_idx, p_sets, hh, datasets, mappings = get_case_study_registry_objects(isess.state)
-            r = build_json_response({"datasets":
-                                         [dict(name=k,
-                                               type="dataset",
-                                               description=F"Dataset with {datasets[k].data.shape[0]} rows, {datasets[k].data.size} cells, {datasets[k].data.memory_usage(True).sum()} bytes",
-                                               # nelements=datasets[k].data.size,
-                                               # nrows=datasets[k].data.shape[0],
-                                               # size=datasets[k].data.memory_usage(True).sum(),
-                                               formats=[dict(format=f, url=nis_api_base + F"/isession/rsession/state_query/datasets/{k}.{f.lower()}") for f in dataset_formats],
-                                               ) for k in datasets
-                                          ] +
-                                         [dict(name="FG",
-                                               type="graph",
-                                               description="Graph of Interfaces, Quantities; Scales and Exchanges",
-                                               formats=[dict(format=f, url=nis_api_base + F"/isession/rsession/state_query/flow_graph.{f.lower()}") for f in graph_formats]),
-                                          dict(name="PG",
-                                               type="graph",
-                                               description="Processors and exchanges graph",
-                                               formats=[dict(format=f, url=nis_api_base + F"/isession/rsession/state_query/processors_graph.{f.lower()}") for f in graph_formats]),
-                                          ] +
-                                         [dict(name="P_GIS",
-                                               type="geolayer",
-                                               description="Processors",
-                                               formats=[dict(format=f, url=nis_api_base + F"/isession/rsession/state_query/geolayer.{f.lower()}") for f in geo_formats]),
-                                          ] +
-                                         [dict(name="Model",
-                                               type="model",
-                                               description="Model",
-                                               formats=[dict(format=f, url=nis_api_base + F"/isession/rsession/state_query/model.{f.lower()}") for f in ["JSON"]]),
-                                          ] +
-                                         [dict(name="Ontology",
-                                               type="ontology",
-                                               description="OWL ontology",
-                                               formats=[dict(format=f, url=nis_api_base + F"/isession/rsession/state_query/ontology.{f.lower()}") for f in ["OWL"]]),
-                                          ] +
-                                         [dict(name="Python script",
-                                               type="script",
-                                               description="Python script",
-                                               formats=[dict(format=f, url=nis_api_base + F"/isession/rsession/state_query/python_script.{f.lower()}") for f in ["Python", "JupyterNotebook"]]),
-                                          dict(name="R script",
-                                               type="script",
-                                               description="R script",
-                                               formats=[dict(format=f, url=nis_api_base + F"/isession/rsession/state_query/r_script.{f.lower()}") for f in ["R", "JupyterNotebook"]]),
-                                          ]
-                                     },
-                                    200)
+            r = {"datasets":
+                     [dict(name=k,
+                           type="dataset",
+                           description=F"Dataset with {datasets[k].data.shape[0]} rows, {datasets[k].data.size} cells, "
+                           F"{datasets[k].data.memory_usage(True).sum()} bytes",
+                           # nelements=datasets[k].data.size,
+                           # nrows=datasets[k].data.shape[0],
+                           # size=datasets[k].data.memory_usage(True).sum(),
+                           formats=[dict(format=f,
+                                         url=nis_api_base + F"/isession/rsession/state_query/datasets/{k}.{f.lower()}")
+                                    for f in dataset_formats],
+                           ) for k in datasets
+                      ] +
+                     [dict(name="FG",
+                           type="graph",
+                           description="Graph of Interfaces, Quantities; Scales and Exchanges",
+                           formats=[dict(format=f,
+                                         url=nis_api_base + F"/isession/rsession/state_query/flow_graph.{f.lower()}")
+                                    for f in graph_formats]),
+                      dict(name="PG",
+                           type="graph",
+                           description="Processors and exchanges graph",
+                           formats=[dict(format=f,
+                                         url=nis_api_base + F"/isession/rsession/state_query/processors_graph.{f.lower()}")
+                                    for f in graph_formats]),
+                      ] +
+                     [dict(name="P_GIS",
+                           type="geolayer",
+                           description="Processors",
+                           formats=[
+                               dict(format=f, url=nis_api_base + F"/isession/rsession/state_query/geolayer.{f.lower()}")
+                               for f in geo_formats]),
+                      ] +
+                     [dict(name="Model",
+                           type="model",
+                           description="Model",
+                           formats=[
+                               dict(format=f, url=nis_api_base + F"/isession/rsession/state_query/model.{f.lower()}")
+                               for f in ["JSON"]]),
+                      ] +
+                     [dict(name="Ontology",
+                           type="ontology",
+                           description="OWL ontology",
+                           formats=[
+                               dict(format=f, url=nis_api_base + F"/isession/rsession/state_query/ontology.{f.lower()}")
+                               for f in ontology_formats]),
+                      ] +
+                     [dict(name="Python script",
+                           type="script",
+                           description="Python script",
+                           formats=[dict(format=f,
+                                         url=nis_api_base + F"/isession/rsession/state_query/python_script.{f.lower()}")
+                                    for f in ["Python", "JupyterNotebook"]]),
+                      dict(name="R script",
+                           type="script",
+                           description="R script",
+                           formats=[
+                               dict(format=f, url=nis_api_base + F"/isession/rsession/state_query/r_script.{f.lower()}")
+                               for f in ["R", "JupyterNotebook"]]),
+                      ]
+                 }
+
+    return r
+
+
+@app.route(nis_api_base + "/isession/rsession/state_query/outputs", methods=["GET"])
+@app.route(nis_api_base + "/isession/rsession/state_query/datasets", methods=["GET"])
+def reproducible_session_query_state_list_results():  # Query list of datasets IN the current state
+    # Recover InteractiveSession
+    isess = deserialize_isession_and_prepare_db_session()
+    if isess and isinstance(isess, Response):
+        return isess
+
+    # A reproducible session must be open, signal about it if not
+    if isess.reproducible_session_opened():
+        if isess.state:
+            r = build_json_response(query_state_list_results(isess), 200)
         else:
             r = build_json_response([], 204)
     else:
-        r = build_json_response({"error": "Cannot return state, no opened reproducible session"}, 401)
+        r = build_json_response({"error": "Cannot return list of results, no reproducible session open"}, 401)
 
     return r
 
 
 @app.route(nis_api_base + "/isession/rsession/state_query/geolayer.<format>", methods=["GET"])
 def get_geolayer(format):
+    isess = deserialize_isession_and_prepare_db_session()
+    if isess and isinstance(isess, Response):
+        return isess
+
     output = None
-    if format == "geojson":
-        # TODO Prepare GeoJSON file
-        output = io.StringIO()
-        mimetype = "application/geojson"
-    elif format == "kmz" or format == "kml":
-        # TODO Prepare KML file
-        output = io.BytesIO()
-        mimetype = "application/kml"
+    # Generate graph from State
+    if isess.state:
+        if format == "geojson":
+            # TODO Prepare GeoJSON file
+            output = io.StringIO()
+            mimetype = "application/geo+json"
+        elif format == "kmz" or format == "kml":
+            # TODO Prepare KML file
+            output = io.BytesIO()
+            if format == "kmz":
+                mimetype = "application/vnd.google-earth.kmz"
+            else:
+                mimetype = "application/vnd.google-earth.kml+xml"
 
     if output:
         return Response(output.getvalue(), mimetype=mimetype, status=200)
@@ -1018,11 +1053,19 @@ def get_geolayer(format):
 
 @app.route(nis_api_base + "/isession/rsession/state_query/ontology.<format>", methods=["GET"])
 def get_ontology(format):
+    # TODO OWLREADY2 installation on the Docker image issues a problem
+    # Recover InteractiveSession
+    isess = deserialize_isession_and_prepare_db_session()
+    if isess and isinstance(isess, Response):
+        return isess
+
     output = None
-    if format == "owl":
-        # TODO Prepare OWL file
-        output = io.StringIO()
-        mimetype = "application/owl"  # TODO
+    # Generate graph from State
+    if isess.state:
+        if format == "owl":
+            # TODO Prepare OWL file
+            output = io.StringIO()
+            mimetype = "application/rdf+xml"  # TODO
 
     if output:
         return Response(output.getvalue(), mimetype=mimetype, status=200)
@@ -1032,15 +1075,39 @@ def get_ontology(format):
 
 @app.route(nis_api_base + "/isession/rsession/state_query/python_script.<format>", methods=["GET"])
 def get_python_script(format):
+    """
+script capaz de reproducir lo ejecutado
+* login
+* open
+* load_workbook
+* load_workbook desde Nextcloud, sin credenciales
+* mostrar cómo obtener cada uno de los datasets, comentado (llamar a "query_state_list_results(isess)")
+* mostrar cómo utilizar cada uno de los datasets, comentado también
+
+* Jupyter sólo: script capaz de relanzar, selección de parámetros, reejecución, recogida de datasets (igual)
+
+    :param format:
+    :return:
+    """
+    # Recover InteractiveSession
+    isess = deserialize_isession_and_prepare_db_session()
+    if isess and isinstance(isess, Response):
+        return isess
+
     output = None
-    if format == "python":
-        # TODO Prepare Python file
-        output = io.StringIO()
-        mimetype = "application/python"  # TODO
-    elif format == "jupyternotebook":
-        # TODO Prepare Jupyternotebook file
-        output = io.StringIO()
-        mimetype = "application/jupyternotebook"  # TODO
+    # Generate graph from State
+    if isess.state:
+        if format == "python":
+            # TODO Prepare Python file
+            output = io.StringIO()
+            mimetype = "application/x-python-code"  # or text/x-python
+        elif format == "jupyternotebook":
+            # TODO Prepare Jupyternotebook file
+            #      Update cells below the one containing Widgets
+            #  display(Javascript('IPython.notebook.execute_cell_range(IPython.notebook.get_selected_index()+1,
+            #  IPython.notebook.get_selected_index()+2)'))
+            output = io.StringIO()
+            mimetype = "application/x-ipynb+json"  # TODO
 
     if output:
         return Response(output.getvalue(), mimetype=mimetype, status=200)
@@ -1050,15 +1117,22 @@ def get_python_script(format):
 
 @app.route(nis_api_base + "/isession/rsession/state_query/r_script.<format>", methods=["GET"])
 def get_r_script(format):
+    # Recover InteractiveSession
+    isess = deserialize_isession_and_prepare_db_session()
+    if isess and isinstance(isess, Response):
+        return isess
+
     output = None
-    if format == "r":
-        # TODO Prepare R file
-        output = io.StringIO()
-        mimetype = "application/r-system"  # TODO
-    elif format == "jupyternotebook":
-        # TODO Prepare Jupyternotebook file
-        output = io.StringIO()
-        mimetype = "application/jupyternotebook"  # TODO
+    # Generate graph from State
+    if isess.state:
+        if format == "r":
+            # TODO Prepare R file
+            output = io.StringIO()
+            mimetype = "application/r-system"  # TODO
+        elif format == "jupyternotebook":
+            # TODO Prepare Jupyternotebook file
+            output = io.StringIO()
+            mimetype = "application/x-ipynb+json"  # TODO
 
     if output:
         return Response(output.getvalue(), mimetype=mimetype, status=200)
@@ -1068,19 +1142,20 @@ def get_r_script(format):
 
 @app.route(nis_api_base + "/isession/rsession/state_query/model.<format>", methods=["GET"])
 def get_model(format):
-    output = None
-    if format == "json":
-        # Recover InteractiveSession
-        isess = deserialize_isession_and_prepare_db_session()
-        if isess and isinstance(isess, Response):
-            return isess
+    isess = deserialize_isession_and_prepare_db_session()
+    if isess and isinstance(isess, Response):
+        return isess
 
-        # A reproducible session must be open, signal about it if not
-        if isess.reproducible_session_opened():
-            if isess.state:
-                # Prepare a JSON string
-                output = str(export_model_to_json(isess.state))
-        mimetype = "text/json"
+    output = None
+    # Generate graph from State
+    if isess.state:
+        if format == "json":
+            # A reproducible session must be open, signal about it if not
+            if isess.reproducible_session_opened():
+                if isess.state:
+                    # Prepare a JSON string
+                    output = str(export_model_to_json(isess.state))
+            mimetype = "text/json"
 
     if output:
         return Response(output, mimetype=mimetype, status=200)
@@ -1146,7 +1221,7 @@ def obtain_processors_graph_visjs_format():
     # Generate graph from State
     if isess.state:
         query = BasicQuery(isess.state)
-        json = construct_processors_graph(isess.state, query, None)
+        json = construct_processors_graph_2(isess.state, query, None, True, True, False)
         r = build_json_response(json, 200)
     else:
         r = build_json_response({}, 200)
@@ -1243,6 +1318,8 @@ def reproducible_session_query_state_get_dataset(name, format):  # Query list of
 
     return r
 
+
+# ----------------------------------------------------------------------------------------------------------------------
 
 @app.route(nis_api_base + "/isession/rsession/command", methods=["POST"])
 def reproducible_session_append_single_command():  # Receive a JSON or CSV command from some externally executed generator

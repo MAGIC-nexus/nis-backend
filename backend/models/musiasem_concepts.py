@@ -1356,31 +1356,13 @@ class Processor(Identifiable, Nameable, Taggable, Qualifiable, Automatable, Obse
                 o2 = ProcessorsRelationUpscaleObservation.create_and_append(p, p2, rel.observer, factor_name, quantity)
                 glb_idx.put(o2.key(), o2)
 
-            # If there are F2F-Scale relations, clone them
-            scale_relations = glb_idx.get(FactorsRelationScaleObservation.partial_key(origin=self, destination=rel.child_processor))
-            if scale_relations:
-                origin = scale_relations[0].origin
-                destination = scale_relations[0].destination
-                # Find equivalent destination factor in the clone Processor
-                for f in p2.factors:
-                    if destination.name == f.name and destination.taxon == f.taxon:
-                        destination2 = f
-                        break
-                else:
-                    destination2 = None
-                if destination2:
-                    quantity = scale_relations[0].quantity
-                    o2 = FactorsRelationScaleObservation.create_and_append(origin, destination2, rel.observer, quantity)
-                    glb_idx.put(o2.key(), o2)
-                else:
-                    raise Exception("Could not find Interface for Scale relationship, during clone operation")
-
         # PROCESS FLOW relations: directed and undirected (if at entry level, i.e., level == 0)
         # This step is needed because flow relations may involve processors and flows outside of the clone processor.
         # If a flow is totally contained, pointing to two cloned elements, the cloned flow will point to the two new elements.
         # If a flow points to an element out, the cloned flow will point have at one side a new element, at the other an existing one.
         if level == 0:
             considered_flows = set()  # Set of already processed flows
+            considered_scales = set()  # Set of already processed scales
             for o in objects_already_cloned:
                 if isinstance(o, Factor):
                     # Flows where the Interface is origin
@@ -1402,6 +1384,7 @@ class Processor(Identifiable, Nameable, Taggable, Qualifiable, Automatable, Obse
                                                                                attributes=f.attributes)
                             glb_idx.put(new_f.key(), new_f)
                             considered_flows.add(f)
+                    # Flows where the Interface is destination
                     for f in glb_idx.get(FactorsRelationDirectedFlowObservation.partial_key(target=o)):  # Destination
                         if f not in considered_flows:
                             if f.source_factor in objects_already_cloned:
@@ -1411,6 +1394,41 @@ class Processor(Identifiable, Nameable, Taggable, Qualifiable, Automatable, Obse
 
                             glb_idx.put(new_f.key(), new_f)
                             considered_flows.add(f)
+                    # Scales
+                    for f in glb_idx.get(FactorsRelationScaleObservation.partial_key(origin=o)):
+                        if f not in considered_scales:
+                            if f.destination in objects_already_cloned:
+                                new_f = FactorsRelationScaleObservation(origin=objects_already_cloned[o],
+                                                                        destination=objects_already_cloned[f.destination],
+                                                                        observer=f.observer,
+                                                                        quantity=f.quantity,
+                                                                        tags=f.tags,
+                                                                        attributes=f.attributes)
+                            else:
+                                new_f = FactorsRelationScaleObservation(origin=objects_already_cloned[o],
+                                                                        destination=f.destination,
+                                                                        observer=f.observer,
+                                                                        quantity=f.quantity,
+                                                                        tags=f.tags,
+                                                                        attributes=f.attributes)
+                            glb_idx.put(new_f.key(), new_f)
+                            considered_scales.add(f)
+                    # Scales where the Interface is destination
+                    for f in glb_idx.get(FactorsRelationScaleObservation.partial_key(destination=o)):  # Destination
+                        if f not in considered_scales:
+                            if f.origin in objects_already_cloned:
+                                new_f = FactorsRelationScaleObservation(
+                                    origin=objects_already_cloned[f.origin], destination=objects_already_cloned[o],
+                                    observer=f.observer, quantity=f.quantity, tags=f.tags, attributes=f.attributes)
+                            else:
+                                new_f = FactorsRelationScaleObservation(source=f.origin,
+                                                                        target=objects_already_cloned[o],
+                                                                        observer=f.observer, quantity=f.quantity,
+                                                                        tags=f.tags, attributes=f.attributes)
+
+                            glb_idx.put(new_f.key(), new_f)
+                            considered_scales.add(f)
+
                 else:  # "o" is a Processor
                     for f in glb_idx.get(ProcessorsRelationUndirectedFlowObservation.partial_key(source=o)): # As Source
                         if f not in considered_flows:
@@ -2371,13 +2389,21 @@ class FactorsRelationScaleObservation(FactorsRelationObservation):
         return self._observer
 
     @staticmethod
-    def partial_key(origin: Factor=None, destination: Factor=None, observer: Observer=None):
+    def partial_key(origin: Factor=None, destination: Factor=None, observer: Observer=None, origin_processor: Processor=None, destination_processor: Processor=None):
         d = {"_t": RelationClassType.ff_scale.name}
         if origin:
             d["__o"] = origin.ident
+            d["__op"] = origin.processor.ident
 
         if destination:
             d["__d"] = destination.ident
+            d["__dp"] = destination.processor.ident
+
+        if origin_processor:
+            d["__op"] = origin_processor.ident
+
+        if destination_processor:
+            d["__dp"] = destination_processor.ident
 
         if observer:
             d["__oer"] = observer.ident
@@ -2385,7 +2411,9 @@ class FactorsRelationScaleObservation(FactorsRelationObservation):
         return d
 
     def key(self):
-        d = {"_t": RelationClassType.ff_scale.name, "__o": self._origin.ident, "__d": self._destination.ident}
+        d = {"_t": RelationClassType.ff_scale.name,
+             "__o": self._origin.ident, "__d": self._destination.ident,
+             "__op": self._origin.processor.ident, "__dp": self._destination.processor.ident}
         if self._observer:
             d["__oer"] = self._observer.ident
         return d
