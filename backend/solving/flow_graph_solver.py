@@ -27,7 +27,7 @@ Before the elaboration of flow graphs, several preparatory steps:
 """
 from collections import namedtuple
 
-#import matplotlib.pyplot as plt
+import matplotlib.pyplot as plt
 import networkx as nx
 from typing import Dict, List, Set, Any, Tuple, Union, Optional, NamedTuple
 
@@ -577,8 +577,9 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
             # Add Processors internal -RelativeTo- relations (time dependent)
             # Transform relative observations into graph edges
             for expression, obs in time_observations_relative[time_period]:
-                relations.add_edge(get_interface_name(obs.relative_factor, glb_idx),
-                                   get_interface_name(obs.factor, glb_idx),
+                processor_name = get_processor_name(obs.factor.processor, glb_idx)
+                relations.add_edge(processor_name + ":" + obs.relative_factor.name,
+                                   processor_name + ":" + obs.factor.name,
                                    weight=expression)
 
             # Second and last pass to resolve weight expressions: expressions with parameters can be solved
