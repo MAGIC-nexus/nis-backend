@@ -1811,8 +1811,12 @@ class FactorQuantitativeObservation(Taggable, Qualifiable, Automatable, Encodabl
         return self._value
 
     @property
-    def relative(self):
-        return (self.attributes.get("relative_to", None) is not None) if self.attributes else False
+    def is_relative(self):
+        return (self.attributes.get("relative_to") is not None) if self.attributes else False
+
+    @property
+    def relative_factor(self):
+        return self.attributes.get("relative_to") if self.attributes else None
 
     @value.setter
     def value(self, v):
@@ -1833,7 +1837,7 @@ class FactorQuantitativeObservation(Taggable, Qualifiable, Automatable, Encodabl
         return d
 
     def key(self):
-        d = {"_t": "qq", "__f": self._factor.ident, "__rt": self.relative}
+        d = {"_t": "qq", "__f": self._factor.ident, "__rt": self.is_relative}
         if self._observer:
             d["__oer"] = self._observer.ident
         return d

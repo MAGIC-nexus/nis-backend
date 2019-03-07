@@ -506,7 +506,7 @@ class TestCommandFiles(unittest.TestCase):
 if __name__ == '__main__':
     i = TestCommandFiles()
     prepare_and_reset_database_for_tests(prepare=True)
-    backend.data_source_manager = register_external_datasources({"FAO_DATASETS_DIR": "/home/rnebot/"})
+    backend.data_source_manager = register_external_datasources({"FAO_DATASETS_DIR": "/home/marco/temp/Data/FAOSTAT/"})
     # i.test_006_execute_file_five()  # TODO: This test from v1 has problems with the case sensitiveness!
     #i.test_008_execute_file_v2_two()
     #i.test_009_execute_file_v2_three()  # Soslaires. v2 syntax
@@ -519,6 +519,6 @@ if __name__ == '__main__':
     #i.test_020_list_of_commands()
     #i.test_021_export_to_json()
     #i.test_022_processor_scalings()
-    #i.test_023_solving()
+    i.test_023_solving()
     #i.test_024_maddalena_dataset()
-    i.test_025_biofuel()
+    #i.test_025_biofuel()
