@@ -17,9 +17,11 @@ def worksheet_to_numpy_array(sh_in):
     :param sh_in:
     :return: The numpy array with the values of the worksheet
     """
-    m = np.zeros((sh_in.max_row, sh_in.max_column)).astype(object)
-    for r in range(sh_in.max_row):
-        for c in range(sh_in.max_column):
+    max_col = sh_in.max_column
+    max_row = sh_in.max_row
+    m = np.zeros((max_row, max_col)).astype(object)
+    for r in range(max_row):
+        for c in range(max_col):
             v = sh_in.cell(row=r + 1, column=c + 1).value
             if v:
                 m[r, c] = v
@@ -45,9 +47,11 @@ def binary_mask_from_worksheet(sh_in, only_numbers=True):
     :param only_numbers:
     :return:
     """
-    m = np.zeros((sh_in.max_row, sh_in.max_column), dtype=bool)
-    for r in range(sh_in.max_row):
-        for c in range(sh_in.max_column):
+    max_col = sh_in.max_column
+    max_row = sh_in.max_row
+    m = np.zeros((max_row, max_col), dtype=bool)
+    for r in range(max_row):
+        for c in range(max_col):
             v = sh_in.cell(row=r + 1, column=c + 1).value
             if v:
                 if only_numbers:
@@ -129,8 +133,10 @@ def reset_cells_format(sh_writable):
     :param sh_writable: Output worksheet
     :return:
     """
-    for r in range(sh_writable.max_row):
-        for c in range(sh_writable.max_column):
+    max_col = sh_writable.max_column
+    max_row = sh_writable.max_row
+    for r in range(max_row):
+        for c in range(max_col):
             reset_cell_format(sh_writable, r + 1, c + 1)
 
 

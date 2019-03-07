@@ -6,7 +6,7 @@ from backend.common.helper import PartialRetrievalDictionary, create_dictionary
 from backend.models import MODEL_VERSION
 from backend.models.musiasem_methodology_support import serialize_from_object, deserialize_to_object
 from backend.model_services import State, get_case_study_registry_objects
-
+import sys
 
 def serialize(o_list):
     """
@@ -143,7 +143,10 @@ def serialize_state(state: State):
         state.set("_datasets", create_dictionary(), ns)  # Nullify datasets
 
     # !!! WARNING: It destroys "state", so a DEEP COPY is performed !!!
+    tmp = sys.getrecursionlimit()
+    sys.setrecursionlimit(10000)
     state2 = copy.deepcopy(state)
+    sys.setrecursionlimit(tmp)
 
     # Iterate all namespaces
     for ns in state2.list_namespaces():

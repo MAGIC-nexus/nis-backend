@@ -73,7 +73,8 @@ RUN apt-get update && \
 	python3-pip \
         liblapack3  \
         libblas3  \
-	python3-scipy
+	python3-scipy \
+	python3-tk
 
 #RUN apt-get -y install wget && \
 #    TEMP_DEB="$(mktemp)" && \

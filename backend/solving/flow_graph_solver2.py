@@ -25,11 +25,10 @@ Before the elaboration of flow graphs, several preparatory steps:
 * Observers (different versions). Take average always
 
 """
-from collections import namedtuple
 
-#import matplotlib.pyplot as plt
+import matplotlib.pyplot as plt
 import networkx as nx
-from typing import Dict, List, Set, Any, Tuple, Union, Optional, NamedTuple
+from typing import Dict, List, Set, Any, Tuple, Union, Optional
 
 from backend import case_sensitive, ureg
 from backend.command_generators.parser_ast_evaluators import ast_evaluator
@@ -326,10 +325,7 @@ def get_observations_OLD(prd: PartialRetrievalDictionary) \
     return observations_prd, relative_observations_prd, time_periods
 
 
-TimeObservationsType = Dict[str, List[Tuple[float, FactorQuantitativeObservation]]]
-
-
-def get_observations_by_time(prd: PartialRetrievalDictionary) -> Tuple[TimeObservationsType, TimeObservationsType]:
+def get_observations_by_time(prd: PartialRetrievalDictionary) -> Dict[str, List[Tuple[float, FactorQuantitativeObservation]]]:
     """
     Process All QQ observations (intensive or extensive):
     * Store in a compact way (then clear), by Time-period, by Interface, by Observer.
@@ -337,7 +333,8 @@ def get_observations_by_time(prd: PartialRetrievalDictionary) -> Tuple[TimeObser
     * Store as value the result plus the QQ observation (in a tuple)
 
     :param prd:
-    :return:
+    :param relative: True->a QQ observation relative to the value of another interface
+    :return: another PartialRetrievalDictionary, the Observers and the Time Periods (indexed)
     """
     observations: Dict[str, List[Tuple[float, FactorQuantitativeObservation]]] = {}
     state = State()
@@ -368,7 +365,7 @@ def get_observations_by_time(prd: PartialRetrievalDictionary) -> Tuple[TimeObser
         for time in observations:
             observations[time] += periodic_observations
 
-    return split_observations_by_relativeness(observations)
+    return observations
 
 
 def evaluate_numeric_expression_with_parameters(expression: Union[float, str, dict], state: State) \
@@ -379,10 +376,7 @@ def evaluate_numeric_expression_with_parameters(expression: Union[float, str, di
     value = None
     params = set()
 
-    if not expression:
-        value = None
-
-    elif isinstance(expression, float):
+    if isinstance(expression, float):
         value = expression
 
     elif isinstance(expression, dict):
@@ -462,7 +456,7 @@ def get_type_from_all_time_periods(time_periods: List[str]) -> Optional[str]:
     return period_type
 
 
-def split_observations_by_relativeness(observations_by_time: TimeObservationsType):
+def split_observations_by_relativeness(observations_by_time):
     observations_by_time_norelative = {}
     observations_by_time_relative = {}
     for time, observations in observations_by_time.items():
@@ -502,178 +496,206 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
     :return: Issue[]
     """
 
-    class Edge(NamedTuple):
-        src: Factor
-        dst: Factor
-        weight: Optional[str]
-
-    def add_edges(edges: List[Edge]):
-        for src, dst, weight in edges:
-            src_name = get_interface_name(src, glb_idx)
-            dst_name = get_interface_name(dst, glb_idx)
-            if "Archetype" in [src.processor.instance_or_archetype, dst.processor.instance_or_archetype]:
-                print(f"WARNING: excluding relation from '{src_name}' to '{dst_name}' because of Archetype processor")
-            else:
-                relations.add_edge(src_name, dst_name, weight=weight)
-
     glb_idx, _, _, _, _ = get_case_study_registry_objects(state)
+
+    # Initialize dictionaries
+    system_flows: Dict[str, Set[FactorsRelationDirectedFlowObservation]] = dict()
+    system_scales: Dict[str, Set[FactorsRelationScaleObservation]] = dict()
+    system_processor_hierarchies: Dict[str, nx.DiGraph] = dict()
+    for s in input_systems:
+        system_flows[s] = set()
+        system_scales[s] = set()
+        system_processor_hierarchies[s] = dict()
+
+    # Handle Interface Types -Scale- relations
+    relations_scale_it2it = glb_idx.get(FactorTypesRelationUnidirectionalLinearTransformObservation.partial_key())
+
+    # Handle Interfaces -Flow- relations
+    relations_flow = glb_idx.get(FactorsRelationDirectedFlowObservation.partial_key())
+
+    for relation in relations_flow:  # type: FactorsRelationDirectedFlowObservation
+        system_flows[relation.source_factor.processor.processor_system].add(relation)
+        system_flows[relation.target_factor.processor.processor_system].add(relation)
+
+    relations_scale = glb_idx.get(FactorsRelationScaleObservation.partial_key())
+
+    for relation in relations_scale:  # type: FactorsRelationScaleObservation
+        system_scales[relation.origin.processor.processor_system].add(relation)
+        system_scales[relation.destination.processor.processor_system].add(relation)
+
+    # Handle Processors -PartOf- relations
+    relations_part_of = glb_idx.get(ProcessorsRelationPartOfObservation.partial_key())
+
+    for relation in relations_part_of:  # type: ProcessorsRelationPartOfObservation
+        if relation.parent_processor.instance_or_archetype.lower() == "instance":
+            graph = system_processor_hierarchies[relation.parent_processor.processor_system]
+
+            if not graph:
+                graph = nx.DiGraph()
+                system_processor_hierarchies[relation.parent_processor.processor_system] = graph
+
+            graph.add_edge(get_processor_name(relation.child_processor, glb_idx), get_processor_name(relation.parent_processor, glb_idx))
 
     # Get all interface observations. Also resolve expressions without parameters. Cannot resolve expressions
     # depending only on global parameters because some of them can be overridden by scenario parameters.
-    time_observations_absolute, time_observations_relative = get_observations_by_time(glb_idx)
+    observations_by_time = get_observations_by_time(glb_idx)
 
-    if len(time_observations_absolute) == 0:
-        raise Exception(f"No absolute observations have been found. The solver has nothing to solve.")
+    if len(observations_by_time) == 0:
+        raise Exception(f"No observations have been found. The solver has nothing to solve.")
 
-    relations = nx.DiGraph()
+    # Split observations into relative and not relative
+    observations_by_time_norelative , observations_by_time_relative = \
+        split_observations_by_relativeness(observations_by_time)
 
-    # Add Interfaces -Flow- relations (time independent)
-    add_edges([Edge(r.source_factor, r.target_factor, r.weight)
-               for r in glb_idx.get(FactorsRelationDirectedFlowObservation.partial_key())])
+    # Combine scenario parameters with the global parameters
+    scenario_parameters: Dict[str, Dict[str, str]] = \
+        {scenario_name: evaluate_parameters_for_scenario(global_parameters, scenario_params)
+         for scenario_name, scenario_params in problem_statement.scenarios.items()}
 
-    # Add Processors -Scale- relations (time independent)
-    add_edges([Edge(r.origin, r.destination, r.quantity)
-               for r in glb_idx.get(FactorsRelationScaleObservation.partial_key())])
+    # SCALES --------------------------
 
-    # TODO Expand flow graph with it2it transforms
-    # relations_scale_it2it = glb_idx.get(FactorTypesRelationUnidirectionalLinearTransformObservation.partial_key())
+    # Obtain the scale VALUES
+    # scales_prd = get_scaled(scenarios=problem_statement.scenarios,
+    #                         scenario_params=scenario_parameters,
+    #                         relations_scale=glb_idx.get(FactorsRelationScaleObservation.partial_key()),
+    #                         observations_by_time=observations_by_time_norelative)
 
-    # First pass to resolve weight expressions: only expressions without parameters can be solved
-    for _, _, data in relations.edges(data=True):
-        expression = data["weight"]
-        if expression:
-            value, ast, _, _ = evaluate_numeric_expression_with_parameters(expression, state)
-            data["weight"] = ifnull(value, ast)
-
-    for scenario_idx, (scenario_name, scenario_params) in enumerate(problem_statement.scenarios.items()):
-
-        print(f"********************* SCENARIO: {scenario_name}")
-
-        scenario_state = State()
-        scenario_combined_params = evaluate_parameters_for_scenario(global_parameters, scenario_params)
-        scenario_state.update(scenario_combined_params)
-
-        for time_period, observations in time_observations_absolute.items():
-
-            print(f"********************* TIME PERIOD: {time_period}")
-
-            # Final values are taken from "observations" that need to computed
-            graph_params = {}
-
-            # Second and last pass to resolve observation expressions with parameters
-            for expression, obs in observations:
-                interface_name = get_interface_name(obs.factor, glb_idx)
-                if interface_name not in relations.nodes:
-                    print(f"WARNING: observation at interface '{interface_name}' is not taken into account.")
-                else:
-                    value, ast, _, issues = evaluate_numeric_expression_with_parameters(expression, scenario_state)
-                    if not value:
-                        raise Exception(f"Cannot evaluate expression '{expression}' for observation at "
-                                        f"interface '{interface_name}'. Issues: {', '.join(issues)}")
-                    graph_params[interface_name] = value
-
-            assert(graph_params is not None)
-
-            # Add Processors internal -RelativeTo- relations (time dependent)
-            # Transform relative observations into graph edges
-            for expression, obs in time_observations_relative[time_period]:
-                relations.add_edge(get_interface_name(obs.relative_factor, glb_idx),
-                                   get_interface_name(obs.factor, glb_idx),
-                                   weight=expression)
-
-            # Second and last pass to resolve weight expressions: expressions with parameters can be solved
-            for u, v, data in relations.edges(data=True):
-                expression = data["weight"]
-                if expression:
-                    value, ast, _, _ = evaluate_numeric_expression_with_parameters(expression, scenario_state)
-                    if not value:
-                        raise Exception(f"Cannot evaluate expression '{expression}' for weight "
-                                        f"from interface '{u}' to interface '{v}'. Issues: {', '.join(issues)}")
-                    data["weight"] = value
-
-            # ----------------------------------------------------
-
-            if time_period == '2008':
-                for component in nx.weakly_connected_components(relations):
-                    nx.draw_kamada_kawai(relations.subgraph(component), with_labels=True)
-                    plt.show()
-
-            flow_graph = FlowGraph(relations)
-            comp_graph, issues = flow_graph.get_computation_graph()
-
-            for issue in issues:
-                print(issue)
-
-            print(f"****** NODES: {comp_graph.nodes}")
-
-            # ----------------------------------------------------
-
-            # Obtain nodes without a value
-            compute_nodes = [n for n in comp_graph.nodes if not graph_params.get(n)]
-
-            # Compute the missing information with the computation graph
-            if len(compute_nodes) == 0:
-                print("All nodes have a value. Nothing to solve.")
-                return []
-
-            print(f"****** UNKNOWN NODES: {compute_nodes}")
-            print(f"****** PARAMS: {graph_params}")
-
-            conflicts = comp_graph.compute_param_conflicts(set(graph_params.keys()))
-
-            for s, (param, values) in enumerate(conflicts.items()):
-                print(f"Conflict {s + 1}: {param} -> {values}")
-
-            combinations = ComputationGraph.compute_param_combinations(conflicts)
-
-            for s, combination in enumerate(combinations):
-                print(f"Combination {s}: {combination}")
-
-                filtered_params = {k: v for k, v in graph_params.items() if k in combination}
-                results, _ = comp_graph.compute_values(compute_nodes, filtered_params)
-
-                results_with_values = {k: v for k, v in results.items() if v}
-                print(f'  results_with_values={results_with_values}')
-
-                # TODO: work with "part_of_graph"
-                #  - Params: graph_params + results
-                #  - Compute conflicts, combinations
-                #  - For each combination "compute_values"
-
-
-        # TODO INDICATORS
-
-    # ----------------------------------------------------
-    # ACCOUNTING PER SYSTEM
-
+    # FLOWS --------------------------
     for system in input_systems:
+        # From Factors IN the context (LOCAL, ENVIRONMENT or OUTSIDE)
+        # obtain a basic graph. Signal each Factor as LOCAL or EXTERNAL, and SOCIETY or ENVIRONMENT
+        # basic_graph = prepare_interfaces_graph(systems[s][Factor])
 
-        # Handle Processors -PartOf- relations
-        proc_hierarchy = nx.DiGraph()
-        for relation in glb_idx.get(ProcessorsRelationPartOfObservation.partial_key()):  # type: ProcessorsRelationPartOfObservation
-            if relation.parent_processor.instance_or_archetype == "Instance":
-                proc_hierarchy.add_edge(get_processor_name(relation.child_processor, glb_idx), get_processor_name(relation.parent_processor, glb_idx))
+        print(f"********************* SYSTEM: {system}")
 
+        # Obtain a flow graph
+        flow_graph = FlowGraph()
         part_of_graph = ComputationGraph()
 
-        # for relation in system_flows[system]:  # type: FactorsRelationDirectedFlowObservation
-        #
-        #     # We create another graph only with interfaces in processors with parents
-        #     for interface in [relation.source_factor, relation.target_factor]:
-        #
-        #         processor_name = get_processor_name(interface.processor, glb_idx)
-        #         interface_full_name = processor_name+":"+interface.name
-        #
-        #         # If "processor" is in the "PartOf" hierarchy AND the "processor:interface" is not being handled yet
-        #         if processor_name in proc_hierarchy and interface_full_name not in part_of_graph.nodes:
-        #             # Insert into the Computation Graph a copy of the "PartOf" hierarchy of processors
-        #             # for the specific interface
-        #             new_edges = [(u+":"+interface.name, v+":"+interface.name)
-        #                          for u, v in weakly_connected_subgraph(proc_hierarchy, processor_name).edges]
-        #             part_of_graph.add_edges(new_edges, 1.0, None)
+        for relation in system_flows[system]:  # type: FactorsRelationDirectedFlowObservation
+            flow_graph.add_edge(get_interface_name(relation.source_factor, glb_idx),
+                                get_interface_name(relation.target_factor, glb_idx),
+                                weight=relation.weight, reverse_weight=None)
+
+            assert(relation.source_factor.name == relation.target_factor.name)
+
+            # We create another graph only with interfaces in processors with parents
+            proc_hierarchy = system_processor_hierarchies[system]
+
+            for interface in [relation.source_factor, relation.target_factor]:
+
+                processor_name = get_processor_name(interface.processor, glb_idx)
+                interface_full_name = processor_name+":"+interface.name
+
+                # If "processor" is in the "PartOf" hierarchy AND the "processor:interface" is not being handled yet
+                if processor_name in proc_hierarchy and interface_full_name not in part_of_graph.nodes:
+                    # Insert into the Computation Graph a copy of the "PartOf" hierarchy of processors
+                    # for the specific interface
+                    new_edges = [(u+":"+interface.name, v+":"+interface.name)
+                                 for u, v in weakly_connected_subgraph(proc_hierarchy, processor_name).edges]
+                    part_of_graph.add_edges(new_edges, 1.0, None)
+
+        comp_graph, issues = flow_graph.get_computation_graph()
+
+        for relation in system_scales[system]:  # type: FactorsRelationScaleObservation
+            comp_graph.add_edge(get_interface_name(relation.origin, glb_idx),
+                                get_interface_name(relation.destination, glb_idx),
+                                weight=relation.quantity, reverse_weight=None)
+
+        for issue in issues:
+            print(issue)
+
+        print(f"****** NODES: {comp_graph.nodes}")
 
         # for component in nx.weakly_connected_components(part_of_graph.graph):
         #     nx.draw_kamada_kawai(part_of_graph.graph.subgraph(component), with_labels=True)
         #     plt.show()
+
+        # TODO Expand flow graph with it2it transforms
+
+        # Split flow graphs
+        for scenario_idx, (scenario_name, scenario) in enumerate(problem_statement.scenarios.items()):
+
+            print(f"********************* SCENARIO: {scenario_name}")
+
+            scenario_state = State()
+            scenario_state.update(scenario_parameters[scenario_name])
+
+            for time_period, observations in observations_by_time_norelative.items():
+
+                print(f"********************* TIME PERIOD: {time_period}")
+
+                scales = {}  # {fact: val for fact, val in scales_prd.get(dict(__t=time_period, __s=scenario_idx))}
+
+                # Final values are taken from "scales" or from "observations" that need to computed
+                graph_params = {}
+                for expression, obs in observations:
+                    interface_name = get_interface_name(obs.factor, glb_idx)
+                    if interface_name not in comp_graph.nodes:
+                        print(f"WARNING: observation at interface '{interface_name}' is not taken into account.")
+                    else:
+                        if scales.get(obs.factor):
+                            graph_params[interface_name] = scales[obs.factor]
+                        else:
+                            value, ast, _, issues = evaluate_numeric_expression_with_parameters(expression, scenario_state)
+                            if not value:
+                                raise Exception(f"Cannot evaluate expression '{expression}' for observation at interface '{interface_name}'")
+
+                            graph_params[interface_name] = value
+
+                # ----------------------------------------------------
+
+                compute_nodes = [n for n in comp_graph.nodes if not graph_params.get(n)]
+
+                # Compute the missing information with the computation graph
+                if len(compute_nodes) > 0:
+
+                    print(f"****** UNKNOWN NODES: {compute_nodes}")
+                    print(f"****** PARAMS: {graph_params}")
+
+                    conflicts = comp_graph.compute_param_conflicts(set(graph_params.keys()))
+
+                    for s, (param, values) in enumerate(conflicts.items()):
+                        print(f"Conflict {s + 1}: {param} -> {values}")
+
+                    combinations = ComputationGraph.compute_param_combinations(conflicts)
+
+                    for s, combination in enumerate(combinations):
+                        print(f"Combination {s}: {combination}")
+
+                        filtered_params = {k: v for k, v in graph_params.items() if k in combination}
+                        results, _ = comp_graph.compute_values(compute_nodes, filtered_params)
+
+                        results_with_values = {k: v for k, v in results.items() if v}
+                        print(f'  results_with_values={results_with_values}')
+
+                        # TODO: work with "part_of_graph"
+                        #  - Params: graph_params + results
+                        #  - Compute conflicts, combinations
+                        #  - For each combination "compute_values"
+                else:
+                    print("There aren't nodes with unknown values. Nothing to solve.")
+
+                # TODO Overwrite "obs" with "scales" results
+                # TODO Put observations into the flow-graph
+
+
+                # TODO Put processors into scale (intensive to extensive conversion)
+                # scale_unit_processors(flow_graph, params, relative_observations_prd)
+
+                # for sub_fg in nx.weakly_connected_component_subgraphs(flow_graph):
+                    # TODO Elaborate information flow graph
+                    #      Cycles allowed?
+                    # ifg = get_information_flow_graph(sub_fg)
+                    # TODO Solve information flow graph. From all possible combinations:
+                    #  bottom-up if top-down USE
+                    #  bottom-up if top-down DO NOT USE
+                    #  top-down  if bottom-up USE
+                    #  top-down  if bottom-up DO NOT USE
+                    # solve_flow_graph(sub_fg, ifg)  # Each value: Interface, Scenario, Time, Given/Computed -> VALUE (or UNDEFINED)
+                    # TODO Put results back
+
+
+        # TODO INDICATORS --- (INSIDE FLOWS)
 
     return []
