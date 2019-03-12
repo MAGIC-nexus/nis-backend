@@ -31,6 +31,8 @@ import matplotlib.pyplot as plt
 import networkx as nx
 from typing import Dict, List, Set, Any, Tuple, Union, Optional, NamedTuple
 
+from networkx.classes.reportviews import NodeView
+
 from backend import case_sensitive, ureg
 from backend.command_generators.parser_ast_evaluators import ast_evaluator
 from backend.command_generators.parser_field_parsers import string_to_ast, expression_with_parameters, is_year, is_month
@@ -284,48 +286,6 @@ def set_update_scales_graph(graph: nx.DiGraph, params: Dict[str, Any],
     compute_scaled_nodes(defined_beginning_interfaces)
 
 
-def get_observations_OLD(prd: PartialRetrievalDictionary) \
-        -> Tuple[PartialRetrievalDictionary, PartialRetrievalDictionary, Dict[str, int]]:
-    """
-    Process All QQ observations (intensive or extensive):
-    * Store in a compact way (then clear), by Time-period, by Interface, by Observer.
-    * Convert to float or prepare AST
-    * Store as value the result plus the QQ observation (in a tuple)
-
-    :param prd:
-    :param relative: True->a QQ observation relative to the value of another interface
-    :return: another PartialRetrievalDictionary, the Observers and the Time Periods (indexed)
-    """
-    observations_prd = PartialRetrievalDictionary()
-    relative_observations_prd = PartialRetrievalDictionary()
-    time_periods: Dict[str, int] = create_dictionary()  # Dictionary of time periods and the associated IDX
-    state = State()
-
-    next_time_period_idx = 0
-    for observation in find_quantitative_observations(prd, processor_instances_only=True):
-
-        # Obtain time period index
-        time = observation.attributes["time"]
-        if time not in time_periods:
-            time_periods[time] = next_time_period_idx
-            next_time_period_idx += 1
-
-        # Elaborate Key: Interface, Time, Observer
-        key = dict(__i=observation.factor, __t=time_periods[time], __o=observation.observer)
-
-        value, ast, _, issues = evaluate_numeric_expression_with_parameters(observation.value, state)
-        if not value:
-            value = ast
-
-        # Store Key: (Value, FactorQuantitativeObservation)
-        if observation.is_relative:
-            relative_observations_prd.put(key, (value, observation))
-        else:
-            observations_prd.put(key, (value, observation))
-
-    return observations_prd, relative_observations_prd, time_periods
-
-
 TimeObservationsType = Dict[str, List[Tuple[float, FactorQuantitativeObservation]]]
 
 
@@ -379,7 +339,7 @@ def evaluate_numeric_expression_with_parameters(expression: Union[float, str, di
     value = None
     params = set()
 
-    if not expression:
+    if expression is None:
         value = None
 
     elif isinstance(expression, float):
@@ -477,12 +437,49 @@ def split_observations_by_relativeness(observations_by_time: TimeObservationsTyp
     return observations_by_time_norelative, observations_by_time_relative
 
 
-def weakly_connected_subgraph(graph: nx.DiGraph, node: str) -> Optional[nx.graphviews.subgraph_view]:
+def weakly_connected_subgraph(graph: nx.DiGraph, node: str) -> Optional[nx.DiGraph]:
     for component in nx.weakly_connected_components(graph):  # type: Set
         if node in component:
             return graph.subgraph(component)
     else:
         return None
+
+
+def compute_all_graph_combinations(comp_graph: ComputationGraph, params: Dict[str, float]) -> Dict[frozenset, Dict[str, float]]:
+    all_values: Dict[frozenset, Dict[str, float]] = {}
+
+    print(f"****** NODES: {comp_graph.nodes}")
+
+    # Obtain nodes without a value
+    compute_nodes = [n for n in comp_graph.nodes if params.get(n) is None]
+
+    # Compute the missing information with the computation graph
+    if len(compute_nodes) == 0:
+        print("All nodes have a value. Nothing to solve.")
+        return {}
+
+    print(f"****** UNKNOWN NODES: {compute_nodes}")
+    print(f"****** PARAMS: {params}")
+
+    conflicts = comp_graph.compute_param_conflicts(set(params.keys()))
+
+    for s, (param, values) in enumerate(conflicts.items()):
+        print(f"Conflict {s + 1}: {param} -> {values}")
+
+    combinations = ComputationGraph.compute_param_combinations(conflicts)
+
+    for s, combination in enumerate(combinations):
+        print(f"Combination {s}: {combination}")
+
+        filtered_params = {k: v for k, v in params.items() if k in combination}
+        results, _ = comp_graph.compute_values(compute_nodes, filtered_params)
+
+        results_with_values = {k: v for k, v in results.items() if v is not None}
+        print(f'  results_with_values={results_with_values}')
+
+        all_values[combination] = results_with_values
+
+    return all_values
 
 
 def flow_graph_solver(global_parameters: List[Parameter], problem_statement: ProblemStatement,
@@ -541,13 +538,16 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
     # First pass to resolve weight expressions: only expressions without parameters can be solved
     for _, _, data in relations.edges(data=True):
         expression = data["weight"]
-        if expression:
+        if expression is not None:
             value, ast, _, _ = evaluate_numeric_expression_with_parameters(expression, state)
             data["weight"] = ifnull(value, ast)
+
+    results: Dict[str, Dict[str, Dict[frozenset, Dict[str, float]]]] = {}
 
     for scenario_idx, (scenario_name, scenario_params) in enumerate(problem_statement.scenarios.items()):
 
         print(f"********************* SCENARIO: {scenario_name}")
+        results[scenario_name] = {}
 
         scenario_state = State()
         scenario_combined_params = evaluate_parameters_for_scenario(global_parameters, scenario_params)
@@ -559,15 +559,17 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
 
             # Final values are taken from "observations" that need to computed
             graph_params = {}
+            # Create a copy of the main relations structure that is modified with time-dependent values
+            time_relations = relations.copy()
 
             # Second and last pass to resolve observation expressions with parameters
             for expression, obs in observations:
                 interface_name = get_interface_name(obs.factor, glb_idx)
-                if interface_name not in relations.nodes:
+                if interface_name not in time_relations.nodes:
                     print(f"WARNING: observation at interface '{interface_name}' is not taken into account.")
                 else:
-                    value, ast, _, issues = evaluate_numeric_expression_with_parameters(expression, scenario_state)
-                    if not value:
+                    value, _, _, issues = evaluate_numeric_expression_with_parameters(expression, scenario_state)
+                    if value is None:
                         raise Exception(f"Cannot evaluate expression '{expression}' for observation at "
                                         f"interface '{interface_name}'. Issues: {', '.join(issues)}")
                     graph_params[interface_name] = value
@@ -578,69 +580,34 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
             # Transform relative observations into graph edges
             for expression, obs in time_observations_relative[time_period]:
                 processor_name = get_processor_name(obs.factor.processor, glb_idx)
-                relations.add_edge(processor_name + ":" + obs.relative_factor.name,
+                time_relations.add_edge(processor_name + ":" + obs.relative_factor.name,
                                    processor_name + ":" + obs.factor.name,
                                    weight=expression)
 
             # Second and last pass to resolve weight expressions: expressions with parameters can be solved
-            for u, v, data in relations.edges(data=True):
+            for u, v, data in time_relations.edges(data=True):
                 expression = data["weight"]
-                if expression:
-                    value, ast, _, _ = evaluate_numeric_expression_with_parameters(expression, scenario_state)
-                    if not value:
+                if expression is not None:
+                    value, ast, _, issues = evaluate_numeric_expression_with_parameters(expression, scenario_state)
+                    if value is None:
                         raise Exception(f"Cannot evaluate expression '{expression}' for weight "
                                         f"from interface '{u}' to interface '{v}'. Issues: {', '.join(issues)}")
                     data["weight"] = value
 
             # ----------------------------------------------------
 
-            if time_period == '2008':
-                for component in nx.weakly_connected_components(relations):
-                    nx.draw_kamada_kawai(relations.subgraph(component), with_labels=True)
-                    plt.show()
+            # if time_period == '2008':
+            #     for component in nx.weakly_connected_components(time_relations):
+            #         nx.draw_kamada_kawai(time_relations.subgraph(component), with_labels=True)
+            #         plt.show()
 
-            flow_graph = FlowGraph(relations)
+            flow_graph = FlowGraph(time_relations)
             comp_graph, issues = flow_graph.get_computation_graph()
 
             for issue in issues:
                 print(issue)
 
-            print(f"****** NODES: {comp_graph.nodes}")
-
-            # ----------------------------------------------------
-
-            # Obtain nodes without a value
-            compute_nodes = [n for n in comp_graph.nodes if not graph_params.get(n)]
-
-            # Compute the missing information with the computation graph
-            if len(compute_nodes) == 0:
-                print("All nodes have a value. Nothing to solve.")
-                return []
-
-            print(f"****** UNKNOWN NODES: {compute_nodes}")
-            print(f"****** PARAMS: {graph_params}")
-
-            conflicts = comp_graph.compute_param_conflicts(set(graph_params.keys()))
-
-            for s, (param, values) in enumerate(conflicts.items()):
-                print(f"Conflict {s + 1}: {param} -> {values}")
-
-            combinations = ComputationGraph.compute_param_combinations(conflicts)
-
-            for s, combination in enumerate(combinations):
-                print(f"Combination {s}: {combination}")
-
-                filtered_params = {k: v for k, v in graph_params.items() if k in combination}
-                results, _ = comp_graph.compute_values(compute_nodes, filtered_params)
-
-                results_with_values = {k: v for k, v in results.items() if v}
-                print(f'  results_with_values={results_with_values}')
-
-                # TODO: work with "part_of_graph"
-                #  - Params: graph_params + results
-                #  - Compute conflicts, combinations
-                #  - For each combination "compute_values"
-
+            results[scenario_name][time_period] = compute_all_graph_combinations(comp_graph, graph_params)
 
         # TODO INDICATORS
 
@@ -649,13 +616,66 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
 
     for system in input_systems:
 
-        # Handle Processors -PartOf- relations
-        proc_hierarchy = nx.DiGraph()
-        for relation in glb_idx.get(ProcessorsRelationPartOfObservation.partial_key()):  # type: ProcessorsRelationPartOfObservation
-            if relation.parent_processor.instance_or_archetype == "Instance":
-                proc_hierarchy.add_edge(get_processor_name(relation.child_processor, glb_idx), get_processor_name(relation.parent_processor, glb_idx))
+        print(f"********************* SYSTEM: {system}")
 
-        part_of_graph = ComputationGraph()
+        # Handle Processors -PartOf- relations
+        proc_hierarchies = nx.DiGraph()
+
+        # Just get the -PartOf- relations of the current system
+        part_of_relations = [(r.child_processor, r.parent_processor)
+                             for r in glb_idx.get(ProcessorsRelationPartOfObservation.partial_key())
+                             if system in [r.parent_processor.processor_system, r.child_processor.processor_system]]
+
+        for child_processor, parent_processor in part_of_relations:  # type: Processor, Processor
+            child_name = get_processor_name(child_processor, glb_idx)
+            parent_name = get_processor_name(parent_processor, glb_idx)
+
+            if "Archetype" in [parent_processor.instance_or_archetype, child_processor.instance_or_archetype]:
+                print(f"WARNING: excluding relation from '{child_name}' to '{parent_name}' because of Archetype processor")
+            else:
+                proc_hierarchies.add_edge(child_name, parent_name, weight=1.0)
+
+        # Iterate over all independent trees created by the PartOf relations
+        for component in nx.weakly_connected_components(proc_hierarchies):
+            proc_hierarchy: nx.DiGraph = proc_hierarchies.subgraph(component)
+
+            print(f"********************* HIERARCHY: {proc_hierarchy.nodes}")
+
+            # nx.draw_kamada_kawai(proc_hierarchy, with_labels=True)
+            # plt.show()
+
+            # Get all different existing interfaces
+            interface_names: Set[str] = {i.name for i in glb_idx.get(Factor.partial_key())}
+
+            for interface_name in interface_names:
+
+                print(f"********************* INTERFACE: {interface_name}")
+
+                interfaced_proc_hierarchy = nx.DiGraph(
+                    incoming_graph_data=[(u+":"+interface_name, v+":"+interface_name) for u, v in proc_hierarchy.edges]
+                )
+
+                scenario_time_combinations = [
+                    (sname, tname, tcomb, cresults)
+                    for sname, sresults in results.items()
+                    for tname, tresults in sresults.items()
+                    for tcomb, cresults in tresults.items()
+                ]
+
+                for scenario_name, time_period, combination, combination_results in scenario_time_combinations:
+
+                    filtered_results = {k: combination_results[k]
+                                        for k in interfaced_proc_hierarchy.nodes
+                                        if combination_results.get(k) is not None}
+
+                    if len(filtered_results) > 0:
+                        print(f"*** Scenario = {scenario_name}, Period = {time_period}, Combination = {combination}")
+                        # Resolve computation graph
+                        comp_graph = ComputationGraph()
+                        comp_graph.add_edges(list(interfaced_proc_hierarchy.edges), 1.0, None)
+                        res = compute_all_graph_combinations(comp_graph, filtered_results)
+
+        # part_of_graph = ComputationGraph()
 
         # for relation in system_flows[system]:  # type: FactorsRelationDirectedFlowObservation
         #
@@ -672,9 +692,5 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
         #             new_edges = [(u+":"+interface.name, v+":"+interface.name)
         #                          for u, v in weakly_connected_subgraph(proc_hierarchy, processor_name).edges]
         #             part_of_graph.add_edges(new_edges, 1.0, None)
-
-        # for component in nx.weakly_connected_components(part_of_graph.graph):
-        #     nx.draw_kamada_kawai(part_of_graph.graph.subgraph(component), with_labels=True)
-        #     plt.show()
 
     return []

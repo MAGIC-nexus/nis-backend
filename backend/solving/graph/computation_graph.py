@@ -55,7 +55,10 @@ class ComputationGraph:
     def add_edges(self, edges: List[Tuple[Node, Node]], weight: Optional[Weight], reverse_weight: Optional[Weight]):
         """ Add several edges with same weight attributes to the computation graph """
         self.graph.add_edges_from(edges, weight=weight, type=EdgeType.DIRECT)
-        self.graph.add_edges_from(edges, weight=reverse_weight, type=EdgeType.REVERSE)
+        self.graph.add_edges_from([(b, a) for a, b in edges], weight=reverse_weight, type=EdgeType.REVERSE)
+        for u, v in edges:
+            self.init_node_split(u)
+            self.init_node_split(v)
 
     def init_node_split(self, n: Node) -> NoReturn:
         """ Set the default value for attribute 'split' to a node """
@@ -178,7 +181,7 @@ class ComputationGraph:
                     if res_backward:
                         return res_backward * weight
                 else:
-                    if res_backward:
+                    if res_backward is not None and weight is not None:
                         result = (result if result else 0) + res_backward * weight
                     else:
                         return None
@@ -192,7 +195,7 @@ class ComputationGraph:
 
             # Does a parameter exist for this node?
             param = params.get(node)
-            if param:
+            if param is not None:
 
                 values[node] = param
                 return param
@@ -206,7 +209,7 @@ class ComputationGraph:
 
             result = solve_inputs(self.direct_inputs(node), split[EdgeType.REVERSE.value])
 
-            if not result:
+            if result is None:
                 result = solve_inputs(self.reverse_inputs(node), split[EdgeType.DIRECT.value])
 
             values[node] = result

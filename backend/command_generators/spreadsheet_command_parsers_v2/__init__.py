@@ -130,7 +130,7 @@ def parse_command(sh: Worksheet, area: AreaTupleType, name: Optional[str], cmd_n
                 # Read and prepare "value"
                 ##value = sh_dict.get((r, col_idx), None)
                 value = sh.cell(row=r, column=col_idx).value
-                if value:
+                if value is not None:
                     if not isinstance(value, str):
                         value = str(value)
                     value = value.strip()

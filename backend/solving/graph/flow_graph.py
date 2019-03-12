@@ -121,7 +121,7 @@ class FlowGraph:
                     continue
 
                 # How many output edges without weight has the node?
-                edges_without_weight = [e for e in all_edges if not e[2]['weight']]
+                edges_without_weight = [e for e in all_edges if e[2]['weight'] is None]
 
                 if len(edges_without_weight) > 1:
                     str_edges = [f'({e[0]}, {e[1]})' for e in edges_without_weight]
@@ -133,8 +133,8 @@ class FlowGraph:
                     if len(all_edges) == 1:
                         edge = list(all_edges)[0]
                         opposite_weight = opposite_graph[edge[1]][edge[0]]['weight']
-                        if opposite_weight:
-                            edge[2]['weight'] = 1.0 / opposite_weight
+                        if opposite_weight is not None:
+                            edge[2]['weight'] = 0.0 if opposite_weight == 0.0 else (1.0 / opposite_weight)
                             issues.append(Issue(IType.INFO,
                                                 f'The weight of single output edge "{edge}" could be inferred from '
                                                 f'opposite weight "{opposite_weight}"'))
@@ -144,7 +144,7 @@ class FlowGraph:
                                                 f'The weight of single output edge "{edge}" could be inferred '
                                                 f'without opposite weight'))
                     else:
-                        sum_other_weights = reduce(add, [e[2]['weight'] for e in all_edges if e[2]['weight']])
+                        sum_other_weights = reduce(add, [e[2]['weight'] for e in all_edges if e[2]['weight'] is not None])
 
                         if sum_other_weights > 1.0:
                             issues.append(Issue(IType.WARNING,
