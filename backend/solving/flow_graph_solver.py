@@ -28,6 +28,7 @@ Before the elaboration of flow graphs, several preparatory steps:
 from collections import namedtuple
 
 import matplotlib.pyplot as plt
+import pandas as pd
 import networkx as nx
 from typing import Dict, List, Set, Any, Tuple, Union, Optional, NamedTuple
 
@@ -482,6 +483,14 @@ def compute_all_graph_combinations(comp_graph: ComputationGraph, params: Dict[st
     return all_values
 
 
+def split_name(processor_interface: str) -> Tuple[str, Optional[str]]:
+    l = processor_interface.split(":")
+    if len(l) > 1:
+        return l[0], l[1]
+    else:
+        return l[0], None
+
+
 def flow_graph_solver(global_parameters: List[Parameter], problem_statement: ProblemStatement,
                       input_systems: Dict[str, Set[Processor]], state: State):
     """
@@ -542,12 +551,12 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
             value, ast, _, _ = evaluate_numeric_expression_with_parameters(expression, state)
             data["weight"] = ifnull(value, ast)
 
-    results: Dict[str, Dict[str, Dict[frozenset, Dict[str, float]]]] = {}
+    results: Dict[Tuple[str, str, str], Dict[str, float]] = {}
+    combinations: Dict[frozenset, str] = {}
 
-    for scenario_idx, (scenario_name, scenario_params) in enumerate(problem_statement.scenarios.items()):
+    for scenario_idx, (scenario_name, scenario_params) in enumerate(problem_statement.scenarios.items()):  # type: int, Tuple[str, dict]
 
         print(f"********************* SCENARIO: {scenario_name}")
-        results[scenario_name] = {}
 
         scenario_state = State()
         scenario_combined_params = evaluate_parameters_for_scenario(global_parameters, scenario_params)
@@ -574,7 +583,7 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
                                         f"interface '{interface_name}'. Issues: {', '.join(issues)}")
                     graph_params[interface_name] = value
 
-            assert(graph_params is not None)
+            assert(len(graph_params) > 0)
 
             # Add Processors internal -RelativeTo- relations (time dependent)
             # Transform relative observations into graph edges
@@ -607,12 +616,25 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
             for issue in issues:
                 print(issue)
 
-            results[scenario_name][time_period] = compute_all_graph_combinations(comp_graph, graph_params)
+            # results[(scenario_name, time_period)] = compute_all_graph_combinations(comp_graph, graph_params)
+            res = compute_all_graph_combinations(comp_graph, graph_params)
 
-        # TODO INDICATORS
+            for comb in res:
+                if combinations.get(comb) is None:
+                    combinations[comb] = str(len(combinations))
+
+            for comb, data in res.items():
+                results[(scenario_name, time_period, combinations[comb])] = data
+
+            results[(scenario_name, time_period, "")] = graph_params
+
+            # TODO INDICATORS
 
     # ----------------------------------------------------
     # ACCOUNTING PER SYSTEM
+
+    agg_results: Dict[Tuple[str, str, str], Dict[str, float]] = {}
+    agg_combinations: Dict[frozenset, str] = {}
 
     for system in input_systems:
 
@@ -655,14 +677,7 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
                     incoming_graph_data=[(u+":"+interface_name, v+":"+interface_name) for u, v in proc_hierarchy.edges]
                 )
 
-                scenario_time_combinations = [
-                    (sname, tname, tcomb, cresults)
-                    for sname, sresults in results.items()
-                    for tname, tresults in sresults.items()
-                    for tcomb, cresults in tresults.items()
-                ]
-
-                for scenario_name, time_period, combination, combination_results in scenario_time_combinations:
+                for (scenario_name, time_period, combination), combination_results in results.items():
 
                     filtered_results = {k: combination_results[k]
                                         for k in interfaced_proc_hierarchy.nodes
@@ -673,24 +688,31 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
                         # Resolve computation graph
                         comp_graph = ComputationGraph()
                         comp_graph.add_edges(list(interfaced_proc_hierarchy.edges), 1.0, None)
-                        res = compute_all_graph_combinations(comp_graph, filtered_results)
+                        agg_res = compute_all_graph_combinations(comp_graph, filtered_results)
 
-        # part_of_graph = ComputationGraph()
+                        for comb in agg_res:
+                            if agg_combinations.get(comb) is None:
+                                agg_combinations[comb] = str(len(agg_combinations))
 
-        # for relation in system_flows[system]:  # type: FactorsRelationDirectedFlowObservation
-        #
-        #     # We create another graph only with interfaces in processors with parents
-        #     for interface in [relation.source_factor, relation.target_factor]:
-        #
-        #         processor_name = get_processor_name(interface.processor, glb_idx)
-        #         interface_full_name = processor_name+":"+interface.name
-        #
-        #         # If "processor" is in the "PartOf" hierarchy AND the "processor:interface" is not being handled yet
-        #         if processor_name in proc_hierarchy and interface_full_name not in part_of_graph.nodes:
-        #             # Insert into the Computation Graph a copy of the "PartOf" hierarchy of processors
-        #             # for the specific interface
-        #             new_edges = [(u+":"+interface.name, v+":"+interface.name)
-        #                          for u, v in weakly_connected_subgraph(proc_hierarchy, processor_name).edges]
-        #             part_of_graph.add_edges(new_edges, 1.0, None)
+                        for comb, data in agg_res.items():
+                            agg_results[(scenario_name, time_period, f"({combination}, {agg_combinations[comb]})")] = data
 
-    return []
+    def create_dataframe(r: Dict[Tuple[str, str, str], Dict[str, float]]) -> pd.DataFrame:
+        data = {k + split_name(name): {"Value": value}
+                for k, v in r.items()
+                for name, value in v.items()}
+        return pd.DataFrame.from_dict(data, orient='index')
+
+    print(combinations)
+    df1 = create_dataframe(results)
+    print(df1)
+
+    print(agg_combinations)
+    df2 = create_dataframe(agg_results)
+    print(df2)
+
+    df = pd.concat([df1, df2])
+    # print(df.loc[('default', '2010', '', 'AR1')])
+    # print(df.loc[('default', '2010', slice(None), 'AR1')])
+
+    return df, combinations, agg_combinations
