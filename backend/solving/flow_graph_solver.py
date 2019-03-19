@@ -25,26 +25,22 @@ Before the elaboration of flow graphs, several preparatory steps:
 * Observers (different versions). Take average always
 
 """
-from collections import namedtuple
-
-import matplotlib.pyplot as plt
 import pandas as pd
 import networkx as nx
 from typing import Dict, List, Set, Any, Tuple, Union, Optional, NamedTuple
 
-from networkx.classes.reportviews import NodeView
-
 from backend import case_sensitive, ureg
 from backend.command_generators.parser_ast_evaluators import ast_evaluator
 from backend.command_generators.parser_field_parsers import string_to_ast, expression_with_parameters, is_year, is_month
-from backend.common.helper import create_dictionary, PartialRetrievalDictionary, ifnull, Memoize
+from backend.common.helper import create_dictionary, PartialRetrievalDictionary, ifnull, Memoize, first, head
 from backend.models.musiasem_concepts import ProblemStatement, Parameter, FactorsRelationDirectedFlowObservation, \
-    FactorTypesRelationUnidirectionalLinearTransformObservation, FactorsRelationScaleObservation, Processor, \
-    FactorQuantitativeObservation, Factor, ProcessorsRelationPartOfObservation, ProcessorsRelationUpscaleObservation
+    FactorsRelationScaleObservation, Processor, \
+    FactorQuantitativeObservation, Factor, ProcessorsRelationPartOfObservation, FactorType
 from backend.model_services import get_case_study_registry_objects, State
 from backend.models.musiasem_concepts_helper import find_quantitative_observations
 from backend.solving.graph.computation_graph import ComputationGraph
-from backend.solving.graph.flow_graph import FlowGraph
+from backend.solving.graph.flow_graph import FlowGraph, IType
+from backend.models.statistical_datasets import Dataset, Dimension
 
 
 @Memoize
@@ -522,7 +518,7 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
             else:
                 relations.add_edge(src_name, dst_name, weight=weight)
 
-    glb_idx, _, _, _, _ = get_case_study_registry_objects(state)
+    glb_idx, _, _, datasets, _ = get_case_study_registry_objects(state)
 
     # Get all interface observations. Also resolve expressions without parameters. Cannot resolve expressions
     # depending only on global parameters because some of them can be overridden by scenario parameters.
@@ -606,6 +602,7 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
             # ----------------------------------------------------
 
             # if time_period == '2008':
+            #     import matplotlib.pyplot as plt
             #     for component in nx.weakly_connected_components(time_relations):
             #         nx.draw_kamada_kawai(time_relations.subgraph(component), with_labels=True)
             #         plt.show()
@@ -615,16 +612,19 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
 
             for issue in issues:
                 print(issue)
+                if issue.itype == IType.ERROR:
+                    return
 
             # results[(scenario_name, time_period)] = compute_all_graph_combinations(comp_graph, graph_params)
             res = compute_all_graph_combinations(comp_graph, graph_params)
 
-            for comb in res:
-                if combinations.get(comb) is None:
-                    combinations[comb] = str(len(combinations))
-
             for comb, data in res.items():
-                results[(scenario_name, time_period, combinations[comb])] = data
+                if len(data) > 0:
+                    if combinations.get(comb) is None:
+                        combinations[comb] = str(len(combinations))
+
+                    results[(scenario_name, time_period, combinations[comb])] = data
+                    results[(scenario_name, time_period, combinations[comb])].update(graph_params)
 
             results[(scenario_name, time_period, "")] = graph_params
 
@@ -634,7 +634,18 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
     # ACCOUNTING PER SYSTEM
 
     agg_results: Dict[Tuple[str, str, str], Dict[str, float]] = {}
+    agg_results2: Dict[Tuple[str, str, str], Dict[str, float]] = {}
     agg_combinations: Dict[frozenset, str] = {}
+
+    # Get all different existing interfaces and their units
+    interfaces: Dict[str, str] = {i.name: i.taxon.attributes.get('unit')
+                                  for i in glb_idx.get(Factor.partial_key())}
+
+    # Get all different existing interfaces types not included in "interfaces" that can be computed
+    # based on children interface types, and their units
+    parent_interfaces_types: Dict[str, str] = {i.name: (i.attributes.get('unit'), i.get_children())
+                                               for i in glb_idx.get(FactorType.partial_key())
+                                               if i.name not in interfaces and len(i.get_children()) > 0}
 
     for system in input_systems:
 
@@ -652,6 +663,9 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
             child_name = get_processor_name(child_processor, glb_idx)
             parent_name = get_processor_name(parent_processor, glb_idx)
 
+            # Parent and child should be of the same system
+            assert (child_processor.processor_system == parent_processor.processor_system)
+
             if "Archetype" in [parent_processor.instance_or_archetype, child_processor.instance_or_archetype]:
                 print(f"WARNING: excluding relation from '{child_name}' to '{parent_name}' because of Archetype processor")
             else:
@@ -663,13 +677,13 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
 
             print(f"********************* HIERARCHY: {proc_hierarchy.nodes}")
 
-            # nx.draw_kamada_kawai(proc_hierarchy, with_labels=True)
+            # if 'Bioethanol.SugarCrops.SugarCane' in proc_hierarchy.nodes:
+            # import matplotlib.pyplot as plt
+            # plt.figure(1, figsize=(8, 8))
+            # nx.draw_spring(proc_hierarchy, with_labels=True, font_size=8, node_size=60)
             # plt.show()
 
-            # Get all different existing interfaces
-            interface_names: Set[str] = {i.name for i in glb_idx.get(Factor.partial_key())}
-
-            for interface_name in interface_names:
+            for interface_name in interfaces:
 
                 print(f"********************* INTERFACE: {interface_name}")
 
@@ -686,16 +700,38 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
                     if len(filtered_results) > 0:
                         print(f"*** Scenario = {scenario_name}, Period = {time_period}, Combination = {combination}")
                         # Resolve computation graph
-                        comp_graph = ComputationGraph()
-                        comp_graph.add_edges(list(interfaced_proc_hierarchy.edges), 1.0, None)
-                        agg_res = compute_all_graph_combinations(comp_graph, filtered_results)
+                        # comp_graph = ComputationGraph()
+                        # comp_graph.add_edges(list(interfaced_proc_hierarchy.edges), 1.0, None)
+                        # agg_res = compute_all_graph_combinations(comp_graph, filtered_results)
+                        #
+                        # for comb, data in agg_res.items():
+                        #     if len(data) > 0:
+                        #         if agg_combinations.get(comb) is None:
+                        #             agg_combinations[comb] = str(len(agg_combinations))
+                        #
+                        #         agg_results[(scenario_name, time_period, f"({combination}, {agg_combinations[comb]})")] = data
 
-                        for comb in agg_res:
-                            if agg_combinations.get(comb) is None:
-                                agg_combinations[comb] = str(len(agg_combinations))
+                        # Aggregate top-down, starting from root
+                        agg_res = compute_aggregate_results(interfaced_proc_hierarchy, filtered_results)
+                        if len(agg_res) > 0:
+                            if agg_results.get((scenario_name, time_period, combination)) is None:
+                                agg_results[(scenario_name, time_period, combination)] = agg_res
+                            else:
+                                agg_results[(scenario_name, time_period, combination)].update(agg_res)
 
-                        for comb, data in agg_res.items():
-                            agg_results[(scenario_name, time_period, f"({combination}, {agg_combinations[comb]})")] = data
+            for proc in proc_hierarchy.nodes:
+                for parent_interface_type, (unit, children_interfaces) in parent_interfaces_types.items():
+                    for (scenario_name, time_period, combination), combination_results in results.items():
+                        if combination != "":
+                            values = dict(combination_results, **agg_results.get((scenario_name, time_period, combination), {}))
+                            sum_children = 0
+                            for c in children_interfaces:
+                                sum_children += values.get(proc+":"+c.name, 0)
+
+                            if agg_results2.get((scenario_name, time_period, combination)) is None:
+                                agg_results2[(scenario_name, time_period, combination)] = {proc+":"+parent_interface_type: sum_children}
+                            else:
+                                agg_results2[(scenario_name, time_period, combination)].update({proc+":"+parent_interface_type: sum_children})
 
     def create_dataframe(r: Dict[Tuple[str, str, str], Dict[str, float]]) -> pd.DataFrame:
         data = {k + split_name(name): {"Value": value}
@@ -705,14 +741,127 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
 
     print(combinations)
     df1 = create_dataframe(results)
-    print(df1)
+    # print(df1)
 
     print(agg_combinations)
     df2 = create_dataframe(agg_results)
-    print(df2)
+    # print(df2)
 
-    df = pd.concat([df1, df2])
-    # print(df.loc[('default', '2010', '', 'AR1')])
-    # print(df.loc[('default', '2010', slice(None), 'AR1')])
+    df3 = create_dataframe(agg_results2)
 
-    return df, combinations, agg_combinations
+    df = pd.concat([df1, df2, df3])
+
+    df.index.names = ["Scenario", "Period", "Combination", "Processor", "Interface"]
+
+    # Update "interfaces" with parent interface types
+    for parent_interface_type, (unit, _) in parent_interfaces_types.items():
+        interfaces[parent_interface_type] = unit
+
+    # Adding units column
+    df["Unit"] = [interfaces[i] for i in df.index.get_level_values("Interface")]
+
+    # Add customer attribute "level"
+    processors = {get_processor_name(p, glb_idx): p.attributes.get("level", "") for p in glb_idx.get(Processor.partial_key())}
+    # TODO: why level n-3 processors like "Society.Biodiesel.OilCrops.ExternalPalmOil.PalmOilCrop" does not appear?
+    df["Level"] = [processors.get(p, '"n-3"') for p in df.index.get_level_values("Processor")]
+    df.set_index("Level", append=True, inplace=True)
+    # df = df.reorder_levels(["Scenario", "Period", "Combination", "Level", "Processor", "Interface"])
+
+    # Pivoting dataframe: using "Interface" index values as columns
+    # df = df.pivot_table(values="Value", index=["Scenario", "Period", "Combination", "Processor"], columns="Interface")
+    # df = df.pivot_table(values="Value", index=["Scenario", "Combination", "Processor"], columns=["Interface", "Period"])
+
+    print(df)
+
+    # Create dataset and store in State
+    ds = get_dataset(df)
+    datasets["flow_graph_solution"] = ds
+
+    # Create dataset and store in State
+    ds2 = get_eum_dataset(df)
+    datasets["end_use_matrix"] = ds2
+
+    # return df, combinations, agg_combinations
+    return []
+
+
+def compute_aggregate_results(tree: nx.DiGraph, params: Dict[str, float]) -> Dict[str, float]:
+    def compute_node(node: str) -> float:
+        if params.get(node) is not None:
+            return params[node]
+
+        sum_children = 0
+        for pred in tree.predecessors(node):
+            sum_children += compute_node(pred)
+
+        values[node] = sum_children
+        return sum_children
+
+    root_nodes = [node for node, degree in tree.out_degree() if degree == 0]
+    if len(root_nodes) != 1 or root_nodes[0] is None:
+        raise Exception(f"Root node cannot be taken from list '{root_nodes}'")
+
+    values: Dict[str, float] = {}
+    compute_node(root_nodes[0])
+    return values
+
+
+def get_eum_dataset(dataframe: pd.DataFrame) -> "Dataset":
+    # EUM columns
+    df = dataframe.query('Interface in ["Biofuel", "CropProduction", "Fertilizer", "HA", "LU"]')
+
+    # EUM rows
+    df = df.query('Processor in ['
+                  '"Society", "Society.Biodiesel", "Society.Bioethanol", "Society.CommerceImports", "Society.CommerceExports", '
+                  '"Society.Bioethanol.Cereals", '
+                  '"Society.Bioethanol.Cereals.Wheat", "Society.Bioethanol.Cereals.Maize", '
+                  '"Society.Bioethanol.Cereals.ExternalWheat", "Society.Bioethanol.Cereals.ExternalMaize", '
+                  '"Society.Bioethanol.SugarCrops", '
+                  '"Society.Bioethanol.SugarCrops.SugarBeet", "Society.Bioethanol.SugarCrops.SugarCane", '
+                  '"Society.Bioethanol.SugarCrops.ExternalSugarBeet", "Society.Bioethanol.SugarCrops.ExternalSugarCane", '
+                  '"Society.Biodiesel.OilCrops", '
+                  '"Society.Biodiesel.OilCrops.PalmOil", "Society.Biodiesel.OilCrops.RapeSeed", "Society.Biodiesel.OilCrops.SoyBean", '
+                  '"Society.Biodiesel.OilCrops.ExternalPalmOil", "Society.Biodiesel.OilCrops.ExternalRapeSeed", "Society.Biodiesel.OilCrops.ExternalSoyBean"'
+                  ']')
+
+    df = df.pivot_table(values="Value", index=["Scenario", "Period", "Processor", "Level"], columns="Interface")
+
+    # Adding units to column name
+    # TODO: remove hardcoded
+    df = df.rename(columns={"Biofuel": "Biofuel (tonnes)",
+                            "CropProduction": "CropProduction (tonnes)",
+                            "Fertilizer": "Fertilizer (kg)",
+                            "HA": "HA (h)",
+                            "LU": "LU (ha)"})
+
+    return get_dataset(df)
+
+
+def get_dataset(dataframe: pd.DataFrame) -> "Dataset":
+    ds = Dataset()
+    ds.data = dataframe.reset_index()
+    ds.code = "flow_graph_solution"
+    ds.description = "Solution given by the Flow Graph Solver"
+    ds.attributes = {}
+    ds.metadata = None
+    ds.database = None
+
+    for dimension in dataframe.index.names:  # type: str
+        d = Dimension()
+        d.code = dimension
+        d.description = None
+        d.attributes = None
+        d.is_time = (dimension.lower() == "period")
+        d.is_measure = False
+        d.dataset = ds
+
+    for measure in dataframe.columns.values:  # type: str
+        d = Dimension()
+        d.code = measure
+        d.description = None
+        d.attributes = None
+        d.is_time = False
+        d.is_measure = True
+        d.dataset = ds
+
+    return ds

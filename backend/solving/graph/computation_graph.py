@@ -65,7 +65,7 @@ class ComputationGraph:
         if not self.graph.nodes[n].get("split"):
             self.graph.nodes[n]["split"] = [False, False]
 
-    def mark_node_split(self, n: Node, split: bool, graph_type: EdgeType) -> NoReturn:
+    def mark_node_split(self, n: Node, graph_type: EdgeType, split: bool = True) -> NoReturn:
         """ Set the attribute 'split' to a node """
         self.graph.nodes[n]["split"][graph_type.value] = split
 
@@ -155,6 +155,14 @@ class ComputationGraph:
 
         combinations: Set[frozenset] = set()
         param_names = set(conflicts.keys())
+
+        # This is a shortcut to avoid computation
+        if all([len(s) == 0 for s in conflicts.values()]):
+            return {frozenset(param_names)}
+
+        # TODO: This routine needs optimization because its order of complexity is too big.
+        #  It takes lot of time even with 10 parameters!
+
         for p in param_names:
             combinations |= valid_combinations(p, param_names)
 

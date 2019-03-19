@@ -72,14 +72,17 @@ class FlowGraph:
     def _create_computation_graph(self) -> ComputationGraph:
         """ Create a Computation Graph based on the Flow Graph """
         graph = ComputationGraph()
+
         for u, v, weight, reverse_weight in self.edges():
             graph.add_edge(u, v, weight, reverse_weight)
 
-        for n, split in self._direct_graph.nodes.data('split'):
-            graph.mark_node_split(n, split, EdgeType.DIRECT)
+        for n, split in self._direct_graph.nodes.data('split'):  # type: Node, bool
+            if split:
+                graph.mark_node_split(n, EdgeType.DIRECT)
 
-        for n, split in self._reverse_graph.nodes.data('split'):
-            graph.mark_node_split(n, split, EdgeType.REVERSE)
+        for n, split in self._reverse_graph.nodes.data('split'):  # type: Node, bool
+            if split:
+                graph.mark_node_split(n, EdgeType.REVERSE)
 
         return graph
 
@@ -105,12 +108,15 @@ class FlowGraph:
         issues: List[Issue] = []
 
         # Checking if graph is acyclic. Just looking at the direct graph is OK.
-        if not nx.algorithms.dag.is_directed_acyclic_graph(self._direct_graph):
-            issues.append(Issue(IType.ERROR, 'The graph contains cycles'))
-            return issues
+        # if not nx.algorithms.dag.is_directed_acyclic_graph(self._direct_graph):
+        #     print("Cycles detected. The nodes connected in a cycle are: ")
+        #     for n in nx.algorithms.cycles.simple_cycles(self._direct_graph):
+        #         print(n)
+        #     issues.append(Issue(IType.ERROR, 'The graph contains cycles'))
+        #     return issues
 
         for graph, opposite_graph in [(self._direct_graph, self._reverse_graph), (self._reverse_graph, self._direct_graph)]:
-            for n in nx.algorithms.dag.topological_sort(graph):
+            for n in nx.dfs_preorder_nodes(graph):
 
                 graph.nodes[n]['split'] = False
 

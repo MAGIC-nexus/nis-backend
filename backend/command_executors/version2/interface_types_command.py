@@ -16,15 +16,14 @@ class InterfaceTypesCommand(IExecutableCommand):
         def process_line(item):
             # Read variables
             ft_h_name = item.get("interface_type_hierarchy", "_default")  # "_default" InterfaceType Hierarchy NAME <<<<<<
-            ft_name = item.get("interface_type", None)
-            ft_sphere = item.get("sphere", None)
-            ft_roegen_type = item.get("roegen_type", None)
-            ft_parent = item.get("parent_interface_type", None)
-            ft_formula = item.get("formula", None)
-            ft_description = item.get("description", None)
-            ft_unit = item.get("unit", None)
-            # ft_orientation = item.get("orientation", None)
-            ft_unit = item.get("unit", None)
+            ft_name = item.get("interface_type")
+            ft_sphere = item.get("sphere")
+            ft_roegen_type = item.get("roegen_type")
+            ft_parent = item.get("parent_interface_type")
+            ft_formula = item.get("formula")
+            ft_description = item.get("description")
+            # ft_orientation = item.get("orientation")
+            ft_unit = item.get("unit")
             ft_attributes = item.get("attributes", {})
             if ft_attributes:
                 try:
