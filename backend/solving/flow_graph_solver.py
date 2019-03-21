@@ -42,7 +42,7 @@ from backend.models.musiasem_concepts_helper import find_quantitative_observatio
 from backend.solving.graph.computation_graph import ComputationGraph
 from backend.solving.graph.flow_graph import FlowGraph, IType
 from backend.models.statistical_datasets import Dataset, Dimension
-from command_generators import Issue
+from backend.command_generators import Issue
 
 
 @Memoize
@@ -490,22 +490,27 @@ def split_name(processor_interface: str) -> Tuple[str, Optional[str]]:
         return l[0], None
 
 
+class Edge(NamedTuple):
+    src: Factor
+    dst: Factor
+    weight: Optional[str]
+
+
+def add_factor_edges(glb_idx, graph: nx.DiGraph, musiasem_class: type, attributes: Tuple[str, str, str]):
+    edges: List[Tuple[Factor, Factor, Optional[str]]] = \
+        [(getattr(r, attributes[0]), getattr(r, attributes[1]), getattr(r, attributes[2]))
+         for r in glb_idx.get(musiasem_class.partial_key())]
+
+    for src, dst, weight in edges:
+        src_name = get_interface_name(src, glb_idx)
+        dst_name = get_interface_name(dst, glb_idx)
+        if "Archetype" in [src.processor.instance_or_archetype, dst.processor.instance_or_archetype]:
+            print(f"WARNING: excluding relation from '{src_name}' to '{dst_name}' because of Archetype processor")
+        else:
+            graph.add_edge(src_name, dst_name, weight=weight)
+
+
 def compute_flow_results(state: State, glb_idx, scenario_combined_params: Dict[str, dict]):
-
-    class Edge(NamedTuple):
-        src: Factor
-        dst: Factor
-        weight: Optional[str]
-
-    def add_edges(edges: List[Edge]):
-        for src, dst, weight in edges:
-            src_name = get_interface_name(src, glb_idx)
-            dst_name = get_interface_name(dst, glb_idx)
-            if "Archetype" in [src.processor.instance_or_archetype, dst.processor.instance_or_archetype]:
-                print(f"WARNING: excluding relation from '{src_name}' to '{dst_name}' because of Archetype processor")
-            else:
-                relations.add_edge(src_name, dst_name, weight=weight)
-
     # Get all interface observations. Also resolve expressions without parameters. Cannot resolve expressions
     # depending only on global parameters because some of them can be overridden by scenario parameters.
     time_observations_absolute, time_observations_relative = get_observations_by_time(glb_idx)
@@ -516,12 +521,10 @@ def compute_flow_results(state: State, glb_idx, scenario_combined_params: Dict[s
     relations = nx.DiGraph()
 
     # Add Interfaces -Flow- relations (time independent)
-    add_edges([Edge(r.source_factor, r.target_factor, r.weight)
-               for r in glb_idx.get(FactorsRelationDirectedFlowObservation.partial_key())])
+    add_factor_edges(glb_idx, relations, FactorsRelationDirectedFlowObservation, ("source_factor", "target_factor", "weight"))
 
     # Add Processors -Scale- relations (time independent)
-    add_edges([Edge(r.origin, r.destination, r.quantity)
-               for r in glb_idx.get(FactorsRelationScaleObservation.partial_key())])
+    add_factor_edges(glb_idx, relations, FactorsRelationScaleObservation, ("origin", "destination", "quantity"))
 
     # TODO Expand flow graph with it2it transforms
     # relations_scale_it2it = glb_idx.get(FactorTypesRelationUnidirectionalLinearTransformObservation.partial_key())
@@ -620,6 +623,7 @@ def compute_interfacetype_aggregates(glb_idx, results):
 
     print(f"Globally computed processors ({len(processors)}): {processors}")
 
+    # Get all different existing interfaces types that can be computed based on children interface types
     parent_interfaces: Dict[str, Set[FactorType]] = \
         {i.name: i.get_children() for i in glb_idx.get(FactorType.partial_key()) if len(i.get_children()) > 0}
 
@@ -665,6 +669,63 @@ def get_processor_partof_hierarchies(glb_idx, system):
     return proc_hierarchies
 
 
+def compute_partof_aggregates(glb_idx, systems, results):
+    agg_results: Dict[Tuple[str, str, str], Dict[str, float]] = {}
+    # agg_combinations: Dict[frozenset, str] = {}
+
+    # Get all different existing interfaces and their units
+    # TODO: interfaces could need a unit transformation according to interface type
+    interfaces: Dict[str, str] = {i.name for i in glb_idx.get(FactorType.partial_key())}
+
+    for system in systems:
+        print(f"********************* SYSTEM: {system}")
+
+        proc_hierarchies = get_processor_partof_hierarchies(glb_idx, system)
+
+        # Iterate over all independent trees created by the PartOf relations
+        for component in nx.weakly_connected_components(proc_hierarchies):
+            proc_hierarchy: nx.DiGraph = proc_hierarchies.subgraph(component)
+            print(f"********************* HIERARCHY: {proc_hierarchy.nodes}")
+
+            # plt.figure(1, figsize=(8, 8))
+            # nx.draw_spring(proc_hierarchy, with_labels=True, font_size=8, node_size=60)
+            # plt.show()
+
+            for interface_name in interfaces:
+                print(f"********************* INTERFACE: {interface_name}")
+
+                interfaced_proc_hierarchy = nx.DiGraph(
+                    incoming_graph_data=[(u+":"+interface_name, v+":"+interface_name) for u, v in proc_hierarchy.edges]
+                )
+
+                for key, values in results.items():
+
+                    filtered_values = {k: values[k] for k in interfaced_proc_hierarchy.nodes
+                                       if values.get(k) is not None}
+
+                    if len(filtered_values) > 0:
+                        print(f"*** (Scenario, Period, Combination = {key}")
+
+                        # Resolve computation graph
+                        # comp_graph = ComputationGraph()
+                        # comp_graph.add_edges(list(interfaced_proc_hierarchy.edges), 1.0, None)
+                        # agg_res = compute_all_graph_combinations(comp_graph, filtered_results)
+                        #
+                        # for comb, data in agg_res.items():
+                        #     if len(data) > 0:
+                        #         if agg_combinations.get(comb) is None:
+                        #             agg_combinations[comb] = str(len(agg_combinations))
+                        #
+                        #         agg_results[(scenario_name, time_period, f"({combination}, {agg_combinations[comb]})")] = data
+
+                        # Aggregate top-down, starting from root
+                        agg_res = compute_aggregate_results(interfaced_proc_hierarchy, filtered_values)
+                        if len(agg_res) > 0:
+                            agg_results.setdefault(key, {}).update(agg_res)
+
+    return agg_results, {}
+
+
 def flow_graph_solver(global_parameters: List[Parameter], problem_statement: ProblemStatement,
                       input_systems: Dict[str, Set[Processor]], state: State) -> List[Issue]:
     """
@@ -691,84 +752,17 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
     if len(issues) > 0:
         return issues
 
-    # ----------------------------------------------------
-    # ACCOUNTING PER SYSTEM
-
-    # agg_results, agg_combinations = compute_partof_aggregates(proc_hierarchy, results)
-
-    agg_results: Dict[Tuple[str, str, str], Dict[str, float]] = {}
-    # agg_combinations: Dict[frozenset, str] = {}
-
-    # Get all different existing interfaces and their units
-    # TODO: interfaces could need a unit transformation according to interface type
-    interfaces: Dict[str, str] = {i.name: i.attributes.get('unit')
-                                  for i in glb_idx.get(FactorType.partial_key())}
-
-    for system in input_systems:
-        print(f"********************* SYSTEM: {system}")
-
-        proc_hierarchies = get_processor_partof_hierarchies(glb_idx, system)
-
-        # Iterate over all independent trees created by the PartOf relations
-        for component in nx.weakly_connected_components(proc_hierarchies):
-            proc_hierarchy: nx.DiGraph = proc_hierarchies.subgraph(component)
-            print(f"********************* HIERARCHY: {proc_hierarchy.nodes}")
-
-            # plt.figure(1, figsize=(8, 8))
-            # nx.draw_spring(proc_hierarchy, with_labels=True, font_size=8, node_size=60)
-            # plt.show()
-
-            for interface_name in interfaces:
-                print(f"********************* INTERFACE: {interface_name}")
-
-                interfaced_proc_hierarchy = nx.DiGraph(
-                    incoming_graph_data=[(u+":"+interface_name, v+":"+interface_name) for u, v in proc_hierarchy.edges]
-                )
-
-                for key, values in results.items():
-
-                    filtered_values = {k: values[k] for k in interfaced_proc_hierarchy.nodes
-                                        if values.get(k) is not None}
-
-                    if len(filtered_values) > 0:
-                        print(f"*** (Scenario, Period, Combination = {key}")
-
-                        # Resolve computation graph
-                        # comp_graph = ComputationGraph()
-                        # comp_graph.add_edges(list(interfaced_proc_hierarchy.edges), 1.0, None)
-                        # agg_res = compute_all_graph_combinations(comp_graph, filtered_results)
-                        #
-                        # for comb, data in agg_res.items():
-                        #     if len(data) > 0:
-                        #         if agg_combinations.get(comb) is None:
-                        #             agg_combinations[comb] = str(len(agg_combinations))
-                        #
-                        #         agg_results[(scenario_name, time_period, f"({combination}, {agg_combinations[comb]})")] = data
-
-                        # Aggregate top-down, starting from root
-                        agg_res = compute_aggregate_results(interfaced_proc_hierarchy, filtered_values)
-                        if len(agg_res) > 0:
-                            agg_results.setdefault(key, {}).update(agg_res)
+    agg_results, agg_combinations = compute_partof_aggregates(glb_idx, input_systems, results)
 
     # Add "agg_results" to "results"
-    # dic.setdefault(key, []).append(value)
     for key, value in agg_results.items():
         results[key].update(value)
-
-    # ***********************************************************************
-    # Get all different existing interfaces types not included in "interfaces" that can be computed
-    # based on children interface types, and their units
-    # parent_interfaces_types: Dict[str, str] = {i.name: (i.attributes.get('unit'), i.get_children())
-    #                                            for i in glb_idx.get(FactorType.partial_key())
-    #                                            if i.name not in interfaces and len(i.get_children()) > 0}
 
     agg_results2 = compute_interfacetype_aggregates(glb_idx, results)
 
     # Add "agg_results2" to "results"
     for key, value in agg_results2.items():
         results[key].update(value)
-
-    # ***********************************************************************
 
     def create_dataframe(r: Dict[Tuple[str, str, str], Dict[str, float]]) -> pd.DataFrame:
         data = {k + split_name(name): {"Value": value}
@@ -784,23 +778,16 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
     df.index.names = ["Scenario", "Period", "Combination", "Processor", "Interface"]
     df = df.sort_index(level=["Scenario", "Period", "Combination", "Processor", "Interface"])
 
-    # Update "interfaces" with parent interface types
-    # for parent_interface_type, (unit, _) in parent_interfaces_types.items():
-    #     interfaces[parent_interface_type] = unit
-
     # Adding units column
-    df["Unit"] = [interfaces[i] for i in df.index.get_level_values("Interface")]
+    interface_units: Dict[str, str] = {i.name: i.attributes.get('unit')
+                                       for i in glb_idx.get(FactorType.partial_key())}
+    df["Unit"] = [interface_units[i] for i in df.index.get_level_values("Interface")]
 
     # Add customer attribute "level"
     processors = {get_processor_name(p, glb_idx): p.attributes.get("level", "") for p in glb_idx.get(Processor.partial_key())}
     # TODO: why level n-3 processors like "Society.Biodiesel.OilCrops.ExternalPalmOil.PalmOilCrop" does not appear?
     df["Level"] = [processors.get(p, '"n-3"') for p in df.index.get_level_values("Processor")]
     df.set_index("Level", append=True, inplace=True)
-    # df = df.reorder_levels(["Scenario", "Period", "Combination", "Level", "Processor", "Interface"])
-
-    # Pivoting dataframe: using "Interface" index values as columns
-    # df = df.pivot_table(values="Value", index=["Scenario", "Period", "Combination", "Processor"], columns="Interface")
-    # df = df.pivot_table(values="Value", index=["Scenario", "Combination", "Processor"], columns=["Interface", "Period"])
 
     print(df)
 
