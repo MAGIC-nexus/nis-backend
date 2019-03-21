@@ -48,13 +48,15 @@ from backend.command_generators import Issue
 @Memoize
 def get_processor_name(processor: Processor, registry: PartialRetrievalDictionary) -> str:
     """ Get the processor hierarchical name with caching enabled """
-    return processor.full_hierarchy_names(registry)[0]
+    full_name = processor.full_hierarchy_names(registry)[0]
+    return full_name if case_sensitive else full_name.lower()
 
 
 def get_interface_name(interface: Factor, registry: PartialRetrievalDictionary) -> str:
     """ Get the full interface name prefixing it with the processor hierarchical name """
     # TODO: use Interface Type name "interface.taxon.name" instead of Interface name "interface.name"?
-    return get_processor_name(interface.processor, registry) + ":" + interface.name
+    return get_processor_name(interface.processor, registry) + ":" + \
+           (interface.name if case_sensitive else interface.name.lower())
 
 
 def get_circular_dependencies(parameters: Dict[str, Tuple[Any, list]]) -> list:
@@ -84,7 +86,7 @@ def evaluate_parameters_for_scenario(base_params: List[Parameter], scenario_para
     """
     # Create dictionary without evaluation
     result_params = create_dictionary()
-    result_params.update({p.name: p.default_value for p in base_params if p.default_value})
+    result_params.update({p.name: p.default_value for p in base_params if p.default_value is not None})
 
     # Overwrite with scenario expressions or constants
     result_params.update(scenario_params)
@@ -96,7 +98,7 @@ def evaluate_parameters_for_scenario(base_params: List[Parameter], scenario_para
     # Now, evaluate ALL expressions
     for param, expression in result_params.items():
         value, ast, params, issues = evaluate_numeric_expression_with_parameters(expression, state)
-        if not value:  # It is not a constant, store the parameters on which this depends
+        if value is None:  # It is not a constant, store the parameters on which this depends
             if case_sensitive:
                 unknown_params[param] = (ast, set(params))
             else:
@@ -122,7 +124,7 @@ def evaluate_parameters_for_scenario(base_params: List[Parameter], scenario_para
             ast, params = unknown_params[param]
             if params.issubset(known_params):
                 value, _, _, issues = evaluate_numeric_expression_with_parameters(ast, state)
-                if not value:
+                if value is None:
                     raise Exception(f"It should be possible to evaluate the parameter '{param}'. "
                                     f"Issues: {', '.join(issues)}")
                 else:
@@ -309,7 +311,7 @@ def get_observations_by_time(prd: PartialRetrievalDictionary) -> Tuple[TimeObser
         value, ast, _, issues = evaluate_numeric_expression_with_parameters(observation.value, state)
 
         # Store: (Value, FactorQuantitativeObservation)
-        time = observation.attributes["time"]
+        time = observation.attributes["time"].lower()
         if time not in observations:
             observations[time] = []
 
@@ -317,7 +319,7 @@ def get_observations_by_time(prd: PartialRetrievalDictionary) -> Tuple[TimeObser
 
     # Check all time periods are consistent. All should be Year or Month, but not both.
     time_period_type = get_type_from_all_time_periods(list(observations.keys()))
-    assert(time_period_type in ["Year", "Month"])
+    assert(time_period_type in ["year", "month"])
 
     # Remove generic period type and insert it into all specific periods. E.g. "Year" into "2010", "2011" and "2012"
     if time_period_type in observations:
@@ -406,11 +408,11 @@ def get_type_from_all_time_periods(time_periods: List[str]) -> Optional[str]:
     # Based on the first element we will check the rest of elements
     period = next(iter(time_periods))
 
-    if period == "Year" or is_year(period):
-        period_type = "Year"
+    if period == "year" or is_year(period):
+        period_type = "year"
         period_check = is_year
-    elif period == "Month" or is_month(period):
-        period_type = "Month"
+    elif period == "month" or is_month(period):
+        period_type = "month"
         period_check = is_month
     else:
         return None
@@ -570,8 +572,8 @@ def compute_flow_results(state: State, glb_idx, scenario_combined_params: Dict[s
             # Transform relative observations into graph edges
             for expression, obs in time_observations_relative[time_period]:
                 processor_name = get_processor_name(obs.factor.processor, glb_idx)
-                time_relations.add_edge(processor_name + ":" + obs.relative_factor.name,
-                                        processor_name + ":" + obs.factor.name,
+                time_relations.add_edge(processor_name + ":" + (obs.relative_factor.name if case_sensitive else obs.relative_factor.name.lower()),
+                                        processor_name + ":" + (obs.factor.name if case_sensitive else obs.factor.name.lower()),
                                         weight=expression)
 
             # Second and last pass to resolve weight expressions: expressions with parameters can be solved
@@ -625,7 +627,8 @@ def compute_interfacetype_aggregates(glb_idx, results):
 
     # Get all different existing interfaces types that can be computed based on children interface types
     parent_interfaces: Dict[str, Set[FactorType]] = \
-        {i.name: i.get_children() for i in glb_idx.get(FactorType.partial_key()) if len(i.get_children()) > 0}
+        {i.name if case_sensitive else i.name.lower(): i.get_children()
+         for i in glb_idx.get(FactorType.partial_key()) if len(i.get_children()) > 0}
 
     # TODO: make a recursive computation if parent can have parent children
 
@@ -638,7 +641,7 @@ def compute_interfacetype_aggregates(glb_idx, results):
 
                     sum_children = 0
                     for child in children_interfaces:
-                        sum_children += values.get(proc + ":" + child.name, 0)
+                        sum_children += values.get(proc + ":" + (child.name if case_sensitive else child.name.lower()), 0)
 
                     agg_results.setdefault(key, {}).update({proc_interface_name: sum_children})
 
@@ -675,7 +678,7 @@ def compute_partof_aggregates(glb_idx, systems, results):
 
     # Get all different existing interfaces and their units
     # TODO: interfaces could need a unit transformation according to interface type
-    interfaces: Dict[str, str] = {i.name for i in glb_idx.get(FactorType.partial_key())}
+    interfaces: Set[str] = {i.name if case_sensitive else i.name.lower() for i in glb_idx.get(FactorType.partial_key())}
 
     for system in systems:
         print(f"********************* SYSTEM: {system}")
@@ -744,8 +747,9 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
     """
     glb_idx, _, _, datasets, _ = get_case_study_registry_objects(state)
 
-    scenario_combined_params = {name: evaluate_parameters_for_scenario(global_parameters, params)
-                                for name, params in problem_statement.scenarios.items()}
+    scenario_combined_params = create_dictionary(
+        data={name: evaluate_parameters_for_scenario(global_parameters, params)
+              for name, params in problem_statement.scenarios.items()})
 
     results, combinations, issues = compute_flow_results(state, glb_idx, scenario_combined_params)
 
@@ -772,19 +776,22 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
 
     print(combinations)
     df = create_dataframe(results)
-    # print(agg_combinations)
     df = df.round(3)
 
+    # Give a name to the dataframe indexes
     df.index.names = ["Scenario", "Period", "Combination", "Processor", "Interface"]
+
+    # Sort the dataframe based on indexes. Not necessary, only done for debugging purposes.
     df = df.sort_index(level=["Scenario", "Period", "Combination", "Processor", "Interface"])
 
-    # Adding units column
-    interface_units: Dict[str, str] = {i.name: i.attributes.get('unit')
-                                       for i in glb_idx.get(FactorType.partial_key())}
+    # Adding column with interface units
+    interface_units = create_dictionary(data={i.name: i.attributes.get('unit')
+                                              for i in glb_idx.get(FactorType.partial_key())})
     df["Unit"] = [interface_units[i] for i in df.index.get_level_values("Interface")]
 
     # Add customer attribute "level"
-    processors = {get_processor_name(p, glb_idx): p.attributes.get("level", "") for p in glb_idx.get(Processor.partial_key())}
+    processors = create_dictionary(data={get_processor_name(p, glb_idx): p.attributes.get("level", "")
+                                         for p in glb_idx.get(Processor.partial_key())})
     # TODO: why level n-3 processors like "Society.Biodiesel.OilCrops.ExternalPalmOil.PalmOilCrop" does not appear?
     df["Level"] = [processors.get(p, '"n-3"') for p in df.index.get_level_values("Processor")]
     df.set_index("Level", append=True, inplace=True)
@@ -826,20 +833,20 @@ def compute_aggregate_results(tree: nx.DiGraph, params: Dict[str, float]) -> Dic
 
 def get_eum_dataset(dataframe: pd.DataFrame) -> "Dataset":
     # EUM columns
-    df = dataframe.query('Interface in ["Biofuel", "CropProduction", "Fertilizer", "HA", "LU"]')
+    df = dataframe.query('Interface in ["biofuel", "cropproduction", "fertilizer", "ha", "lu"]')
 
     # EUM rows
     df = df.query('Processor in ['
-                  '"Society", "Society.Biodiesel", "Society.Bioethanol", "Society.CommerceImports", "Society.CommerceExports", '
-                  '"Society.Bioethanol.Cereals", '
-                  '"Society.Bioethanol.Cereals.Wheat", "Society.Bioethanol.Cereals.Maize", '
-                  '"Society.Bioethanol.Cereals.ExternalWheat", "Society.Bioethanol.Cereals.ExternalMaize", '
-                  '"Society.Bioethanol.SugarCrops", '
-                  '"Society.Bioethanol.SugarCrops.SugarBeet", "Society.Bioethanol.SugarCrops.SugarCane", '
-                  '"Society.Bioethanol.SugarCrops.ExternalSugarBeet", "Society.Bioethanol.SugarCrops.ExternalSugarCane", '
-                  '"Society.Biodiesel.OilCrops", '
-                  '"Society.Biodiesel.OilCrops.PalmOil", "Society.Biodiesel.OilCrops.RapeSeed", "Society.Biodiesel.OilCrops.SoyBean", '
-                  '"Society.Biodiesel.OilCrops.ExternalPalmOil", "Society.Biodiesel.OilCrops.ExternalRapeSeed", "Society.Biodiesel.OilCrops.ExternalSoyBean"'
+                  '"society", "society.biodiesel", "society.bioethanol", "society.commerceimports", "society.commerceexports", '
+                  '"society.bioethanol.cereals", '
+                  '"society.bioethanol.cereals.wheat", "society.bioethanol.cereals.maize", '
+                  '"society.bioethanol.cereals.externalwheat", "society.bioethanol.cereals.externalmaize", '
+                  '"society.bioethanol.sugarcrops", '
+                  '"society.bioethanol.sugarcrops.sugarbeet", "society.bioethanol.sugarcrops.sugarcane", '
+                  '"society.bioethanol.sugarcrops.externalsugarbeet", "society.bioethanol.sugarcrops.externalsugarcane", '
+                  '"society.biodiesel.oilcrops", '
+                  '"society.biodiesel.oilcrops.palmoil", "society.biodiesel.oilcrops.rapeseed", "society.biodiesel.oilcrops.soybean", '
+                  '"society.biodiesel.oilcrops.externalpalmoil", "society.biodiesel.oilcrops.externalrapeseed", "society.biodiesel.oilcrops.externalsoybean"'
                   ']')
 
     # df = df.query('Processor in ['
@@ -859,11 +866,11 @@ def get_eum_dataset(dataframe: pd.DataFrame) -> "Dataset":
 
     # Adding units to column name
     # TODO: remove hardcoded
-    df = df.rename(columns={"Biofuel": "Biofuel (tonnes)",
-                            "CropProduction": "CropProduction (tonnes)",
-                            "Fertilizer": "Fertilizer (kg)",
-                            "HA": "HA (h)",
-                            "LU": "LU (ha)"})
+    df = df.rename(columns={"biofuel": "Biofuel (tonnes)",
+                            "cropproduction": "CropProduction (tonnes)",
+                            "fertilizer": "Fertilizer (kg)",
+                            "ha": "HA (h)",
+                            "lu": "LU (ha)"})
 
     return get_dataset(df)
 
