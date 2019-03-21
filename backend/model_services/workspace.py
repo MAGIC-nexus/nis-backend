@@ -228,7 +228,7 @@ def transform_issues(issues: List[Union[dict, backend.Issue, tuple, Issue]], cmd
         else:  # isinstance(i, Issue):
             issue = i
 
-        if issue.itype == IType.error():
+        if issue.itype == IType.ERROR:
             errors_exist = True
 
         if not issue.ctype and cmd:  # "cmd" may be "None", in case the Issue is produced by the commands container loop
@@ -288,7 +288,7 @@ def convert_generator_to_native(generator_type, file_type: str, file):
 # SOLVING (PREPARATION AND CALL SOLVER)
 # ######################################################################################################################
 
-def prepare_and_solve_model(state: State):
+def prepare_and_solve_model(state: State) -> List[Issue]:
     """
     Modify the state so that:
     * Implicit references of Interfaces to subcontexts are materialized
@@ -308,7 +308,7 @@ def prepare_and_solve_model(state: State):
     return issues
 
 
-def call_solver(state: State, systems: Dict[str, Set[Processor]]):
+def call_solver(state: State, systems: Dict[str, Set[Processor]]) -> List[Issue]:
     """
     Solve the problem
     """
@@ -338,7 +338,7 @@ def call_solver(state: State, systems: Dict[str, Set[Processor]]):
 
     solver_type = problem_statement.solving_parameters.get("solver", "flow_graph").lower()
 
-    issues = []
+    issues: List[Issue] = []
     if solver_type == "flow_graph":
         issues = flow_graph_solver(global_parameters, problem_statement, systems, state)
 

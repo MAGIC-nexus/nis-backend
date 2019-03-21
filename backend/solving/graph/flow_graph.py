@@ -1,5 +1,4 @@
 import math
-from enum import Enum
 from functools import reduce
 from operator import add
 from typing import Dict, List, Tuple, Optional, NoReturn, Generator
@@ -7,21 +6,7 @@ import networkx as nx
 
 from backend.solving.graph import Node, Weight, EdgeType
 from backend.solving.graph.computation_graph import ComputationGraph
-
-
-class IType(Enum):
-    INFO = 1
-    WARNING = 2
-    ERROR = 3
-
-
-class Issue:
-    def __init__(self, itype: IType, description: str):
-        self.itype = itype
-        self.description = description
-
-    def __str__(self):
-        return f"{self.itype}: {self.description}"
+from backend.command_generators import IType, Issue
 
 
 class FlowGraph:

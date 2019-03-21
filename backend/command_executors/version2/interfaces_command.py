@@ -154,7 +154,7 @@ class InterfacesAndQualifiedQuantitiesCommand(IExecutableCommand):
 
             # Check if mandatory fields with no value exist
             for field in [k for k, v in fields.items() if v.mandatory and not fields_value[k]]:
-                add_issue(IType.error(), f"Mandatory field '{field}' is empty. Skipped.")
+                add_issue(IType.ERROR, f"Mandatory field '{field}' is empty. Skipped.")
                 return
 
             # Interface
@@ -183,7 +183,7 @@ class InterfacesAndQualifiedQuantitiesCommand(IExecutableCommand):
                 try:
                     fields_value["interface_attributes"] = dictionary_from_key_value_list(field_val, glb_idx)
                 except Exception as e:
-                    add_issue(IType.error(), str(e))
+                    add_issue(IType.ERROR, str(e))
                     return
             else:
                 fields_value["interface_attributes"] = {}
@@ -192,7 +192,7 @@ class InterfacesAndQualifiedQuantitiesCommand(IExecutableCommand):
                 try:
                     number_attributes = dictionary_from_key_value_list(f_number_attributes, glb_idx)
                 except Exception as e:
-                    add_issue(IType.error(), str(e))
+                    add_issue(IType.ERROR, str(e))
                     return
             else:
                 number_attributes = {}
@@ -203,7 +203,7 @@ class InterfacesAndQualifiedQuantitiesCommand(IExecutableCommand):
                 if f_processor_name and f_interface_type_name:
                     f_interface_name = f_processor_name+":"+f_interface_type_name
                 else:
-                    add_issue(IType.error(), "When 'Interface' column is not defined, both 'Processor' and 'InterfaceType' must")
+                    add_issue(IType.ERROR, "When 'Interface' column is not defined, both 'Processor' and 'InterfaceType' must")
                     return
             else:
                 # TODO Split using syntax analysis. Each of the parts may contain advanced syntactic expressions. For now, only literals are considered
@@ -214,16 +214,16 @@ class InterfacesAndQualifiedQuantitiesCommand(IExecutableCommand):
             if f_pedigree_matrix and f_pedigree:
                 pm = glb_idx.get(PedigreeMatrix.partial_key(name=f_pedigree_matrix))
                 if len(pm) == 0:
-                    add_issue(IType.error(), "Could not find Pedigree Matrix '" + f_pedigree_matrix + "'")
+                    add_issue(IType.ERROR, "Could not find Pedigree Matrix '" + f_pedigree_matrix + "'")
                     return
                 else:
                     try:
                         lst = pm[0].get_modes_for_code(f_pedigree)
                     except:
-                        add_issue(IType.error(), "Could not decode Pedigree '" + f_pedigree + "' for Pedigree Matrix '" + f_pedigree_matrix + "'")
+                        add_issue(IType.ERROR, "Could not decode Pedigree '" + f_pedigree + "' for Pedigree Matrix '" + f_pedigree_matrix + "'")
                         return
             elif f_pedigree and not f_pedigree_matrix:
-                add_issue(IType.error(), "Pedigree specified without accompanying Pedigree Matrix")
+                add_issue(IType.ERROR, "Pedigree specified without accompanying Pedigree Matrix")
                 return
 
             # Source
@@ -258,10 +258,10 @@ class InterfacesAndQualifiedQuantitiesCommand(IExecutableCommand):
             # TODO Allow creating a basic Processor if it is not found
             p = glb_idx.get(Processor.partial_key(f_processor_name))
             if len(p) == 0:
-                add_issue(IType.error(), "Processor '" + f_processor_name + "' not declared previously")
+                add_issue(IType.ERROR, "Processor '" + f_processor_name + "' not declared previously")
                 return
             elif len(p) > 1:
-                add_issue(IType.error(), "Processor '" + f_processor_name + "' found " + str(len(p)) + " times. It must be uniquely identified.")
+                add_issue(IType.ERROR, "Processor '" + f_processor_name + "' found " + str(len(p)) + " times. It must be uniquely identified.")
                 return
             else:
                 p = p[0]
@@ -283,10 +283,10 @@ class InterfacesAndQualifiedQuantitiesCommand(IExecutableCommand):
                 # TODO Allow creating a basic FactorType if it is not found
                 ft = glb_idx.get(FactorType.partial_key(f_interface_type_name))
                 if len(ft) == 0:
-                    add_issue(IType.error(), f"InterfaceType '{f_interface_type_name}' not declared previously")
+                    add_issue(IType.ERROR, f"InterfaceType '{f_interface_type_name}' not declared previously")
                     return
                 elif len(ft) > 1:
-                    add_issue(IType.error(), f"InterfaceType '{f_interface_type_name}' found {str(len(ft))} times. "
+                    add_issue(IType.ERROR, f"InterfaceType '{f_interface_type_name}' found {str(len(ft))} times. "
                                              f"It must be uniquely identified.")
                     return
                 else:
@@ -327,7 +327,7 @@ class InterfacesAndQualifiedQuantitiesCommand(IExecutableCommand):
             # Find Observer
             oer = glb_idx.get(Observer.partial_key(f_source))
             if not oer:
-                add_issue(IType.warning(), f"Observer '{f_source}' has not been found.")
+                add_issue(IType.WARNING, f"Observer '{f_source}' has not been found.")
             else:
                 oer = oer[0]
 
@@ -346,7 +346,7 @@ class InterfacesAndQualifiedQuantitiesCommand(IExecutableCommand):
                 f_relative_to = first(f.processor.factors, lambda ifc: strcmp(ifc.name, relative_to_interface_name))
 
                 if not f_relative_to:
-                    add_issue(IType.error(), f"Interface specified in 'relative_to' column "
+                    add_issue(IType.ERROR, f"Interface specified in 'relative_to' column "
                                              f"'{relative_to_interface_name}' has not been found.")
                     return
 
@@ -355,7 +355,7 @@ class InterfacesAndQualifiedQuantitiesCommand(IExecutableCommand):
 
                 # If an observation exists then "time" is mandatory
                 if not f_time:
-                    add_issue(IType.error(), f"Field 'time' needs to be specified for the given observation.")
+                    add_issue(IType.ERROR, f"Field 'time' needs to be specified for the given observation.")
                     return
 
                 o = _create_or_append_quantitative_observation(f,

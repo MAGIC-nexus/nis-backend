@@ -75,7 +75,7 @@ class ProcessorScalingsCommand(IExecutableCommand):
             try:
                 self._process_row(row)
             except CommandExecutionError as e:
-                self._add_issue(IType.error(), str(e))
+                self._add_issue(IType.ERROR, str(e))
 
         return self._issues, None
 
