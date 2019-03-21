@@ -27,7 +27,7 @@ Before the elaboration of flow graphs, several preparatory steps:
 """
 import pandas as pd
 import networkx as nx
-import matplotlib.pyplot as plt
+# import matplotlib.pyplot as plt
 from typing import Dict, List, Set, Any, Tuple, Union, Optional, NamedTuple
 
 from backend import case_sensitive, ureg
@@ -350,7 +350,7 @@ def evaluate_numeric_expression_with_parameters(expression: Union[float, str, di
     elif isinstance(expression, dict):
         ast = expression
         value, params = ast_evaluator(ast, state, None, issues)
-        if value:
+        if value is not None:
             ast = None
 
     elif isinstance(expression, str):
@@ -359,7 +359,7 @@ def evaluate_numeric_expression_with_parameters(expression: Union[float, str, di
         except ValueError:
             ast = string_to_ast(expression_with_parameters, expression)
             value, params = ast_evaluator(ast, state, None, issues)
-            if value:
+            if value is not None:
                 ast = None
 
     else:
@@ -580,8 +580,9 @@ def compute_flow_results(state: State, glb_idx, scenario_combined_params: Dict[s
             for u, v, data in time_relations.edges(data=True):
                 expression = data["weight"]
                 if expression is not None:
-                    value, ast, _, issues = evaluate_numeric_expression_with_parameters(expression, scenario_state)
+                    value, ast, params, issues = evaluate_numeric_expression_with_parameters(expression, scenario_state)
                     if value is None:
+                        print(params)
                         raise Exception(f"Cannot evaluate expression '{expression}' for weight "
                                         f"from interface '{u}' to interface '{v}'. Issues: {', '.join(issues)}")
                     data["weight"] = value
