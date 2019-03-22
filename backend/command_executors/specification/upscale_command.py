@@ -164,8 +164,8 @@ class UpscaleCommand(IExecutableCommand):
                 if non_zero_weight:
                     # Clone the child processor
                     # TODO
-                    cloned_child = child.clone(state=glb_idx)
-                    glb_idx.put(cloned_child.key(), cloned_child)
+                    cloned_child, cloned_children = child.clone(state=glb_idx)
+                    Processor.register([cloned_child] + list(cloned_children), glb_idx)
 
                     # Create the new Relation Observations
                     # - Part-of Relation

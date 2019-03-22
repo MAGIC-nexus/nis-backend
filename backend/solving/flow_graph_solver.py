@@ -793,8 +793,7 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
     # Add customer attribute "level"
     processors = create_dictionary(data={get_processor_name(p, glb_idx): p.attributes.get("level", "")
                                          for p in glb_idx.get(Processor.partial_key())})
-    # TODO: why level n-3 processors like "Society.Biodiesel.OilCrops.ExternalPalmOil.PalmOilCrop" does not appear?
-    df["Level"] = [processors.get(p, '"n-3"') for p in df.index.get_level_values("Processor")]
+    df["Level"] = [processors[p] for p in df.index.get_level_values("Processor")]
     df.set_index("Level", append=True, inplace=True)
 
     print(df)
@@ -851,16 +850,16 @@ def get_eum_dataset(dataframe: pd.DataFrame) -> "Dataset":
                   ']')
 
     # df = df.query('Processor in ['
-    #               '"Society", "Biodiesel", "Bioethanol", "CommerceImports", "CommerceExports", '
-    #               '"Bioethanol.Cereals", '
-    #               '"Bioethanol.Cereals.Wheat", "Bioethanol.Cereals.Maize", '
-    #               '"Bioethanol.Cereals.ExternalWheat", "Bioethanol.Cereals.ExternalMaize", '
-    #               '"Bioethanol.SugarCrops", '
-    #               '"Bioethanol.SugarCrops.SugarBeet", "Bioethanol.SugarCrops.SugarCane", '
-    #               '"Bioethanol.SugarCrops.ExternalSugarBeet", "Bioethanol.SugarCrops.ExternalSugarCane", '
-    #               '"Biodiesel.OilCrops", '
-    #               '"Biodiesel.OilCrops.PalmOil", "Biodiesel.OilCrops.RapeSeed", "Biodiesel.OilCrops.SoyBean", '
-    #               '"Biodiesel.OilCrops.ExternalPalmOil", "Biodiesel.OilCrops.ExternalRapeSeed", "Biodiesel.OilCrops.ExternalSoyBean"'
+    #               '"society", "biodiesel", "bioethanol", "commerceimports", "commerceexports", '
+    #               '"bioethanol.cereals", '
+    #               '"bioethanol.cereals.wheat", "bioethanol.cereals.maize", '
+    #               '"bioethanol.cereals.externalwheat", "bioethanol.cereals.externalmaize", '
+    #               '"bioethanol.sugarcrops", '
+    #               '"bioethanol.sugarcrops.sugarbeet", "bioethanol.sugarcrops.sugarcane", '
+    #               '"bioethanol.sugarcrops.externalsugarbeet", "bioethanol.sugarcrops.externalsugarcane", '
+    #               '"biodiesel.oilcrops", '
+    #               '"biodiesel.oilcrops.palmoil", "biodiesel.oilcrops.rapeseed", "biodiesel.oilcrops.soybean", '
+    #               '"biodiesel.oilcrops.externalpalmoil", "biodiesel.oilcrops.externalrapeseed", "biodiesel.oilcrops.externalsoybean"'
     #               ']')
 
     df = df.pivot_table(values="Value", index=["Scenario", "Period", "Processor", "Level"], columns="Interface")

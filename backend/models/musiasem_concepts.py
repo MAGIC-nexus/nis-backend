@@ -1295,7 +1295,7 @@ class Processor(Identifiable, Nameable, Taggable, Qualifiable, Automatable, Obse
         :param level: Recursion level (INTERNAL USE)
         :param inherited_attributes: Attributes for the new Processor
         :param name: Name for the new Processor (if None, adopt the name of the cloned Processor)
-        :return:
+        :return: cloned processor, cloned children
         """
         if isinstance(state, PartialRetrievalDictionary):
             glb_idx = state
@@ -1312,8 +1312,8 @@ class Processor(Identifiable, Nameable, Taggable, Qualifiable, Automatable, Obse
                       referenced_processor=self.referenced_processor
                       )
 
-        if name != self.name:
-            glb_idx.put(p.key(), p)
+        # if name != self.name:
+        #     glb_idx.put(p.key(), p)
 
         if not objects_already_cloned:
             objects_already_cloned = {}
@@ -1336,11 +1336,14 @@ class Processor(Identifiable, Nameable, Taggable, Qualifiable, Automatable, Obse
             self._local_indicators.append(li_)
 
         # Clone child Processors (look for part-of relations)
+        children_processors: Set[Processor] = set()
         part_of_relations = glb_idx.get(ProcessorsRelationPartOfObservation.partial_key(parent=self))
         for rel in part_of_relations:
             if rel.child_processor not in objects_already_cloned:
-                p2 = rel.child_processor.clone(state, objects_already_cloned, level + 1, inherited_attributes)  # Recursive call
+                p2, p2_children = rel.child_processor.clone(state, objects_already_cloned, level + 1, inherited_attributes)  # Recursive call
                 objects_already_cloned[rel.child_processor] = p2
+                children_processors.add(p2)
+                children_processors |= p2_children
             else:
                 p2 = objects_already_cloned[rel.child_processor]
 
@@ -1448,7 +1451,14 @@ class Processor(Identifiable, Nameable, Taggable, Qualifiable, Automatable, Obse
                             glb_idx.put(new_f.key(), new_f)
                             considered_flows.add(f)
 
-        return p
+        return p, children_processors
+
+    @staticmethod
+    def register(processors: List["Processor"], registry: PartialRetrievalDictionary):
+        """Add processors' hierarchical names to global register"""
+        for processor in processors:
+            for hierarchical_name in processor.full_hierarchy_names(registry):
+                registry.put(Processor.partial_key(name=hierarchical_name, ident=processor.ident), processor)
 
     @staticmethod
     def alias_key(name: str, processor: "Processor"):

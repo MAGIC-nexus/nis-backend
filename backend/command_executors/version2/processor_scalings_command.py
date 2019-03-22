@@ -166,7 +166,8 @@ class ProcessorScalingsCommand(IExecutableCommand):
                 instance_or_archetype=parent_processor.instance_or_archetype
             )
 
-            processor_clone = processor.clone(state=self._glb_idx, name=name, inherited_attributes=inherited_attributes)
+            processor_clone, processor_clone_children = processor.clone(state=self._glb_idx, name=name,
+                                                                        inherited_attributes=inherited_attributes)
 
             # Create PART-OF relation
             relationship = ProcessorsRelationPartOfObservation.create_and_append(parent=parent_processor,
@@ -174,9 +175,7 @@ class ProcessorScalingsCommand(IExecutableCommand):
             self._glb_idx.put(relationship.key(), relationship)
 
             # Add cloned processor hierarchical names to global index
-            for hierarchical_name in processor_clone.full_hierarchy_names(self._glb_idx):
-                self._glb_idx.put(Processor.partial_key(name=hierarchical_name, ident=processor_clone.ident),
-                                  processor_clone)
+            Processor.register([processor_clone] + list(processor_clone_children), self._glb_idx)
 
             return processor_clone
 
