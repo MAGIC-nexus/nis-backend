@@ -468,8 +468,7 @@ class TestCommandFiles(unittest.TestCase):
 
     def test_023_solving(self):
         file_path = os.path.dirname(
-            # os.path.abspath(__file__)) + "/z_input_files/v2/06_upscale_almeria_NEW.xlsx"
-            os.path.abspath(__file__)) + "/z_input_files/v2/Biofuel_NIS.xlsx"
+            os.path.abspath(__file__)) + "/z_input_files/v2/15_graph_solver_example.xlsx"
 
         isess = execute_file(file_path, generator_type="spreadsheet")
 

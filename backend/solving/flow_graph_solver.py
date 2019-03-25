@@ -45,6 +45,10 @@ from backend.models.statistical_datasets import Dataset, Dimension
 from backend.command_generators import Issue
 
 
+class SolvingError(Exception):
+    pass
+
+
 @Memoize
 def get_processor_name(processor: Processor, registry: PartialRetrievalDictionary) -> str:
     """ Get the processor hierarchical name with caching enabled """
@@ -109,8 +113,8 @@ def evaluate_parameters_for_scenario(base_params: List[Parameter], scenario_para
 
     cycles = get_circular_dependencies(unknown_params)
     if len(cycles) > 0:
-        raise Exception(f"Parameters cannot have circular dependencies. {len(cycles)} cycles were detected: "
-                        f"{':: '.join(cycles)}")
+        raise SolvingError(f"Parameters cannot have circular dependencies. {len(cycles)} cycles were detected: "
+                           f"{':: '.join(cycles)}")
 
     # Initialize state with known parameters
     state.update(known_params)
@@ -125,167 +129,17 @@ def evaluate_parameters_for_scenario(base_params: List[Parameter], scenario_para
             if params.issubset(known_params):
                 value, _, _, issues = evaluate_numeric_expression_with_parameters(ast, state)
                 if value is None:
-                    raise Exception(f"It should be possible to evaluate the parameter '{param}'. "
-                                    f"Issues: {', '.join(issues)}")
+                    raise SolvingError(f"It should be possible to evaluate the parameter '{param}'. "
+                                       f"Issues: {', '.join(issues)}")
                 else:
                     del unknown_params[param]
                     result_params[param] = value
                     state.set(param, value)
 
     if len(unknown_params) > 0:
-        raise Exception(f"Could not evaluate the following parameters: {', '.join(unknown_params)}")
+        raise SolvingError(f"Could not evaluate the following parameters: {', '.join(unknown_params)}")
 
     return result_params
-
-
-def prepare_interfaces_graph(factors: List[Factor]) -> nx.DiGraph:
-    """
-    Construct a DiGraph JUST with NODES, which are ALL the Factors
-
-    :param factors:
-    :return: a DiGraph
-    """
-
-    G = nx.DiGraph()
-    for f in factors:
-        # d = dict(interface=f)
-        # G.add_node(f, **d)
-        G.add_node(f)
-    return G
-
-
-def create_scales_graph(scale_relations: List[FactorsRelationScaleObservation]) -> nx.DiGraph:
-    """
-    This graph is used to put interfaces into scale, possibly in cascade (an Interface should not receive more than one scale).
-    The scaling can then be updated for each scenario (parameters) and values can depend also on the TIME-PERIOD.
-    Interfaces not involved in the graph may be removed from it.
-
-    ADDITIONAL METHOD (set_update_scales_graph):
-    * Set values, parameters, and evaluate scale expression. Initial values in the middle of a scaling chain are rejected.
-      Only allowed at the beginning of a scale chain. The "scale_origin" property is set for nodes starting one of these chains.
-    * Solve scales
-
-    :param scale_relations:
-    :return: nx.DiGraph (with the "scales graph")
-    """
-    G = nx.DiGraph()  # Start a graph
-
-    # Auxiliary sets:
-    # - "origin" only (origin-destination) nodes are sources for scale.
-    # - "destination" nodes can only appear once as destination
-    origin_interfaces: Set[Factor] = set()
-    destination_interfaces: Set[Factor] = set()
-    state = State()  # Empty State, just to be able to evaluate expressions and detect needed parameters
-
-    for relation in scale_relations:
-        value, ast, _, issues = evaluate_numeric_expression_with_parameters(relation.quantity, state)
-        if value:
-            ast = None
-
-        assert(len(issues) == 0)
-
-        # Add an edge per i2i scale relation
-        G.add_edge(relation.origin, relation.destination, rel=relation, ast=ast, value=value)
-
-        # Nodes appearing in scale are not to be removed
-        # G[s.origin]["remove"] = False
-        # G[s.destination]["remove"] = False
-
-        # Nodes appearing more than once as destination is a construction error
-        if relation.destination in destination_interfaces:
-            raise Exception("An Interface should not appear in more than one Scale relation as destination")
-
-        origin_interfaces.add(relation.origin)
-        destination_interfaces.add(relation.destination)
-
-    # "Beginning" nodes are marked
-    nx.set_node_attributes(G, False, "beginning")
-    for i in origin_interfaces.difference(destination_interfaces):
-        G.nodes[i]["beginning"] = True
-
-    return G
-
-
-def get_scale_beginning_interfaces(graph: nx.DiGraph):
-    return set([node for node, data in graph.nodes(data=True) if data["beginning"]])
-
-
-def set_update_scales_graph(graph: nx.DiGraph, params: Dict[str, Any],
-                            beginning_values: Dict[Factor, Tuple[Any, FactorQuantitativeObservation]]):
-    """
-    For a scaling graph:
-     - set both the parameters and the values of Interfaces beginning scale-chains
-     - update the scale chains accordingly
-
-    :param graph: Graph with all scale chains
-    :param params: Parameters to apply to values in edges and nodes of the graph
-    :param beginning_values: Expressions (plus "unit") for beginning nodes of the graph
-    :return: Nothing (the graph is updated in-place)
-    """
-
-    # Set of all nodes.
-    all_interfaces = set(graph.nodes)
-    # Set of "scale beginning" nodes.
-    beginning_interfaces = get_scale_beginning_interfaces(graph)
-    # Set of "scale following" nodes
-    following_interfaces = all_interfaces.difference(beginning_interfaces)
-
-    # Set of nodes with value
-    interfaces_with_value = set(beginning_values.keys())
-
-    # Check that all beginning interfaces have been defined (have a value)
-    mandatory_to_define_all_beginning_interfaces = False
-
-    if mandatory_to_define_all_beginning_interfaces:
-        interfaces_which_should_have_a_value = beginning_interfaces.difference(interfaces_with_value)
-        if interfaces_which_should_have_a_value:
-            s = ", ".join([i.processor.name + ":" + i.name for i in interfaces_which_should_have_a_value])
-            raise Exception("Not all scale beginning Interfaces have been assigned a value: "+s)
-
-    # "following" interfaces in scale-chains should not have a value
-    interfaces_which_should_not_have_a_value = following_interfaces.intersection(interfaces_with_value)
-
-    if interfaces_which_should_not_have_a_value:
-        s = ", ".join([i.processor.name + ":" + i.name for i in interfaces_which_should_not_have_a_value])
-        raise Exception("Interfaces in scale chains cannot have assigned values: "+s)
-
-    # Now expressions. First, prepare "state"
-    state = State()
-    state.update(params)
-
-    # Evaluate (AST) all expressions from the INTERSECTION
-    defined_beginning_interfaces = beginning_interfaces.intersection(interfaces_with_value)
-    for i in defined_beginning_interfaces:
-        expression = beginning_values[i][0]
-        unit = ureg(beginning_values[i][1].attributes["unit"])
-        v, _, _, issues = evaluate_numeric_expression_with_parameters(expression, state)
-        if not v:
-            raise Exception(f"Could not evaluate expression '{expression}': {', '.join(issues)}")
-        else:
-            graph.nodes[i]["value"] = v * unit
-
-    # Evaluate all edges
-    for u, v, data in graph.edges(data=True):
-        ast = data["ast"]
-        if ast:
-            v, _, _, issues = evaluate_numeric_expression_with_parameters(ast, state)
-            if not v:
-                raise Exception(f"Could not evaluate edge scale expression '{ast}' for edge ({u.name}->{v.name}): {', '.join(issues)}")
-            else:
-                graph.edges[u, v]["value"] = v
-
-    # Now, compute values in nodes
-    def compute_scaled_nodes(nodes):
-        for i in nodes:
-            val = graph.nodes[i]["value"]
-            tmp = []
-            for suc in graph.successors(i):
-                # TODO Consider unit conversions, or the unit of the predecessor is inherited?
-                graph.nodes[suc]["value"] = graph.nodes[i]["value"] * graph.edges[i, suc]["value"]
-                tmp.append(suc)
-            compute_scaled_nodes(tmp)
-
-    compute_scaled_nodes(defined_beginning_interfaces)
 
 
 TimeObservationsType = Dict[str, List[Tuple[float, FactorQuantitativeObservation]]]
@@ -316,6 +170,9 @@ def get_observations_by_time(prd: PartialRetrievalDictionary) -> Tuple[TimeObser
             observations[time] = []
 
         observations[time].append((ifnull(value, ast), observation))
+
+    if len(observations) == 0:
+        return {}, {}
 
     # Check all time periods are consistent. All should be Year or Month, but not both.
     time_period_type = get_type_from_all_time_periods(list(observations.keys()))
@@ -363,38 +220,9 @@ def evaluate_numeric_expression_with_parameters(expression: Union[float, str, di
                 ast = None
 
     else:
-        issues.append((3, "Invalid type for expression"))
+        issues.append((3, f"Invalid type '{type(expression)}' for expression '{expression}'"))
 
     return value, ast, params, [i[1] for i in issues]
-
-
-def get_scaled(scenarios, scenario_params, relations_scale, observations_by_time):
-
-    # Obtain a i2i Scales Graph
-    graph = create_scales_graph(relations_scale)
-
-    # Compute the scales for the different scenarios and time periods, and store the results in
-    # another partial retrieval dictionary
-    scale_beginning_interfaces = get_scale_beginning_interfaces(graph)
-
-    scales_prd = PartialRetrievalDictionary()
-    for scenario_idx, scenario_name in enumerate(scenarios):
-
-        for time_period, observations in observations_by_time.items():
-
-            # Filter, and prepare dictionary for the update of the scaling
-            beginning_values: Dict[Factor, Tuple[Any, FactorQuantitativeObservation]] = \
-                {obs.factor: (value, obs) for value, obs in observations if obs.factor in scale_beginning_interfaces}
-
-            # Evaluate expressions
-            set_update_scales_graph(graph, scenario_params[scenario_name], beginning_values)
-
-            # Write data to the PartialRetrieveDictionary
-            for interface, data in graph.nodes(data=True):  # type: Factor, Dict
-                key = dict(__i=interface, __t=time_period, __s=scenario_idx)
-                scales_prd.put(key, (interface, data["value"]))  # ERROR: Observation not hashable
-
-    return scales_prd
 
 
 def get_type_from_all_time_periods(time_periods: List[str]) -> Optional[str]:
@@ -437,14 +265,6 @@ def split_observations_by_relativeness(observations_by_time: TimeObservationsTyp
                 observations_by_time_norelative[time].append((value, obs))
 
     return observations_by_time_norelative, observations_by_time_relative
-
-
-def weakly_connected_subgraph(graph: nx.DiGraph, node: str) -> Optional[nx.DiGraph]:
-    for component in nx.weakly_connected_components(graph):  # type: Set
-        if node in component:
-            return graph.subgraph(component)
-    else:
-        return None
 
 
 def compute_all_graph_combinations(comp_graph: ComputationGraph, params: Dict[str, float]) -> Dict[frozenset, Dict[str, float]]:
@@ -512,13 +332,13 @@ def add_factor_edges(glb_idx, graph: nx.DiGraph, musiasem_class: type, attribute
             graph.add_edge(src_name, dst_name, weight=weight)
 
 
-def compute_flow_results(state: State, glb_idx, scenario_combined_params: Dict[str, dict]):
+def compute_flow_results(state: State, glb_idx, global_parameters, problem_statement):
     # Get all interface observations. Also resolve expressions without parameters. Cannot resolve expressions
     # depending only on global parameters because some of them can be overridden by scenario parameters.
     time_observations_absolute, time_observations_relative = get_observations_by_time(glb_idx)
 
     if len(time_observations_absolute) == 0:
-        raise Exception(f"No absolute observations have been found. The solver has nothing to solve.")
+        return None, None, [Issue(IType.WARNING, f"No absolute observations have been found. The solver has nothing to solve.")]
 
     relations = nx.DiGraph()
 
@@ -541,10 +361,10 @@ def compute_flow_results(state: State, glb_idx, scenario_combined_params: Dict[s
     results: Dict[Tuple[str, str, str], Dict[str, float]] = {}
     combinations: Dict[frozenset, str] = {}
 
-    for scenario_name, scenario_params in scenario_combined_params.items():  # type: str, dict
+    for scenario_name, scenario_params in problem_statement.scenarios.items():  # type: str, dict
         print(f"********************* SCENARIO: {scenario_name}")
 
-        scenario_state = State(scenario_params)
+        scenario_state = State(evaluate_parameters_for_scenario(global_parameters, scenario_params))
 
         for time_period, observations in time_observations_absolute.items():
             print(f"********************* TIME PERIOD: {time_period}")
@@ -560,10 +380,14 @@ def compute_flow_results(state: State, glb_idx, scenario_combined_params: Dict[s
                 if interface_name not in time_relations.nodes:
                     print(f"WARNING: observation at interface '{interface_name}' is not taken into account.")
                 else:
-                    value, _, _, issues = evaluate_numeric_expression_with_parameters(expression, scenario_state)
+                    value, _, params, issues = evaluate_numeric_expression_with_parameters(expression, scenario_state)
                     if value is None:
-                        raise Exception(f"Cannot evaluate expression '{expression}' for observation at "
-                                        f"interface '{interface_name}'. Issues: {', '.join(issues)}")
+                        raise SolvingError(
+                            f"Scenario '{scenario_name}' - period '{time_period}'. Cannot evaluate expression "
+                            f"'{expression}' for observation at interface '{interface_name}'. Params: {params}. "
+                            f"Issues: {', '.join(issues)}"
+                        )
+
                     graph_params[interface_name] = value
 
             assert(len(graph_params) > 0)
@@ -582,9 +406,12 @@ def compute_flow_results(state: State, glb_idx, scenario_combined_params: Dict[s
                 if expression is not None:
                     value, ast, params, issues = evaluate_numeric_expression_with_parameters(expression, scenario_state)
                     if value is None:
-                        print(params)
-                        raise Exception(f"Cannot evaluate expression '{expression}' for weight "
-                                        f"from interface '{u}' to interface '{v}'. Issues: {', '.join(issues)}")
+                        raise SolvingError(
+                            f"Scenario '{scenario_name}' - period '{time_period}'. Cannot evaluate expression "
+                            f"'{expression}' for weight from interface '{u}' to interface '{v}'. Params: {params}. "
+                            f"Issues: {', '.join(issues)}"
+                        )
+
                     data["weight"] = value
 
             # for component in nx.weakly_connected_components(time_relations):
@@ -597,11 +424,11 @@ def compute_flow_results(state: State, glb_idx, scenario_combined_params: Dict[s
             for issue in issues:
                 print(issue)
 
-            error_issues = [e for e in issues if e.itype == IType.ERROR]
+            error_issues = [e.description for e in issues if e.itype == IType.ERROR]
             if len(error_issues) > 0:
-                return None, None, error_issues
+                raise SolvingError(f"Scenario '{scenario_name}' - period '{time_period}'. The computation graph cannot "
+                                   f"be generated. Issues: {', '.join(error_issues)}")
 
-            # results[(scenario_name, time_period)] = compute_all_graph_combinations(comp_graph, graph_params)
             res = compute_all_graph_combinations(comp_graph, graph_params)
 
             for comb, data in res.items():
@@ -612,26 +439,35 @@ def compute_flow_results(state: State, glb_idx, scenario_combined_params: Dict[s
                     results[(scenario_name, time_period, combinations[comb])] = data
                     results[(scenario_name, time_period, combinations[comb])].update(graph_params)
 
-            # results[(scenario_name, time_period, "")] = graph_params
-
             # TODO INDICATORS
 
-    return results, combinations, []
+    return results, combinations
 
 
 def compute_interfacetype_aggregates(glb_idx, results):
 
-    agg_results: Dict[Tuple[str, str, str], Dict[str, float]] = {}
-    processors = {split_name(proc_interface)[0] for values in results.values() for proc_interface in values}
+    def get_sum(processor: str, children: Set[FactorType]) -> float:
+        sum_children = 0.0
+        for child in children:
+            child_name = child.name if case_sensitive else child.name.lower()
+            child_value = values.get(processor + ":" + child_name)
+            if child_value is None:
+                if child_name in parent_interfaces:
+                    child_value = get_sum(proc, parent_interfaces[child_name])
+                else:
+                    child_value = 0.0
 
-    print(f"Globally computed processors ({len(processors)}): {processors}")
+            sum_children += child_value
+
+        return sum_children
+
+    agg_results: Dict[Tuple[str, str, str], Dict[str, float]] = {}
+    processors: Set[str] = {split_name(proc_interface)[0] for values in results.values() for proc_interface in values}
 
     # Get all different existing interfaces types that can be computed based on children interface types
     parent_interfaces: Dict[str, Set[FactorType]] = \
         {i.name if case_sensitive else i.name.lower(): i.get_children()
          for i in glb_idx.get(FactorType.partial_key()) if len(i.get_children()) > 0}
-
-    # TODO: make a recursive computation if parent can have parent children
 
     for key, values in results.items():
         for parent_interface, children_interfaces in parent_interfaces.items():
@@ -639,12 +475,9 @@ def compute_interfacetype_aggregates(glb_idx, results):
                 proc_interface_name = proc + ":" + parent_interface
 
                 if values.get(proc_interface_name) is None:
-
-                    sum_children = 0
-                    for child in children_interfaces:
-                        sum_children += values.get(proc + ":" + (child.name if case_sensitive else child.name.lower()), 0)
-
-                    agg_results.setdefault(key, {}).update({proc_interface_name: sum_children})
+                    agg_results.setdefault(key, {}).update({
+                        proc_interface_name: get_sum(proc, children_interfaces)
+                    })
 
     return agg_results
 
@@ -723,7 +556,11 @@ def compute_partof_aggregates(glb_idx, systems, results):
                         #         agg_results[(scenario_name, time_period, f"({combination}, {agg_combinations[comb]})")] = data
 
                         # Aggregate top-down, starting from root
-                        agg_res = compute_aggregate_results(interfaced_proc_hierarchy, filtered_values)
+                        agg_res, error_msg = compute_aggregate_results(interfaced_proc_hierarchy, filtered_values)
+
+                        if error_msg is not None:
+                            raise SolvingError(f"System: '{system}'. Interface: '{interface_name}'. Error: {error_msg}")
+
                         if len(agg_res) > 0:
                             agg_results.setdefault(key, {}).update(agg_res)
 
@@ -748,25 +585,22 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
     """
     glb_idx, _, _, datasets, _ = get_case_study_registry_objects(state)
 
-    scenario_combined_params = create_dictionary(
-        data={name: evaluate_parameters_for_scenario(global_parameters, params)
-              for name, params in problem_statement.scenarios.items()})
+    try:
+        results, combinations = compute_flow_results(state, glb_idx, global_parameters, problem_statement)
 
-    results, combinations, issues = compute_flow_results(state, glb_idx, scenario_combined_params)
+        agg_results, agg_combinations = compute_partof_aggregates(glb_idx, input_systems, results)
 
-    if len(issues) > 0:
-        return issues
-
-    agg_results, agg_combinations = compute_partof_aggregates(glb_idx, input_systems, results)
+    except SolvingError as e:
+        return [Issue(IType.ERROR, str(e))]
 
     # Add "agg_results" to "results"
     for key, value in agg_results.items():
         results[key].update(value)
 
-    agg_results2 = compute_interfacetype_aggregates(glb_idx, results)
+    agg_results = compute_interfacetype_aggregates(glb_idx, results)
 
-    # Add "agg_results2" to "results"
-    for key, value in agg_results2.items():
+    # Add "agg_results" to "results"
+    for key, value in agg_results.items():
         results[key].update(value)
 
     def create_dataframe(r: Dict[Tuple[str, str, str], Dict[str, float]]) -> pd.DataFrame:
@@ -777,6 +611,8 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
 
     print(combinations)
     df = create_dataframe(results)
+
+    # Round all values to 3 decimals
     df = df.round(3)
 
     # Give a name to the dataframe indexes
@@ -799,18 +635,15 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
     print(df)
 
     # Create dataset and store in State
-    ds = get_dataset(df)
-    datasets["flow_graph_solution"] = ds
+    datasets["flow_graph_solution"] = get_dataset(df)
 
     # Create dataset and store in State
-    ds2 = get_eum_dataset(df)
-    datasets["end_use_matrix"] = ds2
+    datasets["end_use_matrix"] = get_eum_dataset(df)
 
-    # return df, combinations, agg_combinations
     return []
 
 
-def compute_aggregate_results(tree: nx.DiGraph, params: Dict[str, float]) -> Dict[str, float]:
+def compute_aggregate_results(tree: nx.DiGraph, params: Dict[str, float]) -> Tuple[Dict[str, float], Optional[str]]:
     def compute_node(node: str) -> float:
         if params.get(node) is not None:
             return params[node]
@@ -824,11 +657,11 @@ def compute_aggregate_results(tree: nx.DiGraph, params: Dict[str, float]) -> Dic
 
     root_nodes = [node for node, degree in tree.out_degree() if degree == 0]
     if len(root_nodes) != 1 or root_nodes[0] is None:
-        raise Exception(f"Root node cannot be taken from list '{root_nodes}'")
+        return {}, f"Root node cannot be taken from list '{root_nodes}'"
 
     values: Dict[str, float] = {}
     compute_node(root_nodes[0])
-    return values
+    return values, None
 
 
 def get_eum_dataset(dataframe: pd.DataFrame) -> "Dataset":
