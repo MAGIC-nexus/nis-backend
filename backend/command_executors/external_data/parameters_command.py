@@ -1,6 +1,6 @@
 import json
 
-from backend.command_generators import Issue
+from backend.command_generators import Issue, IType
 from backend.command_generators.spreadsheet_command_parsers_v2 import IssueLocation
 from backend.models.musiasem_concepts import Parameter
 from backend.model_services import IExecutableCommand, get_case_study_registry_objects
@@ -22,7 +22,7 @@ class ParametersCommand(IExecutableCommand):
             name = param["name"]
             p = glb_idx.get(Parameter.partial_key(name))
             if len(p) > 0:
-                issues.append(Issue(itype=2,
+                issues.append(Issue(itype=IType.WARNING,
                                     description="The parameter '" + name + "' has been declared previously. Skipped.",
                                     location=IssueLocation(sheet_name=sheet_name, row=r, column=None)))
                 continue

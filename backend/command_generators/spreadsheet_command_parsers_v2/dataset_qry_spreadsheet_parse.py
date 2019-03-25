@@ -3,7 +3,7 @@ from collections import OrderedDict
 from openpyxl.worksheet.worksheet import Worksheet
 
 from backend import AreaTupleType, IssuesLabelContentTripleType
-from backend.command_generators import parser_field_parsers, Issue, IssueLocation
+from backend.command_generators import parser_field_parsers, Issue, IssueLocation, IType
 from backend.command_generators.parser_field_parsers import simple_ident
 from backend.common.helper import obtain_dataset_source, obtain_dataset_metadata, create_dictionary, strcmp
 from backend.model_services import get_case_study_registry_objects
@@ -119,7 +119,7 @@ def parse_dataset_qry_command(sh: Worksheet, area: AreaTupleType, name, state) -
                 if not d:
                     continue
                 if d not in cl:
-                    issues.append(Issue(itype=3,
+                    issues.append(Issue(itype=IType.ERROR,
                                         description="The dimension specified for output, '"+d+"' is neither a dataset dimension nor a mapped dimension. ["+', '.join([d2 for d2 in cl])+"]",
                                         location=IssueLocation(sheet_name=name, row=r + 1, column=c + 1)))
                 else:
@@ -133,7 +133,7 @@ def parse_dataset_qry_command(sh: Worksheet, area: AreaTupleType, name, state) -
                 if not m:
                     continue
                 if m not in meas:
-                    issues.append(Issue(itype=3,
+                    issues.append(Issue(itype=IType.ERROR,
                                         description="The specified measure, '"+m+"' is not a measure available in the dataset. ["+', '.join([m2 for m2 in measures])+"]",
                                         location=IssueLocation(sheet_name=name, row=r + 1, column=c + 1)))
                 else:
@@ -146,7 +146,7 @@ def parse_dataset_qry_command(sh: Worksheet, area: AreaTupleType, name, state) -
                     continue
 
                 if f.lower() not in ["sum", "avg", "count", "sumna", "countav", "avgna", "pctna"]:
-                    issues.append(Issue(itype=3,
+                    issues.append(Issue(itype=IType.ERROR,
                                         description="The specified aggregation function, '"+f+"' is not one of the supported ones: 'sum', 'avg', 'count', 'sumna', 'avgna', 'countav', 'pctna'",
                                         location=IssueLocation(sheet_name=name, row=r + 1, column=c + 1)))
                 else:
@@ -162,7 +162,7 @@ def parse_dataset_qry_command(sh: Worksheet, area: AreaTupleType, name, state) -
                 if not cd:
                     continue
                 if str(cd) not in cl[col_name]:
-                    issues.append(Issue(itype=3,
+                    issues.append(Issue(itype=IType.ERROR,
                                         description="The code '"+cd+"' is not present in the codes declared for dimension '"+col_name+"'. Please, check them.",
                                         location=IssueLocation(sheet_name=name, row=r + 1, column=c + 1)))
                 else:
@@ -185,7 +185,7 @@ def parse_dataset_qry_command(sh: Worksheet, area: AreaTupleType, name, state) -
                 try:
                     parser_field_parsers.string_to_ast(simple_ident, result_name)
                 except:
-                    issues.append(Issue(itype=3,
+                    issues.append(Issue(itype=IType.ERROR,
                                         description="Column '" + col_name + "' has an invalid dataset name '" + result_name + "'",
                                         location=IssueLocation(sheet_name=name, row=2, column=c + 1)))
 
@@ -196,14 +196,14 @@ def parse_dataset_qry_command(sh: Worksheet, area: AreaTupleType, name, state) -
     if len(agg_funcs) > 1:
         first_agg_func = None
     elif len(agg_funcs) == 0:
-        issues.append(Issue(itype=2,
+        issues.append(Issue(itype=IType.WARNING,
                             description="No aggregation function specified. Assuming 'average'",
                             location=IssueLocation(sheet_name=name, row=1, column=aggregations_column)))
         first_agg_func = "avg"
     else:  # One aggregation function
         first_agg_func = out_measures[area[0]+1]["agg_func"]
         if not first_agg_func:
-            issues.append(Issue(itype=3,
+            issues.append(Issue(itype=IType.ERROR,
                                 description="The aggregation function must be defined in the first row",
                                 location=IssueLocation(sheet_name=name, row=1, column=aggregations_column)))
 
@@ -218,7 +218,7 @@ def parse_dataset_qry_command(sh: Worksheet, area: AreaTupleType, name, state) -
         agg_func = v.get("agg_func", None)
         measure_as = v.get("measure_as", None)
         if measure and not agg_func or not measure and agg_func:
-            issues.append(Issue(itype=3,
+            issues.append(Issue(itype=IType.ERROR,
                                 description="Each measure must be associated with an aggregation function",
                                 location=IssueLocation(sheet_name=name, row=r, column=measure_names_column)))
         elif measure and not measure_as:
@@ -229,19 +229,19 @@ def parse_dataset_qry_command(sh: Worksheet, area: AreaTupleType, name, state) -
     agg_funcs = [v["agg_func"] for v in out_measures.values() if v["agg_func"]]
 
     if len(measures) == 0:
-        issues.append(Issue(itype=3,
+        issues.append(Issue(itype=IType.ERROR,
                             description="At least one measure should be specified",
                             location=IssueLocation(sheet_name=name, row=1, column=measure_names_column)))
 
     # measures != agg_funcs && len(agg_funcs) == 1 --> OK
     if len(measures) != len(agg_funcs) and len(agg_funcs) != 1:
-        issues.append(Issue(itype=3,
+        issues.append(Issue(itype=IType.ERROR,
                             description="There must be one aggregation function (used for all measures) or one aggregation per measure",
                             location=IssueLocation(sheet_name=name, row=1, column=aggregations_column)))
 
     if not result_name:
         result_name = source + "_" + dataset_name
-        issues.append(Issue(itype=2,
+        issues.append(Issue(itype=IType.WARNING,
                             description="No result name specified. Assuming '"+result_name+"'",
                             location=IssueLocation(sheet_name=name, row=2, column=c + 1)))
 

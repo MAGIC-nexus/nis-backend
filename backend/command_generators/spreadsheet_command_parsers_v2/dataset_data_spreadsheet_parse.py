@@ -5,7 +5,7 @@ import pandas as pd
 from openpyxl.worksheet.worksheet import Worksheet
 
 from backend import IssuesLabelContentTripleType, AreaTupleType
-from backend.command_generators import Issue, IssueLocation
+from backend.command_generators import Issue, IssueLocation, IType
 from backend.common.helper import strcmp, create_dictionary
 
 
@@ -27,7 +27,7 @@ def parse_dataset_data_command(sh: Worksheet, area: AreaTupleType, name: str, st
         col_name = sh.cell(row=area[0], column=c).value.strip()
         # Avoid repetitions
         if col_name in col_map:
-            issues.append(Issue(itype=3,
+            issues.append(Issue(itype=IType.ERROR,
                                 description="The column name '"+col_name+"' is repeated",
                                 location=IssueLocation(sheet_name=name, row=1, column=c)))
 
@@ -38,11 +38,11 @@ def parse_dataset_data_command(sh: Worksheet, area: AreaTupleType, name: str, st
             col_map[col_name] = c
 
     if "dataset" not in col_map:
-        issues.append(Issue(itype=3,
+        issues.append(Issue(itype=IType.ERROR,
                             description="The column name 'DatasetName' is not defined for command 'DatasetData'",
                             location=IssueLocation(sheet_name=name, row=1, column=c)))
 
-    if any([i.itype == 3 for i in issues]):
+    if any([i.itype == IType.ERROR for i in issues]):
         return issues, None, None
 
     # Read all the content into a list of lists

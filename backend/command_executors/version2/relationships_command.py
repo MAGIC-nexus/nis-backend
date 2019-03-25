@@ -4,7 +4,7 @@ import re
 from backend.command_executors.execution_helpers import parse_line, classify_variables, \
     obtain_dictionary_with_literal_fields
 from backend.command_field_definitions import get_command_fields_from_class
-from backend.command_generators import Issue, IssueLocation
+from backend.command_generators import Issue, IssueLocation, IType
 from backend.command_generators.parser_ast_evaluators import dictionary_from_key_value_list
 from backend.command_generators.parser_field_parsers import string_to_ast, processor_names
 from backend.common.helper import strcmp
@@ -83,17 +83,17 @@ class RelationshipsCommand(IExecutableCommand):
                     ds_concepts = res["ds_concepts"]
                     h_list = res["hierarchies"]
                     if len(ds_list) >= 1 and len(h_list) >= 1:
-                        issues.append(Issue(itype=3,
+                        issues.append(Issue(itype=IType.ERROR,
                                             description="Dataset(s): "+", ".join([d.name for d in ds_list])+", and hierarchy(ies): "+", ".join([h.name for h in h_list])+", have been specified. Either a single dataset or a single hiearchy is supported.",
                                             location=IssueLocation(sheet_name=name, row=r, column=None)))
                         return
                     elif len(ds_list) > 1:
-                        issues.append(Issue(itype=3,
+                        issues.append(Issue(itype=IType.ERROR,
                                             description="More than one dataset has been specified: "+", ".join([d.name for d in ds_list])+", just one dataset is supported.",
                                             location=IssueLocation(sheet_name=name, row=r, column=None)))
                         return
                     elif len(h_list) > 1:
-                        issues.append(Issue(itype=3,
+                        issues.append(Issue(itype=IType.ERROR,
                                             description="More than one hierarchy has been specified: " + ", ".join([h.name for h in h_list])+", just one hierarchy is supported.",
                                             location=IssueLocation(sheet_name=name, row=r, column=None)))
                         return
@@ -115,7 +115,7 @@ class RelationshipsCommand(IExecutableCommand):
                         only_dimensions_requested = len(all_dimensions) == 0
 
                         if measure_requested and not only_dimensions_requested:
-                            issues.append(Issue(itype=3,
+                            issues.append(Issue(itype=IType.ERROR,
                                                 description="It is not possible to use a measure if not all dimensions are used (cannot assume implicit aggregation)",
                                                 location=IssueLocation(sheet_name=name, row=r, column=None)))
                             return
@@ -209,7 +209,7 @@ class RelationshipsCommand(IExecutableCommand):
                 try:
                     attributes = dictionary_from_key_value_list(r_attributes, glb_idx)
                 except Exception as e:
-                    issues.append(Issue(itype=3,
+                    issues.append(Issue(itype=IType.ERROR,
                                         description=str(e),
                                         location=IssueLocation(sheet_name=name, row=r, column=None)))
                     return
@@ -291,7 +291,7 @@ class RelationshipsCommand(IExecutableCommand):
                         # TODO When different interface types are connected, a scales path should exist (to transform from one type to the other)
                         # TODO Check this and change the type (then, when Scale transform is applied, it will automatically be considered)
                         if not r_change_type_scale:
-                            issues.append(Issue(itype=3,
+                            issues.append(Issue(itype=IType.ERROR,
                                                 description="Interface types are not the same (and transformation from one "
                                                             "to the other cannot be performed). Origin: " +
                                                             source_interface_type.name+"; Target: " +
@@ -301,7 +301,7 @@ class RelationshipsCommand(IExecutableCommand):
                         else:
                             change_type_scale = r_change_type_scale
                 else:  # No interface types!!
-                    issues.append(Issue(itype=3,
+                    issues.append(Issue(itype=IType.ERROR,
                                         description="No InterfaceTypes specified or retrieved for a flow",
                                         location=IssueLocation(sheet_name=name, row=r, column=None)))
                     return

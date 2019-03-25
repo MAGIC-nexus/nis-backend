@@ -217,13 +217,13 @@ def transform_issues(issues: List[Union[dict, backend.Issue, tuple, Issue]], cmd
 
     for i in issues:
         if isinstance(i, dict):
-            issue = Issue(itype=i["type"], description=i["message"], ctype=i["c_type"],
+            issue = Issue(itype=IType(i["type"]), description=i["message"], ctype=i["c_type"],
                           location=IssueLocation(sheet_name=i["sheet_name"], sheet_number=i["sheet_number"]))
         elif isinstance(i, backend.Issue):  # namedtuple
             issue = Issue(itype=i.type, description=i.message, ctype=i.c_type,
                           location=IssueLocation(sheet_name=i.sheet_name, sheet_number=i.sheet_number))
         elif isinstance(i, tuple):
-            issue = Issue(itype=i[0], description=i[1],
+            issue = Issue(itype=IType(i[0]), description=i[1],
                           location=IssueLocation(sheet_name=""))
         else:  # isinstance(i, Issue):
             issue = i

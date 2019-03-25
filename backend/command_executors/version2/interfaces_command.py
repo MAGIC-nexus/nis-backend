@@ -49,17 +49,17 @@ class InterfacesAndQualifiedQuantitiesCommand(IExecutableCommand):
                     ds_concepts = res["ds_concepts"]
                     h_list = res["hierarchies"]
                     if len(ds_list) >= 1 and len(h_list) >= 1:
-                        issues.append(Issue(itype=3,
+                        issues.append(Issue(itype=IType.ERROR,
                                             description="Dataset(s): "+", ".join([d.name for d in ds_list])+", and hierarchy(ies): "+", ".join([h.name for h in h_list])+", have been specified. Only a single dataset is supported.",
                                             location=IssueLocation(sheet_name=name, row=r, column=None)))
                         return
                     elif len(ds_list) > 1:
-                        issues.append(Issue(itype=3,
+                        issues.append(Issue(itype=IType.ERROR,
                                             description="More than one dataset has been specified: "+", ".join([d.name for d in ds_list])+", just one dataset is supported.",
                                             location=IssueLocation(sheet_name=name, row=r, column=None)))
                         return
                     elif len(h_list) > 0:
-                        issues.append(Issue(itype=3,
+                        issues.append(Issue(itype=IType.ERROR,
                                             description="One or more hierarchies have been specified: " + ", ".join([h.name for h in h_list]),
                                             location=IssueLocation(sheet_name=name, row=r, column=None)))
                         return
@@ -81,7 +81,7 @@ class InterfacesAndQualifiedQuantitiesCommand(IExecutableCommand):
                         only_dimensions_requested = len(all_dimensions) == 0
 
                         if measure_requested and not only_dimensions_requested:
-                            issues.append(Issue(itype=3,
+                            issues.append(Issue(itype=IType.ERROR,
                                                 description="It is not possible to use a measure if not all dataset dimensions are used (cannot assume implicit aggregation)",
                                                 location=IssueLocation(sheet_name=name, row=r, column=None)))
                             return
@@ -371,7 +371,7 @@ class InterfacesAndQualifiedQuantitiesCommand(IExecutableCommand):
                 # TODO Register? Disable for now. Observation can be obtained from a pass over all Interfaces
                 # glb_idx.put(o.key(), o)
 
-        def add_issue(itype: int, description: str):
+        def add_issue(itype: IType, description: str):
             issues.append(
                 Issue(itype=itype,
                       description=description,

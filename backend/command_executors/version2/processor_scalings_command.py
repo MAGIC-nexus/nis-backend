@@ -39,7 +39,7 @@ class ProcessorScalingsCommand(IExecutableCommand):
         if len(empty_fields) > 0:
             raise CommandExecutionError(f"Mandatory field/s '{', '.join(empty_fields)}' is/are empty.")
 
-    def _add_issue(self, itype: int, description: str):
+    def _add_issue(self, itype: IType, description: str):
         self._issues.append(
             Issue(itype=itype,
                   description=description,
