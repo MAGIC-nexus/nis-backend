@@ -30,13 +30,13 @@ import networkx as nx
 # import matplotlib.pyplot as plt
 from typing import Dict, List, Set, Any, Tuple, Union, Optional, NamedTuple
 
-from backend import case_sensitive, ureg
+from backend import case_sensitive
 from backend.command_generators.parser_ast_evaluators import ast_evaluator
 from backend.command_generators.parser_field_parsers import string_to_ast, expression_with_parameters, is_year, is_month
-from backend.common.helper import create_dictionary, PartialRetrievalDictionary, ifnull, Memoize, first, head
+from backend.common.helper import create_dictionary, PartialRetrievalDictionary, ifnull, Memoize
 from backend.models.musiasem_concepts import ProblemStatement, Parameter, FactorsRelationDirectedFlowObservation, \
-    FactorsRelationScaleObservation, Processor, \
-    FactorQuantitativeObservation, Factor, ProcessorsRelationPartOfObservation, FactorType
+    FactorsRelationScaleObservation, Processor, FactorQuantitativeObservation, Factor, \
+    ProcessorsRelationPartOfObservation, FactorType
 from backend.model_services import get_case_study_registry_objects, State
 from backend.models.musiasem_concepts_helper import find_quantitative_observations
 from backend.solving.graph.computation_graph import ComputationGraph
@@ -45,7 +45,7 @@ from backend.models.statistical_datasets import Dataset, Dimension
 from backend.command_generators import Issue
 
 
-class SolvingError(Exception):
+class SolvingException(Exception):
     pass
 
 
@@ -113,8 +113,9 @@ def evaluate_parameters_for_scenario(base_params: List[Parameter], scenario_para
 
     cycles = get_circular_dependencies(unknown_params)
     if len(cycles) > 0:
-        raise SolvingError(f"Parameters cannot have circular dependencies. {len(cycles)} cycles were detected: "
-                           f"{':: '.join(cycles)}")
+        raise SolvingException(
+            IType.ERROR, f"Parameters cannot have circular dependencies. {len(cycles)} cycles were detected: "
+                         f"{':: '.join(cycles)}")
 
     # Initialize state with known parameters
     state.update(known_params)
@@ -129,15 +130,16 @@ def evaluate_parameters_for_scenario(base_params: List[Parameter], scenario_para
             if params.issubset(known_params):
                 value, _, _, issues = evaluate_numeric_expression_with_parameters(ast, state)
                 if value is None:
-                    raise SolvingError(f"It should be possible to evaluate the parameter '{param}'. "
-                                       f"Issues: {', '.join(issues)}")
+                    raise SolvingException(
+                        IType.ERROR, f"It should be possible to evaluate the parameter '{param}'. "
+                                     f"Issues: {', '.join(issues)}")
                 else:
                     del unknown_params[param]
                     result_params[param] = value
                     state.set(param, value)
 
     if len(unknown_params) > 0:
-        raise SolvingError(f"Could not evaluate the following parameters: {', '.join(unknown_params)}")
+        raise SolvingException(IType.ERROR, f"Could not evaluate the following parameters: {', '.join(unknown_params)}")
 
     return result_params
 
@@ -338,7 +340,9 @@ def compute_flow_results(state: State, glb_idx, global_parameters, problem_state
     time_observations_absolute, time_observations_relative = get_observations_by_time(glb_idx)
 
     if len(time_observations_absolute) == 0:
-        return None, None, [Issue(IType.WARNING, f"No absolute observations have been found. The solver has nothing to solve.")]
+        raise SolvingException(
+            IType.WARNING, f"No absolute observations have been found. The solver has nothing to solve."
+        )
 
     relations = nx.DiGraph()
 
@@ -382,7 +386,7 @@ def compute_flow_results(state: State, glb_idx, global_parameters, problem_state
                 else:
                     value, _, params, issues = evaluate_numeric_expression_with_parameters(expression, scenario_state)
                     if value is None:
-                        raise SolvingError(
+                        raise SolvingException(IType.ERROR,
                             f"Scenario '{scenario_name}' - period '{time_period}'. Cannot evaluate expression "
                             f"'{expression}' for observation at interface '{interface_name}'. Params: {params}. "
                             f"Issues: {', '.join(issues)}"
@@ -406,7 +410,7 @@ def compute_flow_results(state: State, glb_idx, global_parameters, problem_state
                 if expression is not None:
                     value, ast, params, issues = evaluate_numeric_expression_with_parameters(expression, scenario_state)
                     if value is None:
-                        raise SolvingError(
+                        raise SolvingException(IType.ERROR,
                             f"Scenario '{scenario_name}' - period '{time_period}'. Cannot evaluate expression "
                             f"'{expression}' for weight from interface '{u}' to interface '{v}'. Params: {params}. "
                             f"Issues: {', '.join(issues)}"
@@ -426,8 +430,11 @@ def compute_flow_results(state: State, glb_idx, global_parameters, problem_state
 
             error_issues = [e.description for e in issues if e.itype == IType.ERROR]
             if len(error_issues) > 0:
-                raise SolvingError(f"Scenario '{scenario_name}' - period '{time_period}'. The computation graph cannot "
-                                   f"be generated. Issues: {', '.join(error_issues)}")
+                raise SolvingException(
+                    IType.ERROR,
+                    f"Scenario '{scenario_name}' - period '{time_period}'. The computation graph cannot "
+                    f"be generated. Issues: {', '.join(error_issues)}"
+                )
 
             res = compute_all_graph_combinations(comp_graph, graph_params)
 
@@ -559,7 +566,8 @@ def compute_partof_aggregates(glb_idx, systems, results):
                         agg_res, error_msg = compute_aggregate_results(interfaced_proc_hierarchy, filtered_values)
 
                         if error_msg is not None:
-                            raise SolvingError(f"System: '{system}'. Interface: '{interface_name}'. Error: {error_msg}")
+                            raise SolvingException(
+                                IType.ERROR, f"System: '{system}'. Interface: '{interface_name}'. Error: {error_msg}")
 
                         if len(agg_res) > 0:
                             agg_results.setdefault(key, {}).update(agg_res)
@@ -570,18 +578,14 @@ def compute_partof_aggregates(glb_idx, systems, results):
 def flow_graph_solver(global_parameters: List[Parameter], problem_statement: ProblemStatement,
                       input_systems: Dict[str, Set[Processor]], state: State) -> List[Issue]:
     """
-    * First scales have to be solved
-    * Second direct flows
-    * Third conversions of flows
-
-    Once flows have been found, Indicators have to be gathered.
+    A solver
 
     :param global_parameters: Parameters including the default value (if defined)
     :param problem_statement: ProblemStatement object, with scenarios (parameters changing the default)
                               and parameters for the solver
     :param state: State with everything
     :param input_systems: A dictionary of the different systems to be solved
-    :return: Issue[]
+    :return: List of Issues
     """
     glb_idx, _, _, datasets, _ = get_case_study_registry_objects(state)
 
@@ -590,8 +594,8 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
 
         agg_results, agg_combinations = compute_partof_aggregates(glb_idx, input_systems, results)
 
-    except SolvingError as e:
-        return [Issue(IType.ERROR, str(e))]
+    except SolvingException as e:
+        return [Issue(e.args[0], str(e.args[1]))]
 
     # Add "agg_results" to "results"
     for key, value in agg_results.items():
