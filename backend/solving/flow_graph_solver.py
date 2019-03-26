@@ -27,8 +27,8 @@ Before the elaboration of flow graphs, several preparatory steps:
 """
 import pandas as pd
 import networkx as nx
-# import matplotlib.pyplot as plt
-from typing import Dict, List, Set, Any, Tuple, Union, Optional, NamedTuple
+import matplotlib.pyplot as plt
+from typing import Dict, List, Set, Any, Tuple, Union, Optional, NamedTuple, NoReturn
 
 from backend import case_sensitive
 from backend.command_generators.parser_ast_evaluators import ast_evaluator
@@ -334,6 +334,21 @@ def add_factor_edges(glb_idx, graph: nx.DiGraph, musiasem_class: type, attribute
             graph.add_edge(src_name, dst_name, weight=weight)
 
 
+def resolve_weight_expressions(graph: nx.DiGraph, state: State, raise_error=False) -> NoReturn:
+    for u, v, data in graph.edges(data=True):
+        expression = data["weight"]
+        if expression is not None:
+            value, ast, params, issues = evaluate_numeric_expression_with_parameters(expression, state)
+            if raise_error and value is None:
+                raise SolvingException(IType.ERROR,
+                    f"Cannot evaluate expression "
+                    f"'{expression}' for weight from interface '{u}' to interface '{v}'. Params: {params}. "
+                    f"Issues: {', '.join(issues)}"
+                )
+
+            data["weight"] = ifnull(value, ast)
+
+
 def compute_flow_results(state: State, glb_idx, global_parameters, problem_statement):
     # Get all interface observations. Also resolve expressions without parameters. Cannot resolve expressions
     # depending only on global parameters because some of them can be overridden by scenario parameters.
@@ -356,11 +371,7 @@ def compute_flow_results(state: State, glb_idx, global_parameters, problem_state
     # relations_scale_it2it = glb_idx.get(FactorTypesRelationUnidirectionalLinearTransformObservation.partial_key())
 
     # First pass to resolve weight expressions: only expressions without parameters can be solved
-    for _, _, data in relations.edges(data=True):
-        expression = data["weight"]
-        if expression is not None:
-            value, ast, _, _ = evaluate_numeric_expression_with_parameters(expression, state)
-            data["weight"] = ifnull(value, ast)
+    resolve_weight_expressions(relations, state)
 
     results: Dict[Tuple[str, str, str], Dict[str, float]] = {}
     combinations: Dict[frozenset, str] = {}
@@ -405,18 +416,7 @@ def compute_flow_results(state: State, glb_idx, global_parameters, problem_state
                                         weight=expression)
 
             # Second and last pass to resolve weight expressions: expressions with parameters can be solved
-            for u, v, data in time_relations.edges(data=True):
-                expression = data["weight"]
-                if expression is not None:
-                    value, ast, params, issues = evaluate_numeric_expression_with_parameters(expression, scenario_state)
-                    if value is None:
-                        raise SolvingException(IType.ERROR,
-                            f"Scenario '{scenario_name}' - period '{time_period}'. Cannot evaluate expression "
-                            f"'{expression}' for weight from interface '{u}' to interface '{v}'. Params: {params}. "
-                            f"Issues: {', '.join(issues)}"
-                        )
-
-                    data["weight"] = value
+            resolve_weight_expressions(time_relations, scenario_state, raise_error=True)
 
             # for component in nx.weakly_connected_components(time_relations):
             #     nx.draw_kamada_kawai(time_relations.subgraph(component), with_labels=True)
