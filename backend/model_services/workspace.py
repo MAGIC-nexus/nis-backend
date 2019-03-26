@@ -16,7 +16,7 @@ import sqlalchemy
 import backend
 from backend.command_generators import Issue, IssueLocation, IType
 from backend.command_generators.parsers_factory import commands_container_parser_factory
-from backend.common.helper import create_dictionary
+from backend.common.helper import create_dictionary, strcmp
 from backend.model_services import IExecutableCommand, get_case_study_registry_objects
 from backend.model_services import State
 from backend.models.musiasem_concepts import ProblemStatement, FactorsRelationDirectedFlowObservation, Processor, \
@@ -364,6 +364,9 @@ def prepare_model(state) -> Dict[str, Set[Processor]]:
     objs = query.execute([Factor], filt)
     processors_by_system = create_dictionary()
     for iface in objs[Factor]:  # type: Factor
+        if strcmp(iface.processor.instance_or_archetype, 'Archetype'):
+            continue
+
         system = iface.processor.processor_system
 
         processors = processors_by_system.get(system, set())
