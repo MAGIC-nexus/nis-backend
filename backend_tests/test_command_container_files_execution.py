@@ -473,6 +473,8 @@ class TestCommandFiles(unittest.TestCase):
         isess = execute_file(file_path, generator_type="spreadsheet")
 
         issues = prepare_and_solve_model(isess.state)
+        for idx, issue in enumerate(issues):
+            print(f"Issue {idx + 1}/{len(issues)} = {issue}")
 
         # Check State of things
         glb_idx, p_sets, hh, datasets, mappings = get_case_study_registry_objects(isess.state)
