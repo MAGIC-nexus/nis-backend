@@ -307,6 +307,50 @@ def compute_all_graph_combinations(comp_graph: ComputationGraph, params: Dict[st
     return all_values
 
 
+def compute_graph_values(comp_graph: ComputationGraph, params: Dict[str, float], other_values: Dict[str, float]) -> Tuple[Dict[str, float], List[str]]:
+    print(f"****** NODES: {comp_graph.nodes}")
+
+    # Filter params in graph
+    graph_params = {k: v for k, v in params.items() if k in comp_graph.nodes}
+    print("Missing values: ", [k for k, v in graph_params.items() if v is None])
+
+    conflicts = comp_graph.compute_param_conflicts(set(graph_params.keys()))
+
+    conflict_strings: List[str] = []
+    for param, conf_params in conflicts.items():
+        if len(conf_params) > 0:
+            conf_params_string = "{" + ', '.join([f"{p} ({round(graph_params[p], 3)})" for p in conf_params]) + "}"
+            conflict_strings.append(f"{param} ({round(graph_params[param], 3)}) -> {conf_params_string}")
+
+    if len(conflict_strings) > 0:
+        raise SolvingException(IType.ERROR, f"There are conflicts: {', '.join(conflict_strings)}")
+
+    graph_params = {**graph_params, **other_values}
+
+    # Obtain nodes without a value
+    compute_nodes = [n for n in comp_graph.nodes if graph_params.get(n) is None]
+
+    # Compute the missing information with the computation graph
+    if len(compute_nodes) == 0:
+        print("All nodes have a value. Nothing to solve.")
+        return {}, []
+
+    print(f"****** UNKNOWN NODES: {compute_nodes}")
+    print(f"****** PARAMS: {graph_params}")
+
+    results, _ = comp_graph.compute_values(compute_nodes, graph_params)
+
+    results_with_values: Dict[str, float] = {}
+    unknown_nodes: List[str] = []
+    for k, v in results.items():
+        if v is not None:
+            results_with_values[k] = v
+        else:
+            unknown_nodes.append(k)
+
+    return results_with_values, unknown_nodes
+
+
 def split_name(processor_interface: str) -> Tuple[str, Optional[str]]:
     l = processor_interface.split(":")
     if len(l) > 1:
@@ -360,22 +404,22 @@ def compute_flow_results(state: State, glb_idx, global_parameters, problem_state
             IType.WARNING, f"No absolute observations have been found. The solver has nothing to solve."
         )
 
-    relations = nx.DiGraph()
-
     # Add Interfaces -Flow- relations (time independent)
-    add_factor_edges(glb_idx, relations, FactorsRelationDirectedFlowObservation, ("source_factor", "target_factor", "weight"))
+    relations_flow = nx.DiGraph()
+    add_factor_edges(glb_idx, relations_flow, FactorsRelationDirectedFlowObservation, ("source_factor", "target_factor", "weight"))
 
     # Add Processors -Scale- relations (time independent)
-    add_factor_edges(glb_idx, relations, FactorsRelationScaleObservation, ("origin", "destination", "quantity"))
+    relations_scale = nx.DiGraph()
+    add_factor_edges(glb_idx, relations_scale, FactorsRelationScaleObservation, ("origin", "destination", "quantity"))
 
     # TODO Expand flow graph with it2it transforms
     # relations_scale_it2it = glb_idx.get(FactorTypesRelationUnidirectionalLinearTransformObservation.partial_key())
 
     # First pass to resolve weight expressions: only expressions without parameters can be solved
-    resolve_weight_expressions(relations, state)
+    resolve_weight_expressions(relations_flow, state)
+    resolve_weight_expressions(relations_scale, state)
 
     results: Dict[Tuple[str, str, str], Dict[str, float]] = {}
-    combinations: Dict[frozenset, str] = {}
 
     for scenario_name, scenario_params in problem_statement.scenarios.items():  # type: str, dict
         print(f"********************* SCENARIO: {scenario_name}")
@@ -388,12 +432,13 @@ def compute_flow_results(state: State, glb_idx, global_parameters, problem_state
             # Final values are taken from "observations" that need to computed
             known_observations = {}
             # Create a copy of the main relations structure that is modified with time-dependent values
-            time_relations = relations.copy()
+            time_relations_flow = relations_flow.copy()
+            time_relations_scale = relations_scale.copy()
 
             # Second and last pass to resolve observation expressions with parameters
             for expression, obs in observations:
                 interface_name = get_interface_name(obs.factor, glb_idx)
-                if interface_name not in time_relations.nodes:
+                if interface_name not in time_relations_flow.nodes and interface_name not in time_relations_scale.nodes:
                     print(f"WARNING: observation at interface '{interface_name}' is not taken into account.")
                 else:
                     value, _, params, issues = evaluate_numeric_expression_with_parameters(expression, scenario_state)
@@ -412,19 +457,27 @@ def compute_flow_results(state: State, glb_idx, global_parameters, problem_state
             # Transform relative observations into graph edges
             for expression, obs in time_observations_relative[time_period]:
                 processor_name = get_processor_name(obs.factor.processor, glb_idx)
-                time_relations.add_edge(processor_name + ":" + (obs.relative_factor.name if case_sensitive else obs.relative_factor.name.lower()),
-                                        processor_name + ":" + (obs.factor.name if case_sensitive else obs.factor.name.lower()),
-                                        weight=expression)
+                time_relations_scale.add_edge(
+                    processor_name + ":" + (obs.relative_factor.name if case_sensitive else obs.relative_factor.name.lower()),
+                    processor_name + ":" + (obs.factor.name if case_sensitive else obs.factor.name.lower()),
+                    weight=expression)
 
             # Second and last pass to resolve weight expressions: expressions with parameters can be solved
-            resolve_weight_expressions(time_relations, scenario_state, raise_error=True)
+            resolve_weight_expressions(time_relations_flow, scenario_state, raise_error=True)
+            resolve_weight_expressions(time_relations_scale, scenario_state, raise_error=True)
 
-            # for component in nx.weakly_connected_components(time_relations):
-            #     nx.draw_kamada_kawai(time_relations.subgraph(component), with_labels=True)
-            #     plt.show()
+            # if scenario_name == 'Scenario1' and time_period == '2011':
+            #     for graph in [time_relations_scale]:  # time_relations_flow
+            #         for component in nx.weakly_connected_components(graph):
+            #             # plt.figure(1, figsize=(8, 8))
+            #             nx.draw_spring(graph.subgraph(component), with_labels=True, font_size=8, node_size=60)
+            #             # nx.draw_kamada_kawai(graph.subgraph(component), with_labels=True)
+            #             plt.show()
 
-            flow_graph = FlowGraph(time_relations)
-            comp_graph, issues = flow_graph.get_computation_graph()
+
+            # *********************************************
+            flow_graph = FlowGraph(time_relations_flow)
+            comp_graph_flow, issues = flow_graph.get_computation_graph(time_relations_scale)
 
             for issue in issues:
                 print(issue)
@@ -437,19 +490,41 @@ def compute_flow_results(state: State, glb_idx, global_parameters, problem_state
                     f"be generated. Issues: {', '.join(error_issues)}"
                 )
 
-            res = compute_all_graph_combinations(comp_graph, known_observations)
+            # *********************************************
+            comp_graph_scale = ComputationGraph(time_relations_scale)
 
-            for comb, data in res.items():
-                if len(data) > 0:
-                    if combinations.get(comb) is None:
-                        combinations[comb] = str(len(combinations))
+            # *********************************************
 
-                    results[(scenario_name, time_period, combinations[comb])] = data
-                    results[(scenario_name, time_period, combinations[comb])].update(known_observations)
+            results[(scenario_name, time_period, "0")] = {**known_observations}
+
+            current_num_unknown_nodes = len(comp_graph_flow.nodes)
+            previous_num_unknown_nodes = current_num_unknown_nodes + 1
+            other_values1 = {}
+            other_values2 = {}
+            params1 = None
+            params2 = None
+            data = {}
+            while previous_num_unknown_nodes > current_num_unknown_nodes > 0:
+                previous_num_unknown_nodes = current_num_unknown_nodes
+                if params1 is None:
+                    params1 = {**data, **known_observations}
+                else:
+                    params1 = {**data}
+                data, unknown_nodes = compute_graph_values(comp_graph_scale, params1, other_values1)
+                results[(scenario_name, time_period, "0")].update(data)
+                other_values1.update({**data, **params1})
+                if params2 is None:
+                    params2 = {**data, **known_observations}
+                else:
+                    params2 = {**data}
+                data, unknown_nodes = compute_graph_values(comp_graph_flow, params2, other_values2)
+                results[(scenario_name, time_period, "0")].update(data)
+                other_values2.update({**data, **params2})
+                current_num_unknown_nodes = len(unknown_nodes)
 
             # TODO INDICATORS
 
-    return results, combinations
+    return results
 
 
 def compute_interfacetype_aggregates(glb_idx, results):
@@ -591,7 +666,7 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
     glb_idx, _, _, datasets, _ = get_case_study_registry_objects(state)
 
     try:
-        results, combinations = compute_flow_results(state, glb_idx, global_parameters, problem_statement)
+        results = compute_flow_results(state, glb_idx, global_parameters, problem_statement)
 
         agg_results, agg_combinations = compute_partof_aggregates(glb_idx, input_systems, results)
 
@@ -614,7 +689,6 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
                 for name, value in v.items()}
         return pd.DataFrame.from_dict(data, orient='index')
 
-    print(combinations)
     df = create_dataframe(results)
 
     # Round all values to 3 decimals

@@ -22,8 +22,12 @@ class ComputationGraph:
      - Split rule: If the node value is split entirely (100%) into the successors nodes, its value can be computed in
                    the opposite direction (from successors) only by computing one of the input nodes.
     """
-    def __init__(self):
+    def __init__(self, graph: Optional[nx.DiGraph] = None):
         self.graph = nx.DiGraph()
+
+        if graph:
+            for u, v, data in graph.edges(data=True):
+                self.add_edge(u, v, data["weight"], None)
 
     @property
     def nodes(self):
@@ -31,6 +35,7 @@ class ComputationGraph:
         return self.graph.nodes
 
     def _inputs(self, n: Node, edge_type: EdgeType) -> List[Tuple[Node, Optional[Weight]]]:
+        """ Return the predecessors of a node in the specified direction """
         return [(e[0], e[2]['weight']) for e in self.graph.in_edges(n, data=True) if e[2]['type'] == edge_type]
 
     def direct_inputs(self, n: Node):
@@ -41,9 +46,9 @@ class ComputationGraph:
         """ Return the predecessors of a node in the 'reverse' (Bottom-Up) direction """
         return self._inputs(n, EdgeType.REVERSE)
 
-    def weighted_successors(self, n: Node) -> List[Node]:
+    def weighted_successors(self, n: Node) -> List[Tuple[Node, Weight]]:
         """ Return the successors of a node that have a valid weight """
-        return [suc for suc in self.graph.successors(n) if self.graph[n][suc]['weight']]
+        return [suc for suc in self.graph.successors(n) if self.graph[n][suc]['weight'] is not None]
 
     def add_edge(self, u: Node, v: Node, weight: Optional[Weight], reverse_weight: Optional[Weight]):
         """ Add an edge with weight attributes to the computation graph """
@@ -96,7 +101,7 @@ class ComputationGraph:
 
         all_conflicts: Dict[Node, Set[Node]] = {}
         for param in params:
-            sub_params = params - {param}
+            sub_params: Set[Node] = params - {param}
             visited_nodes: Set[Node] = set()
             conflicts = visit_forward(param)
             all_conflicts[param] = conflicts

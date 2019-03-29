@@ -41,13 +41,13 @@ class FlowGraph:
         """ Return the nodes of the flow graph """
         return self._direct_graph.nodes
 
-    def get_computation_graph(self) -> Tuple[Optional[ComputationGraph], List[Issue]]:
+    def get_computation_graph(self, structural_graph: Optional[nx.DiGraph] = None) -> Tuple[Optional[ComputationGraph], List[Issue]]:
         """ Get a Computation Graph out of the Flow Graph, after checking the validity (no cycles) and inferring
             missing weights and compute other node attributes.
 
             :return: the Computation Graph if no errors occurred and a list of messages given by the analysis
         """
-        issues = self.analyze_and_complete()
+        issues = self.analyze_and_complete(structural_graph)
 
         if IType.ERROR in [e.itype for e in issues]:
             return None, issues
@@ -71,7 +71,7 @@ class FlowGraph:
 
         return graph
 
-    def analyze_and_complete(self) -> List[Issue]:
+    def analyze_and_complete(self, structural_graph: Optional[nx.DiGraph] = None) -> List[Issue]:
         """
         It analyzes the flow graph and completes it with inferrable data.
 
@@ -123,14 +123,19 @@ class FlowGraph:
 
                     if len(all_edges) == 1:
                         edge = list(all_edges)[0]
-                        opposite_weight = opposite_graph[edge[1]][edge[0]]['weight']
+                        u, v, data = edge
+                        opposite_weight = opposite_graph[v][u]['weight']
                         if opposite_weight is not None:
-                            edge[2]['weight'] = 0.0 if opposite_weight == 0.0 else (1.0 / opposite_weight)
+                            data['weight'] = 0.0 if opposite_weight == 0.0 else (1.0 / opposite_weight)
                             issues.append(Issue(IType.INFO,
                                                 f'The weight of single output edge "{edge}" could be inferred from '
                                                 f'opposite weight "{opposite_weight}"'))
+                        elif structural_graph and (structural_graph.has_edge(u, v) or structural_graph.has_edge(v, u)):
+                            issues.append(Issue(IType.WARNING,
+                                                f'The weight of single output edge "{edge}" will not be inferred '
+                                                f'because a structural edge exist'))
                         else:
-                            edge[2]['weight'] = 1.0
+                            data['weight'] = 1.0
                             issues.append(Issue(IType.INFO,
                                                 f'The weight of single output edge "{edge}" could be inferred '
                                                 f'without opposite weight'))
