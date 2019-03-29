@@ -300,6 +300,7 @@ def compute_all_graph_combinations(comp_graph: ComputationGraph, params: Dict[st
 
         results_with_values = {k: v for k, v in results.items() if v is not None}
         print(f'  results_with_values={results_with_values}')
+        print(f'  results_without_values={[k for k, v in results.items() if v is None]}')
 
         all_values[combination] = results_with_values
 
@@ -385,7 +386,7 @@ def compute_flow_results(state: State, glb_idx, global_parameters, problem_state
             print(f"********************* TIME PERIOD: {time_period}")
 
             # Final values are taken from "observations" that need to computed
-            graph_params = {}
+            known_observations = {}
             # Create a copy of the main relations structure that is modified with time-dependent values
             time_relations = relations.copy()
 
@@ -403,9 +404,9 @@ def compute_flow_results(state: State, glb_idx, global_parameters, problem_state
                             f"Issues: {', '.join(issues)}"
                         )
 
-                    graph_params[interface_name] = value
+                    known_observations[interface_name] = value
 
-            assert(len(graph_params) > 0)
+            assert(len(known_observations) > 0)
 
             # Add Processors internal -RelativeTo- relations (time dependent)
             # Transform relative observations into graph edges
@@ -436,7 +437,7 @@ def compute_flow_results(state: State, glb_idx, global_parameters, problem_state
                     f"be generated. Issues: {', '.join(error_issues)}"
                 )
 
-            res = compute_all_graph_combinations(comp_graph, graph_params)
+            res = compute_all_graph_combinations(comp_graph, known_observations)
 
             for comb, data in res.items():
                 if len(data) > 0:
@@ -444,7 +445,7 @@ def compute_flow_results(state: State, glb_idx, global_parameters, problem_state
                         combinations[comb] = str(len(combinations))
 
                     results[(scenario_name, time_period, combinations[comb])] = data
-                    results[(scenario_name, time_period, combinations[comb])].update(graph_params)
+                    results[(scenario_name, time_period, combinations[comb])].update(known_observations)
 
             # TODO INDICATORS
 
