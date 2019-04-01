@@ -25,15 +25,18 @@ Before the elaboration of flow graphs, several preparatory steps:
 * Observers (different versions). Take average always
 
 """
+from _operator import add
+from functools import reduce
+from itertools import chain
+
 import pandas as pd
 import networkx as nx
 import matplotlib.pyplot as plt
-from typing import Dict, List, Set, Any, Tuple, Union, Optional, NamedTuple, NoReturn
+from typing import Dict, List, Set, Any, Tuple, Union, Optional, NamedTuple, NoReturn, Generator
 
-from backend import case_sensitive
 from backend.command_generators.parser_ast_evaluators import ast_evaluator
 from backend.command_generators.parser_field_parsers import string_to_ast, expression_with_parameters, is_year, is_month
-from backend.common.helper import create_dictionary, PartialRetrievalDictionary, ifnull, Memoize
+from backend.common.helper import create_dictionary, PartialRetrievalDictionary, ifnull, Memoize, istr
 from backend.models.musiasem_concepts import ProblemStatement, Parameter, FactorsRelationDirectedFlowObservation, \
     FactorsRelationScaleObservation, Processor, FactorQuantitativeObservation, Factor, \
     ProcessorsRelationPartOfObservation, FactorType
@@ -53,14 +56,13 @@ class SolvingException(Exception):
 def get_processor_name(processor: Processor, registry: PartialRetrievalDictionary) -> str:
     """ Get the processor hierarchical name with caching enabled """
     full_name = processor.full_hierarchy_names(registry)[0]
-    return full_name if case_sensitive else full_name.lower()
+    return istr(full_name)
 
 
 def get_interface_name(interface: Factor, registry: PartialRetrievalDictionary) -> str:
     """ Get the full interface name prefixing it with the processor hierarchical name """
     # TODO: use Interface Type name "interface.taxon.name" instead of Interface name "interface.name"?
-    return get_processor_name(interface.processor, registry) + ":" + \
-           (interface.name if case_sensitive else interface.name.lower())
+    return get_processor_name(interface.processor, registry) + ":" + istr(interface.name)
 
 
 def get_circular_dependencies(parameters: Dict[str, Tuple[Any, list]]) -> list:
@@ -103,10 +105,7 @@ def evaluate_parameters_for_scenario(base_params: List[Parameter], scenario_para
     for param, expression in result_params.items():
         value, ast, params, issues = evaluate_numeric_expression_with_parameters(expression, state)
         if value is None:  # It is not a constant, store the parameters on which this depends
-            if case_sensitive:
-                unknown_params[param] = (ast, set(params))
-            else:
-                unknown_params[param] = (ast, set([p.lower() for p in params]))
+            unknown_params[param] = (ast, set([istr(p) for p in params]))
         else:  # It is a constant, store it
             result_params[param] = value  # Overwrite
             known_params[param] = value
@@ -365,7 +364,7 @@ class Edge(NamedTuple):
     weight: Optional[str]
 
 
-def add_factor_edges(glb_idx, graph: nx.DiGraph, musiasem_class: type, attributes: Tuple[str, str, str]):
+def create_factor_edges(glb_idx, musiasem_class: type, attributes: Tuple[str, str, str]) -> Generator[Tuple[str, str, Dict], None, None]:
     edges: List[Tuple[Factor, Factor, Optional[str]]] = \
         [(getattr(r, attributes[0]), getattr(r, attributes[1]), getattr(r, attributes[2]))
          for r in glb_idx.get(musiasem_class.partial_key())]
@@ -376,22 +375,52 @@ def add_factor_edges(glb_idx, graph: nx.DiGraph, musiasem_class: type, attribute
         if "Archetype" in [src.processor.instance_or_archetype, dst.processor.instance_or_archetype]:
             print(f"WARNING: excluding relation from '{src_name}' to '{dst_name}' because of Archetype processor")
         else:
-            graph.add_edge(src_name, dst_name, weight=weight)
+            yield src_name, dst_name, dict(weight=weight)
 
 
-def resolve_weight_expressions(graph: nx.DiGraph, state: State, raise_error=False) -> NoReturn:
-    for u, v, data in graph.edges(data=True):
-        expression = data["weight"]
-        if expression is not None:
-            value, ast, params, issues = evaluate_numeric_expression_with_parameters(expression, state)
-            if raise_error and value is None:
-                raise SolvingException(IType.ERROR,
-                    f"Cannot evaluate expression "
-                    f"'{expression}' for weight from interface '{u}' to interface '{v}'. Params: {params}. "
-                    f"Issues: {', '.join(issues)}"
-                )
+def resolve_weight_expressions(graph_list: List[nx.DiGraph], state: State, raise_error=False) -> NoReturn:
+    for graph in graph_list:
+        for u, v, data in graph.edges(data=True):
+            expression = data["weight"]
+            if expression is not None:
+                value, ast, params, issues = evaluate_numeric_expression_with_parameters(expression, state)
+                if raise_error and value is None:
+                    raise SolvingException(IType.ERROR,
+                        f"Cannot evaluate expression "
+                        f"'{expression}' for weight from interface '{u}' to interface '{v}'. Params: {params}. "
+                        f"Issues: {', '.join(issues)}"
+                    )
 
-            data["weight"] = ifnull(value, ast)
+                data["weight"] = ifnull(value, ast)
+
+
+def iterative_solving(comp_graph_list: List[ComputationGraph], observations: Dict[str, float]):
+    num_unknown_nodes: int = reduce(add, [len(g.nodes) for g in comp_graph_list])
+    prev_num_unknown_nodes: int = num_unknown_nodes + 1
+    params: List[Optional[Dict[str, float]]] = [None] * len(comp_graph_list)
+    other_values: List[Dict[str, float]] = [{}] * len(comp_graph_list)
+    unknown_nodes: List[List[str]] = [[]] * len(comp_graph_list)
+    data = {}
+    all_data = {}
+    while prev_num_unknown_nodes > num_unknown_nodes > 0:
+        prev_num_unknown_nodes = num_unknown_nodes
+
+        for i, comp_graph in enumerate(comp_graph_list):
+            if params[i] is None:
+                params[i] = {**data, **observations}
+            else:
+                params[i] = {**data}
+            data, unknown_nodes[i] = compute_graph_values(comp_graph, params[i], other_values[i])
+            all_data.update(data)
+            other_values[i].update({**data, **params[i]})
+
+        num_unknown_nodes = reduce(add, [len(l) for l in unknown_nodes])
+
+    all_unkwown_nodes = []
+    for l in unknown_nodes:
+        all_unkwown_nodes.extend(l)
+
+    return all_data, all_unkwown_nodes
 
 
 def compute_flow_results(state: State, glb_idx, global_parameters, problem_statement):
@@ -405,19 +434,24 @@ def compute_flow_results(state: State, glb_idx, global_parameters, problem_state
         )
 
     # Add Interfaces -Flow- relations (time independent)
-    relations_flow = nx.DiGraph()
-    add_factor_edges(glb_idx, relations_flow, FactorsRelationDirectedFlowObservation, ("source_factor", "target_factor", "weight"))
+    relations_flow = nx.DiGraph(
+        incoming_graph_data=create_factor_edges(glb_idx,
+                                                FactorsRelationDirectedFlowObservation,
+                                                ("source_factor", "target_factor", "weight"))
+    )
 
     # Add Processors -Scale- relations (time independent)
-    relations_scale = nx.DiGraph()
-    add_factor_edges(glb_idx, relations_scale, FactorsRelationScaleObservation, ("origin", "destination", "quantity"))
+    relations_scale = nx.DiGraph(
+        incoming_graph_data=create_factor_edges(glb_idx,
+                                                FactorsRelationScaleObservation,
+                                                ("origin", "destination", "quantity"))
+    )
 
     # TODO Expand flow graph with it2it transforms
     # relations_scale_it2it = glb_idx.get(FactorTypesRelationUnidirectionalLinearTransformObservation.partial_key())
 
     # First pass to resolve weight expressions: only expressions without parameters can be solved
-    resolve_weight_expressions(relations_flow, state)
-    resolve_weight_expressions(relations_scale, state)
+    resolve_weight_expressions([relations_flow, relations_scale], state)
 
     results: Dict[Tuple[str, str, str], Dict[str, float]] = {}
 
@@ -429,16 +463,15 @@ def compute_flow_results(state: State, glb_idx, global_parameters, problem_state
         for time_period, observations in time_observations_absolute.items():
             print(f"********************* TIME PERIOD: {time_period}")
 
-            # Final values are taken from "observations" that need to computed
             known_observations = {}
-            # Create a copy of the main relations structure that is modified with time-dependent values
+            # Create a copy of the main relations structures that are modified with time-dependent values
             time_relations_flow = relations_flow.copy()
             time_relations_scale = relations_scale.copy()
 
             # Second and last pass to resolve observation expressions with parameters
             for expression, obs in observations:
                 interface_name = get_interface_name(obs.factor, glb_idx)
-                if interface_name not in time_relations_flow.nodes and interface_name not in time_relations_scale.nodes:
+                if interface_name not in chain(time_relations_flow.nodes, time_relations_scale.nodes):
                     print(f"WARNING: observation at interface '{interface_name}' is not taken into account.")
                 else:
                     value, _, params, issues = evaluate_numeric_expression_with_parameters(expression, scenario_state)
@@ -457,14 +490,12 @@ def compute_flow_results(state: State, glb_idx, global_parameters, problem_state
             # Transform relative observations into graph edges
             for expression, obs in time_observations_relative[time_period]:
                 processor_name = get_processor_name(obs.factor.processor, glb_idx)
-                time_relations_scale.add_edge(
-                    processor_name + ":" + (obs.relative_factor.name if case_sensitive else obs.relative_factor.name.lower()),
-                    processor_name + ":" + (obs.factor.name if case_sensitive else obs.factor.name.lower()),
-                    weight=expression)
+                time_relations_scale.add_edge(processor_name + ":" + istr(obs.relative_factor.name),
+                                              processor_name + ":" + istr(obs.factor.name),
+                                              weight=expression)
 
             # Second and last pass to resolve weight expressions: expressions with parameters can be solved
-            resolve_weight_expressions(time_relations_flow, scenario_state, raise_error=True)
-            resolve_weight_expressions(time_relations_scale, scenario_state, raise_error=True)
+            resolve_weight_expressions([time_relations_flow, time_relations_scale], scenario_state, raise_error=True)
 
             # if scenario_name == 'Scenario1' and time_period == '2011':
             #     for graph in [time_relations_scale]:  # time_relations_flow
@@ -474,8 +505,6 @@ def compute_flow_results(state: State, glb_idx, global_parameters, problem_state
             #             # nx.draw_kamada_kawai(graph.subgraph(component), with_labels=True)
             #             plt.show()
 
-
-            # *********************************************
             flow_graph = FlowGraph(time_relations_flow)
             comp_graph_flow, issues = flow_graph.get_computation_graph(time_relations_scale)
 
@@ -490,37 +519,14 @@ def compute_flow_results(state: State, glb_idx, global_parameters, problem_state
                     f"be generated. Issues: {', '.join(error_issues)}"
                 )
 
-            # *********************************************
             comp_graph_scale = ComputationGraph(time_relations_scale)
-
-            # *********************************************
 
             results[(scenario_name, time_period, "0")] = {**known_observations}
 
-            current_num_unknown_nodes = len(comp_graph_flow.nodes)
-            previous_num_unknown_nodes = current_num_unknown_nodes + 1
-            other_values1 = {}
-            other_values2 = {}
-            params1 = None
-            params2 = None
-            data = {}
-            while previous_num_unknown_nodes > current_num_unknown_nodes > 0:
-                previous_num_unknown_nodes = current_num_unknown_nodes
-                if params1 is None:
-                    params1 = {**data, **known_observations}
-                else:
-                    params1 = {**data}
-                data, unknown_nodes = compute_graph_values(comp_graph_scale, params1, other_values1)
-                results[(scenario_name, time_period, "0")].update(data)
-                other_values1.update({**data, **params1})
-                if params2 is None:
-                    params2 = {**data, **known_observations}
-                else:
-                    params2 = {**data}
-                data, unknown_nodes = compute_graph_values(comp_graph_flow, params2, other_values2)
-                results[(scenario_name, time_period, "0")].update(data)
-                other_values2.update({**data, **params2})
-                current_num_unknown_nodes = len(unknown_nodes)
+            data, unknown_data = iterative_solving([comp_graph_scale, comp_graph_flow], known_observations)
+
+            print(f"Unknown data: {unknown_data}")
+            results[(scenario_name, time_period, "0")].update(data)
 
             # TODO INDICATORS
 
@@ -532,7 +538,7 @@ def compute_interfacetype_aggregates(glb_idx, results):
     def get_sum(processor: str, children: Set[FactorType]) -> float:
         sum_children = 0.0
         for child in children:
-            child_name = child.name if case_sensitive else child.name.lower()
+            child_name = istr(child.name)
             child_value = values.get(processor + ":" + child_name)
             if child_value is None:
                 if child_name in parent_interfaces:
@@ -549,8 +555,7 @@ def compute_interfacetype_aggregates(glb_idx, results):
 
     # Get all different existing interfaces types that can be computed based on children interface types
     parent_interfaces: Dict[str, Set[FactorType]] = \
-        {i.name if case_sensitive else i.name.lower(): i.get_children()
-         for i in glb_idx.get(FactorType.partial_key()) if len(i.get_children()) > 0}
+        {istr(i.name): i.get_children() for i in glb_idx.get(FactorType.partial_key()) if len(i.get_children()) > 0}
 
     for key, values in results.items():
         for parent_interface, children_interfaces in parent_interfaces.items():
@@ -595,7 +600,7 @@ def compute_partof_aggregates(glb_idx, systems, results):
 
     # Get all different existing interfaces and their units
     # TODO: interfaces could need a unit transformation according to interface type
-    interfaces: Set[str] = {i.name if case_sensitive else i.name.lower() for i in glb_idx.get(FactorType.partial_key())}
+    interfaces: Set[str] = {istr(i.name) for i in glb_idx.get(FactorType.partial_key())}
 
     for system in systems:
         print(f"********************* SYSTEM: {system}")
