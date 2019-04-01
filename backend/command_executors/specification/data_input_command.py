@@ -1,5 +1,6 @@
 import json
 
+from backend import case_sensitive
 from backend.common.helper import create_dictionary
 from backend.model_services import IExecutableCommand, State, get_case_study_registry_objects
 from backend.command_generators import parser_field_parsers
@@ -237,8 +238,13 @@ class DataInputCommand(IExecutableCommand):
                         else:
                             fixed_dict[k] = r[k]  # Special
                 # Check that the # names are in the Dataset
-                # TODO: treat case sensitiveness here
-                diff = set([v for v in list(var_dict.values())+list(var_taxa_dict.values())]).difference(set(ds.data.columns))
+                if not case_sensitive:
+                    s1 = {v.lower(): v for v in list(var_dict.values())+list(var_taxa_dict.values())}
+                    s2 = {v.lower(): v for v in ds.data.columns}
+                else:
+                    s1 = {v: v for v in list(var_dict.values())+list(var_taxa_dict.values())}
+                    s2 = {v: v for v in ds.data.columns}
+                diff = set(s1.keys()).difference(set(s2.keys()))
                 if diff:
                     # There are request fields in var_dict NOT in the input dataset "ds.data"
                     if len(diff) > 1:
@@ -250,10 +256,16 @@ class DataInputCommand(IExecutableCommand):
                     # Iterate the dataset (a pd.DataFrame), row by row
                     for r_num, r2 in ds.data.iterrows():
                         r_exp = fixed_dict.copy()
-                        r_exp.update({k: str(r2[v.lower()]) for k, v in var_dict.items()})
+                        if not case_sensitive:
+                            r_exp.update({k: str(r2[s2[v.lower()]]) for k, v in var_dict.items()})
+                        else:
+                            r_exp.update({k: str(r2[s2[v]]) for k, v in var_dict.items()})
                         if var_taxa_dict:
                             taxa = r_exp["taxa"]
-                            taxa.update({k: r2[v.lower()] for k, v in var_taxa_dict.items()})
+                            if not case_sensitive:
+                                taxa.update({k: r2[s2[v.lower()]] for k, v in var_taxa_dict.items()})
+                            else:
+                                taxa.update({k: r2[s2[v]] for k, v in var_taxa_dict.items()})
                             if r_exp["processor"].startswith("#"):
                                 r_exp["processor"] = "_".join([str(taxa[t]) for t in processor_attributes if t in taxa])
                         process_row(r_exp)

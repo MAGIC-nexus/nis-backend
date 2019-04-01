@@ -506,7 +506,7 @@ def find_or_create_factor(state: Union[State, PartialRetrievalDictionary],
 
     f = glb_idx.get(Factor.partial_key(processor=p, factor_type=ft))
     if not f:
-        f = Factor.create_and_append(p.name+":"+ft.name,
+        f = Factor.create_and_append(ft.name,
                                      p,
                                      in_processor_type=FactorInProcessorType(external=fact_external,
                                                                              incoming=fact_incoming),

@@ -162,22 +162,20 @@ command_fields: Dict[str, List[CommandField]] = {
     ],
 
     "interfaces_and_qq": [
-        CommandField(allowed_names=["Alias", "SpecificName"], name="alias", parser=simple_ident),
+        CommandField(allowed_names=["Processor"], name="processor", mandatory=True, parser=processor_name),
         CommandField(allowed_names=["InterfaceType"], name="interface_type", parser=simple_ident),
-        CommandField(allowed_names=["Interface"], name="interface", parser=simple_ident),  # Processor:InterfaceType
-        # TODO
-        #CommandField(allowed_names=["Processor"], name="processor", mandatory=True, parser=processor_name),
-        CommandField(allowed_names=["Processor"], name="processor", parser=simple_ident),
+        CommandField(allowed_names=["Interface"], name="interface", parser=simple_ident),
         CommandField(allowed_names=["Sphere"], name="sphere", allowed_values=spheres, parser=simple_ident,
                      attribute_of=Factor),
         CommandField(allowed_names=["RoegenType"], name="roegen_type", allowed_values=roegen_types, parser=simple_ident,
                      attribute_of=Factor),
-        CommandField(allowed_names=["Orientation"], name="orientation", mandatory=True, allowed_values=orientations,
+        CommandField(allowed_names=["Orientation"], name="orientation", allowed_values=orientations,
                      parser=simple_ident, attribute_of=Factor),
         CommandField(allowed_names=["OppositeProcessorType"], name="opposite_processor_type",
                      allowed_values=processor_types, parser=simple_ident, attribute_of=Factor),
         CommandField(allowed_names=["GeolocationRef"], name="geolocation_ref", parser=reference),
         CommandField(allowed_names=["GeolocationCode"], name="geolocation_code", parser=code_string),
+        CommandField(allowed_names=["Alias", "SpecificName"], name="alias", parser=simple_ident),
         CommandField(allowed_names=["InterfaceAttributes"], name="interface_attributes", parser=key_value_list),
         CommandField(allowed_names=["I"+attributeRegex], name="interface_attributes", many_appearances=True,
                      parser=value),

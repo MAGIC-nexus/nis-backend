@@ -12,7 +12,8 @@ from backend.command_generators.parser_ast_evaluators import dictionary_from_key
 from backend.common.helper import strcmp, first, ifnull
 from backend.model_services import IExecutableCommand, get_case_study_registry_objects
 from backend.models.musiasem_concepts import PedigreeMatrix, Reference, FactorType, \
-    Processor, Factor, FactorInProcessorType, Observer, Parameter
+    Processor, Factor, FactorInProcessorType, Observer, Parameter, GeographicReference, ProvenanceReference, \
+    BibliographicReference
 from backend.models.musiasem_concepts_helper import _create_or_append_quantitative_observation
 from backend.solving import get_processor_names_to_processors_dictionary
 from backend.command_field_definitions import get_command_fields_from_class
@@ -158,27 +159,33 @@ class InterfacesAndQualifiedQuantitiesCommand(IExecutableCommand):
                 return
 
             # Interface
-            f_alias = item.get("alias", None)
-            f_interface_name = item.get("interface", None)
-            f_interface_type_name = item.get("interface_type", None)
-            f_processor_name = item.get("processor", None)
-            f_location = item.get("location", None)
+            f_alias = fields_value.get("alias")
+            f_processor_name = fields_value.get("processor")
+            f_interface_type_name = fields_value.get("interface_type")
+            f_interface_name = fields_value.get("interface")  # A "simple_ident", optional
+            f_location = fields_value.get("location")
+            f_orientation = fields_value.get("orientation")
+            # f_roegen_type = fields_value.get("roegen_type")
+            # f_sphere = fields_value.get("sphere")
+            # f_opposite_processor_type = fields_value.get("opposite_processor_type")
+            # f_geolocation_ref = fields_value.get("geolocation_ref")
+            # f_geolocation_code = fields_value.get("geolocation_code")
 
             # Qualified Quantity
-            f_value = item.get("value", None)
-            f_unit = item.get("unit", None)
-            f_uncertainty = item.get("uncertainty", None)
-            f_assessment = item.get("assessment", None)
-            f_pedigree_matrix = item.get("pedigree_matrix", None)
-            f_pedigree = item.get("pedigree", None)
-            f_relative_to = item.get("relative_to", None)
-            f_time = item.get("time", None)
-            f_source = item.get("qq_source", None)
-            f_number_attributes = item.get("number_attributes", {})
-            f_comments = item.get("comments", None)
+            f_value = fields_value.get("value")
+            f_unit = fields_value.get("unit")
+            f_uncertainty = fields_value.get("uncertainty")
+            f_assessment = fields_value.get("assessment")
+            f_pedigree_matrix = fields_value.get("pedigree_matrix")
+            f_pedigree = fields_value.get("pedigree")
+            f_relative_to = fields_value.get("relative_to")
+            f_time = fields_value.get("time")
+            f_source = fields_value.get("qq_source")
+            f_number_attributes = fields_value.get("number_attributes", {})
+            f_comments = fields_value.get("comments")
 
             # Transform text of "interface_attributes" into a dictionary
-            field_val = fields_value.get("interface_attributes", None)
+            field_val = fields_value.get("interface_attributes")
             if field_val:
                 try:
                     fields_value["interface_attributes"] = dictionary_from_key_value_list(field_val, glb_idx)
@@ -188,6 +195,7 @@ class InterfacesAndQualifiedQuantitiesCommand(IExecutableCommand):
             else:
                 fields_value["interface_attributes"] = {}
 
+            # Transform text of "number_attributes" into a dictionary
             if f_number_attributes:
                 try:
                     number_attributes = dictionary_from_key_value_list(f_number_attributes, glb_idx)
@@ -197,18 +205,22 @@ class InterfacesAndQualifiedQuantitiesCommand(IExecutableCommand):
             else:
                 number_attributes = {}
 
-            # Either f_interface_name or both f_processor_name and f_interface_type_name
+            # f_processor_name -> p
+            # f_interface_type_name -> it
+            # f_interface_name -> i
+            #
+            # IF NOT i AND it AND p => i_name = it.name => get or create "i"
+            # IF i AND it AND p => get or create "i", IF "i" exists, i.it MUST BE equal to "it" (IF NOT, error)
+            # IF i AND p AND NOT it => get "i" (MUST EXIST)
             if not f_interface_name:
-                possibly_local_interface_name = None
-                if f_processor_name and f_interface_type_name:
-                    f_interface_name = f_processor_name+":"+f_interface_type_name
-                else:
-                    add_issue(IType.error(), "When 'Interface' column is not defined, both 'Processor' and 'InterfaceType' must")
+                if not f_interface_type_name:
+                    add_issue(IType.error(), "At least one of InterfaceType or Interface must be defined")
                     return
+
+                possibly_local_interface_name = None
+                f_interface_name = f_interface_type_name
             else:
-                # TODO Split using syntax analysis. Each of the parts may contain advanced syntactic expressions. For now, only literals are considered
-                f_processor_name, f_interface_type_name = f_interface_name.split(":")
-                possibly_local_interface_name = f_interface_type_name
+                possibly_local_interface_name = f_interface_name
 
             # Check existence of PedigreeMatrix, if used
             if f_pedigree_matrix and f_pedigree:
@@ -231,9 +243,15 @@ class InterfacesAndQualifiedQuantitiesCommand(IExecutableCommand):
                 try:
                     ast = parser_field_parsers.string_to_ast(parser_field_parsers.reference, f_source)
                     ref_id = ast["ref_id"]
-                    references = glb_idx.get(Reference.partial_key(ref_id), ref_type="provenance")
+                    references = glb_idx.get(ProvenanceReference.partial_key(ref_id))
                     if len(references) == 1:
                         source = references[0]
+                    else:
+                        references = glb_idx.get(BibliographicReference.partial_key(ref_id))
+                        if len(references) == 1:
+                            source = references[0]
+                        else:
+                            add_issue(IType.error(), f"Reference '{f_source}' not found")
                 except:
                     # TODO Change when Ref* are implemented
                     source = f_source + " (not found)"
@@ -246,7 +264,7 @@ class InterfacesAndQualifiedQuantitiesCommand(IExecutableCommand):
                     # TODO Change to parser for Location (includes references, but also Codes)
                     ast = parser_field_parsers.string_to_ast(parser_field_parsers.reference, f_location)
                     ref_id = ast["ref_id"]
-                    references = glb_idx.get(Reference.partial_key(ref_id), ref_type="geographic")
+                    references = glb_idx.get(GeographicReference.partial_key(ref_id))
                     if len(references) == 1:
                         geolocation = references[0]
                 except:
@@ -255,7 +273,7 @@ class InterfacesAndQualifiedQuantitiesCommand(IExecutableCommand):
                 geolocation = None
 
             # Find Processor
-            # TODO Allow creating a basic Processor if it is not found
+            # TODO Allow creating a basic Processor if it is not found?
             p = glb_idx.get(Processor.partial_key(f_processor_name))
             if len(p) == 0:
                 add_issue(IType.error(), "Processor '" + f_processor_name + "' not declared previously")
@@ -266,18 +284,28 @@ class InterfacesAndQualifiedQuantitiesCommand(IExecutableCommand):
             else:
                 p = p[0]
 
-            f = None
-            if possibly_local_interface_name:
-                # Find Factor
-                p = Processor()
-                for ff in p.factors:
-                    if strcmp(f.name, possibly_local_interface_name):
-                        f = ff
-                        ft: FactorType = f.taxon
-                        break
-            else:
-                ft: FactorType = None
+            # Try to find Interface
+            ft: FactorType = None
+            f = glb_idx.get(Factor.partial_key(processor=p, name=f_interface_name))
+            if len(f) == 1:
+                f = f[0]
+                ft: FactorType = f.taxon
+                if f_interface_type_name:
+                    if not strcmp(ft.name, f_interface_type_name):
+                        add_issue(IType.warning(), f"The InterfaceType of the Interface, {ft.name} "
+                                  f"is different from the specified InterfaceType, {f_interface_type_name}. Record skipped.")
+                        return
+            elif len(f) > 1:
+                add_issue(IType.error(), f"Interface '{f_interface_name}' found {str(len(f))} times. "
+                                         f"It must be uniquely identified.")
+                return
+            elif len(f) == 0:
+                f: Factor = None  # Does not exist, create it below
+                if not f_orientation:
+                    add_issue(IType.error(), f"Orientation must be defined for new Interfaces")
+                    return
 
+            # InterfaceType still not found
             if not ft:
                 # Find FactorType
                 # TODO Allow creating a basic FactorType if it is not found
@@ -293,36 +321,30 @@ class InterfacesAndQualifiedQuantitiesCommand(IExecutableCommand):
                     ft = ft[0]
 
             if not f:
-                # Find or Create Interface
-                f = glb_idx.get(Factor.partial_key(processor=p, factor_type=ft))
+                # Get attributes default values taken from Interface Type or Processor attributes
+                default_values = {
+                    # "orientation": ft.orientation,
+                    "sphere": ft.sphere,
+                    "roegen_type": ft.roegen_type,
+                    "opposite_processor_type": p.subsystem_type
+                }
 
-                if not f:
-                    # Get attributes default values taken from Interface Type or Processor attributes
-                    default_values = {
-                        # "orientation": ft.orientation,
-                        "sphere": ft.sphere,
-                        "roegen_type": ft.roegen_type,
-                        "opposite_processor_type": p.subsystem_type
-                    }
+                # Get internal and user-defined attributes in one dictionary
+                attributes = {k: ifnull(fields_value[k], default_values.get(k, None))
+                              for k, v in fields.items() if v.attribute_of == Factor}
+                attributes.update(fields_value["interface_attributes"])
 
-                    # Get internal and user-defined attributes in one dictionary
-                    attributes = {k: ifnull(fields_value[k], default_values.get(k, None))
-                                  for k, v in fields.items() if v.attribute_of == Factor}
-                    attributes.update(fields_value["interface_attributes"])
-
-                    f = Factor.create_and_append(f_interface_type_name,
-                                                 p,
-                                                 in_processor_type=FactorInProcessorType(
-                                                     external=False,
-                                                     incoming=False
-                                                 ),
-                                                 taxon=ft,
-                                                 geolocation=f_location,
-                                                 tags=None,
-                                                 attributes=attributes)
-                    glb_idx.put(f.key(), f)
-                else:
-                    f = f[0]
+                f = Factor.create_and_append(f_interface_name,
+                                             p,
+                                             in_processor_type=FactorInProcessorType(
+                                                 external=False,
+                                                 incoming=False
+                                             ),
+                                             taxon=ft,
+                                             geolocation=f_location,
+                                             tags=None,
+                                             attributes=attributes)
+                glb_idx.put(f.key(), f)
 
             # Find Observer
             oer = glb_idx.get(Observer.partial_key(f_source))
@@ -352,7 +374,6 @@ class InterfacesAndQualifiedQuantitiesCommand(IExecutableCommand):
 
             # Create quantitative observation
             if f_value:
-
                 # If an observation exists then "time" is mandatory
                 if not f_time:
                     add_issue(IType.error(), f"Field 'time' needs to be specified for the given observation.")
