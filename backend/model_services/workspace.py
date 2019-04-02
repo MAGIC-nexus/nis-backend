@@ -984,7 +984,7 @@ class ReproducibleSession:
         return id3
 
 
-def execute_file(file_name, generator_type):
+def execute_file_return_issues(file_name, generator_type):
     """
     Execution of files in the context of tests
 
@@ -1018,7 +1018,18 @@ def execute_file(file_name, generator_type):
 
     isess.close_reproducible_session()
     isess.close_db_session()
-    return isess
+    return isess, issues
+
+
+def execute_file(file_name, generator_type):
+    """
+    Execution of files in the context of tests
+
+    :param file_name:
+    :param generator_type:
+    :return:
+    """
+    return execute_file_return_issues(file_name, generator_type)[0]  # Return just "isession"
 
 
 def prepare_and_reset_database_for_tests(prepare=False):

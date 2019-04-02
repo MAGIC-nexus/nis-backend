@@ -4,7 +4,8 @@ import unittest
 import backend
 from backend.ie_exports.json import export_model_to_json
 from backend.model_services import get_case_study_registry_objects
-from backend.model_services.workspace import execute_file, prepare_and_reset_database_for_tests, prepare_and_solve_model
+from backend.model_services.workspace import execute_file, prepare_and_reset_database_for_tests, \
+    prepare_and_solve_model, execute_file_return_issues
 from backend.models.musiasem_concepts import Observer, \
     Processor, FactorType, Factor, \
     Hierarchy, \
@@ -20,7 +21,10 @@ from backend.solving import get_processor_names_to_processors_dictionary
 class TestCommandFiles(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        pass  # Executed BEFORE test methods of the class
+        # Executed BEFORE test methods of the class
+        prepare_and_reset_database_for_tests(prepare=True)
+        backend.data_source_manager = register_external_datasources(
+            {"FAO_DATASETS_DIR": "/home/marco/temp/Data/FAOSTAT/"})
 
     @classmethod
     def tearDownClass(cls):
@@ -493,12 +497,26 @@ class TestCommandFiles(unittest.TestCase):
         # Close interactive session
         isess.close_db_session()
 
-    def test_025_biofuel(self):
+    def test_025(self):
         file_path = os.path.dirname(
-            os.path.abspath(__file__)) + "/z_input_files/v2/Biofuel_NIS.xlsx"
-        isess = execute_file(file_path, generator_type="spreadsheet")
+            os.path.abspath(__file__)) + "/../../nis-undisclosed-tests/utest1.xlsx"
+        isess, issues = execute_file_return_issues(file_path, generator_type="spreadsheet")
         # Check State of things
+        self.assertEqual(len(issues), 1)  # Just one issue
         glb_idx, p_sets, hh, datasets, mappings = get_case_study_registry_objects(isess.state)
+        p = glb_idx.get(Processor.partial_key("Society"))
+        self.assertEqual(len(p), 1)
+        p = p[0]
+        self.assertEqual(len(p.factors), 4)
+        f = glb_idx.get(Factor.partial_key(p, None, name="Bioethanol"))
+        self.assertEqual(len(f), 1)
+        self.assertEqual(len(f[0].observations), 4)
+        # TODO These Observations are not registered, uncomment in case they are
+        # obs = glb_idx.get(FactorQuantitativeObservation.partial_key(f[0]))
+        #self.assertEqual(len(obs), 2)
+        f = glb_idx.get(Factor.partial_key(p, None, name="BioethIn2"))
+        self.assertEqual(len(f), 1)
+        self.assertEqual(len(f[0].observations), 0)
         # TODO Check things!!!
         # self.assertEqual(len(p_sets), 3)
         # Close interactive session
@@ -509,7 +527,8 @@ if __name__ == '__main__':
     i = TestCommandFiles()
     prepare_and_reset_database_for_tests(prepare=True)
     backend.data_source_manager = register_external_datasources({"FAO_DATASETS_DIR": "/home/marco/temp/Data/FAOSTAT/"})
-    # i.test_006_execute_file_five()  # TODO: This test from v1 has problems with the case sensitiveness!
+    #i.test_002_execute_file_two()
+    i.test_006_execute_file_five()  # TODO: This test from v1 has problems with the case sensitiveness!
     #i.test_008_execute_file_v2_two()
     #i.test_009_execute_file_v2_three()  # Soslaires. v2 syntax
     #i.test_011_execute_file_v2_five()  # Dataset
@@ -521,6 +540,6 @@ if __name__ == '__main__':
     #i.test_020_list_of_commands()
     #i.test_021_export_to_json()
     #i.test_022_processor_scalings()
-    i.test_023_solving()
+    #i.test_023_solving()
     #i.test_024_maddalena_dataset()
-    #i.test_025_biofuel()
+    #i.test_025()
