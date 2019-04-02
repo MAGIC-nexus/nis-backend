@@ -214,7 +214,7 @@ class InterfacesAndQualifiedQuantitiesCommand(IExecutableCommand):
             # IF i AND p AND NOT it => get "i" (MUST EXIST)
             if not f_interface_name:
                 if not f_interface_type_name:
-                    add_issue(IType.error(), "At least one of InterfaceType or Interface must be defined")
+                    add_issue(IType.ERROR, "At least one of InterfaceType or Interface must be defined")
                     return
 
                 possibly_local_interface_name = None
@@ -251,7 +251,7 @@ class InterfacesAndQualifiedQuantitiesCommand(IExecutableCommand):
                         if len(references) == 1:
                             source = references[0]
                         else:
-                            add_issue(IType.error(), f"Reference '{f_source}' not found")
+                            add_issue(IType.ERROR, f"Reference '{f_source}' not found")
                 except:
                     # TODO Change when Ref* are implemented
                     source = f_source + " (not found)"
@@ -292,17 +292,17 @@ class InterfacesAndQualifiedQuantitiesCommand(IExecutableCommand):
                 ft: FactorType = f.taxon
                 if f_interface_type_name:
                     if not strcmp(ft.name, f_interface_type_name):
-                        add_issue(IType.warning(), f"The InterfaceType of the Interface, {ft.name} "
+                        add_issue(IType.WARNING, f"The InterfaceType of the Interface, {ft.name} "
                                   f"is different from the specified InterfaceType, {f_interface_type_name}. Record skipped.")
                         return
             elif len(f) > 1:
-                add_issue(IType.error(), f"Interface '{f_interface_name}' found {str(len(f))} times. "
+                add_issue(IType.ERROR, f"Interface '{f_interface_name}' found {str(len(f))} times. "
                                          f"It must be uniquely identified.")
                 return
             elif len(f) == 0:
                 f: Factor = None  # Does not exist, create it below
                 if not f_orientation:
-                    add_issue(IType.error(), f"Orientation must be defined for new Interfaces")
+                    add_issue(IType.ERROR, f"Orientation must be defined for new Interfaces")
                     return
 
             # InterfaceType still not found
@@ -323,14 +323,13 @@ class InterfacesAndQualifiedQuantitiesCommand(IExecutableCommand):
             if not f:
                 # Get attributes default values taken from Interface Type or Processor attributes
                 default_values = {
-                    # "orientation": ft.orientation,
                     "sphere": ft.sphere,
                     "roegen_type": ft.roegen_type,
-                    "opposite_processor_type": p.subsystem_type
+                    "opposite_processor_type": ft.opposite_processor_type
                 }
 
                 # Get internal and user-defined attributes in one dictionary
-                attributes = {k: ifnull(fields_value[k], default_values.get(k, None))
+                attributes = {k: ifnull(fields_value[k], default_values.get(k))
                               for k, v in fields.items() if v.attribute_of == Factor}
                 attributes.update(fields_value["interface_attributes"])
 

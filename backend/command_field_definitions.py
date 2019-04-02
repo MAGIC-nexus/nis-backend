@@ -128,7 +128,7 @@ command_fields: Dict[str, List[CommandField]] = {
         CommandField(allowed_names=["Description"], name="description", parser=unquoted_string),
         CommandField(allowed_names=["Unit"], name="unit", parser=unit_name),
         CommandField(allowed_names=["OppositeProcessorType"], name="opposite_processor_type",
-                     allowed_values=processor_types, parser=simple_ident, attribute_of=Factor),
+                     allowed_values=processor_types, parser=simple_ident),
         CommandField(allowed_names=["Attributes"], name="attributes", parser=key_value_list),
         CommandField(allowed_names=[attributeRegex], name="attributes", many_appearances=True, parser=value)
     ],
@@ -169,7 +169,7 @@ command_fields: Dict[str, List[CommandField]] = {
                      attribute_of=Factor),
         CommandField(allowed_names=["RoegenType"], name="roegen_type", allowed_values=roegen_types, parser=simple_ident,
                      attribute_of=Factor),
-        CommandField(allowed_names=["Orientation"], name="orientation", allowed_values=orientations,
+        CommandField(allowed_names=["Orientation"], name="orientation", mandatory=True, allowed_values=orientations,
                      parser=simple_ident, attribute_of=Factor),
         CommandField(allowed_names=["OppositeProcessorType"], name="opposite_processor_type",
                      allowed_values=processor_types, parser=simple_ident, attribute_of=Factor),

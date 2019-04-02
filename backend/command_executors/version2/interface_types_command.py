@@ -22,8 +22,8 @@ class InterfaceTypesCommand(IExecutableCommand):
             ft_parent = item.get("parent_interface_type")
             ft_formula = item.get("formula")
             ft_description = item.get("description")
-            # ft_orientation = item.get("orientation")
             ft_unit = item.get("unit")
+            ft_opposite_processor_type = item.get("opposite_processor_type")
             ft_attributes = item.get("attributes", {})
             if ft_attributes:
                 try:
@@ -100,8 +100,8 @@ class InterfaceTypesCommand(IExecutableCommand):
                                 tags=None,  # No tags
                                 attributes=dict(unit=ft_unit, description=ft_description, **ft_attributes),
                                 expression=ft_formula,
-                                # orientation=ft_orientation,
-                                sphere=ft_sphere
+                                sphere=ft_sphere,
+                                opposite_processor_type=ft_opposite_processor_type
                                 )
                 # Simple name
                 glb_idx.put(FactorType.partial_key(ft_name, ft.ident), ft)

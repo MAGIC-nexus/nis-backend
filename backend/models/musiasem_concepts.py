@@ -1079,15 +1079,15 @@ class FactorType(Identifiable, HierarchyNode, HierarchyExpression, Taggable, Qua
     INTERNAL_ATTRIBUTE_NAMES = frozenset({})
 
     def __init__(self, name, parent=None, hierarchy=None, roegen_type: FlowFundRoegenType=FlowFundRoegenType.flow,
-                 tags=None, attributes=None, expression=None, sphere=None):  # orientation=None,
+                 tags=None, attributes=None, expression=None, sphere=None, opposite_processor_type=None):
         Identifiable.__init__(self)
         HierarchyNode.__init__(self, name, parent, hierarchy=hierarchy)
         Taggable.__init__(self, tags)
         Qualifiable.__init__(self, attributes, self.INTERNAL_ATTRIBUTE_NAMES)
         HierarchyExpression.__init__(self, expression)
         self._roegen_type = roegen_type
-        # self._orientation = orientation
         self._sphere = sphere
+        self._opposite_processor_type = opposite_processor_type
         self._physical_type = None  # TODO Which physical types. An object
         self._default_unit_str = None  # TODO A string representing the unit, compatible with the physical type
         self._factors = []
@@ -1097,8 +1097,8 @@ class FactorType(Identifiable, HierarchyNode, HierarchyExpression, Taggable, Qua
 
         d.update({
             'roegen_type': getattr(self.roegen_type, "name", None),
-            # 'orientation': self.orientation,
-            'sphere': self.sphere
+            'sphere': self.sphere,
+            'opposite_processor_type': self.opposite_processor_type
         })
 
         # Remove property inherited from HierarchyNode because it is always "null" for FactorType
@@ -1135,9 +1135,9 @@ class FactorType(Identifiable, HierarchyNode, HierarchyExpression, Taggable, Qua
     def roegen_type(self):
         return self._roegen_type
 
-    # @property
-    # def orientation(self):
-    #     return self._orientation
+    @property
+    def opposite_processor_type(self):
+        return self._opposite_processor_type
 
     @property
     def sphere(self):
