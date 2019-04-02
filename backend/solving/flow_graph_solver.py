@@ -536,17 +536,19 @@ def compute_flow_results(state: State, glb_idx, global_parameters, problem_state
 def compute_interfacetype_aggregates(glb_idx, results):
 
     def get_sum(processor: str, children: Set[FactorType]) -> float:
-        sum_children = 0.0
+        sum_children = None
         for child in children:
             child_name = istr(child.name)
             child_value = values.get(processor + ":" + child_name)
             if child_value is None:
                 if child_name in parent_interfaces:
                     child_value = get_sum(proc, parent_interfaces[child_name])
-                else:
-                    child_value = 0.0
 
-            sum_children += child_value
+            if child_value is not None:
+                if sum_children is None:
+                    sum_children = child_value
+                else:
+                    sum_children += child_value
 
         return sum_children
 
@@ -563,9 +565,11 @@ def compute_interfacetype_aggregates(glb_idx, results):
                 proc_interface_name = proc + ":" + parent_interface
 
                 if values.get(proc_interface_name) is None:
-                    agg_results.setdefault(key, {}).update({
-                        proc_interface_name: get_sum(proc, children_interfaces)
-                    })
+                    sum_result = get_sum(proc, children_interfaces)
+                    if sum_result is not None:
+                        agg_results.setdefault(key, {}).update({
+                            proc_interface_name: sum_result
+                        })
 
     return agg_results
 
@@ -596,7 +600,6 @@ def get_processor_partof_hierarchies(glb_idx, system):
 
 def compute_partof_aggregates(glb_idx, systems, results):
     agg_results: Dict[Tuple[str, str, str], Dict[str, float]] = {}
-    # agg_combinations: Dict[frozenset, str] = {}
 
     # Get all different existing interfaces and their units
     # TODO: interfaces could need a unit transformation according to interface type
@@ -630,18 +633,6 @@ def compute_partof_aggregates(glb_idx, systems, results):
 
                     if len(filtered_values) > 0:
                         print(f"*** (Scenario, Period, Combination = {key}")
-
-                        # Resolve computation graph
-                        # comp_graph = ComputationGraph()
-                        # comp_graph.add_edges(list(interfaced_proc_hierarchy.edges), 1.0, None)
-                        # agg_res = compute_all_graph_combinations(comp_graph, filtered_results)
-                        #
-                        # for comb, data in agg_res.items():
-                        #     if len(data) > 0:
-                        #         if agg_combinations.get(comb) is None:
-                        #             agg_combinations[comb] = str(len(agg_combinations))
-                        #
-                        #         agg_results[(scenario_name, time_period, f"({combination}, {agg_combinations[comb]})")] = data
 
                         # Aggregate top-down, starting from root
                         agg_res, error_msg = compute_aggregate_results(interfaced_proc_hierarchy, filtered_values)
@@ -733,10 +724,15 @@ def compute_aggregate_results(tree: nx.DiGraph, params: Dict[str, float]) -> Tup
             return params[node]
 
         sum_children = 0
+        has_children = False
+
         for pred in tree.predecessors(node):
+            has_children = True
             sum_children += compute_node(pred)
 
-        values[node] = sum_children
+        if has_children:
+            values[node] = sum_children
+
         return sum_children
 
     root_nodes = [node for node, degree in tree.out_degree() if degree == 0]
