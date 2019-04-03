@@ -1785,6 +1785,30 @@ class RelationClassType(Enum):
 
     ftft_directed_linear_transform = 20  # InterfaceType to InterfaceType
 
+    @staticmethod
+    def from_str(label):
+
+        if label in ["is_a", "isa"]:
+            return RelationClassType.pp_isa
+        elif label in ["part_of", "partof", "|"]:
+            return RelationClassType.pp_part_of
+        elif label in ["aggregate", "aggregation"]:
+            return RelationClassType.pp_aggregate
+        elif label in ["associate", "association"]:
+            return RelationClassType.pp_associate
+        elif label in ["flow", ">"]:
+            return RelationClassType.ff_directed_flow
+        elif label in ["<"]:
+            return RelationClassType.ff_reverse_directed_flow
+        elif label in ["scale"]:
+            return RelationClassType.ff_scale
+        elif label in ["<>", "><"]:
+            return RelationClassType.pp_undirected_flow
+        elif label in ["||"]:
+            return RelationClassType.pp_upscale
+        else:
+            raise NotImplementedError
+
 
 class FactorQuantitativeObservation(Taggable, Qualifiable, Automatable, Encodable):
     """ An expression or quantity assigned to an Observable (Factor) """

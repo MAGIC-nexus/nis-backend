@@ -1,5 +1,6 @@
 import json
 import re
+from typing import Tuple, Optional
 
 from backend.command_executors.execution_helpers import parse_line, classify_variables, \
     obtain_dictionary_with_literal_fields
@@ -10,8 +11,9 @@ from backend.command_generators.parser_field_parsers import string_to_ast, proce
 from backend.common.helper import strcmp
 from backend.model_services import IExecutableCommand, get_case_study_registry_objects
 from backend.models.musiasem_concepts import FactorType, Factor, FactorInProcessorType, \
-    RelationClassType, Parameter
-from backend.models.musiasem_concepts_helper import create_relation_observations, find_processor_by_name
+    RelationClassType, Parameter, Processor
+from backend.models.musiasem_concepts_helper import create_relation_observations, find_processor_by_name, \
+    find_or_create_factor
 from backend.solving import get_processor_names_to_processors_dictionary
 
 
@@ -192,19 +194,40 @@ class RelationshipsCommand(IExecutableCommand):
                 # print("Single: "+str(item))
                 yield item
 
+        def get_interface_and_type(interface_name: Optional[str], processor: Processor) -> Tuple[Factor, FactorType]:
+            interface = None
+            interface_type = None
+            if interface_name:
+                # First find an Interface in the Processor by that name
+                for f in processor.factors:
+                    if strcmp(f.name, interface_name):
+                        interface = f
+
+                # If not, look for an InterfaceType
+                if not interface:
+                    interface_type = glb_idx.get(FactorType.partial_key(interface_name))
+                    if len(interface_type) == 0:
+                        interface_type = None
+                    elif len(interface_type) == 1:
+                        interface_type = interface_type[0]
+                else:
+                    interface_type = interface.taxon
+
+            return interface, interface_type
+
         def process_line(item):
-            r_source_processor_name = item.get("source_processor", None)  # Mandatory, simple_ident
-            r_source_interface_name = item.get("source_interface", None)  # Mandatory, simple_ident
-            r_target_processor_name = item.get("target_processor", None)  # Mandatory, simple_ident
-            r_target_interface_name = item.get("target_interface", None)  # Mandatory, simple_ident
-            r_source_name = item.get("source", None)  # Mandatory, simple_ident
-            r_target_name = item.get("target", None)  # Mandatory, simple_ident
-            r_relation_type = item.get("relation_type", None).lower()  # Mandatory, simple_ident
-            r_change_type_scale = item.get("change_type_scale", None)  # Mandatory, simple_ident
-            r_flow_weight = item.get("flow_weight", None)  # Mandatory, simple_ident
-            r_source_cardinality = item.get("source_cardinality", None)  # Mandatory, simple_ident
-            r_target_cardinality = item.get("target_cardinality", None)  # Mandatory, simple_ident
-            r_attributes = item.get("attributes", None)
+            r_source_processor_name = item.get("source_processor")  # Mandatory, simple_ident
+            r_source_interface_name = item.get("source_interface")  # Mandatory, simple_ident
+            r_target_processor_name = item.get("target_processor")  # Mandatory, simple_ident
+            r_target_interface_name = item.get("target_interface")  # Mandatory, simple_ident
+            r_source_name = item.get("source")  # Mandatory, simple_ident
+            r_target_name = item.get("target")  # Mandatory, simple_ident
+            r_relation_type = item.get("relation_type").lower()  # Mandatory, simple_ident
+            r_change_type_scale = item.get("change_type_scale")  # Mandatory, simple_ident
+            r_flow_weight = item.get("flow_weight")  # Mandatory, simple_ident
+            r_source_cardinality = item.get("source_cardinality")  # Mandatory, simple_ident
+            r_target_cardinality = item.get("target_cardinality")  # Mandatory, simple_ident
+            r_attributes = item.get("attributes")
             if r_attributes:
                 try:
                     attributes = dictionary_from_key_value_list(r_attributes, glb_idx)
@@ -216,70 +239,23 @@ class RelationshipsCommand(IExecutableCommand):
             else:
                 attributes = {}
 
-            r_relation_class = None
-            if r_relation_type in ["is_a", "isa"]:
-                r_relation_class = RelationClassType.pp_isa
-            elif r_relation_type in ["part_of", "partof", "|"]:
-                r_relation_class = RelationClassType.pp_part_of
-            elif r_relation_type in ["aggregate", "aggregation"]:
-                r_relation_class = RelationClassType.pp_aggregate
-            elif r_relation_type in ["associate", "association"]:
-                r_relation_class = RelationClassType.pp_associate
-            elif r_relation_type in ["flow", ">"]:
-                r_relation_class = RelationClassType.ff_directed_flow
-            elif r_relation_type in ["<"]:
-                r_relation_class = RelationClassType.ff_reverse_directed_flow
-            elif r_relation_type in ["scale"]:
-                r_relation_class = RelationClassType.ff_scale
+            r_relation_class = RelationClassType.from_str(r_relation_type)
 
-            if r_relation_type in ["is_a", "isa", "part_of", "partof", "|", "aggregate", "associate"]:
-                between_processors = True
-            else:  # "flow", ">", "<", "scale"
+            if r_relation_class in [RelationClassType.ff_directed_flow,
+                                    RelationClassType.ff_reverse_directed_flow,
+                                    RelationClassType.ff_scale]:
                 between_processors = False
+            else:
+                between_processors = True
 
-            # Look for source Processor
+            # Look for source and target Processors
             source_processor = find_processor_by_name(state=glb_idx, processor_name=r_source_processor_name)
-            # Look for target Processor
             target_processor = find_processor_by_name(state=glb_idx, processor_name=r_target_processor_name)
-            if not between_processors:
-                # Look for source Interface
-                # First find an Interface in the Processor by that name
-                source_interface = None
-                if r_source_interface_name:
-                    for f in source_processor.factors:
-                        if strcmp(f.name, r_source_interface_name):
-                            source_interface = f
-                target_interface = None
-                if r_target_interface_name:
-                    for f in target_processor.factors:
-                        if strcmp(f.name, r_target_interface_name):
-                            target_interface = f
 
-                # If not, look for an InterfaceType
-                if not source_interface:
-                    if r_source_interface_name:
-                        source_interface_type = glb_idx.get(FactorType.partial_key(r_source_interface_name))
-                        if len(source_interface_type) == 0:
-                            source_interface_type = None
-                        elif len(source_interface_type) == 1:
-                            source_interface_type = source_interface_type[0]
-                    else:
-                        source_interface_type = None
-                else:
-                    source_interface_type = source_interface.taxon
-                    
-                # Look for target InterfaceType
-                if not target_interface:
-                    if r_target_interface_name:
-                        target_interface_type = glb_idx.get(FactorType.partial_key(r_target_interface_name))
-                        if len(target_interface_type) == 0:
-                            target_interface_type = None
-                        elif len(target_interface_type) == 1:
-                            target_interface_type = target_interface_type[0]
-                    else:
-                        target_interface_type = None
-                else:
-                    target_interface_type = target_interface.taxon
+            if not between_processors:
+                # Look for source and target Interfaces and InterfaceTypes
+                source_interface, source_interface_type = get_interface_and_type(r_source_interface_name, source_processor)
+                target_interface, target_interface_type = get_interface_and_type(r_target_interface_name, target_processor)
 
                 change_type_scale = None
                 if source_interface_type and not target_interface_type:
@@ -306,35 +282,13 @@ class RelationshipsCommand(IExecutableCommand):
                                         location=IssueLocation(sheet_name=name, row=r, column=None)))
                     return
 
-                # Find source Interface, if not add it
+                # Find Interface, if not add it
                 if not source_interface:
-                    source_interface = glb_idx.get(Factor.partial_key(processor=source_processor, factor_type=source_interface_type))
-                    if len(source_interface) == 0:
-                        source_interface = None
-                    elif len(source_interface) == 1:
-                        source_interface = source_interface[0]
-                    if not source_interface:
-                        source_interface = Factor.create_and_append(source_interface_type.name,
-                                                                    source_processor,
-                                                                    in_processor_type=FactorInProcessorType(external=False,
-                                                                                                            incoming=True),
-                                                                    taxon=source_interface_type)
-                        glb_idx.put(source_interface.key(), source_interface)
-
-                # Find target Interface
+                    source_interface = find_or_create_factor(glb_idx, source_processor, source_interface_type,
+                                                             fact_external=False, fact_incoming=True)
                 if not target_interface:
-                    target_interface = glb_idx.get(Factor.partial_key(processor=target_processor, factor_type=target_interface_type))
-                    if len(target_interface) == 0:
-                        target_interface = None
-                    elif len(target_interface) == 1:
-                        target_interface = target_interface[0]
-                    if not target_interface:
-                        target_interface = Factor.create_and_append(target_interface_type.name,
-                                                                    target_processor,
-                                                                    in_processor_type=FactorInProcessorType(external=False,
-                                                                                                            incoming=True),
-                                                                    taxon=target_interface_type)
-                        glb_idx.put(target_interface.key(), target_interface)
+                    target_interface = find_or_create_factor(glb_idx, target_processor, target_interface_type,
+                                                             fact_external=False, fact_incoming=True)
 
             # TODO Pass full "attributes" dictionary
             # Pass "change_type_scale" as attribute
