@@ -326,6 +326,9 @@ class Qualifiable(Encodable):
         else:
             return {}
 
+    def compare_attributes(self, attrs: Dict[str, Any]) -> bool:
+        return all([attrs[k] == self.get_attribute(k) for k in attrs])
+
 
 class Observable(Encodable):
     """ An entity which can be structurally (relations with other observables) or quantitatively observed.

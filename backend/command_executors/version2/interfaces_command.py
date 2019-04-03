@@ -288,7 +288,7 @@ class InterfacesAndQualifiedQuantitiesCommand(IExecutableCommand):
             ft: FactorType = None
             f = glb_idx.get(Factor.partial_key(processor=p, name=f_interface_name))
             if len(f) == 1:
-                f = f[0]
+                f: Factor = f[0]
                 ft: FactorType = f.taxon
                 if f_interface_type_name:
                     if not strcmp(ft.name, f_interface_type_name):
@@ -297,7 +297,7 @@ class InterfacesAndQualifiedQuantitiesCommand(IExecutableCommand):
                         return
             elif len(f) > 1:
                 add_issue(IType.ERROR, f"Interface '{f_interface_name}' found {str(len(f))} times. "
-                                         f"It must be uniquely identified.")
+                                       f"It must be uniquely identified.")
                 return
             elif len(f) == 0:
                 f: Factor = None  # Does not exist, create it below
@@ -315,22 +315,22 @@ class InterfacesAndQualifiedQuantitiesCommand(IExecutableCommand):
                     return
                 elif len(ft) > 1:
                     add_issue(IType.ERROR, f"InterfaceType '{f_interface_type_name}' found {str(len(ft))} times. "
-                                             f"It must be uniquely identified.")
+                                           f"It must be uniquely identified.")
                     return
                 else:
                     ft = ft[0]
 
-            if not f:
-                # Get attributes default values taken from Interface Type or Processor attributes
-                default_values = {
-                    "sphere": ft.sphere,
-                    "roegen_type": ft.roegen_type,
-                    "opposite_processor_type": ft.opposite_processor_type
-                }
+            # Get attributes default values taken from Interface Type or Processor attributes
+            default_values = {
+                "sphere": ft.sphere,
+                "roegen_type": ft.roegen_type,
+                "opposite_processor_type": ft.opposite_processor_type
+            }
 
-                # Get internal and user-defined attributes in one dictionary
-                attributes = {k: ifnull(fields_value[k], default_values.get(k))
-                              for k, v in fields.items() if v.attribute_of == Factor}
+            # Get internal and user-defined attributes in one dictionary
+            attributes = {k: ifnull(fields_value[k], default_values.get(k))
+                          for k, v in fields.items() if v.attribute_of == Factor}
+            if not f:
                 attributes.update(fields_value["interface_attributes"])
 
                 f = Factor.create_and_append(f_interface_name,
@@ -344,6 +344,9 @@ class InterfacesAndQualifiedQuantitiesCommand(IExecutableCommand):
                                              tags=None,
                                              attributes=attributes)
                 glb_idx.put(f.key(), f)
+
+            elif not f.compare_attributes(attributes):
+                add_issue(IType.ERROR, f"The same interface is being redeclared with different properties.")
 
             # Find Observer
             oer = glb_idx.get(Observer.partial_key(f_source))
@@ -360,19 +363,24 @@ class InterfacesAndQualifiedQuantitiesCommand(IExecutableCommand):
                 try:
                     f_unit = str((ureg(f_unit) / ureg(rel_unit_name)).units)
                 except (UndefinedUnitError, AttributeError) as ex:
-                    add_issue(3, f"The final unit could not be computed, interface '{f_unit}' / "
-                                 f"relative_to '{rel_unit_name}': {str(ex)}")
+                    add_issue(IType.ERROR, f"The final unit could not be computed, interface '{f_unit}' / "
+                                           f"relative_to '{rel_unit_name}': {str(ex)}")
                     return
 
                 f_relative_to = first(f.processor.factors, lambda ifc: strcmp(ifc.name, relative_to_interface_name))
 
                 if not f_relative_to:
                     add_issue(IType.ERROR, f"Interface specified in 'relative_to' column "
-                                             f"'{relative_to_interface_name}' has not been found.")
+                                           f"'{relative_to_interface_name}' has not been found.")
                     return
 
+            if f_value is None and f_relative_to is not None:
+                f_value = "0"
+                add_issue(IType.WARNING, f"Field 'value' should be defined for unitary processors, i.e. those having a "
+                                         f"'relative_to' interface. Using value '0'.")
+
             # Create quantitative observation
-            if f_value:
+            if f_value is not None:
                 # If an observation exists then "time" is mandatory
                 if not f_time:
                     add_issue(IType.ERROR, f"Field 'time' needs to be specified for the given observation.")

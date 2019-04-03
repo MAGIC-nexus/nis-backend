@@ -697,8 +697,13 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
     df = df.sort_index(level=["Scenario", "Period", "Combination", "Processor", "Interface"])
 
     # Adding column with interface units
-    interface_units = create_dictionary(data={i.name: i.attributes.get('unit')
-                                              for i in glb_idx.get(FactorType.partial_key())})
+    interface_units = create_dictionary(
+        data={i.name: i.attributes.get('unit') for i in glb_idx.get(FactorType.partial_key())}
+    )
+    interface_units.update(
+        {i.name: i.taxon.attributes.get('unit') for i in glb_idx.get(Factor.partial_key())}
+    )
+
     df["Unit"] = [interface_units[i] for i in df.index.get_level_values("Interface")]
 
     # Add customer attribute "level"
