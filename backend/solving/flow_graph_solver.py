@@ -31,7 +31,7 @@ from itertools import chain
 
 import pandas as pd
 import networkx as nx
-import matplotlib.pyplot as plt
+# import matplotlib.pyplot as plt
 from typing import Dict, List, Set, Any, Tuple, Union, Optional, NamedTuple, NoReturn, Generator
 
 from backend.command_generators.parser_ast_evaluators import ast_evaluator
