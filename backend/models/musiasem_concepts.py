@@ -1238,6 +1238,13 @@ class Processor(Identifiable, Nameable, Taggable, Qualifiable, Automatable, Obse
     def factors_append(self, factor: "Factor"):
         self._factors.append(factor)
 
+    def factors_find(self, factor_name: str) -> Optional["Factor"]:
+        for f in self.factors:  # type: Factor
+            if strcmp(f.name, factor_name):
+                return f
+
+        return None
+
     @property
     def extensive(self):
         # TODO True if of all values defined for all factors no value depends on another factor
@@ -1275,6 +1282,15 @@ class Processor(Identifiable, Nameable, Taggable, Qualifiable, Automatable, Obse
             return [(parent_name+"."+self.name)
                     for parent_relation in parent_relations
                     for parent_name in parent_relation.parent_processor.full_hierarchy_names(registry)]
+
+    def children(self, registry: PartialRetrievalDictionary) -> List["Processor"]:
+        """
+        Obtain the list of children looking for the PART-OF relations
+
+        :param registry:
+        :return:
+        """
+        return [r.child_processor for r in registry.get(ProcessorsRelationPartOfObservation.partial_key(parent=self))]
 
     def clone(self, state: Union[PartialRetrievalDictionary, State], objects_already_cloned: Dict = None, level=0,
               inherited_attributes: Dict[str, Any] = {}, name: str = None):

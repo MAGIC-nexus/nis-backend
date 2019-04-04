@@ -200,12 +200,10 @@ command_fields: Dict[str, List[CommandField]] = {
     ],
 
     "relationships": [
-        CommandField(allowed_names=["OriginProcessors", "OriginProcessor"], name="source_processor", parser=processor_names),
+        CommandField(allowed_names=["OriginProcessors", "OriginProcessor"], name="source_processor", mandatory=True, parser=processor_names),
         CommandField(allowed_names=["OriginInterface"], name="source_interface", parser=simple_ident),
-        CommandField(allowed_names=["DestinationProcessors", "DestinationProcessor"], name="target_processor", parser=processor_names),
+        CommandField(allowed_names=["DestinationProcessors", "DestinationProcessor"], name="target_processor", mandatory=True, parser=processor_names),
         CommandField(allowed_names=["DestinationInterface"], name="target_interface", parser=simple_ident),
-        CommandField(allowed_names=["Origin"], name="source", parser=simple_ident),
-        CommandField(allowed_names=["Destination"], name="target", parser=simple_ident),
         CommandField(allowed_names=["RelationType"], name="relation_type", mandatory=True, allowed_values=relation_types, parser=unquoted_string),
         CommandField(allowed_names=["ChangeOfTypeScale"], name="change_type_scale", parser=expression_with_parameters),
         CommandField(allowed_names=["Weight"], name="flow_weight", parser=expression_with_parameters),
