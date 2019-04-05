@@ -1585,7 +1585,7 @@ class Factor(Identifiable, Nameable, Taggable, Qualifiable, Observable, Automata
         return tmp
 
     @property
-    def taxon(self):  # Factor Type
+    def taxon(self) -> FactorType:
         tmp = self._taxon
         if tmp is None and self.referenced_factor:
             tmp = self.referenced_factor.taxon
