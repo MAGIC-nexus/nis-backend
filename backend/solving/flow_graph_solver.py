@@ -268,44 +268,6 @@ def split_observations_by_relativeness(observations_by_time: TimeObservationsTyp
     return observations_by_time_norelative, observations_by_time_relative
 
 
-def compute_all_graph_combinations(comp_graph: ComputationGraph, params: Dict[str, float]) -> Dict[frozenset, Dict[str, float]]:
-    all_values: Dict[frozenset, Dict[str, float]] = {}
-
-    print(f"****** NODES: {comp_graph.nodes}")
-
-    # Obtain nodes without a value
-    compute_nodes = [n for n in comp_graph.nodes if params.get(n) is None]
-
-    # Compute the missing information with the computation graph
-    if len(compute_nodes) == 0:
-        print("All nodes have a value. Nothing to solve.")
-        return {}
-
-    print(f"****** UNKNOWN NODES: {compute_nodes}")
-    print(f"****** PARAMS: {params}")
-
-    conflicts = comp_graph.compute_param_conflicts(set(params.keys()))
-
-    for s, (param, values) in enumerate(conflicts.items()):
-        print(f"Conflict {s + 1}: {param} -> {values}")
-
-    combinations = ComputationGraph.compute_param_combinations(conflicts)
-
-    for s, combination in enumerate(combinations):
-        print(f"Combination {s}: {combination}")
-
-        filtered_params = {k: v for k, v in params.items() if k in combination}
-        results, _ = comp_graph.compute_values(compute_nodes, filtered_params)
-
-        results_with_values = {k: v for k, v in results.items() if v is not None}
-        print(f'  results_with_values={results_with_values}')
-        print(f'  results_without_values={[k for k, v in results.items() if v is None]}')
-
-        all_values[combination] = results_with_values
-
-    return all_values
-
-
 def compute_graph_values(comp_graph: ComputationGraph, params: Dict[str, float], other_values: Dict[str, float]) -> Tuple[Dict[str, float], List[str]]:
     print(f"****** NODES: {comp_graph.nodes}")
 
@@ -453,7 +415,7 @@ def compute_flow_results(state: State, glb_idx, global_parameters, problem_state
     # First pass to resolve weight expressions: only expressions without parameters can be solved
     resolve_weight_expressions([relations_flow, relations_scale], state)
 
-    results: Dict[Tuple[str, str, str], Dict[str, float]] = {}
+    results: Dict[Tuple[str, str], Dict[str, float]] = {}
 
     for scenario_name, scenario_params in problem_statement.scenarios.items():  # type: str, dict
         print(f"********************* SCENARIO: {scenario_name}")
@@ -521,12 +483,12 @@ def compute_flow_results(state: State, glb_idx, global_parameters, problem_state
 
             comp_graph_scale = ComputationGraph(time_relations_scale)
 
-            results[(scenario_name, time_period, "0")] = {**known_observations}
+            results[(scenario_name, time_period)] = {**known_observations}
 
             data, unknown_data = iterative_solving([comp_graph_scale, comp_graph_flow], known_observations)
 
             print(f"Unknown data: {unknown_data}")
-            results[(scenario_name, time_period, "0")].update(data)
+            results[(scenario_name, time_period)].update(data)
 
             # TODO INDICATORS
 
@@ -599,7 +561,7 @@ def get_processor_partof_hierarchies(glb_idx, system):
 
 
 def compute_partof_aggregates(glb_idx, systems, results):
-    agg_results: Dict[Tuple[str, str, str], Dict[str, float]] = {}
+    agg_results: Dict[Tuple[str, str], Dict[str, float]] = {}
 
     # Get all different existing interfaces and their units
     # TODO: interfaces could need a unit transformation according to interface type
@@ -632,7 +594,7 @@ def compute_partof_aggregates(glb_idx, systems, results):
                                        if values.get(k) is not None}
 
                     if len(filtered_values) > 0:
-                        print(f"*** (Scenario, Period, Combination = {key}")
+                        print(f"*** (Scenario, Period = {key})")
 
                         # Aggregate top-down, starting from root
                         agg_res, error_msg = compute_aggregate_results(interfaced_proc_hierarchy, filtered_values)
@@ -644,7 +606,7 @@ def compute_partof_aggregates(glb_idx, systems, results):
                         if len(agg_res) > 0:
                             agg_results.setdefault(key, {}).update(agg_res)
 
-    return agg_results, {}
+    return agg_results
 
 
 def flow_graph_solver(global_parameters: List[Parameter], problem_statement: ProblemStatement,
@@ -664,7 +626,7 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
     try:
         results = compute_flow_results(state, glb_idx, global_parameters, problem_statement)
 
-        agg_results, agg_combinations = compute_partof_aggregates(glb_idx, input_systems, results)
+        agg_results = compute_partof_aggregates(glb_idx, input_systems, results)
 
     except SolvingException as e:
         return [Issue(e.args[0], str(e.args[1]))]
@@ -679,7 +641,7 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
     for key, value in agg_results.items():
         results[key].update(value)
 
-    def create_dataframe(r: Dict[Tuple[str, str, str], Dict[str, float]]) -> pd.DataFrame:
+    def create_dataframe(r: Dict[Tuple[str, str], Dict[str, float]]) -> pd.DataFrame:
         data = {k + split_name(name): {"Value": value}
                 for k, v in r.items()
                 for name, value in v.items()}
@@ -691,10 +653,10 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
     df = df.round(3)
 
     # Give a name to the dataframe indexes
-    df.index.names = ["Scenario", "Period", "Combination", "Processor", "Interface"]
+    df.index.names = ["Scenario", "Period", "Processor", "Interface"]
 
     # Sort the dataframe based on indexes. Not necessary, only done for debugging purposes.
-    df = df.sort_index(level=["Scenario", "Period", "Combination", "Processor", "Interface"])
+    df = df.sort_index(level=["Scenario", "Period", "Processor", "Interface"])
 
     # Adding column with interface units
     interface_units = create_dictionary(
