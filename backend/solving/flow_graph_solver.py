@@ -732,14 +732,14 @@ def compute_aggregate_results(tree: nx.DiGraph, params: Dict[str, float]) -> Tup
         if params.get(node) is not None:
             return params[node]
 
-        sum_children = 0
-        has_children = False
+        sum_children = None
 
         for pred in tree.predecessors(node):
-            has_children = True
-            sum_children += compute_node(pred)
+            pred_value = compute_node(pred)
+            if pred_value is not None:
+                sum_children = (0 if sum_children is None else sum_children) + pred_value
 
-        if has_children:
+        if sum_children is not None:
             values[node] = sum_children
 
         return sum_children
