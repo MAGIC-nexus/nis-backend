@@ -55,14 +55,16 @@ class SolvingException(Exception):
 class InterfaceNode:
     registry: PartialRetrievalDictionary = None
 
-    def __init__(self, interface_or_type: Union[Factor, FactorType], processor: Processor = None):
+    def __init__(self, interface_or_type: Union[Factor, FactorType], processor: Processor = None, orientation: str = None):
         if isinstance(interface_or_type, Factor):
-            self.interface = interface_or_type
+            self.interface: Optional[Factor] = interface_or_type
             self.interface_type = self.interface.taxon
-            self.processor = processor if processor else interface_or_type.processor
+            self.orientation: Optional[str] = orientation if orientation else self.interface.orientation
+            self.processor = processor if processor else self.interface.processor
         elif isinstance(interface_or_type, FactorType):
-            self.interface = None
+            self.interface: Optional[Factor] = None
             self.interface_type = interface_or_type
+            self.orientation = orientation
             assert(processor is not None)
             self.processor = processor
         else:
@@ -71,11 +73,41 @@ class InterfaceNode:
 
         self.interface_name: str = interface_or_type.name
         self.processor_name: str = get_processor_name(self.processor, self.registry)
-        self.name: str = self.processor_name + ":" + self.interface_name
+        self.name: str = self.processor_name + ":" + self.interface_name + ":" + self.orientation
 
     @property
-    def names(self):
-        return istr(self.processor_name), istr(self.interface_name)
+    def key(self) -> Tuple:
+        return self.processor_name, self.interface_name, self.orientation
+
+    @staticmethod
+    def key_labels() -> List[str]:
+        return ["Processor", "Interface", "Orientation"]
+
+    @property
+    def unit(self):
+        return self.interface_type.attributes.get('unit')
+
+    @property
+    def roegen_type(self):
+        if self.interface and self.interface.roegen_type:
+            return self.interface.roegen_type.name
+        elif self.interface_type.roegen_type:
+            return self.interface_type.roegen_type.name
+
+    @property
+    def sphere(self):
+        if self.interface and self.interface.sphere:
+            return self.interface.sphere
+        else:
+            return self.interface_type.sphere
+
+    @property
+    def system(self):
+        return self.processor.processor_system
+
+    @property
+    def subsystem(self):
+        return self.processor.subsystem_type
 
     def __str__(self):
         return self.name
@@ -541,7 +573,7 @@ def compute_separated_results(results: Dict[Tuple[str, str, str], Dict[Interface
                 if node.interface.orientation.lower() == 'input':
                     # res = compute resulting vector based on INCOMING flows processor.subsystem_type
                     for in_node, _, data in comp_graph.graph.in_edges(node, data=True):
-                        # edge_value =
+                        edge_value = values[in_node] * data['weight']
                         pass
                 else:
                     # res = compute resulting vector based on OUTCOMING flows processor.subsystem_type
@@ -557,7 +589,7 @@ def compute_interfacetype_aggregates(glb_idx, results):
     def get_sum(processor: Processor, children: Set[FactorType]) -> float:
         sum_children = None
         for child in children:
-            child_value = values.get(InterfaceNode(child, processor))
+            child_value = values.get(InterfaceNode(child, processor, orientation))
             if child_value is None:
                 if child in parent_interfaces:
                     child_value = get_sum(processor, parent_interfaces[child])
@@ -580,14 +612,15 @@ def compute_interfacetype_aggregates(glb_idx, results):
     for key, values in results.items():
         for parent_interface, children_interfaces in parent_interfaces.items():
             for proc in processors:
-                interface_node = InterfaceNode(parent_interface, proc)
+                for orientation in ["Input", "Output"]:
+                    interface_node = InterfaceNode(parent_interface, proc, orientation)
 
-                if values.get(interface_node) is None:
-                    sum_result = get_sum(proc, children_interfaces)
-                    if sum_result is not None:
-                        agg_results.setdefault(key, {}).update({
-                            interface_node: sum_result
-                        })
+                    if values.get(interface_node) is None:
+                        sum_result = get_sum(proc, children_interfaces)
+                        if sum_result is not None:
+                            agg_results.setdefault(key, {}).update({
+                                interface_node: sum_result
+                            })
 
     return agg_results
 
@@ -614,7 +647,9 @@ def get_processor_partof_hierarchies(glb_idx, system):
     return proc_hierarchies
 
 
-def compute_partof_aggregates(glb_idx, systems, results):
+def compute_partof_aggregates(glb_idx: PartialRetrievalDictionary,
+                              systems: Dict[str, Set[Processor]],
+                              results: Dict[Tuple[str, str], Dict[InterfaceNode, float]]):
     agg_results: Dict[Tuple[str, str], Dict[InterfaceNode, float]] = {}
 
     # Get all different existing interfaces and their units
@@ -638,27 +673,34 @@ def compute_partof_aggregates(glb_idx, systems, results):
             for interface in interfaces:
                 print(f"********************* INTERFACE: {interface}")
 
-                interfaced_proc_hierarchy = nx.DiGraph(
-                    incoming_graph_data=[(InterfaceNode(interface, u), InterfaceNode(interface, v)) for u, v in proc_hierarchy.edges]
-                )
+                for orientation in ["Input", "Output"]:
+                    print(f"********************* ORIENTATION: {orientation}")
 
-                for key, values in results.items():
+                    interfaced_proc_hierarchy = nx.DiGraph(
+                        incoming_graph_data=[(InterfaceNode(interface, u, orientation),
+                                              InterfaceNode(interface, v, orientation))
+                                             for u, v in proc_hierarchy.edges]
+                    )
 
-                    filtered_values = {k: values[k] for k in interfaced_proc_hierarchy.nodes
-                                       if values.get(k) is not None}
+                    for key, values in results.items():
 
-                    if len(filtered_values) > 0:
-                        print(f"*** (Scenario, Period = {key})")
+                        filtered_values: Dict[InterfaceNode, float] = {k: values[k]
+                                                                       for k in interfaced_proc_hierarchy.nodes
+                                                                       if values.get(k) is not None}
 
-                        # Aggregate top-down, starting from root
-                        agg_res, error_msg = compute_aggregate_results(interfaced_proc_hierarchy, filtered_values)
+                        if len(filtered_values) > 0:
+                            print(f"*** (Scenario, Period = {key})")
 
-                        if error_msg is not None:
-                            raise SolvingException(
-                                IType.ERROR, f"System: '{system}'. Interface: '{interface.name}'. Error: {error_msg}")
+                            # Aggregate top-down, starting from root
+                            agg_res, error_msg = compute_aggregate_results(interfaced_proc_hierarchy, filtered_values)
 
-                        if len(agg_res) > 0:
-                            agg_results.setdefault(key, {}).update(agg_res)
+                            if error_msg is not None:
+                                raise SolvingException(
+                                    IType.ERROR, f"System: '{system}'. Interface: '{interface.name}'. "
+                                                 f"Orientation: '{orientation}'. Error: {error_msg}")
+
+                            if len(agg_res) > 0:
+                                agg_results.setdefault(key, {}).update(agg_res)
 
     return agg_results
 
@@ -696,9 +738,13 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
     for key, value in agg_results.items():
         results[key].update(value)
 
-    data = {k + node.names: {"Value": value,
-                             "Unit": node.interface_type.attributes.get('unit'),
-                             "Level": node.processor.attributes.get('level', '')}
+    data = {k + node.key: {"Value": value,
+                           "Unit": node.unit,
+                           "Level": node.processor.attributes.get('level', ''),
+                           "System": node.system,
+                           "Subsystem": node.subsystem,
+                           "Sphere": node.sphere,
+                           "RoegenType": node.roegen_type}
             for k, v in results.items()
             for node, value in v.items()}
 
@@ -708,13 +754,11 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
     df = df.round(3)
 
     # Give a name to the dataframe indexes
-    df.index.names = ["Scenario", "Period", "Processor", "Interface"]
+    index_names = ["Scenario", "Period"] + InterfaceNode.key_labels()
+    df.index.names = index_names
 
     # Sort the dataframe based on indexes. Not necessary, only done for debugging purposes.
-    df = df.sort_index(level=["Scenario", "Period", "Processor", "Interface"])
-
-    # Convert a Serie into an Index
-    df.set_index("Level", append=True, inplace=True)
+    df = df.sort_index(level=index_names)
 
     print(df)
 
@@ -727,7 +771,7 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
     return []
 
 
-def compute_aggregate_results(tree: nx.DiGraph, params: Dict[str, float]) -> Tuple[Dict[InterfaceNode, float], Optional[str]]:
+def compute_aggregate_results(tree: nx.DiGraph, params: Dict[InterfaceNode, float]) -> Tuple[Dict[InterfaceNode, float], Optional[str]]:
     def compute_node(node: str) -> float:
         if params.get(node) is not None:
             return params[node]
@@ -755,31 +799,34 @@ def compute_aggregate_results(tree: nx.DiGraph, params: Dict[str, float]) -> Tup
 
 def get_eum_dataset(dataframe: pd.DataFrame) -> "Dataset":
     # EUM columns
-    df = dataframe.query('Interface in ["biofuel", "cropproduction", "fertilizer", "ha", "lu"]')
+    df = dataframe.query('Orientation == "Input" and Interface in ["Biofuel", "CropProduction", "Fertilizer", "HA", "LU"]')
 
     # EUM rows
     df = df.query('Processor in ['
-                  '"society", "society.biodiesel", "society.bioethanol", "society.commerceimports", "society.commerceexports", '
-                  '"society.bioethanol.cereals", '
-                  '"society.bioethanol.cereals.wheat", "society.bioethanol.cereals.maize", '
-                  '"society.bioethanol.cereals.externalwheat", "society.bioethanol.cereals.externalmaize", '
-                  '"society.bioethanol.sugarcrops", '
-                  '"society.bioethanol.sugarcrops.sugarbeet", "society.bioethanol.sugarcrops.sugarcane", '
-                  '"society.bioethanol.sugarcrops.externalsugarbeet", "society.bioethanol.sugarcrops.externalsugarcane", '
-                  '"society.biodiesel.oilcrops", '
-                  '"society.biodiesel.oilcrops.palmoil", "society.biodiesel.oilcrops.rapeseed", "society.biodiesel.oilcrops.soybean", '
-                  '"society.biodiesel.oilcrops.externalpalmoil", "society.biodiesel.oilcrops.externalrapeseed", "society.biodiesel.oilcrops.externalsoybean"'
+                  '"Society", "Society.Biodiesel", "Society.Bioethanol", '
+                  '"Society.CommerceImports", "Society.CommerceExports", '
+                  '"Society.Bioethanol.Cereals", '
+                  '"Society.Bioethanol.Cereals.Wheat", "Society.Bioethanol.Cereals.Maize", '
+                  '"Society.Bioethanol.Cereals.ExternalWheat", "Society.Bioethanol.Cereals.ExternalMaize", '
+                  '"Society.Bioethanol.SugarCrops", '
+                  '"Society.Bioethanol.SugarCrops.SugarBeet", "Society.Bioethanol.SugarCrops.SugarCane", '
+                  '"Society.Bioethanol.SugarCrops.ExternalSugarBeet", "Society.Bioethanol.SugarCrops.ExternalSugarCane", '
+                  '"Society.Biodiesel.OilCrops", '
+                  '"Society.Biodiesel.OilCrops.PalmOil", "Society.Biodiesel.OilCrops.RapeSeed", "Society.Biodiesel.OilCrops.SoyBean", '
+                  '"Society.Biodiesel.OilCrops.ExternalPalmOil", "Society.Biodiesel.OilCrops.ExternalRapeSeed", "Society.Biodiesel.OilCrops.ExternalSoyBean"'
                   ']')
 
     df = df.pivot_table(values="Value", index=["Scenario", "Period", "Processor", "Level"], columns="Interface")
 
     # Adding units to column name
     # TODO: remove hardcoded
-    df = df.rename(columns={"biofuel": "Biofuel (tonnes)",
-                            "cropproduction": "CropProduction (tonnes)",
-                            "fertilizer": "Fertilizer (kg)",
-                            "ha": "HA (h)",
-                            "lu": "LU (ha)"})
+    df = df.rename(columns={"Biofuel": "Biofuel (tonnes)",
+                            "CropProduction": "CropProduction (tonnes)",
+                            "Fertilizer": "Fertilizer (kg)",
+                            "HA": "HA (h)",
+                            "LU": "LU (ha)"})
+
+    print(df)
 
     return get_dataset(df)
 
