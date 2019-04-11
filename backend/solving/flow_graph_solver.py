@@ -26,13 +26,14 @@ Before the elaboration of flow graphs, several preparatory steps:
 
 """
 from _operator import add
+from enum import Enum
 from functools import reduce
 from itertools import chain
 
 import pandas as pd
 import networkx as nx
 # import matplotlib.pyplot as plt
-from typing import Dict, List, Set, Any, Tuple, Union, Optional, NamedTuple, NoReturn, Generator
+from typing import Dict, List, Set, Any, Tuple, Union, Optional, NamedTuple, NoReturn, Generator, Type
 
 from backend.command_generators.parser_ast_evaluators import ast_evaluator
 from backend.command_generators.parser_field_parsers import string_to_ast, expression_with_parameters, is_year, is_month
@@ -120,6 +121,16 @@ class InterfaceNode:
 
     def __hash__(self):
         return hash(repr(self))
+
+
+class Scope(Enum):
+    Total = 1
+    Internal = 2
+    External = 3
+
+
+NodeFloatDict = Dict[InterfaceNode, float]
+ResultDict = Dict[Tuple[str, str, str], NodeFloatDict]
 
 
 @Memoize
@@ -336,8 +347,8 @@ def split_observations_by_relativeness(observations_by_time: TimeObservationsTyp
     return observations_by_time_norelative, observations_by_time_relative
 
 
-def compute_graph_values(comp_graph: ComputationGraph, params: Dict[InterfaceNode, float], other_values: Dict[InterfaceNode, float]) \
-        -> Tuple[Dict[InterfaceNode, float], List[InterfaceNode]]:
+def compute_graph_values(comp_graph: ComputationGraph, params: NodeFloatDict, other_values: NodeFloatDict) \
+        -> Tuple[NodeFloatDict, List[InterfaceNode]]:
     print(f"****** NODES: {comp_graph.nodes}")
 
     # Filter params in graph
@@ -370,7 +381,7 @@ def compute_graph_values(comp_graph: ComputationGraph, params: Dict[InterfaceNod
 
     results, _ = comp_graph.compute_values(compute_nodes, graph_params)
 
-    results_with_values: Dict[InterfaceNode, float] = {}
+    results_with_values: NodeFloatDict = {}
     unknown_nodes: List[InterfaceNode] = []
     for k, v in results.items():
         if v is not None:
@@ -395,11 +406,14 @@ class Edge(NamedTuple):
     weight: Optional[str]
 
 
-def create_factor_edges(glb_idx, musiasem_class: type, attributes: Tuple[str, str, str]) \
+FactorsRelationClassType = Type[Union[FactorsRelationDirectedFlowObservation, FactorsRelationScaleObservation]]
+
+
+def create_factor_edges(glb_idx, factors_relation_class: FactorsRelationClassType, attributes: Tuple[str, str, str]) \
         -> Generator[Tuple[InterfaceNode, InterfaceNode, Dict], None, None]:
     edges: List[Tuple[Factor, Factor, Optional[str]]] = \
         [(getattr(r, attributes[0]), getattr(r, attributes[1]), getattr(r, attributes[2]))
-         for r in glb_idx.get(musiasem_class.partial_key())]
+         for r in glb_idx.get(factors_relation_class.partial_key())]
 
     for src, dst, weight in edges:
         src_node = InterfaceNode(src)
@@ -417,7 +431,8 @@ def resolve_weight_expressions(graph_list: List[nx.DiGraph], state: State, raise
             if expression is not None:
                 value, ast, params, issues = evaluate_numeric_expression_with_parameters(expression, state)
                 if raise_error and value is None:
-                    raise SolvingException(IType.ERROR,
+                    raise SolvingException(
+                        IType.ERROR,
                         f"Cannot evaluate expression "
                         f"'{expression}' for weight from interface '{u}' to interface '{v}'. Params: {params}. "
                         f"Issues: {', '.join(issues)}"
@@ -426,11 +441,11 @@ def resolve_weight_expressions(graph_list: List[nx.DiGraph], state: State, raise
                 data["weight"] = ifnull(value, ast)
 
 
-def iterative_solving(comp_graph_list: List[ComputationGraph], observations: Dict[InterfaceNode, float]):
+def iterative_solving(comp_graph_list: List[ComputationGraph], observations: NodeFloatDict):
     num_unknown_nodes: int = reduce(add, [len(g.nodes) for g in comp_graph_list])
     prev_num_unknown_nodes: int = num_unknown_nodes + 1
-    params: List[Optional[Dict[InterfaceNode, float]]] = [None] * len(comp_graph_list)
-    other_values: List[Dict[InterfaceNode, float]] = [{}] * len(comp_graph_list)
+    params: List[Optional[NodeFloatDict]] = [None] * len(comp_graph_list)
+    other_values: List[NodeFloatDict] = [{}] * len(comp_graph_list)
     unknown_nodes: List[List[InterfaceNode]] = [[]] * len(comp_graph_list)
     data = {}
     all_data = {}
@@ -485,7 +500,7 @@ def compute_flow_results(state: State, glb_idx, global_parameters, problem_state
     # First pass to resolve weight expressions: only expressions without parameters can be solved
     resolve_weight_expressions([relations_flow, relations_scale], state)
 
-    results: Dict[Tuple[str, str], Dict[InterfaceNode, float]] = {}
+    results: ResultDict = {}
 
     for scenario_name, scenario_params in problem_statement.scenarios.items():  # type: str, dict
         print(f"********************* SCENARIO: {scenario_name}")
@@ -495,7 +510,7 @@ def compute_flow_results(state: State, glb_idx, global_parameters, problem_state
         for time_period, observations in time_observations_absolute.items():
             print(f"********************* TIME PERIOD: {time_period}")
 
-            known_observations: Dict[InterfaceNode, float] = {}
+            known_observations: NodeFloatDict = {}
             # Create a copy of the main relations structures that are modified with time-dependent values
             time_relations_flow = relations_flow.copy()
             time_relations_scale = relations_scale.copy()
@@ -552,36 +567,62 @@ def compute_flow_results(state: State, glb_idx, global_parameters, problem_state
 
             comp_graph_scale = ComputationGraph(time_relations_scale)
 
-            results[(scenario_name, time_period)] = {**known_observations}
-
             data, unknown_data = iterative_solving([comp_graph_scale, comp_graph_flow], known_observations)
 
             print(f"Unknown data: {unknown_data}")
-            results[(scenario_name, time_period)].update(data)
+            data = {**known_observations, **data}
+            results[(scenario_name, time_period, Scope.Total.name)] = data
 
             # TODO INDICATORS
+
+            internal_data, external_data = compute_separated_results(data, comp_graph_flow)
+            if len(external_data) > 0:
+                results[(scenario_name, time_period, Scope.External.name)] = external_data
+
+            if len(internal_data) > 0:
+                results[(scenario_name, time_period, Scope.Internal.name)] = internal_data
 
     return results
 
 
-def compute_separated_results(results: Dict[Tuple[str, str, str], Dict[InterfaceNode, float]], comp_graph: ComputationGraph):
-    for scenario_time, values in results.items():
-        for node, value in values.items():
+def compute_separated_results(values: NodeFloatDict, comp_graph: ComputationGraph) -> Tuple[NodeFloatDict, NodeFloatDict]:
+    internal_results: NodeFloatDict = {}
+    external_results: NodeFloatDict = {}
+    for node, value in values.items():
 
-            res = []
-            if node in comp_graph.graph and node.interface:
-                if node.interface.orientation.lower() == 'input':
-                    # res = compute resulting vector based on INCOMING flows processor.subsystem_type
-                    for in_node, _, data in comp_graph.graph.in_edges(node, data=True):
-                        edge_value = values[in_node] * data['weight']
-                        pass
-                else:
-                    # res = compute resulting vector based on OUTCOMING flows processor.subsystem_type
-                    pass
+        if node in comp_graph.graph:
+            if node.orientation.lower() == 'input':
+                # res = compute resulting vector based on INCOMING flows processor.subsystem_type
+                edges: Set[Tuple[InterfaceNode, InterfaceNode, Dict]] = comp_graph.graph.in_edges(node, data=True)
+            else:
+                # res = compute resulting vector based on OUTCOMING flows processor.subsystem_type
+                edges: Set[Tuple[InterfaceNode, InterfaceNode, Dict]] = comp_graph.graph.out_edges(node, data=True)
 
-            if len(res) == 0:
-                # res = compute resulting vector based on containing PROCESSOR
-                pass
+            external_value: Optional[float] = None
+            internal_value: Optional[float] = None
+            for opposite_node, _, data in edges:
+                if data['weight'] and opposite_node in values:
+                    edge_value = values[opposite_node] * data['weight']
+
+                    if opposite_node.subsystem.lower() in ["external", "externalenvironment"]:
+                        external_value = (0.0 if external_value is None else external_value) + edge_value
+                    else:
+                        internal_value = (0.0 if internal_value is None else internal_value) + edge_value
+
+            if external_value is not None:
+                external_results[node] = external_value
+
+            if internal_value is not None:
+                internal_results[node] = internal_value
+
+        if node not in external_results and node not in internal_results:
+            # res = compute resulting vector based on containing PROCESSOR
+            if node.subsystem.lower() in ["external", "externalenvironment"]:
+                external_results[node] = value
+            else:
+                internal_results[node] = value
+
+    return internal_results, external_results
 
 
 def compute_interfacetype_aggregates(glb_idx, results):
@@ -602,7 +643,7 @@ def compute_interfacetype_aggregates(glb_idx, results):
 
         return sum_children
 
-    agg_results: Dict[Tuple[str, str, str], Dict[InterfaceNode, float]] = {}
+    agg_results: ResultDict = {}
     processors: Set[Processor] = {node.processor for values in results.values() for node in values}
 
     # Get all different existing interfaces types that can be computed based on children interface types
@@ -649,8 +690,8 @@ def get_processor_partof_hierarchies(glb_idx, system):
 
 def compute_partof_aggregates(glb_idx: PartialRetrievalDictionary,
                               systems: Dict[str, Set[Processor]],
-                              results: Dict[Tuple[str, str], Dict[InterfaceNode, float]]):
-    agg_results: Dict[Tuple[str, str], Dict[InterfaceNode, float]] = {}
+                              results: ResultDict):
+    agg_results: ResultDict = {}
 
     # Get all different existing interfaces and their units
     # TODO: interfaces could need a unit transformation according to interface type
@@ -664,14 +705,14 @@ def compute_partof_aggregates(glb_idx: PartialRetrievalDictionary,
         # Iterate over all independent trees created by the PartOf relations
         for component in nx.weakly_connected_components(proc_hierarchies):
             proc_hierarchy: nx.DiGraph = proc_hierarchies.subgraph(component)
-            print(f"********************* HIERARCHY: {proc_hierarchy.nodes}")
+            print(f"********************* HIERARCHY: {[p.name for p in proc_hierarchy.nodes]}")
 
             # plt.figure(1, figsize=(8, 8))
             # nx.draw_spring(proc_hierarchy, with_labels=True, font_size=8, node_size=60)
             # plt.show()
 
             for interface in interfaces:
-                print(f"********************* INTERFACE: {interface}")
+                print(f"********************* INTERFACE: {interface.name}")
 
                 for orientation in ["Input", "Output"]:
                     print(f"********************* ORIENTATION: {orientation}")
@@ -684,12 +725,12 @@ def compute_partof_aggregates(glb_idx: PartialRetrievalDictionary,
 
                     for key, values in results.items():
 
-                        filtered_values: Dict[InterfaceNode, float] = {k: values[k]
-                                                                       for k in interfaced_proc_hierarchy.nodes
-                                                                       if values.get(k) is not None}
+                        filtered_values: NodeFloatDict = {k: values[k]
+                                                          for k in interfaced_proc_hierarchy.nodes
+                                                          if values.get(k) is not None}
 
                         if len(filtered_values) > 0:
-                            print(f"*** (Scenario, Period = {key})")
+                            print(f"*** (Results key = {key})")
 
                             # Aggregate top-down, starting from root
                             agg_res, error_msg = compute_aggregate_results(interfaced_proc_hierarchy, filtered_values)
@@ -754,7 +795,7 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
     df = df.round(3)
 
     # Give a name to the dataframe indexes
-    index_names = ["Scenario", "Period"] + InterfaceNode.key_labels()
+    index_names = ["Scenario", "Period", "Scope"] + InterfaceNode.key_labels()
     df.index.names = index_names
 
     # Sort the dataframe based on indexes. Not necessary, only done for debugging purposes.
@@ -771,7 +812,7 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
     return []
 
 
-def compute_aggregate_results(tree: nx.DiGraph, params: Dict[InterfaceNode, float]) -> Tuple[Dict[InterfaceNode, float], Optional[str]]:
+def compute_aggregate_results(tree: nx.DiGraph, params: NodeFloatDict) -> Tuple[NodeFloatDict, Optional[str]]:
     def compute_node(node: str) -> float:
         if params.get(node) is not None:
             return params[node]
@@ -788,33 +829,38 @@ def compute_aggregate_results(tree: nx.DiGraph, params: Dict[InterfaceNode, floa
 
         return sum_children
 
-    root_nodes = [node for node, degree in tree.out_degree() if degree == 0]
+    root_nodes = [node for node, degree in tree.out_degree if degree == 0]
     if len(root_nodes) != 1 or root_nodes[0] is None:
         return {}, f"Root node cannot be taken from list '{root_nodes}'"
 
-    values: Dict[InterfaceNode, float] = {}
+    values: NodeFloatDict = {}
     compute_node(root_nodes[0])
     return values, None
 
 
 def get_eum_dataset(dataframe: pd.DataFrame) -> "Dataset":
     # EUM columns
-    df = dataframe.query('Orientation == "Input" and Interface in ["Biofuel", "CropProduction", "Fertilizer", "HA", "LU"]')
+    df = dataframe.query('Orientation == "Input" and '
+                         'Interface in ["Biofuel", "CropProduction", "Fertilizer", "HA", "LU"]')
 
     # EUM rows
-    df = df.query('Processor in ['
-                  '"Society", "Society.Biodiesel", "Society.Bioethanol", '
-                  '"Society.CommerceImports", "Society.CommerceExports", '
-                  '"Society.Bioethanol.Cereals", '
-                  '"Society.Bioethanol.Cereals.Wheat", "Society.Bioethanol.Cereals.Maize", '
-                  '"Society.Bioethanol.Cereals.ExternalWheat", "Society.Bioethanol.Cereals.ExternalMaize", '
-                  '"Society.Bioethanol.SugarCrops", '
-                  '"Society.Bioethanol.SugarCrops.SugarBeet", "Society.Bioethanol.SugarCrops.SugarCane", '
-                  '"Society.Bioethanol.SugarCrops.ExternalSugarBeet", "Society.Bioethanol.SugarCrops.ExternalSugarCane", '
-                  '"Society.Biodiesel.OilCrops", '
-                  '"Society.Biodiesel.OilCrops.PalmOil", "Society.Biodiesel.OilCrops.RapeSeed", "Society.Biodiesel.OilCrops.SoyBean", '
-                  '"Society.Biodiesel.OilCrops.ExternalPalmOil", "Society.Biodiesel.OilCrops.ExternalRapeSeed", "Society.Biodiesel.OilCrops.ExternalSoyBean"'
-                  ']')
+    df = df.query(
+        'Processor in ['
+        '"Society", "Society.Biodiesel", "Society.Bioethanol", '
+        '"Society.CommerceImports", "Society.CommerceExports", '
+        '"Society.Bioethanol.Cereals", '
+        '"Society.Bioethanol.Cereals.Wheat", "Society.Bioethanol.Cereals.Maize", '
+        '"Society.Bioethanol.Cereals.ExternalWheat", "Society.Bioethanol.Cereals.ExternalMaize", '
+        '"Society.Bioethanol.SugarCrops", '
+        '"Society.Bioethanol.SugarCrops.SugarBeet", "Society.Bioethanol.SugarCrops.SugarCane", '
+        '"Society.Bioethanol.SugarCrops.ExternalSugarBeet", "Society.Bioethanol.SugarCrops.ExternalSugarCane", '
+        '"Society.Biodiesel.OilCrops", '
+        '"Society.Biodiesel.OilCrops.PalmOil", "Society.Biodiesel.OilCrops.RapeSeed", '
+        '"Society.Biodiesel.OilCrops.SoyBean", '
+        '"Society.Biodiesel.OilCrops.ExternalPalmOil", "Society.Biodiesel.OilCrops.ExternalRapeSeed", '
+        '"Society.Biodiesel.OilCrops.ExternalSoyBean"'
+        ']'
+    )
 
     df = df.pivot_table(values="Value", index=["Scenario", "Period", "Processor", "Level"], columns="Interface")
 
