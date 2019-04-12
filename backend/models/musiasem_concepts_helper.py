@@ -1,4 +1,4 @@
-from typing import Union, List, Tuple, Optional, Any, Dict
+from typing import Union, List, Tuple, Optional, Any, Dict, Set
 
 import jsonpickle
 
@@ -13,7 +13,8 @@ from backend.models.musiasem_concepts import \
     ProcessorsRelationPartOfObservation, ProcessorsRelationUndirectedFlowObservation, \
     ProcessorsRelationUpscaleObservation, \
     FactorsRelationDirectedFlowObservation, Hierarchy, Taxon, \
-    FactorQuantitativeObservation, HierarchyLevel, Geolocation, FactorsRelationScaleObservation
+    FactorQuantitativeObservation, HierarchyLevel, Geolocation, FactorsRelationScaleObservation, \
+    FactorTypesRelationUnidirectionalLinearTransformObservation
 from backend.models.statistical_datasets import CodeList, CodeListLevel, Code
 
 
@@ -887,15 +888,59 @@ def _create_or_append_quantitative_observation(factor: Factor,
     return fo
 
 
-def _get_observer(observer: Union[str, Observer], idx: PartialRetrievalDictionary) -> Observer:
+def _get_observer(observer: Union[str, Observer], registry: PartialRetrievalDictionary) -> Optional[Observer]:
     res = None
     if isinstance(observer, Observer):
         res = observer
     else:
-        oer = idx.get(Observer.partial_key(name=observer))
+        oer = registry.get(Observer.partial_key(name=observer))
         if oer:
             res = oer[0]
     return res
+
+
+def find_or_create_observer(observer: str, registry: PartialRetrievalDictionary) -> Observer:
+    # Find
+    obs = _get_observer(observer, registry)
+
+    if not obs:
+        # Create
+        obs = Observer(observer)
+        registry.put(obs.key(), obs)
+
+    return obs
+
+
+def find_factor_type_scale_relation(registry: PartialRetrievalDictionary,
+                                    origin_interface_type: FactorType, destination_interface_type: FactorType,
+                                    origin_context: Processor, destination_context: Processor):
+    """We try to get the best match from the existing factor types scales"""
+
+    def get_relations_from_contexts(orig=None, dest=None) -> Set[FactorTypesRelationUnidirectionalLinearTransformObservation]:
+        return registry.get(FactorTypesRelationUnidirectionalLinearTransformObservation.partial_key(
+            origin=origin_interface_type, destination=destination_interface_type,
+            origin_context=orig, destination_context=dest))
+
+    # 1. Do we have a relation with same origin and destination context?
+    if origin_context and destination_context:
+        relations = get_relations_from_contexts(orig=origin_context, dest=destination_context)
+        if len(relations) > 0:
+            return relations
+
+    # 2. Do we have a relation with same origin context?
+    if origin_context:
+        relations = get_relations_from_contexts(orig=origin_context)
+        if len(relations) > 0:
+            return relations
+
+    # 3. Do we have a relation with same destination context?
+    if destination_context:
+        relations = get_relations_from_contexts(dest=destination_context)
+        if len(relations) > 0:
+            return relations
+
+    # 4. Do we have a relation without contexts?
+    return get_relations_from_contexts()
 
 
 def _find_or_create_relation(origin, destination, rel_type: Union[str, RelationClassType], oer: Union[Observer, str], weight: str, state: Union[State, PartialRetrievalDictionary], attributes=None):

@@ -1,10 +1,12 @@
 import json
+from typing import NoReturn, Optional
 
 from backend.command_generators import Issue, IssueLocation, IType
 from backend.common.helper import strcmp
 from backend.model_services import IExecutableCommand, get_case_study_registry_objects
 from backend.models.musiasem_concepts import Observer, FactorTypesRelationUnidirectionalLinearTransformObservation, \
-    FactorType
+    FactorType, Processor
+from models.musiasem_concepts_helper import find_or_create_observer, find_processor_by_name
 
 
 class ScaleConversionV2Command(IExecutableCommand):
@@ -13,6 +15,40 @@ class ScaleConversionV2Command(IExecutableCommand):
         self._content = None
 
     def execute(self, state: "State"):
+        def add_issue(itype: IType, description: str) -> NoReturn:
+            issues.append(Issue(itype=itype,
+                                description=description,
+                                location=IssueLocation(sheet_name=name, row=r, column=None)))
+
+        def get_factor_type(hierarchy_name: str, interface_type_name: str, orig_or_dest: str) -> Optional[FactorType]:
+            if not interface_type_name:
+                add_issue(IType.ERROR, f"The {orig_or_dest} interface type name has not been specified")
+                return None
+
+            # Check if FactorType exists
+            ft_list = glb_idx.get(FactorType.partial_key(interface_type_name))
+            if len(ft_list) > 0:
+                if len(ft_list) == 1:
+                    return ft_list[0]
+                else:
+                    if not hierarchy_name:
+                        add_issue(IType.ERROR,
+                                  f"The hierarchy of the {orig_or_dest} interface type {interface_type_name} "
+                                  f"has not been specified and this name is not unique")
+                        return None
+
+                    for ft in ft_list:
+                        if strcmp(ft.hierarchy.name, hierarchy_name):
+                            return ft
+
+        def get_processor(processor_name: str) -> Optional[Processor]:
+            processor = find_processor_by_name(state=glb_idx, processor_name=processor_name)
+
+            if not processor:
+                add_issue(IType.ERROR, f"The processor '{processor_name}' has not been previously declared.")
+
+            return processor
+
         def process_line(item):
             sc_src_hierarchy = item.get("source_hierarchy")
             sc_src_interface_type = item.get("source_interface_type")
@@ -24,58 +60,35 @@ class ScaleConversionV2Command(IExecutableCommand):
             sc_src_unit = item.get("source_unit")
             sc_tgt_unit = item.get("target_unit")
 
-            # Check the existence of the interface types
+            origin_interface_type = get_factor_type(sc_src_hierarchy, sc_src_interface_type, "origin")
+            destination_interface_type = get_factor_type(sc_tgt_hierarchy, sc_tgt_interface_type, "destination")
 
-            force_create = True
-            if force_create:
-                pass
-
-            # Check if FactorTypes exist
-            fts = []
-            for i, (hierarchy, interface_type) in enumerate([(sc_src_hierarchy, sc_src_interface_type),
-                                                             (sc_tgt_hierarchy, sc_tgt_interface_type)]):
-                m = "origin" if i == 0 else "destination"
-                if not interface_type:
-                    issues.append(Issue(itype=IType.ERROR,
-                                        description="The "+m+ "interface type name has not been specified",
-                                        location=IssueLocation(sheet_name=name, row=r, column=None)))
-                    return
-
-                # Check if FactorType exists
-                ft = glb_idx.get(FactorType.partial_key(interface_type))
-                if len(ft) > 0:
-                    if len(ft) == 1:
-                        fts.append(ft[0])
-                    else:
-                        if not hierarchy:
-                            issues.append(Issue(itype=IType.ERROR,
-                                                description="The hierarchy of the " + m + "interface type name has not been specified and the interface type name is not unique",
-                                                location=IssueLocation(sheet_name=name, row=r, column=None)))
-                            return
-
-                        for ft2 in ft:
-                            if strcmp(ft2.hierarchy.name, hierarchy):
-                                fts.append(ft2)
-
-            if len(fts) != 2:
-                issues.append(Issue(itype=IType.ERROR,
-                                    description="Found "+str(len(fts))+" interface types in the specification of a scale change",
-                                    location=IssueLocation(sheet_name=name, row=r, column=None)))
+            if not origin_interface_type or not destination_interface_type:
                 return
 
+            origin_processor: Optional[Processor] = None
+            if sc_src_context:
+                origin_processor = get_processor(sc_src_context)
+                if not origin_processor:
+                    return
+
+            destination_processor: Optional[Processor] = None
+            if sc_tgt_context:
+                destination_processor = get_processor(sc_tgt_context)
+                if not destination_processor:
+                    return
+
             # Check that the interface types are from different hierarchies (warn if not; not error)
-            if fts[0].hierarchy == fts[1].hierarchy:
-                issues.append(Issue(itype=IType.WARNING,
-                                    description="The interface types '"+fts[0].name+"' and '"+fts[1].name+"' are in the same hierarchy",
-                                    location=IssueLocation(sheet_name=name, row=r, column=None)))
+            if origin_interface_type.hierarchy == destination_interface_type.hierarchy:
+                add_issue(IType.WARNING, f"The interface types '{origin_interface_type.name}' and "
+                                         f"'{destination_interface_type.name}' are in the same hierarchy")
 
             # Create the directed Scale (Linear "Transformation") Relationship
-            origin = fts[0]
-            destination = fts[1]
-            FactorTypesRelationUnidirectionalLinearTransformObservation.\
-                create_and_append(origin, destination, sc_scale,
-                                  sc_src_context, sc_tgt_context,
-                                  Observer.no_observer_specified)
+            o = FactorTypesRelationUnidirectionalLinearTransformObservation.create_and_append(
+                origin_interface_type, destination_interface_type, sc_scale, origin_processor, destination_processor,
+                sc_src_unit, sc_tgt_unit, find_or_create_observer(Observer.no_observer_specified, glb_idx))
+
+            glb_idx.put(o.key(), o)
 
         issues = []
         glb_idx, p_sets, hh, datasets, mappings = get_case_study_registry_objects(state)

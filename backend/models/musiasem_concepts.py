@@ -1930,37 +1930,35 @@ class FactorsRelationObservation(RelationObservation, Encodable):  # Just base o
         return d
 
 
-class FactorTypesLT_Specific(Encodable):
-    def __init__(self, alpha: Union[float, str], origin_unit: str=None, dest_unit: str=None,
-                 src_proc_context_qry: str=None, dst_proc_context_qry: str=None,
-                 observer: Observer=None):
-        """
-        A specific "alpha" to perform a linear change of scale between an origin FactorType and a destination FactorType
-        It can contain the context where this "alpha" can be applied. The context -for now- is relative to the known FactorType:
-        *
-        :param alpha:
-        :param origin_unit:
-        :param dest_unit:
-        :param src_proc_context_qry:
-        :param dst_proc_context_qry:
-        :param observer:
-        """
-        self.alpha = alpha
+class FactorTypesConverter(Encodable):
+    def __init__(self, scale: Union[float, str], origin_unit: str = None, destination_unit: str = None):
+        self.scale = scale
         self.origin_unit = origin_unit
-        self.dest_unit = dest_unit
-        self.src_proc_context_qry = src_proc_context_qry
-        self.dst_proc_context_qry = dst_proc_context_qry
-        self.observer = observer
+        self.destination_unit = destination_unit
 
     def encode(self):
         return {
-            "alpha": self.alpha,
+            "scale": self.scale,
             "origin_unit": self.origin_unit,
-            "dest_unit": self.dest_unit,
-            "src_proc_context_qry": self.src_proc_context_qry,
-            "dst_proc_context_qry": self.dst_proc_context_qry,
-            "observer": name_and_id_dict(self.observer)
+            "destination_unit": self.destination_unit
         }
+
+    def convert(self, value: float, source_unit: str, target_unit: str) -> float:
+        quantity = value * ureg(source_unit)
+
+        if self.origin_unit and self.origin_unit.lower() != source_unit.lower():
+            # Transform input value from source_unit to origin_unit
+            quantity.ito(ureg(self.origin_unit))
+
+        result = quantity.magnitude * self.scale
+
+        if self.destination_unit and self.destination_unit.lower() != target_unit.lower():
+            # Transform result from destination_unit to target_unit
+            quantity = result * ureg(self.destination_unit)
+            quantity.ito(ureg(target_unit))
+            result = quantity.magnitude
+
+        return result
 
 
 class FactorTypesRelationUnidirectionalLinearTransformObservation(FactorTypesRelationObservation, Encodable):
@@ -1970,18 +1968,20 @@ class FactorTypesRelationUnidirectionalLinearTransformObservation(FactorTypesRel
     This relation will be applied to Factors which are instances of the origin FactorTypes, to obtain destination
     FactorTypes
     """
-    def __init__(self, origin: FactorType, destination: FactorType, generate_back_flow: bool=False, weight: Union[float, str]=None, origin_context=None, destination_context=None, observer: Observer=None, tags=None, attributes=None):
+    def __init__(self, origin: FactorType, destination: FactorType, weight: Union[float, str] = None,
+                 origin_context: Processor = None, destination_context: Processor = None, origin_unit=None,
+                 destination_unit=None, observer: Observer = None, tags=None, attributes=None):
         Taggable.__init__(self, tags)
         Qualifiable.__init__(self, attributes)
         Automatable.__init__(self)
-        # TODO Back flow with proportional weight?? or weight "1.0"?
-        self._generate_back_flow = generate_back_flow  # True: generate a FactorsRelationDirectedFlowObservation in the opposite direction, if not already existent
-        self._scales = []  # type: List[FactorTypesLT_Specific]
+
         if weight:
-            tmp = FactorTypesLT_Specific(weight, origin_unit=None, dest_unit=None, )
+            self.converter = FactorTypesConverter(weight, origin_unit, destination_unit)
+        else:
+            self.converter = None
+
         self._origin = origin
         self._destination = destination
-        self._weight = weight
         self._observer = observer
         self._origin_context = origin_context
         self._destination_context = destination_context
@@ -1993,22 +1993,27 @@ class FactorTypesRelationUnidirectionalLinearTransformObservation(FactorTypesRel
             "origin": name_and_id_dict(self.origin),
             "destination": name_and_id_dict(self.destination),
             "observer": name_and_id_dict(self.observer),
-            "weight": self._weight,
-            "generate_back_flow": self._generate_back_flow,
-            "scales": self._scales,
+            "converter": self.converter,
             "origin_context": self._origin_context,
-            "destination_context": self._destination_context
+            "destination_context": self._destination_context,
+            "origin_unit": self._origin_unit,
+            "destination_unit": self._destination_unit
         })
 
         return d
 
     @staticmethod
-    def create_and_append(origin: FactorType, destination: FactorType, weight, origin_context=None, destination_context=None, observer: Observer=None, tags=None, attributes=None):
-        o = FactorTypesRelationUnidirectionalLinearTransformObservation(origin, destination, weight, origin_context, destination_context, observer, tags, attributes)
-        if origin:
-            origin.observations_append(o)
-        if destination:
-            destination.observations_append(o)
+    def create_and_append(origin: FactorType, destination: FactorType, weight, origin_context: Processor = None,
+                          destination_context: Processor = None, origin_unit=None, destination_unit=None,
+                          observer: Observer = None, tags=None, attributes=None):
+        o = FactorTypesRelationUnidirectionalLinearTransformObservation(
+            origin, destination, weight, origin_context, destination_context,
+            origin_unit, destination_unit, observer, tags, attributes)
+
+        # if origin:
+        #     origin.observations_append(o)
+        # if destination:
+        #     destination.observations_append(o)
         if observer:
             observer.observables_append(origin)
             observer.observables_append(destination)
@@ -2027,7 +2032,8 @@ class FactorTypesRelationUnidirectionalLinearTransformObservation(FactorTypesRel
         return self._observer
 
     @staticmethod
-    def partial_key(origin: FactorType=None, destination: FactorType=None, observer: Observer=None):
+    def partial_key(origin: FactorType = None, destination: FactorType = None,
+                    origin_context: Processor = None, destination_context: Processor = None, observer: Observer = None):
         d = {"_t": RelationClassType.ftft_directed_linear_transform.name}
         if origin:
             d["__o"] = origin.ident
@@ -2038,11 +2044,24 @@ class FactorTypesRelationUnidirectionalLinearTransformObservation(FactorTypesRel
         if observer:
             d["__oer"] = observer.ident
 
+        if origin_context:
+            d["__oc"] = origin_context.ident
+
+        if destination_context:
+            d["__dc"] = destination_context.ident
+
         return d
 
     def key(self):
         d = {"_t": RelationClassType.ftft_directed_linear_transform.name,
              "__o": self._origin.ident, "__d": self._destination.ident}
+
+        if self._origin_context:
+            d["__oc"] = self._origin_context.ident
+
+        if self._destination_context:
+            d["__dc"] = self._destination_context.ident
+
         if self._observer:
             d["__oer"] = self._observer.ident
         return d

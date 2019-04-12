@@ -566,6 +566,22 @@ class TestCommandFiles(unittest.TestCase):
         # Close interactive session
         isess.close_db_session()
 
+    def test_027_solving_it2it(self):
+        file_path = os.path.dirname(
+            os.path.abspath(__file__)) + "/z_input_files/v2/15_graph_solver_euro_example.xlsx"
+
+        isess = execute_file(file_path, generator_type="spreadsheet")
+
+        issues = prepare_and_solve_model(isess.state)
+        for idx, issue in enumerate(issues):
+            print(f"Issue {idx + 1}/{len(issues)} = {issue}")
+
+        # Check State of things
+        glb_idx, p_sets, hh, datasets, mappings = get_case_study_registry_objects(isess.state)
+
+        # Close interactive session
+        isess.close_db_session()
+
 
 if __name__ == '__main__':
     is_fao_test = False
@@ -596,4 +612,5 @@ if __name__ == '__main__':
         #i.test_023_solving()
         #i.test_024_maddalena_dataset()
         #i.test_025()
-        i.test_026_NL_ES()
+        # i.test_026_NL_ES()
+        i.test_027_solving_it2it()

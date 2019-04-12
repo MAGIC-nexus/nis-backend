@@ -11,9 +11,10 @@ from backend.command_generators.parser_field_parsers import string_to_ast, proce
 from backend.common.helper import strcmp
 from backend.model_services import IExecutableCommand, get_case_study_registry_objects
 from backend.models.musiasem_concepts import FactorType, Factor, FactorInProcessorType, \
-    RelationClassType, Parameter, Processor
+    RelationClassType, Parameter, Processor, FactorTypesRelationUnidirectionalLinearTransformObservation, \
+    FactorTypesConverter
 from backend.models.musiasem_concepts_helper import create_relation_observations, find_processor_by_name, \
-    find_or_create_factor
+    find_or_create_factor, find_factor_type_scale_relation
 from backend.solving import get_processor_names_to_processors_dictionary
 
 
@@ -266,7 +267,7 @@ class RelationshipsCommand(IExecutableCommand):
                 add_issue(IType.ERROR, f"The target processor '{r_target_processor_name}' doesn't exist.")
                 return
 
-            change_type_scale = None
+            change_type_scale: Optional[FactorTypesConverter] = None
 
             if not between_processors:
                 # Look for source and target Interfaces
@@ -296,15 +297,25 @@ class RelationshipsCommand(IExecutableCommand):
                         return
 
                 if source_interface.taxon != target_interface.taxon:
-                    # TODO When different interface types are connected, a scales path should exist (to transform from one type to the other)
-                    # TODO Check this and change the type (then, when Scale transform is applied, it will automatically be considered)
                     if not r_change_type_scale:
-                        add_issue(IType.ERROR, f"Interface types are not the same (and transformation from one "
-                                               f"to the other cannot be performed). Origin: "
-                                               f"{source_interface.taxon.name}; Target: {target_interface.taxon.name}")
-                        return
+                        # Check if a scale change has been specified
+                        scale_relations = find_factor_type_scale_relation(
+                            glb_idx, source_interface.taxon, target_interface.taxon, source_processor, target_processor)
+
+                        if len(scale_relations) == 0:
+                            add_issue(IType.ERROR, f"Interface types are not the same (and transformation from one "
+                                                   f"to the other cannot be performed). Origin: "
+                                                   f"{source_interface.taxon.name}; Target: {target_interface.taxon.name}")
+                            return
+                        elif len(scale_relations) > 1:
+                            add_issue(IType.ERROR,
+                                      f"Multiple transformations can be applied between interfaces. Origin: "
+                                      f"{source_interface.taxon.name}; Target: {target_interface.taxon.name}")
+                            return
+                        else:
+                            change_type_scale = scale_relations[0].converter
                     else:
-                        change_type_scale = r_change_type_scale
+                        change_type_scale = FactorTypesConverter(r_change_type_scale)
 
             # TODO Pass full "attributes" dictionary
             # Pass "change_type_scale" as attribute
