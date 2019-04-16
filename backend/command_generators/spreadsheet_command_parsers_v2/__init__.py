@@ -3,7 +3,7 @@ from typing import List, Tuple, Optional, Dict
 from openpyxl.worksheet.worksheet import Worksheet
 
 from backend import CommandField, IssuesLabelContentTripleType, AreaTupleType
-from backend.command_generators import Issue, parser_field_parsers, IssueLocation
+from backend.command_generators import Issue, parser_field_parsers, IssueLocation, IType
 
 
 def check_columns(sh, name: str, area: Tuple, cols: List[CommandField], command_name: str, ignore_not_found=False):
@@ -42,7 +42,7 @@ def check_columns(sh, name: str, area: Tuple, cols: List[CommandField], command_
                 # Column Name to Column Index
                 if not col.many_appearances:  # Column appears once
                     if col in col_map:
-                        issues.append(Issue(itype=3,
+                        issues.append(Issue(itype=IType.ERROR,
                                             description="The column '"+col.name+"' should not appear more than one time",
                                             location=IssueLocation(sheet_name=name, row=1, column=c)))
                     col_map[col] = [(col_name, c)]
@@ -56,12 +56,12 @@ def check_columns(sh, name: str, area: Tuple, cols: List[CommandField], command_
                 break
         else:  # No match for the column "col_name"
             if not ignore_not_found:
-                issues.append(Issue(itype=3,
+                issues.append(Issue(itype=IType.ERROR,
                                     description="The column name '" + col_name + "' does not match any of the allowed column names for the command '" + command_name + "'",
                                     location=IssueLocation(sheet_name=name, row=1, column=c)))
 
     if len(mandatory_not_found) > 0:
-        issues.append(Issue(itype=3,
+        issues.append(Issue(itype=IType.ERROR,
                             description="Mandatory columns: " + ", ".join(
                                 mandatory_not_found) + " have not been specified",
                             location=IssueLocation(sheet_name=name, row=1, column=None)))
@@ -103,7 +103,7 @@ def parse_command(sh: Worksheet, area: AreaTupleType, name: Optional[str], cmd_n
     ##col_map, local_issues = check_columns(sh_dict, name, area, cols, cmd_name)
     col_map, local_issues = check_columns(sh, name, area, cols, cmd_name)
 
-    if any([i.itype == 3 for i in local_issues]):
+    if any([i.itype == IType.ERROR for i in local_issues]):
         return local_issues, None, None
 
     issues.extend(local_issues)
@@ -130,7 +130,7 @@ def parse_command(sh: Worksheet, area: AreaTupleType, name: Optional[str], cmd_n
                 # Read and prepare "value"
                 ##value = sh_dict.get((r, col_idx), None)
                 value = sh.cell(row=r, column=col_idx).value
-                if value:
+                if value is not None:
                     if not isinstance(value, str):
                         value = str(value)
                     value = value.strip()
@@ -140,7 +140,7 @@ def parse_command(sh: Worksheet, area: AreaTupleType, name: Optional[str], cmd_n
                 if col.allowed_values:  # If the CommandField checks for a list of allowed values
                     if value.lower() not in [v.lower() for v in col.allowed_values]:  # TODO Case insensitive CI
                         issues.append(
-                            Issue(itype=3,
+                            Issue(itype=IType.ERROR,
                                   description=f"Field '{col_name}' of command '{cmd_name}' has invalid value '{value}'."
                                               f" Allowed values are: {', '.join(col.allowed_values)}.",
                                   location=IssueLocation(sheet_name=name, row=r, column=col_idx)))
@@ -170,7 +170,7 @@ def parse_command(sh: Worksheet, area: AreaTupleType, name: Optional[str], cmd_n
                         except:
                             ##col_header = sh_dict.get((1, col_idx), None)
                             col_header = sh.cell(row=1, column=col_idx).value
-                            issues.append(Issue(itype=3,
+                            issues.append(Issue(itype=IType.ERROR,
                                                 description="The value in field '" + col_header + "' of command '" + cmd_name + "' is not syntactically correct. Entered: " + value,
                                                 location=IssueLocation(sheet_name=name, row=r, column=col_idx)))
                     else:
@@ -190,7 +190,7 @@ def parse_command(sh: Worksheet, area: AreaTupleType, name: Optional[str], cmd_n
         # Append if all mandatory fields have been filled
         may_append = True
         if len(mandatory_not_found) > 0:
-            issues.append(Issue(itype=3,
+            issues.append(Issue(itype=IType.ERROR,
                                 description="Mandatory columns: " + ", ".join(
                                     mandatory_not_found) + " have not been specified",
                                 location=IssueLocation(sheet_name=name, row=r, column=None)))
@@ -204,7 +204,7 @@ def parse_command(sh: Worksheet, area: AreaTupleType, name: Optional[str], cmd_n
                 mandatory = eval(c.mandatory, None, line)
                 may_append = (mandatory and col in line) or (not mandatory)
                 if mandatory and col not in line:
-                    issues.append(Issue(itype=3,
+                    issues.append(Issue(itype=IType.ERROR,
                                         description="Mandatory column: " + col + " has not been specified",
                                         location=IssueLocation(sheet_name=name, row=r, column=None)))
 

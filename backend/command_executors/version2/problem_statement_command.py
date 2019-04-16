@@ -1,6 +1,6 @@
 import json
 
-from backend.command_generators import Issue
+from backend.command_generators import Issue, IType
 from backend.command_generators.spreadsheet_command_parsers_v2 import IssueLocation
 from backend.common.helper import create_dictionary
 from backend.model_services import IExecutableCommand, get_case_study_registry_objects
@@ -28,7 +28,7 @@ class ProblemStatementCommand(IExecutableCommand):
             p = glb_idx.get(Parameter.partial_key(parameter))
             if scenario:
                 if len(p) == 0:
-                    issues.append(Issue(itype=3,
+                    issues.append(Issue(itype=IType.ERROR,
                                         description="The parameter '" + parameter + "' has not been declared previously.",
                                         location=IssueLocation(sheet_name=sheet_name, row=r, column=None)))
                     any_error = True

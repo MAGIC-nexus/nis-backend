@@ -128,7 +128,7 @@ command_fields: Dict[str, List[CommandField]] = {
         CommandField(allowed_names=["Description"], name="description", parser=unquoted_string),
         CommandField(allowed_names=["Unit"], name="unit", parser=unit_name),
         CommandField(allowed_names=["OppositeProcessorType"], name="opposite_processor_type",
-                     allowed_values=processor_types, parser=simple_ident, attribute_of=Factor),
+                     allowed_values=processor_types, parser=simple_ident),
         CommandField(allowed_names=["Attributes"], name="attributes", parser=key_value_list),
         CommandField(allowed_names=[attributeRegex], name="attributes", many_appearances=True, parser=value)
     ],
@@ -169,7 +169,7 @@ command_fields: Dict[str, List[CommandField]] = {
                      attribute_of=Factor),
         CommandField(allowed_names=["RoegenType"], name="roegen_type", allowed_values=roegen_types, parser=simple_ident,
                      attribute_of=Factor),
-        CommandField(allowed_names=["Orientation"], name="orientation", allowed_values=orientations,
+        CommandField(allowed_names=["Orientation"], name="orientation", mandatory=True, allowed_values=orientations,
                      parser=simple_ident, attribute_of=Factor),
         CommandField(allowed_names=["OppositeProcessorType"], name="opposite_processor_type",
                      allowed_values=processor_types, parser=simple_ident, attribute_of=Factor),
@@ -200,12 +200,10 @@ command_fields: Dict[str, List[CommandField]] = {
     ],
 
     "relationships": [
-        CommandField(allowed_names=["OriginProcessors", "OriginProcessor"], name="source_processor", parser=processor_names),
+        CommandField(allowed_names=["OriginProcessors", "OriginProcessor"], name="source_processor", mandatory=True, parser=processor_names),
         CommandField(allowed_names=["OriginInterface"], name="source_interface", parser=simple_ident),
-        CommandField(allowed_names=["DestinationProcessors", "DestinationProcessor"], name="target_processor", parser=processor_names),
+        CommandField(allowed_names=["DestinationProcessors", "DestinationProcessor"], name="target_processor", mandatory=True, parser=processor_names),
         CommandField(allowed_names=["DestinationInterface"], name="target_interface", parser=simple_ident),
-        CommandField(allowed_names=["Origin"], name="source", parser=simple_ident),
-        CommandField(allowed_names=["Destination"], name="target", parser=simple_ident),
         CommandField(allowed_names=["RelationType"], name="relation_type", mandatory=True, allowed_values=relation_types, parser=unquoted_string),
         CommandField(allowed_names=["ChangeOfTypeScale"], name="change_type_scale", parser=expression_with_parameters),
         CommandField(allowed_names=["Weight"], name="flow_weight", parser=expression_with_parameters),

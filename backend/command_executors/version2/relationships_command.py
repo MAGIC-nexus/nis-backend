@@ -1,17 +1,19 @@
 import json
 import re
+from typing import Tuple, Optional, NoReturn, List
 
 from backend.command_executors.execution_helpers import parse_line, classify_variables, \
     obtain_dictionary_with_literal_fields
 from backend.command_field_definitions import get_command_fields_from_class
-from backend.command_generators import Issue, IssueLocation
+from backend.command_generators import Issue, IssueLocation, IType
 from backend.command_generators.parser_ast_evaluators import dictionary_from_key_value_list
 from backend.command_generators.parser_field_parsers import string_to_ast, processor_names
 from backend.common.helper import strcmp
 from backend.model_services import IExecutableCommand, get_case_study_registry_objects
 from backend.models.musiasem_concepts import FactorType, Factor, FactorInProcessorType, \
-    RelationClassType, Parameter
-from backend.models.musiasem_concepts_helper import create_relation_observations, find_processor_by_name
+    RelationClassType, Parameter, Processor
+from backend.models.musiasem_concepts_helper import create_relation_observations, find_processor_by_name, \
+    find_or_create_factor
 from backend.solving import get_processor_names_to_processors_dictionary
 
 
@@ -83,17 +85,17 @@ class RelationshipsCommand(IExecutableCommand):
                     ds_concepts = res["ds_concepts"]
                     h_list = res["hierarchies"]
                     if len(ds_list) >= 1 and len(h_list) >= 1:
-                        issues.append(Issue(itype=3,
+                        issues.append(Issue(itype=IType.ERROR,
                                             description="Dataset(s): "+", ".join([d.name for d in ds_list])+", and hierarchy(ies): "+", ".join([h.name for h in h_list])+", have been specified. Either a single dataset or a single hiearchy is supported.",
                                             location=IssueLocation(sheet_name=name, row=r, column=None)))
                         return
                     elif len(ds_list) > 1:
-                        issues.append(Issue(itype=3,
+                        issues.append(Issue(itype=IType.ERROR,
                                             description="More than one dataset has been specified: "+", ".join([d.name for d in ds_list])+", just one dataset is supported.",
                                             location=IssueLocation(sheet_name=name, row=r, column=None)))
                         return
                     elif len(h_list) > 1:
-                        issues.append(Issue(itype=3,
+                        issues.append(Issue(itype=IType.ERROR,
                                             description="More than one hierarchy has been specified: " + ", ".join([h.name for h in h_list])+", just one hierarchy is supported.",
                                             location=IssueLocation(sheet_name=name, row=r, column=None)))
                         return
@@ -115,7 +117,7 @@ class RelationshipsCommand(IExecutableCommand):
                         only_dimensions_requested = len(all_dimensions) == 0
 
                         if measure_requested and not only_dimensions_requested:
-                            issues.append(Issue(itype=3,
+                            issues.append(Issue(itype=IType.ERROR,
                                                 description="It is not possible to use a measure if not all dimensions are used (cannot assume implicit aggregation)",
                                                 location=IssueLocation(sheet_name=name, row=r, column=None)))
                             return
@@ -192,149 +194,117 @@ class RelationshipsCommand(IExecutableCommand):
                 # print("Single: "+str(item))
                 yield item
 
+        def check_flow_orientation(source_processor: Processor, target_processor: Processor,
+                                   source_interface: Factor, target_interface: Factor, is_direct_flow: bool):
+            allowed_source_orientation = ("Output" if is_direct_flow else "Input")
+            error_issues: List[str] = []
+
+            # Are the orientations equal?
+            if strcmp(source_interface.orientation, target_interface.orientation):
+                if strcmp(source_interface.orientation, allowed_source_orientation):
+                    # Target processor should be parent of source processor
+                    parent_processor = target_processor
+                    child_processor = source_processor
+                else:
+                    # Source processor should be parent of target processor
+                    parent_processor = source_processor
+                    child_processor = target_processor
+
+                if child_processor not in parent_processor.children(glb_idx):
+                    error_issues.append(f"The processor '{child_processor.name}' should be part of the "
+                                        f"processor '{parent_processor.name}' when using the same interface "
+                                        f"orientation '{source_interface.orientation}'.")
+
+            else:  # Orientations are different
+                if not strcmp(source_interface.orientation, allowed_source_orientation):
+                    error_issues.append(f"The source interface '{source_interface.full_name}' has the wrong "
+                                        f"orientation '{source_interface.orientation}'.")
+
+                if strcmp(target_interface.orientation, allowed_source_orientation):
+                    error_issues.append(f"The target interface '{target_interface.full_name}' has the wrong "
+                                        f"orientation '{target_interface.orientation}'.")
+
+            return error_issues
+
         def process_line(item):
-            r_source_processor_name = item.get("source_processor", None)  # Mandatory, simple_ident
-            r_source_interface_name = item.get("source_interface", None)  # Mandatory, simple_ident
-            r_target_processor_name = item.get("target_processor", None)  # Mandatory, simple_ident
-            r_target_interface_name = item.get("target_interface", None)  # Mandatory, simple_ident
-            r_source_name = item.get("source", None)  # Mandatory, simple_ident
-            r_target_name = item.get("target", None)  # Mandatory, simple_ident
-            r_relation_type = item.get("relation_type", None).lower()  # Mandatory, simple_ident
-            r_change_type_scale = item.get("change_type_scale", None)  # Mandatory, simple_ident
-            r_flow_weight = item.get("flow_weight", None)  # Mandatory, simple_ident
-            r_source_cardinality = item.get("source_cardinality", None)  # Mandatory, simple_ident
-            r_target_cardinality = item.get("target_cardinality", None)  # Mandatory, simple_ident
-            r_attributes = item.get("attributes", None)
+            r_source_processor_name = item.get("source_processor")  # Mandatory, simple_ident
+            r_source_interface_name = item.get("source_interface")  # Mandatory, simple_ident
+            r_target_processor_name = item.get("target_processor")  # Mandatory, simple_ident
+            r_target_interface_name = item.get("target_interface")  # Mandatory, simple_ident
+            r_relation_type = item.get("relation_type").lower()  # Mandatory, simple_ident
+            r_change_type_scale = item.get("change_type_scale")  # Mandatory, simple_ident
+            r_flow_weight = item.get("flow_weight")  # Mandatory, simple_ident
+            r_source_cardinality = item.get("source_cardinality")  # Mandatory, simple_ident
+            r_target_cardinality = item.get("target_cardinality")  # Mandatory, simple_ident
+            r_attributes = item.get("attributes")
             if r_attributes:
                 try:
                     attributes = dictionary_from_key_value_list(r_attributes, glb_idx)
                 except Exception as e:
-                    issues.append(Issue(itype=3,
-                                        description=str(e),
-                                        location=IssueLocation(sheet_name=name, row=r, column=None)))
+                    add_issue(IType.ERROR, str(e))
                     return
             else:
                 attributes = {}
 
-            r_relation_class = None
-            if r_relation_type in ["is_a", "isa"]:
-                r_relation_class = RelationClassType.pp_isa
-            elif r_relation_type in ["part_of", "partof", "|"]:
-                r_relation_class = RelationClassType.pp_part_of
-            elif r_relation_type in ["aggregate", "aggregation"]:
-                r_relation_class = RelationClassType.pp_aggregate
-            elif r_relation_type in ["associate", "association"]:
-                r_relation_class = RelationClassType.pp_associate
-            elif r_relation_type in ["flow", ">"]:
-                r_relation_class = RelationClassType.ff_directed_flow
-            elif r_relation_type in ["<"]:
-                r_relation_class = RelationClassType.ff_reverse_directed_flow
-            elif r_relation_type in ["scale"]:
-                r_relation_class = RelationClassType.ff_scale
+            r_relation_class = RelationClassType.from_str(r_relation_type)
 
-            if r_relation_type in ["is_a", "isa", "part_of", "partof", "|", "aggregate", "associate"]:
-                between_processors = True
-            else:  # "flow", ">", "<", "scale"
+            if r_relation_class in [RelationClassType.ff_directed_flow,
+                                    RelationClassType.ff_reverse_directed_flow,
+                                    RelationClassType.ff_scale]:
                 between_processors = False
+            else:
+                between_processors = True
 
-            # Look for source Processor
+            # Look for source and target Processors
             source_processor = find_processor_by_name(state=glb_idx, processor_name=r_source_processor_name)
-            # Look for target Processor
+            if not source_processor:
+                add_issue(IType.ERROR, f"The source processor '{r_source_processor_name}' doesn't exist.")
+                return
+
             target_processor = find_processor_by_name(state=glb_idx, processor_name=r_target_processor_name)
+            if not target_processor:
+                add_issue(IType.ERROR, f"The target processor '{r_target_processor_name}' doesn't exist.")
+                return
+
+            change_type_scale = None
+
             if not between_processors:
-                # Look for source Interface
-                # First find an Interface in the Processor by that name
-                source_interface = None
-                if r_source_interface_name:
-                    for f in source_processor.factors:
-                        if strcmp(f.name, r_source_interface_name):
-                            source_interface = f
-                target_interface = None
-                if r_target_interface_name:
-                    for f in target_processor.factors:
-                        if strcmp(f.name, r_target_interface_name):
-                            target_interface = f
-
-                # If not, look for an InterfaceType
+                # Look for source and target Interfaces
+                source_interface = source_processor.factors_find(r_source_interface_name)
                 if not source_interface:
-                    if r_source_interface_name:
-                        source_interface_type = glb_idx.get(FactorType.partial_key(r_source_interface_name))
-                        if len(source_interface_type) == 0:
-                            source_interface_type = None
-                        elif len(source_interface_type) == 1:
-                            source_interface_type = source_interface_type[0]
-                    else:
-                        source_interface_type = None
-                else:
-                    source_interface_type = source_interface.taxon
-                    
-                # Look for target InterfaceType
-                if not target_interface:
-                    if r_target_interface_name:
-                        target_interface_type = glb_idx.get(FactorType.partial_key(r_target_interface_name))
-                        if len(target_interface_type) == 0:
-                            target_interface_type = None
-                        elif len(target_interface_type) == 1:
-                            target_interface_type = target_interface_type[0]
-                    else:
-                        target_interface_type = None
-                else:
-                    target_interface_type = target_interface.taxon
-
-                change_type_scale = None
-                if source_interface_type and not target_interface_type:
-                    target_interface_type = source_interface_type
-                elif not source_interface_type and target_interface_type:
-                    source_interface_type = target_interface_type
-                elif source_interface_type and target_interface_type:
-                    if source_interface_type != target_interface_type:
-                        # TODO When different interface types are connected, a scales path should exist (to transform from one type to the other)
-                        # TODO Check this and change the type (then, when Scale transform is applied, it will automatically be considered)
-                        if not r_change_type_scale:
-                            issues.append(Issue(itype=3,
-                                                description="Interface types are not the same (and transformation from one "
-                                                            "to the other cannot be performed). Origin: " +
-                                                            source_interface_type.name+"; Target: " +
-                                                            target_interface_type.name,
-                                                location=IssueLocation(sheet_name=name, row=r, column=None)))
-                            return
-                        else:
-                            change_type_scale = r_change_type_scale
-                else:  # No interface types!!
-                    issues.append(Issue(itype=3,
-                                        description="No InterfaceTypes specified or retrieved for a flow",
-                                        location=IssueLocation(sheet_name=name, row=r, column=None)))
+                    add_issue(IType.ERROR, f"The source interface '{r_source_interface_name}' has not been found in "
+                                           f"processor '{source_processor.name}'.")
                     return
 
-                # Find source Interface, if not add it
-                if not source_interface:
-                    source_interface = glb_idx.get(Factor.partial_key(processor=source_processor, factor_type=source_interface_type))
-                    if len(source_interface) == 0:
-                        source_interface = None
-                    elif len(source_interface) == 1:
-                        source_interface = source_interface[0]
-                    if not source_interface:
-                        source_interface = Factor.create_and_append(source_interface_type.name,
-                                                                    source_processor,
-                                                                    in_processor_type=FactorInProcessorType(external=False,
-                                                                                                            incoming=True),
-                                                                    taxon=source_interface_type)
-                        glb_idx.put(source_interface.key(), source_interface)
-
-                # Find target Interface
+                target_interface = target_processor.factors_find(r_target_interface_name)
                 if not target_interface:
-                    target_interface = glb_idx.get(Factor.partial_key(processor=target_processor, factor_type=target_interface_type))
-                    if len(target_interface) == 0:
-                        target_interface = None
-                    elif len(target_interface) == 1:
-                        target_interface = target_interface[0]
-                    if not target_interface:
-                        target_interface = Factor.create_and_append(target_interface_type.name,
-                                                                    target_processor,
-                                                                    in_processor_type=FactorInProcessorType(external=False,
-                                                                                                            incoming=True),
-                                                                    taxon=target_interface_type)
-                        glb_idx.put(target_interface.key(), target_interface)
+                    add_issue(IType.ERROR, f"The target interface '{r_target_interface_name}' has not been found in "
+                                           f"processor '{target_processor.name}'.")
+                    return
+
+                # Check for correct interfaces orientation (input/output) of source and target
+                if r_relation_class in [RelationClassType.ff_directed_flow, RelationClassType.ff_reverse_directed_flow]:
+                    orientation_issues = check_flow_orientation(
+                        source_processor, target_processor, source_interface, target_interface,
+                        is_direct_flow=(r_relation_class == RelationClassType.ff_directed_flow)
+                    )
+
+                    if len(orientation_issues) > 0:
+                        for description in orientation_issues:
+                            add_issue(IType.ERROR, description)
+
+                        return
+
+                if source_interface.taxon != target_interface.taxon:
+                    # TODO When different interface types are connected, a scales path should exist (to transform from one type to the other)
+                    # TODO Check this and change the type (then, when Scale transform is applied, it will automatically be considered)
+                    if not r_change_type_scale:
+                        add_issue(IType.ERROR, f"Interface types are not the same (and transformation from one "
+                                               f"to the other cannot be performed). Origin: "
+                                               f"{source_interface.taxon.name}; Target: {target_interface.taxon.name}")
+                        return
+                    else:
+                        change_type_scale = r_change_type_scale
 
             # TODO Pass full "attributes" dictionary
             # Pass "change_type_scale" as attribute
@@ -362,9 +332,14 @@ class RelationshipsCommand(IExecutableCommand):
                                              attributes=attributes
                                              )
 
+        def add_issue(itype: IType, description: str) -> NoReturn:
+            issues.append(Issue(itype=itype,
+                                description=description,
+                                location=IssueLocation(sheet_name=name, row=r, column=None)))
+
         fields = {f.name: f for f in get_command_fields_from_class(self.__class__)}
 
-        issues = []
+        issues: List[Issue] = []
         glb_idx, p_sets, hh, datasets, mappings = get_case_study_registry_objects(state)
         name = self._content["command_name"]
 

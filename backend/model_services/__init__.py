@@ -221,9 +221,12 @@ class State:
 
     """
 
-    def __init__(self):
+    def __init__(self, d: Dict[str, Any] = None):
         self._default_namespace = ""
-        self._namespaces = create_dictionary()  # type:
+        self._namespaces = create_dictionary()
+
+        if d is not None and len(d) > 0:
+            self.update(d)
 
     def new_namespace(self, name):
         self._namespaces[name] = Namespace()

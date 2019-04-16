@@ -2,7 +2,7 @@ import json
 from io import StringIO
 import pandas as pd
 
-from backend.command_generators import Issue, IssueLocation
+from backend.command_generators import Issue, IssueLocation, IType
 from backend.model_services import IExecutableCommand, get_case_study_registry_objects
 from backend.common.helper import strcmp, prepare_dataframe_after_external_read
 
@@ -34,7 +34,7 @@ class DatasetDataCommand(IExecutableCommand):
                     iss = prepare_dataframe_after_external_read(ds, df)
                     for issue in iss:
                         issues.append(
-                            Issue(itype=3,
+                            Issue(itype=IType.ERROR,
                                   description=issue,
                                   location=IssueLocation(sheet_name=name, row=-1, column=-1)))
                     # Everything ok? Store the dataframe!
@@ -43,7 +43,7 @@ class DatasetDataCommand(IExecutableCommand):
                     break
             else:
                 issues.append(
-                    Issue(itype=3,
+                    Issue(itype=IType.ERROR,
                           description="Metadata for the dataset '"+dataset_name+"' must be defined previously",
                           location=IssueLocation(sheet_name=name, row=-1, column=-1)))
 

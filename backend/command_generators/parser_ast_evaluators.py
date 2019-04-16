@@ -168,7 +168,7 @@ def ast_evaluator(exp: Dict, state: State, obj, issue_lst, evaluation_type="nume
                     # Simple name
                     if obj is None:
                         obj = state.get(o, _namespace)
-                        if not obj:
+                        if obj is None:
                             issue_lst.append((3, "'" + o + "' is not globally declared in namespace '" + (_namespace if _namespace else "default") + "'"))
                             if _namespace:
                                 unresolved_vars.add(_namespace+"::"+o)

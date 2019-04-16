@@ -1,6 +1,6 @@
 import json
 
-from backend.command_generators import Issue, IssueLocation
+from backend.command_generators import Issue, IssueLocation, IType
 from backend.common.helper import strcmp
 from backend.model_services import IExecutableCommand, get_case_study_registry_objects
 from backend.models.musiasem_concepts import Observer, FactorTypesRelationUnidirectionalLinearTransformObservation, \
@@ -36,7 +36,7 @@ class ScaleConversionV2Command(IExecutableCommand):
                                                              (sc_tgt_hierarchy, sc_tgt_interface_type)]):
                 m = "origin" if i == 0 else "destination"
                 if not interface_type:
-                    issues.append(Issue(itype=3,
+                    issues.append(Issue(itype=IType.ERROR,
                                         description="The "+m+ "interface type name has not been specified",
                                         location=IssueLocation(sheet_name=name, row=r, column=None)))
                     return
@@ -48,7 +48,7 @@ class ScaleConversionV2Command(IExecutableCommand):
                         fts.append(ft[0])
                     else:
                         if not hierarchy:
-                            issues.append(Issue(itype=3,
+                            issues.append(Issue(itype=IType.ERROR,
                                                 description="The hierarchy of the " + m + "interface type name has not been specified and the interface type name is not unique",
                                                 location=IssueLocation(sheet_name=name, row=r, column=None)))
                             return
@@ -58,14 +58,14 @@ class ScaleConversionV2Command(IExecutableCommand):
                                 fts.append(ft2)
 
             if len(fts) != 2:
-                issues.append(Issue(itype=3,
+                issues.append(Issue(itype=IType.ERROR,
                                     description="Found "+str(len(fts))+" interface types in the specification of a scale change",
                                     location=IssueLocation(sheet_name=name, row=r, column=None)))
                 return
 
             # Check that the interface types are from different hierarchies (warn if not; not error)
             if fts[0].hierarchy == fts[1].hierarchy:
-                issues.append(Issue(itype=2,
+                issues.append(Issue(itype=IType.WARNING,
                                     description="The interface types '"+fts[0].name+"' and '"+fts[1].name+"' are in the same hierarchy",
                                     location=IssueLocation(sheet_name=name, row=r, column=None)))
 

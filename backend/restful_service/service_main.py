@@ -28,7 +28,7 @@ import json
 # >>>>>>>>>> IMPORTANT <<<<<<<<<
 from backend.command_definitions import commands
 from backend.command_field_definitions import command_fields
-from backend.command_generators import Issue
+from backend.command_generators import Issue, IType
 from backend.command_generators.parser_field_parsers import string_to_ast
 from backend.command_generators.parser_spreadsheet_utils import rewrite_xlsx_file
 from backend.ie_exports.json import export_model_to_json
@@ -355,6 +355,36 @@ def send_web_client_file(path=None):
     :return:
 
     """
+    def detect_mimetype(fn):
+        if fn.lower().startswith("main.") and fn.lower().endswith(".js"):
+            return "text/html"
+        if fn.lower().endswith(".js"):
+            return "application/javascript"
+        elif fn.lower().endswith(".html"):
+            return "text/html"
+        elif fn.lower().endswith(".png"):
+            return "image/png"
+        elif fn.lower().endswith(".jpg") or fn.lower().endswith(".jpeg"):
+            return "image/jpeg"
+        elif fn.lower().endswith(".css"):
+            return "text/css"
+        elif fn.lower().endswith(".json"):
+            return "application/json"
+        elif fn.lower().endswith(".ico"):
+            return "image/x-icon"
+        elif fn.lower().endswith(".svg"):
+            return "image/svg+xml"
+        elif fn.lower().endswith(".eot"):
+            return "application/vnd.ms-fontobject"
+        elif fn.lower().endswith(".woff"):
+            return "application/font-woff"
+        elif fn.lower().endswith(".woff2"):
+            return "application/font-woff2"
+        elif fn.lower().endswith(".ttf"):
+            return "application/x-font-ttf"
+        else:
+            return None
+
     base = Path(get_root_path("backend.restful_service"))
     base = str(base.parent.parent)+"/frontend"
     # logger.debug("BASE DIRECTORY: "+base)
@@ -377,10 +407,14 @@ def send_web_client_file(path=None):
         # From inside
         new_name = path
 
+    mimetype = detect_mimetype(new_name)
+
+    logger.debug("File: "+new_name+"; MIMETYPE: "+mimetype)
+
     try:
-        return send_from_directory(base, new_name)
+        return send_from_directory(base, new_name, mimetype=mimetype)
     except NotFound:
-        return send_from_directory(base, "index.html")
+        return send_from_directory(base, "index.html", mimetype="text/html")
 
 
 # #####################################################################################################################
@@ -1471,10 +1505,13 @@ def reproducible_session_append_command_generator():  # Receive a command_execut
         """
         out = []
         for i in iss_lst:
+            location = dict(sheet_name="", row=None, col=None)
             if isinstance(i, Issue):
-                out.append(dict(sheet_name=i.location.sheet_name, row=str(i.location.row), col=str(i.location.column), message=i.description, type=i.itype))
+                if i.location is not None:
+                    location = dict(sheet_name=i.location.sheet_name, row=str(i.location.row), col=str(i.location.column))
+                out.append(dict(**location, message=i.description, type=i.itype.value))
             else:
-                out.append(dict(sheet_name="", row=None, col=None, message="Issue type unknown", type=3))
+                out.append(dict(**location, message="Issue type unknown", type=3))
         return out
 
     import time
@@ -1511,7 +1548,7 @@ def reproducible_session_append_command_generator():  # Receive a command_execut
                 if i[0] == 3:  # Error
                     stop = True
             elif isinstance(i, Issue):
-                if i.itype == 3:  # Error
+                if i.itype == IType.ERROR:  # Error
                     stop = True
 
         # SOLVE !!!!
@@ -3361,10 +3398,18 @@ def hierarchies():
 @app.route('/test', methods=['GET'])
 @app.route(nis_api_base + '/test', methods=['GET'])
 def hello():
+    logger.debug("LOG!!!")
     return build_json_response({"hello": "world"})
 
 
 if __name__ == '__main__':
+    # GUNICORN
+    # (start REDIS first at localhost:6379)
+    #
+    # cd ~/AA_MAGIC/nis-backend
+    # export MAGIC_NIS_SERVICE_CONFIG_FILE=/home/rnebot/GoogleDrive/AA_MAGIC/nis-backend-config/nis_local.conf
+    # gunicorn --bind 0.0.0.0:8080 --workers 3 backend.restful_service.service_main:app
+
     # cs = CaseStudy()
     # vs1 = CaseStudyVersion()
     # vs1.case_study = cs

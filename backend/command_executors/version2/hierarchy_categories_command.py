@@ -1,6 +1,6 @@
 import json
 
-from backend.command_generators import Issue, IssueLocation
+from backend.command_generators import Issue, IssueLocation, IType
 from backend.common.helper import strcmp
 from backend.model_services import IExecutableCommand, get_case_study_registry_objects
 from backend.models.musiasem_concepts import HierarchySource, HierarchyGroup, Hierarchy, HierarchyLevel, HierarchyNode, \
@@ -47,7 +47,7 @@ class HierarchyCategoriesCommand(IExecutableCommand):
 
             hname = item.get("hierarchy_name", None)
             if not hname:
-                issues.append(Issue(itype=3,
+                issues.append(Issue(itype=IType.ERROR,
                                     description="The name of the Hierarchy has not been defined. Skipped.",
                                     location=IssueLocation(sheet_name=name, row=r, column=None)))
                 continue
@@ -107,7 +107,7 @@ class HierarchyCategoriesCommand(IExecutableCommand):
                 ph = h  # Parent Hierarchy is the same as current hierarchy
                 pcode = ph.codes.get(parent_code, None)
                 if not pcode:
-                    issues.append(Issue(itype=3,
+                    issues.append(Issue(itype=IType.ERROR,
                                         description="Could not find code '"+parent_code+"' in hierarchy '"+ph.name+"'. Skipped.",
                                         location=IssueLocation(sheet_name=name, row=r, column=None)))
                     continue
@@ -118,7 +118,7 @@ class HierarchyCategoriesCommand(IExecutableCommand):
             if not is_code_list:
                 ref_hierarchy = item.get("referred_hierarchy", None)
                 if not ref_hierarchy:
-                    issues.append(Issue(itype=3,
+                    issues.append(Issue(itype=IType.ERROR,
                                         description="For HCLs, defining ReferredHierarchy is mandatory",
                                         location=IssueLocation(sheet_name=name, row=r, column=None)))
                     continue
@@ -126,7 +126,7 @@ class HierarchyCategoriesCommand(IExecutableCommand):
                 tmp = ref_hierarchy
                 ref_hierarchy = glb_idx.get(Hierarchy.partial_key(name=ref_hierarchy))
                 if len(ref_hierarchy) == 0:
-                    issues.append(Issue(itype=3,
+                    issues.append(Issue(itype=IType.ERROR,
                                         description="ReferredHierarchy '"+tmp+"' not defined previously",
                                         location=IssueLocation(sheet_name=name, row=r, column=None)))
                     continue
@@ -135,7 +135,7 @@ class HierarchyCategoriesCommand(IExecutableCommand):
 
                 ref_code = ref_hierarchy.codes.get(code, None)
                 if not ref_code:
-                    issues.append(Issue(itype=3,
+                    issues.append(Issue(itype=IType.ERROR,
                                         description="Code '"+code+"' not found in referred hierarchy '"+ref_hierarchy.name+"'",
                                         location=IssueLocation(sheet_name=name, row=r, column=None)))
                     continue
@@ -148,7 +148,7 @@ class HierarchyCategoriesCommand(IExecutableCommand):
 
             c = h.codes.get(code, None)
             if c:
-                issues.append(Issue(itype=3,
+                issues.append(Issue(itype=IType.ERROR,
                                     description="Code '" + code + "' in hierarchy '" + h.name + "' redefined.",
                                     location=IssueLocation(sheet_name=name, row=r, column=None)))
                 continue

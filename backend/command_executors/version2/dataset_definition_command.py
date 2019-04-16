@@ -1,6 +1,6 @@
 import json
 
-from backend.command_generators import Issue, IssueLocation, parser_field_parsers
+from backend.command_generators import Issue, IssueLocation, parser_field_parsers, IType
 from backend.command_generators.parser_ast_evaluators import dictionary_from_key_value_list
 from backend.command_generators.parser_field_parsers import url_parser
 from backend.common.helper import create_dictionary, load_dataset, prepare_dataframe_after_external_read
@@ -30,7 +30,7 @@ class DatasetDefCommand(IExecutableCommand):
                 try:
                     attributes = dictionary_from_key_value_list(dsd_attributes, glb_idx)
                 except Exception as e:
-                    issues.append(Issue(itype=3,
+                    issues.append(Issue(itype=IType.ERROR,
                                         description=str(e),
                                         location=IssueLocation(sheet_name=name, row=r, column=None)))
                     return
@@ -38,7 +38,7 @@ class DatasetDefCommand(IExecutableCommand):
                 attributes = {}
 
             if dsd_dataset_name in ds_names:
-                issues.append(Issue(itype=3,
+                issues.append(Issue(itype=IType.ERROR,
                                     description="The dataset '"+dsd_dataset_name+"' has been already defined",
                                     location=IssueLocation(sheet_name=name, row=r, column=None)))
                 return
@@ -75,12 +75,12 @@ class DatasetDefCommand(IExecutableCommand):
                         # h = hierarchies.get(dsd_concept_domain, None)
                         h = glb_idx.get(Hierarchy.partial_key(name=dsd_concept_domain))
                         if len(h) == 0:
-                            issues.append(Issue(itype=3,
+                            issues.append(Issue(itype=IType.ERROR,
                                                 description="Could not find hierarchy of Categories '" + dsd_concept_domain + "'",
                                                 location=IssueLocation(sheet_name=name, row=r, column=None)))
                             return
                         elif len(h) > 1:
-                            issues.append(Issue(itype=3,
+                            issues.append(Issue(itype=IType.ERROR,
                                                 description="Found more than one instance of Categories '" + dsd_concept_domain + "'",
                                                 location=IssueLocation(sheet_name=name, row=r, column=None)))
                             return
@@ -123,7 +123,7 @@ class DatasetDefCommand(IExecutableCommand):
 
         # Any error?
         for issue in issues:
-            if issue.itype == 3:
+            if issue.itype == IType.ERROR:
                 error = True
                 break
         else:
@@ -133,7 +133,7 @@ class DatasetDefCommand(IExecutableCommand):
         for ds in current_ds.values():
             if "_location" not in ds.attributes:
                 error = True
-                issues.append(Issue(itype=3,
+                issues.append(Issue(itype=IType.ERROR,
                                     description="Location of data not specified  for dataset '" + ds.code + "'",
                                     location=IssueLocation(sheet_name=name, row=r, column=None)))
             else:
@@ -143,14 +143,14 @@ class DatasetDefCommand(IExecutableCommand):
                     df = load_dataset(loc)
                     if df is None:
                         error = True
-                        issues.append(Issue(itype=3,
+                        issues.append(Issue(itype=IType.ERROR,
                                             description="Could not obtain data for dataset '" + ds.code + "'",
                                             location=IssueLocation(sheet_name=name, row=r, column=None)))
                     else:
                         iss = prepare_dataframe_after_external_read(ds, df)
                         for issue in iss:
                             issues.append(
-                                Issue(itype=3,
+                                Issue(itype=IType.ERROR,
                                       description=issue,
                                       location=IssueLocation(sheet_name=name, row=-1, column=-1)))
                         # Everything ok? Store the dataframe!

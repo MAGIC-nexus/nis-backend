@@ -1,6 +1,6 @@
 import json
 
-from backend.command_generators import Issue, IssueLocation
+from backend.command_generators import Issue, IssueLocation, IType
 from backend.model_services import IExecutableCommand, get_case_study_registry_objects
 from backend.models.musiasem_concepts import ProvenanceReference, BibliographicReference, \
     GeographicReference, Observer
@@ -33,7 +33,7 @@ class ReferencesV2Command(IExecutableCommand):
             r = ref["_row"]
 
             if "ref_id" not in ref:
-                issues.append(Issue(itype=3,
+                issues.append(Issue(itype=IType.ERROR,
                                     description="'ref_id' field not found: "+str(ref),
                                     location=IssueLocation(sheet_name=name, row=r, column=None)))
                 continue
@@ -41,12 +41,12 @@ class ReferencesV2Command(IExecutableCommand):
                 ref_id = ref["ref_id"]
                 existing = glb_idx.get(self.ref_type.partial_key(ref_id))
                 if len(existing) == 1:
-                    issues.append(Issue(itype=3,
+                    issues.append(Issue(itype=IType.ERROR,
                                         description="Reference '"+ref_id+"' of type '"+str(self.ref_type)+"' is already defined. Not allowed",
                                         location=IssueLocation(sheet_name=name, row=r, column=None)))
                     continue
                 elif len(existing) > 1:  # This condition should not occur...
-                    issues.append(Issue(itype=3,
+                    issues.append(Issue(itype=IType.ERROR,
                                         description="The reference '"+ref_id+"' of type '"+str(self.ref_type)+"' is defined more than one time ("+str(len(existing))+")",
                                         location=IssueLocation(sheet_name=name, row=r, column=None)))
                     continue

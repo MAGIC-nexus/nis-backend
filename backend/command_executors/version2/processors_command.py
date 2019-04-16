@@ -7,7 +7,7 @@ from backend.command_executors.execution_helpers import parse_line, classify_var
     obtain_dictionary_with_literal_fields
 from backend.command_executors.version2.relationships_command import obtain_matching_processors
 from backend.command_field_definitions import get_command_fields_from_class
-from backend.command_generators import Issue, IssueLocation
+from backend.command_generators import Issue, IssueLocation, IType
 from backend.command_generators.parser_ast_evaluators import dictionary_from_key_value_list
 from backend.command_generators.parser_field_parsers import string_to_ast, processor_names
 from backend.common.helper import head, strcmp, ifnull
@@ -79,13 +79,13 @@ class ProcessorsCommand(IExecutableCommand):
                     ds_concepts = res["ds_concepts"]
                     h_list = res["hierarchies"]
                     if len(ds_list) >= 1 and len(h_list) >= 1:
-                        issues.append(create_issue(3, "Dataset(s): "+", ".join([d.name for d in ds_list])+", and hierarchy(ies): "+", ".join([h.name for h in h_list])+", have been specified. Either a single dataset or a single hiearchy is supported."))
+                        issues.append(create_issue(IType.ERROR, "Dataset(s): "+", ".join([d.name for d in ds_list])+", and hierarchy(ies): "+", ".join([h.name for h in h_list])+", have been specified. Either a single dataset or a single hiearchy is supported."))
                         return
                     elif len(ds_list) > 1:
-                        issues.append(create_issue(3, "More than one dataset has been specified: "+", ".join([d.name for d in ds_list])+", just one dataset is supported."))
+                        issues.append(create_issue(IType.ERROR, "More than one dataset has been specified: "+", ".join([d.name for d in ds_list])+", just one dataset is supported."))
                         return
                     elif len(h_list) > 1:
-                        issues.append(create_issue(3, "More than one hierarchy has been specified: " + ", ".join([h.name for h in h_list])+", just one hierarchy is supported."))
+                        issues.append(create_issue(IType.ERROR, "More than one hierarchy has been specified: " + ", ".join([h.name for h in h_list])+", just one hierarchy is supported."))
                         return
                     const_dict = obtain_dictionary_with_literal_fields(item, asts)
                     if len(ds_list) == 1:
@@ -105,7 +105,7 @@ class ProcessorsCommand(IExecutableCommand):
                         only_dimensions_requested = len(all_dimensions) == 0
 
                         if measure_requested and not only_dimensions_requested:
-                            issues.append(create_issue(3, "It is not possible to use a measure if not all dimensions are used (cannot assume implicit aggregation)"))
+                            issues.append(create_issue(IType.ERROR, "It is not possible to use a measure if not all dimensions are used (cannot assume implicit aggregation)"))
                             return
                         elif not measure_requested and not only_dimensions_requested:
                             # TODO Reduce the dataset to the unique tuples (consider the current case -sensitive or not-sensitive-)
@@ -185,7 +185,7 @@ class ProcessorsCommand(IExecutableCommand):
 
             # Check if mandatory fields with no value exist
             for field in [k for k, v in fields.items() if v.mandatory and not fields_value[k]]:
-                issues.append(create_issue(3, f"Mandatory field '{field}' is empty. Skipped."))
+                issues.append(create_issue(IType.ERROR, f"Mandatory field '{field}' is empty. Skipped."))
                 return
 
             # Transform text of "attributes" into a dictionary
@@ -194,7 +194,7 @@ class ProcessorsCommand(IExecutableCommand):
                 try:
                     fields_value["attributes"] = dictionary_from_key_value_list(field_val, glb_idx)
                 except Exception as e:
-                    issues.append(create_issue(3, str(e)))
+                    issues.append(create_issue(IType.ERROR, str(e)))
                     return
             else:
                 fields_value["attributes"] = {}
@@ -207,7 +207,7 @@ class ProcessorsCommand(IExecutableCommand):
             if field_val:
                 parent_processor = find_processor_by_name(state=glb_idx, processor_name=field_val)
                 if not parent_processor:
-                    issues.append(create_issue(3, f"Specified parent processor, '{field_val}', does not exist"))
+                    issues.append(create_issue(IType.ERROR, f"Specified parent processor, '{field_val}', does not exist"))
                     return
 
             # Find or create processor and REGISTER it in "glb_idx"
@@ -247,7 +247,7 @@ class ProcessorsCommand(IExecutableCommand):
                 o1 = ProcessorsRelationPartOfObservation.create_and_append(parent_processor, p, None)  # Part-of
                 glb_idx.put(o1.key(), o1)
 
-        def create_issue(itype: int, description: str) -> Issue:
+        def create_issue(itype: IType, description: str) -> Issue:
             return Issue(itype=itype,
                          description=description,
                          location=IssueLocation(sheet_name=command_name, row=row, column=None))

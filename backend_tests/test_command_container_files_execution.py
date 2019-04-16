@@ -472,11 +472,13 @@ class TestCommandFiles(unittest.TestCase):
 
     def test_023_solving(self):
         file_path = os.path.dirname(
-            os.path.abspath(__file__)) + "/z_input_files/v2/06_upscale_almeria_NEW.xlsx"
+            os.path.abspath(__file__)) + "/z_input_files/v2/15_graph_solver_example.xlsx"
 
         isess = execute_file(file_path, generator_type="spreadsheet")
 
         issues = prepare_and_solve_model(isess.state)
+        for idx, issue in enumerate(issues):
+            print(f"Issue {idx + 1}/{len(issues)} = {issue}")
 
         # Check State of things
         glb_idx, p_sets, hh, datasets, mappings = get_case_study_registry_objects(isess.state)
@@ -526,7 +528,7 @@ if __name__ == '__main__':
     prepare_and_reset_database_for_tests(prepare=True)
     backend.data_source_manager = register_external_datasources({"FAO_DATASETS_DIR": "/home/marco/temp/Data/FAOSTAT/"})
     #i.test_002_execute_file_two()
-    i.test_006_execute_file_five()  # TODO: This test from v1 has problems with the case sensitiveness!
+    # i.test_006_execute_file_five()  # TODO: This test from v1 has problems with the case sensitiveness!
     #i.test_008_execute_file_v2_two()
     #i.test_009_execute_file_v2_three()  # Soslaires. v2 syntax
     #i.test_011_execute_file_v2_five()  # Dataset
@@ -538,6 +540,6 @@ if __name__ == '__main__':
     #i.test_020_list_of_commands()
     #i.test_021_export_to_json()
     #i.test_022_processor_scalings()
-    #i.test_023_solving()
+    i.test_023_solving()
     #i.test_024_maddalena_dataset()
     #i.test_025()
