@@ -1067,6 +1067,11 @@ def get_geolayer(format):
     output = None
     # Generate graph from State
     if isess.state:
+        # TODO Obtain a list of Geolocated processors
+        #      Obtain attributes attached to the processor: Name, Full name, system, subsystem type, ...
+        #      Go to general matrix and obtain values for interfaces, different scenarios, times and observers
+        # TODO Extract geometry of processors into a new layer
+        # TODO  Elaborate a new layer where each processor
         if format == "geojson":
             # TODO Prepare GeoJSON file
             output = io.StringIO()
