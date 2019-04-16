@@ -4,6 +4,7 @@ import tempfile
 import zipfile
 from typing import List
 import pandas as pd
+pd.core.common.is_list_like = pd.api.types.is_list_like
 import pandas_datareader.data as web
 import numpy as np
 import requests
