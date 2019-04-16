@@ -1,5 +1,4 @@
 import math
-from enum import Enum
 from functools import reduce
 from operator import add
 from typing import Dict, List, Tuple, Optional, NoReturn, Generator
@@ -7,21 +6,7 @@ import networkx as nx
 
 from backend.solving.graph import Node, Weight, EdgeType
 from backend.solving.graph.computation_graph import ComputationGraph
-
-
-class IType(Enum):
-    INFO = 1
-    WARNING = 2
-    ERROR = 3
-
-
-class Issue:
-    def __init__(self, itype: IType, description: str):
-        self.itype = itype
-        self.description = description
-
-    def __str__(self):
-        return f"{self.itype}: {self.description}"
+from backend.command_generators import IType, Issue
 
 
 class FlowGraph:
@@ -56,13 +41,13 @@ class FlowGraph:
         """ Return the nodes of the flow graph """
         return self._direct_graph.nodes
 
-    def get_computation_graph(self) -> Tuple[Optional[ComputationGraph], List[Issue]]:
+    def get_computation_graph(self, structural_graph: Optional[nx.DiGraph] = None) -> Tuple[Optional[ComputationGraph], List[Issue]]:
         """ Get a Computation Graph out of the Flow Graph, after checking the validity (no cycles) and inferring
             missing weights and compute other node attributes.
 
             :return: the Computation Graph if no errors occurred and a list of messages given by the analysis
         """
-        issues = self.analyze_and_complete()
+        issues = self.analyze_and_complete(structural_graph)
 
         if IType.ERROR in [e.itype for e in issues]:
             return None, issues
@@ -72,18 +57,21 @@ class FlowGraph:
     def _create_computation_graph(self) -> ComputationGraph:
         """ Create a Computation Graph based on the Flow Graph """
         graph = ComputationGraph()
+
         for u, v, weight, reverse_weight in self.edges():
             graph.add_edge(u, v, weight, reverse_weight)
 
-        for n, split in self._direct_graph.nodes.data('split'):
-            graph.mark_node_split(n, split, EdgeType.DIRECT)
+        for n, split in self._direct_graph.nodes.data('split'):  # type: Node, bool
+            if split:
+                graph.mark_node_split(n, EdgeType.DIRECT)
 
-        for n, split in self._reverse_graph.nodes.data('split'):
-            graph.mark_node_split(n, split, EdgeType.REVERSE)
+        for n, split in self._reverse_graph.nodes.data('split'):  # type: Node, bool
+            if split:
+                graph.mark_node_split(n, EdgeType.REVERSE)
 
         return graph
 
-    def analyze_and_complete(self) -> List[Issue]:
+    def analyze_and_complete(self, structural_graph: Optional[nx.DiGraph] = None) -> List[Issue]:
         """
         It analyzes the flow graph and completes it with inferrable data.
 
@@ -105,12 +93,15 @@ class FlowGraph:
         issues: List[Issue] = []
 
         # Checking if graph is acyclic. Just looking at the direct graph is OK.
-        if not nx.algorithms.dag.is_directed_acyclic_graph(self._direct_graph):
-            issues.append(Issue(IType.ERROR, 'The graph contains cycles'))
-            return issues
+        # if not nx.algorithms.dag.is_directed_acyclic_graph(self._direct_graph):
+        #     print("Cycles detected. The nodes connected in a cycle are: ")
+        #     for n in nx.algorithms.cycles.simple_cycles(self._direct_graph):
+        #         print(n)
+        #     issues.append(Issue(IType.ERROR, 'The graph contains cycles'))
+        #     return issues
 
         for graph, opposite_graph in [(self._direct_graph, self._reverse_graph), (self._reverse_graph, self._direct_graph)]:
-            for n in nx.algorithms.dag.topological_sort(graph):
+            for n in nx.dfs_preorder_nodes(graph):
 
                 graph.nodes[n]['split'] = False
 
@@ -121,7 +112,7 @@ class FlowGraph:
                     continue
 
                 # How many output edges without weight has the node?
-                edges_without_weight = [e for e in all_edges if not e[2]['weight']]
+                edges_without_weight = [e for e in all_edges if e[2]['weight'] is None]
 
                 if len(edges_without_weight) > 1:
                     str_edges = [f'({e[0]}, {e[1]})' for e in edges_without_weight]
@@ -132,19 +123,24 @@ class FlowGraph:
 
                     if len(all_edges) == 1:
                         edge = list(all_edges)[0]
-                        opposite_weight = opposite_graph[edge[1]][edge[0]]['weight']
-                        if opposite_weight:
-                            edge[2]['weight'] = 1.0 / opposite_weight
+                        u, v, data = edge
+                        opposite_weight = opposite_graph[v][u]['weight']
+                        if opposite_weight is not None:
+                            data['weight'] = 0.0 if opposite_weight == 0.0 else (1.0 / opposite_weight)
                             issues.append(Issue(IType.INFO,
                                                 f'The weight of single output edge "{edge}" could be inferred from '
                                                 f'opposite weight "{opposite_weight}"'))
+                        elif structural_graph and (structural_graph.has_edge(u, v) or structural_graph.has_edge(v, u)):
+                            issues.append(Issue(IType.WARNING,
+                                                f'The weight of single output edge "{edge}" will not be inferred '
+                                                f'because a structural edge exist'))
                         else:
-                            edge[2]['weight'] = 1.0
+                            data['weight'] = 1.0
                             issues.append(Issue(IType.INFO,
                                                 f'The weight of single output edge "{edge}" could be inferred '
                                                 f'without opposite weight'))
                     else:
-                        sum_other_weights = reduce(add, [e[2]['weight'] for e in all_edges if e[2]['weight']])
+                        sum_other_weights = reduce(add, [e[2]['weight'] for e in all_edges if e[2]['weight'] is not None])
 
                         if sum_other_weights > 1.0:
                             issues.append(Issue(IType.WARNING,

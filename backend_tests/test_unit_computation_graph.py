@@ -3,6 +3,7 @@ from typing import List, Set, Dict, Tuple, Optional, NoReturn, Callable
 
 from backend.solving.graph.computation_graph import ComputationGraph
 from backend.solving.graph.flow_graph import FlowGraph
+from backend.solving.graph import EdgeType
 
 
 class SubTestCase:
@@ -12,6 +13,39 @@ class SubTestCase:
         self.conflicts = conflicts
         self.combinations = combinations
         self.results = results
+
+
+def create_test_data_flow_cycle() -> Tuple[FlowGraph, ComputationGraph, List[SubTestCase]]:
+    flow_graph = FlowGraph()
+
+    # flow_graph.add_edge('A', 'B', 2.0, 0.5)
+    # flow_graph.add_edge('B', 'C', 0.7, 0.1)
+
+    comp_graph = ComputationGraph()
+
+    comp_graph.add_edge('A', 'B', 2.0, 0.5)
+    comp_graph.add_edge('B', 'A', 0.7, 0.1)
+    # NOTE: the reverse weight is ignored for this computation
+
+    # Set split info
+    #
+
+    subtest_cases: List[SubTestCase] = []
+
+    # Case 0
+    params = {'B': 5}
+    conflicts = {
+        'B': set()
+    }
+    combinations = {
+        frozenset({'B'})
+    }
+    results = {
+        ('A', frozenset({'B'})): 3.5
+    }
+    subtest_cases.append(SubTestCase(params, conflicts, combinations, results))
+
+    return flow_graph, comp_graph, subtest_cases
 
 
 def create_test_data_flow() -> Tuple[FlowGraph, ComputationGraph, List[SubTestCase]]:
@@ -37,15 +71,9 @@ def create_test_data_flow() -> Tuple[FlowGraph, ComputationGraph, List[SubTestCa
     comp_graph.add_edge('H', 'G', 0.5, 0.9)
     comp_graph.add_edge('I', 'G', 0.4, 0.1)
 
-    comp_graph.graph.nodes['A']['split'] = [False, False]
-    comp_graph.graph.nodes['B']['split'] = [False, False]
-    comp_graph.graph.nodes['C']['split'] = [False, True]
-    comp_graph.graph.nodes['D']['split'] = [False, False]
-    comp_graph.graph.nodes['E']['split'] = [False, False]
-    comp_graph.graph.nodes['F']['split'] = [False, False]
-    comp_graph.graph.nodes['G']['split'] = [False, True]
-    comp_graph.graph.nodes['H']['split'] = [False, False]
-    comp_graph.graph.nodes['I']['split'] = [False, False]
+    # Set split info
+    comp_graph.mark_node_split('C', EdgeType.REVERSE)
+    comp_graph.mark_node_split('G', EdgeType.REVERSE)
 
     return flow_graph, comp_graph, []
 
@@ -71,13 +99,8 @@ def create_test_data_reverse() -> Tuple[FlowGraph, ComputationGraph, List[SubTes
     comp_graph.add_edge('G', 'E', 0.7, 0.1)
     comp_graph.add_edge('B', 'G', 0.7, 0.1)
 
-    comp_graph.graph.nodes['A']['split'] = [False, False]
-    comp_graph.graph.nodes['B']['split'] = [False, False]
-    comp_graph.graph.nodes['C']['split'] = [True, False]
-    comp_graph.graph.nodes['D']['split'] = [False, False]
-    comp_graph.graph.nodes['E']['split'] = [False, False]
-    comp_graph.graph.nodes['F']['split'] = [False, False]
-    comp_graph.graph.nodes['G']['split'] = [False, False]
+    # Set split info
+    comp_graph.mark_node_split('C', EdgeType.DIRECT)
 
     subtest_cases: List[SubTestCase] = []
 
@@ -100,7 +123,7 @@ def create_test_data_reverse() -> Tuple[FlowGraph, ComputationGraph, List[SubTes
     return flow_graph, comp_graph, subtest_cases
 
 
-def create_test_data_cycle() -> Tuple[FlowGraph, ComputationGraph, List[SubTestCase]]:
+def create_test_data_conflict_cycle() -> Tuple[FlowGraph, ComputationGraph, List[SubTestCase]]:
     flow_graph = FlowGraph()
 
     flow_graph.add_edge('A', 'B', 2.0, 0.5)
@@ -111,9 +134,8 @@ def create_test_data_cycle() -> Tuple[FlowGraph, ComputationGraph, List[SubTestC
     comp_graph.add_edge('A', 'B', 2.0, 0.5)
     comp_graph.add_edge('B', 'C', 0.7, 0.1)
 
-    comp_graph.graph.nodes['A']['split'] = [False, False]
-    comp_graph.graph.nodes['B']['split'] = [False, False]
-    comp_graph.graph.nodes['C']['split'] = [False, False]
+    # Set split info
+    #
 
     subtest_cases: List[SubTestCase] = []
 
@@ -151,11 +173,8 @@ def create_test_data_simple() -> Tuple[FlowGraph, ComputationGraph, List[SubTest
     comp_graph.add_edge('C', 'D', 0.1, None)
     comp_graph.add_edge('E', 'D', 0.1, None)
 
-    comp_graph.graph.nodes['A']['split'] = [False, False]
-    comp_graph.graph.nodes['B']['split'] = [False, False]
-    comp_graph.graph.nodes['C']['split'] = [False, False]
-    comp_graph.graph.nodes['D']['split'] = [False, False]
-    comp_graph.graph.nodes['E']['split'] = [False, False]
+    # Set split info
+    #
 
     subtest_cases: List[SubTestCase] = []
 
@@ -197,11 +216,8 @@ def create_test_data_star() -> Tuple[FlowGraph, ComputationGraph, List[SubTestCa
     comp_graph.add_edge('A', 'D', 0.1, 10.0)
     comp_graph.add_edge('A', 'E', 0.15, 6.66666667)
 
-    comp_graph.graph.nodes['A']['split'] = [True, False]
-    comp_graph.graph.nodes['B']['split'] = [False, False]
-    comp_graph.graph.nodes['C']['split'] = [False, False]
-    comp_graph.graph.nodes['D']['split'] = [False, False]
-    comp_graph.graph.nodes['E']['split'] = [False, False]
+    # Set split info
+    comp_graph.mark_node_split('A', EdgeType.DIRECT)
 
     subtest_cases: List[SubTestCase] = []
 
@@ -265,11 +281,8 @@ def create_test_data_star2() -> Tuple[FlowGraph, ComputationGraph, List[SubTestC
     comp_graph.add_edge('A', 'D', None, 1.0)
     comp_graph.add_edge('A', 'E', None, 1.0)
 
-    comp_graph.graph.nodes['A']['split'] = [False, False]
-    comp_graph.graph.nodes['B']['split'] = [False, False]
-    comp_graph.graph.nodes['C']['split'] = [False, False]
-    comp_graph.graph.nodes['D']['split'] = [False, False]
-    comp_graph.graph.nodes['E']['split'] = [False, False]
+    # Set split info
+    #
 
     subtest_cases: List[SubTestCase] = []
 
@@ -306,9 +319,10 @@ class TestComputationGraph(unittest.TestCase):
             cls.computation_graphs[flow_graph] = comp_graph
             cls.subtest_cases[comp_graph] = subtest_cases
 
+        add_test_case(create_test_data_flow_cycle)
         add_test_case(create_test_data_flow)
         add_test_case(create_test_data_reverse)
-        add_test_case(create_test_data_cycle)
+        add_test_case(create_test_data_conflict_cycle)
         add_test_case(create_test_data_simple)
         add_test_case(create_test_data_star)
         add_test_case(create_test_data_star2)

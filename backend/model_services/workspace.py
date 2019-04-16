@@ -16,7 +16,7 @@ import sqlalchemy
 import backend
 from backend.command_generators import Issue, IssueLocation, IType
 from backend.command_generators.parsers_factory import commands_container_parser_factory
-from backend.common.helper import create_dictionary
+from backend.common.helper import create_dictionary, strcmp
 from backend.model_services import IExecutableCommand, get_case_study_registry_objects
 from backend.model_services import State
 from backend.models.musiasem_concepts import ProblemStatement, FactorsRelationDirectedFlowObservation, Processor, \
@@ -217,18 +217,18 @@ def transform_issues(issues: List[Union[dict, backend.Issue, tuple, Issue]], cmd
 
     for i in issues:
         if isinstance(i, dict):
-            issue = Issue(itype=i["type"], description=i["message"], ctype=i["c_type"],
+            issue = Issue(itype=IType(i["type"]), description=i["message"], ctype=i["c_type"],
                           location=IssueLocation(sheet_name=i["sheet_name"], sheet_number=i["sheet_number"]))
         elif isinstance(i, backend.Issue):  # namedtuple
             issue = Issue(itype=i.type, description=i.message, ctype=i.c_type,
                           location=IssueLocation(sheet_name=i.sheet_name, sheet_number=i.sheet_number))
         elif isinstance(i, tuple):
-            issue = Issue(itype=i[0], description=i[1],
+            issue = Issue(itype=IType(i[0]), description=i[1],
                           location=IssueLocation(sheet_name=""))
         else:  # isinstance(i, Issue):
             issue = i
 
-        if issue.itype == IType.error():
+        if issue.itype == IType.ERROR:
             errors_exist = True
 
         if not issue.ctype and cmd:  # "cmd" may be "None", in case the Issue is produced by the commands container loop
@@ -288,7 +288,7 @@ def convert_generator_to_native(generator_type, file_type: str, file):
 # SOLVING (PREPARATION AND CALL SOLVER)
 # ######################################################################################################################
 
-def prepare_and_solve_model(state: State):
+def prepare_and_solve_model(state: State) -> List[Issue]:
     """
     Modify the state so that:
     * Implicit references of Interfaces to subcontexts are materialized
@@ -308,7 +308,7 @@ def prepare_and_solve_model(state: State):
     return issues
 
 
-def call_solver(state: State, systems: Dict[str, Set[Processor]]):
+def call_solver(state: State, systems: Dict[str, Set[Processor]]) -> List[Issue]:
     """
     Solve the problem
     """
@@ -338,10 +338,9 @@ def call_solver(state: State, systems: Dict[str, Set[Processor]]):
 
     solver_type = problem_statement.solving_parameters.get("solver", "flow_graph").lower()
 
-    issues = []
+    issues: List[Issue] = []
     if solver_type == "flow_graph":
-        pass
-        #issues = flow_graph_solver(global_parameters, problem_statement, systems, state)
+        issues = flow_graph_solver(global_parameters, problem_statement, systems, state)
 
     return issues
 
@@ -365,6 +364,9 @@ def prepare_model(state) -> Dict[str, Set[Processor]]:
     objs = query.execute([Factor], filt)
     processors_by_system = create_dictionary()
     for iface in objs[Factor]:  # type: Factor
+        if strcmp(iface.processor.instance_or_archetype, 'Archetype'):
+            continue
+
         system = iface.processor.processor_system
 
         processors = processors_by_system.get(system, set())

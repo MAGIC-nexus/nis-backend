@@ -230,6 +230,14 @@ def strcmp(s1, s2):
     else:
         return s1.strip().lower() == s2.strip().lower()
 
+
+def istr(s1: str) -> str:
+    """ Return a lowercase version of a string if program works ignoring case sensitiveness """
+    if case_sensitive:
+        return s1
+    else:
+        return s1.lower()
+
 # #####################################################################################################################
 # >>>> DYNAMIC IMPORT <<<<
 # #####################################################################################################################

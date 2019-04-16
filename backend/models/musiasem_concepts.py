@@ -326,6 +326,9 @@ class Qualifiable(Encodable):
         else:
             return {}
 
+    def compare_attributes(self, attrs: Dict[str, Any]) -> bool:
+        return all([attrs[k] == self.get_attribute(k) for k in attrs])
+
 
 class Observable(Encodable):
     """ An entity which can be structurally (relations with other observables) or quantitatively observed.
@@ -1079,15 +1082,15 @@ class FactorType(Identifiable, HierarchyNode, HierarchyExpression, Taggable, Qua
     INTERNAL_ATTRIBUTE_NAMES = frozenset({})
 
     def __init__(self, name, parent=None, hierarchy=None, roegen_type: FlowFundRoegenType=FlowFundRoegenType.flow,
-                 tags=None, attributes=None, expression=None, sphere=None):  # orientation=None,
+                 tags=None, attributes=None, expression=None, sphere=None, opposite_processor_type=None):
         Identifiable.__init__(self)
         HierarchyNode.__init__(self, name, parent, hierarchy=hierarchy)
         Taggable.__init__(self, tags)
         Qualifiable.__init__(self, attributes, self.INTERNAL_ATTRIBUTE_NAMES)
         HierarchyExpression.__init__(self, expression)
         self._roegen_type = roegen_type
-        # self._orientation = orientation
         self._sphere = sphere
+        self._opposite_processor_type = opposite_processor_type
         self._physical_type = None  # TODO Which physical types. An object
         self._default_unit_str = None  # TODO A string representing the unit, compatible with the physical type
         self._factors = []
@@ -1097,8 +1100,8 @@ class FactorType(Identifiable, HierarchyNode, HierarchyExpression, Taggable, Qua
 
         d.update({
             'roegen_type': getattr(self.roegen_type, "name", None),
-            # 'orientation': self.orientation,
-            'sphere': self.sphere
+            'sphere': self.sphere,
+            'opposite_processor_type': self.opposite_processor_type
         })
 
         # Remove property inherited from HierarchyNode because it is always "null" for FactorType
@@ -1135,9 +1138,9 @@ class FactorType(Identifiable, HierarchyNode, HierarchyExpression, Taggable, Qua
     def roegen_type(self):
         return self._roegen_type
 
-    # @property
-    # def orientation(self):
-    #     return self._orientation
+    @property
+    def opposite_processor_type(self):
+        return self._opposite_processor_type
 
     @property
     def sphere(self):
@@ -1235,6 +1238,13 @@ class Processor(Identifiable, Nameable, Taggable, Qualifiable, Automatable, Obse
     def factors_append(self, factor: "Factor"):
         self._factors.append(factor)
 
+    def factors_find(self, factor_name: str) -> Optional["Factor"]:
+        for f in self.factors:  # type: Factor
+            if strcmp(f.name, factor_name):
+                return f
+
+        return None
+
     @property
     def extensive(self):
         # TODO True if of all values defined for all factors no value depends on another factor
@@ -1273,6 +1283,15 @@ class Processor(Identifiable, Nameable, Taggable, Qualifiable, Automatable, Obse
                     for parent_relation in parent_relations
                     for parent_name in parent_relation.parent_processor.full_hierarchy_names(registry)]
 
+    def children(self, registry: PartialRetrievalDictionary) -> List["Processor"]:
+        """
+        Obtain the list of children looking for the PART-OF relations
+
+        :param registry:
+        :return:
+        """
+        return [r.child_processor for r in registry.get(ProcessorsRelationPartOfObservation.partial_key(parent=self))]
+
     def clone(self, state: Union[PartialRetrievalDictionary, State], objects_already_cloned: Dict = None, level=0,
               inherited_attributes: Dict[str, Any] = {}, name: str = None):
         """
@@ -1295,7 +1314,7 @@ class Processor(Identifiable, Nameable, Taggable, Qualifiable, Automatable, Obse
         :param level: Recursion level (INTERNAL USE)
         :param inherited_attributes: Attributes for the new Processor
         :param name: Name for the new Processor (if None, adopt the name of the cloned Processor)
-        :return:
+        :return: cloned processor, cloned children
         """
         if isinstance(state, PartialRetrievalDictionary):
             glb_idx = state
@@ -1312,8 +1331,8 @@ class Processor(Identifiable, Nameable, Taggable, Qualifiable, Automatable, Obse
                       referenced_processor=self.referenced_processor
                       )
 
-        if name != self.name:
-            glb_idx.put(p.key(), p)
+        # if name != self.name:
+        #     glb_idx.put(p.key(), p)
 
         if not objects_already_cloned:
             objects_already_cloned = {}
@@ -1336,11 +1355,14 @@ class Processor(Identifiable, Nameable, Taggable, Qualifiable, Automatable, Obse
             self._local_indicators.append(li_)
 
         # Clone child Processors (look for part-of relations)
+        children_processors: Set[Processor] = set()
         part_of_relations = glb_idx.get(ProcessorsRelationPartOfObservation.partial_key(parent=self))
         for rel in part_of_relations:
             if rel.child_processor not in objects_already_cloned:
-                p2 = rel.child_processor.clone(state, objects_already_cloned, level + 1, inherited_attributes)  # Recursive call
+                p2, p2_children = rel.child_processor.clone(state, objects_already_cloned, level + 1, inherited_attributes)  # Recursive call
                 objects_already_cloned[rel.child_processor] = p2
+                children_processors.add(p2)
+                children_processors |= p2_children
             else:
                 p2 = objects_already_cloned[rel.child_processor]
 
@@ -1448,7 +1470,14 @@ class Processor(Identifiable, Nameable, Taggable, Qualifiable, Automatable, Obse
                             glb_idx.put(new_f.key(), new_f)
                             considered_flows.add(f)
 
-        return p
+        return p, children_processors
+
+    @staticmethod
+    def register(processors: List["Processor"], registry: PartialRetrievalDictionary):
+        """Add processors' hierarchical names to global register"""
+        for processor in processors:
+            for hierarchical_name in processor.full_hierarchy_names(registry):
+                registry.put(Processor.partial_key(name=hierarchical_name, ident=processor.ident), processor)
 
     @staticmethod
     def alias_key(name: str, processor: "Processor"):
@@ -1556,7 +1585,7 @@ class Factor(Identifiable, Nameable, Taggable, Qualifiable, Observable, Automata
         return tmp
 
     @property
-    def taxon(self):  # Factor Type
+    def taxon(self) -> FactorType:
         tmp = self._taxon
         if tmp is None and self.referenced_factor:
             tmp = self.referenced_factor.taxon
@@ -1771,6 +1800,30 @@ class RelationClassType(Enum):
     ff_scale = 12
 
     ftft_directed_linear_transform = 20  # InterfaceType to InterfaceType
+
+    @staticmethod
+    def from_str(label):
+
+        if label in ["is_a", "isa"]:
+            return RelationClassType.pp_isa
+        elif label in ["part_of", "partof", "|"]:
+            return RelationClassType.pp_part_of
+        elif label in ["aggregate", "aggregation"]:
+            return RelationClassType.pp_aggregate
+        elif label in ["associate", "association"]:
+            return RelationClassType.pp_associate
+        elif label in ["flow", ">"]:
+            return RelationClassType.ff_directed_flow
+        elif label in ["<"]:
+            return RelationClassType.ff_reverse_directed_flow
+        elif label in ["scale"]:
+            return RelationClassType.ff_scale
+        elif label in ["<>", "><"]:
+            return RelationClassType.pp_undirected_flow
+        elif label in ["||"]:
+            return RelationClassType.pp_upscale
+        else:
+            raise NotImplementedError
 
 
 class FactorQuantitativeObservation(Taggable, Qualifiable, Automatable, Encodable):

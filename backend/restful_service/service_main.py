@@ -28,7 +28,7 @@ import json
 # >>>>>>>>>> IMPORTANT <<<<<<<<<
 from backend.command_definitions import commands
 from backend.command_field_definitions import command_fields
-from backend.command_generators import Issue
+from backend.command_generators import Issue, IType
 from backend.command_generators.parser_field_parsers import string_to_ast
 from backend.command_generators.parser_spreadsheet_utils import rewrite_xlsx_file
 from backend.ie_exports.json import export_model_to_json
@@ -1505,10 +1505,13 @@ def reproducible_session_append_command_generator():  # Receive a command_execut
         """
         out = []
         for i in iss_lst:
+            location = dict(sheet_name="", row=None, col=None)
             if isinstance(i, Issue):
-                out.append(dict(sheet_name=i.location.sheet_name, row=str(i.location.row), col=str(i.location.column), message=i.description, type=i.itype))
+                if i.location is not None:
+                    location = dict(sheet_name=i.location.sheet_name, row=str(i.location.row), col=str(i.location.column))
+                out.append(dict(**location, message=i.description, type=i.itype.value))
             else:
-                out.append(dict(sheet_name="", row=None, col=None, message="Issue type unknown", type=3))
+                out.append(dict(**location, message="Issue type unknown", type=3))
         return out
 
     import time
@@ -1545,7 +1548,7 @@ def reproducible_session_append_command_generator():  # Receive a command_execut
                 if i[0] == 3:  # Error
                     stop = True
             elif isinstance(i, Issue):
-                if i.itype == 3:  # Error
+                if i.itype == IType.ERROR:  # Error
                     stop = True
 
         # SOLVE !!!!

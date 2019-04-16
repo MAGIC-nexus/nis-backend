@@ -44,7 +44,7 @@ class HierarchyMappingCommand(IExecutableCommand):
             name = ((mh_src_dataset + ".") if mh_src_dataset else "") + mh_dst_hierarchy + " -> " + mh_dst_hierarchy
 
             if name in mappings:
-                issues.append(Issue(itype=3,
+                issues.append(Issue(itype=IType.ERROR,
                                     description="The mapping '"+name+"' has been declared previously. Skipped.",
                                     location=IssueLocation(sheet_name=name, row=r, column=None)))
                 return
@@ -66,7 +66,7 @@ class HierarchyMappingCommand(IExecutableCommand):
             else:
                 to_dict = create_dictionary()
             if mh_dst_code in to_dict:
-                issues.append(Issue(itype=3,
+                issues.append(Issue(itype=IType.ERROR,
                                     description="The mapping of '" + mh_src_code + "' into '" + mh_dst_code + "' has been done already",
                                     location=IssueLocation(sheet_name=name, row=r, column=None)))
                 return
@@ -106,7 +106,7 @@ class HierarchyMappingCommand(IExecutableCommand):
             if local_mappings[d].origin_dataset:
                 dims, attrs, meas = obtain_dataset_metadata(local_mappings[d].origin_dataset)
                 if local_mappings[d].origin_hierarchy not in dims:
-                    issues.append(Issue(itype=3,
+                    issues.append(Issue(itype=IType.ERROR,
                                         description="The origin dimension '" + local_mappings[d].origin_hierarchy + "' does not exist in dataset '" + local_mappings[d].origin_dataset + "'",
                                         location=IssueLocation(sheet_name=name, row=r, column=None)))
                     continue

@@ -50,17 +50,17 @@ class InterfacesAndQualifiedQuantitiesCommand(IExecutableCommand):
                     ds_concepts = res["ds_concepts"]
                     h_list = res["hierarchies"]
                     if len(ds_list) >= 1 and len(h_list) >= 1:
-                        issues.append(Issue(itype=3,
+                        issues.append(Issue(itype=IType.ERROR,
                                             description="Dataset(s): "+", ".join([d.name for d in ds_list])+", and hierarchy(ies): "+", ".join([h.name for h in h_list])+", have been specified. Only a single dataset is supported.",
                                             location=IssueLocation(sheet_name=name, row=r, column=None)))
                         return
                     elif len(ds_list) > 1:
-                        issues.append(Issue(itype=3,
+                        issues.append(Issue(itype=IType.ERROR,
                                             description="More than one dataset has been specified: "+", ".join([d.name for d in ds_list])+", just one dataset is supported.",
                                             location=IssueLocation(sheet_name=name, row=r, column=None)))
                         return
                     elif len(h_list) > 0:
-                        issues.append(Issue(itype=3,
+                        issues.append(Issue(itype=IType.ERROR,
                                             description="One or more hierarchies have been specified: " + ", ".join([h.name for h in h_list]),
                                             location=IssueLocation(sheet_name=name, row=r, column=None)))
                         return
@@ -82,7 +82,7 @@ class InterfacesAndQualifiedQuantitiesCommand(IExecutableCommand):
                         only_dimensions_requested = len(all_dimensions) == 0
 
                         if measure_requested and not only_dimensions_requested:
-                            issues.append(Issue(itype=3,
+                            issues.append(Issue(itype=IType.ERROR,
                                                 description="It is not possible to use a measure if not all dataset dimensions are used (cannot assume implicit aggregation)",
                                                 location=IssueLocation(sheet_name=name, row=r, column=None)))
                             return
@@ -155,7 +155,7 @@ class InterfacesAndQualifiedQuantitiesCommand(IExecutableCommand):
 
             # Check if mandatory fields with no value exist
             for field in [k for k, v in fields.items() if v.mandatory and not fields_value[k]]:
-                add_issue(IType.error(), f"Mandatory field '{field}' is empty. Skipped.")
+                add_issue(IType.ERROR, f"Mandatory field '{field}' is empty. Skipped.")
                 return
 
             # Interface
@@ -190,7 +190,7 @@ class InterfacesAndQualifiedQuantitiesCommand(IExecutableCommand):
                 try:
                     fields_value["interface_attributes"] = dictionary_from_key_value_list(field_val, glb_idx)
                 except Exception as e:
-                    add_issue(IType.error(), str(e))
+                    add_issue(IType.ERROR, str(e))
                     return
             else:
                 fields_value["interface_attributes"] = {}
@@ -200,7 +200,7 @@ class InterfacesAndQualifiedQuantitiesCommand(IExecutableCommand):
                 try:
                     number_attributes = dictionary_from_key_value_list(f_number_attributes, glb_idx)
                 except Exception as e:
-                    add_issue(IType.error(), str(e))
+                    add_issue(IType.ERROR, str(e))
                     return
             else:
                 number_attributes = {}
@@ -214,7 +214,7 @@ class InterfacesAndQualifiedQuantitiesCommand(IExecutableCommand):
             # IF i AND p AND NOT it => get "i" (MUST EXIST)
             if not f_interface_name:
                 if not f_interface_type_name:
-                    add_issue(IType.error(), "At least one of InterfaceType or Interface must be defined")
+                    add_issue(IType.ERROR, "At least one of InterfaceType or Interface must be defined")
                     return
 
                 possibly_local_interface_name = None
@@ -226,16 +226,16 @@ class InterfacesAndQualifiedQuantitiesCommand(IExecutableCommand):
             if f_pedigree_matrix and f_pedigree:
                 pm = glb_idx.get(PedigreeMatrix.partial_key(name=f_pedigree_matrix))
                 if len(pm) == 0:
-                    add_issue(IType.error(), "Could not find Pedigree Matrix '" + f_pedigree_matrix + "'")
+                    add_issue(IType.ERROR, "Could not find Pedigree Matrix '" + f_pedigree_matrix + "'")
                     return
                 else:
                     try:
                         lst = pm[0].get_modes_for_code(f_pedigree)
                     except:
-                        add_issue(IType.error(), "Could not decode Pedigree '" + f_pedigree + "' for Pedigree Matrix '" + f_pedigree_matrix + "'")
+                        add_issue(IType.ERROR, "Could not decode Pedigree '" + f_pedigree + "' for Pedigree Matrix '" + f_pedigree_matrix + "'")
                         return
             elif f_pedigree and not f_pedigree_matrix:
-                add_issue(IType.error(), "Pedigree specified without accompanying Pedigree Matrix")
+                add_issue(IType.ERROR, "Pedigree specified without accompanying Pedigree Matrix")
                 return
 
             # Source
@@ -251,7 +251,7 @@ class InterfacesAndQualifiedQuantitiesCommand(IExecutableCommand):
                         if len(references) == 1:
                             source = references[0]
                         else:
-                            add_issue(IType.error(), f"Reference '{f_source}' not found")
+                            add_issue(IType.ERROR, f"Reference '{f_source}' not found")
                 except:
                     # TODO Change when Ref* are implemented
                     source = f_source + " (not found)"
@@ -276,10 +276,10 @@ class InterfacesAndQualifiedQuantitiesCommand(IExecutableCommand):
             # TODO Allow creating a basic Processor if it is not found?
             p = glb_idx.get(Processor.partial_key(f_processor_name))
             if len(p) == 0:
-                add_issue(IType.error(), "Processor '" + f_processor_name + "' not declared previously")
+                add_issue(IType.ERROR, "Processor '" + f_processor_name + "' not declared previously")
                 return
             elif len(p) > 1:
-                add_issue(IType.error(), "Processor '" + f_processor_name + "' found " + str(len(p)) + " times. It must be uniquely identified.")
+                add_issue(IType.ERROR, "Processor '" + f_processor_name + "' found " + str(len(p)) + " times. It must be uniquely identified.")
                 return
             else:
                 p = p[0]
@@ -288,21 +288,21 @@ class InterfacesAndQualifiedQuantitiesCommand(IExecutableCommand):
             ft: FactorType = None
             f = glb_idx.get(Factor.partial_key(processor=p, name=f_interface_name))
             if len(f) == 1:
-                f = f[0]
+                f: Factor = f[0]
                 ft: FactorType = f.taxon
                 if f_interface_type_name:
                     if not strcmp(ft.name, f_interface_type_name):
-                        add_issue(IType.warning(), f"The InterfaceType of the Interface, {ft.name} "
+                        add_issue(IType.WARNING, f"The InterfaceType of the Interface, {ft.name} "
                                   f"is different from the specified InterfaceType, {f_interface_type_name}. Record skipped.")
                         return
             elif len(f) > 1:
-                add_issue(IType.error(), f"Interface '{f_interface_name}' found {str(len(f))} times. "
-                                         f"It must be uniquely identified.")
+                add_issue(IType.ERROR, f"Interface '{f_interface_name}' found {str(len(f))} times. "
+                                       f"It must be uniquely identified.")
                 return
             elif len(f) == 0:
                 f: Factor = None  # Does not exist, create it below
                 if not f_orientation:
-                    add_issue(IType.error(), f"Orientation must be defined for new Interfaces")
+                    add_issue(IType.ERROR, f"Orientation must be defined for new Interfaces")
                     return
 
             # InterfaceType still not found
@@ -311,27 +311,26 @@ class InterfacesAndQualifiedQuantitiesCommand(IExecutableCommand):
                 # TODO Allow creating a basic FactorType if it is not found
                 ft = glb_idx.get(FactorType.partial_key(f_interface_type_name))
                 if len(ft) == 0:
-                    add_issue(IType.error(), f"InterfaceType '{f_interface_type_name}' not declared previously")
+                    add_issue(IType.ERROR, f"InterfaceType '{f_interface_type_name}' not declared previously")
                     return
                 elif len(ft) > 1:
-                    add_issue(IType.error(), f"InterfaceType '{f_interface_type_name}' found {str(len(ft))} times. "
-                                             f"It must be uniquely identified.")
+                    add_issue(IType.ERROR, f"InterfaceType '{f_interface_type_name}' found {str(len(ft))} times. "
+                                           f"It must be uniquely identified.")
                     return
                 else:
                     ft = ft[0]
 
-            if not f:
-                # Get attributes default values taken from Interface Type or Processor attributes
-                default_values = {
-                    # "orientation": ft.orientation,
-                    "sphere": ft.sphere,
-                    "roegen_type": ft.roegen_type,
-                    "opposite_processor_type": p.subsystem_type
-                }
+            # Get attributes default values taken from Interface Type or Processor attributes
+            default_values = {
+                "sphere": ft.sphere,
+                "roegen_type": ft.roegen_type,
+                "opposite_processor_type": ft.opposite_processor_type
+            }
 
-                # Get internal and user-defined attributes in one dictionary
-                attributes = {k: ifnull(fields_value[k], default_values.get(k, None))
-                              for k, v in fields.items() if v.attribute_of == Factor}
+            # Get internal and user-defined attributes in one dictionary
+            attributes = {k: ifnull(fields_value[k], default_values.get(k))
+                          for k, v in fields.items() if v.attribute_of == Factor}
+            if not f:
                 attributes.update(fields_value["interface_attributes"])
 
                 f = Factor.create_and_append(f_interface_name,
@@ -346,10 +345,13 @@ class InterfacesAndQualifiedQuantitiesCommand(IExecutableCommand):
                                              attributes=attributes)
                 glb_idx.put(f.key(), f)
 
+            elif not f.compare_attributes(attributes):
+                add_issue(IType.ERROR, f"The same interface is being redeclared with different properties.")
+
             # Find Observer
             oer = glb_idx.get(Observer.partial_key(f_source))
             if not oer:
-                add_issue(IType.warning(), f"Observer '{f_source}' has not been found.")
+                add_issue(IType.WARNING, f"Observer '{f_source}' has not been found.")
             else:
                 oer = oer[0]
 
@@ -361,22 +363,27 @@ class InterfacesAndQualifiedQuantitiesCommand(IExecutableCommand):
                 try:
                     f_unit = str((ureg(f_unit) / ureg(rel_unit_name)).units)
                 except (UndefinedUnitError, AttributeError) as ex:
-                    add_issue(3, f"The final unit could not be computed, interface '{f_unit}' / "
-                                 f"relative_to '{rel_unit_name}': {str(ex)}")
+                    add_issue(IType.ERROR, f"The final unit could not be computed, interface '{f_unit}' / "
+                                           f"relative_to '{rel_unit_name}': {str(ex)}")
                     return
 
                 f_relative_to = first(f.processor.factors, lambda ifc: strcmp(ifc.name, relative_to_interface_name))
 
                 if not f_relative_to:
-                    add_issue(IType.error(), f"Interface specified in 'relative_to' column "
-                                             f"'{relative_to_interface_name}' has not been found.")
+                    add_issue(IType.ERROR, f"Interface specified in 'relative_to' column "
+                                           f"'{relative_to_interface_name}' has not been found.")
                     return
 
+            if f_value is None and f_relative_to is not None:
+                f_value = "0"
+                add_issue(IType.WARNING, f"Field 'value' should be defined for unitary processors, i.e. those having a "
+                                         f"'relative_to' interface. Using value '0'.")
+
             # Create quantitative observation
-            if f_value:
+            if f_value is not None:
                 # If an observation exists then "time" is mandatory
                 if not f_time:
-                    add_issue(IType.error(), f"Field 'time' needs to be specified for the given observation.")
+                    add_issue(IType.ERROR, f"Field 'time' needs to be specified for the given observation.")
                     return
 
                 o = _create_or_append_quantitative_observation(f,
@@ -392,7 +399,7 @@ class InterfacesAndQualifiedQuantitiesCommand(IExecutableCommand):
                 # TODO Register? Disable for now. Observation can be obtained from a pass over all Interfaces
                 # glb_idx.put(o.key(), o)
 
-        def add_issue(itype: int, description: str):
+        def add_issue(itype: IType, description: str):
             issues.append(
                 Issue(itype=itype,
                       description=description,

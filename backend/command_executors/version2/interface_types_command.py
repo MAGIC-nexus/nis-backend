@@ -1,6 +1,6 @@
 import json
 
-from backend.command_generators import Issue, IssueLocation
+from backend.command_generators import Issue, IssueLocation, IType
 from backend.command_generators.parser_ast_evaluators import dictionary_from_key_value_list
 from backend.common.helper import strcmp
 from backend.model_services import IExecutableCommand, get_case_study_registry_objects
@@ -16,21 +16,20 @@ class InterfaceTypesCommand(IExecutableCommand):
         def process_line(item):
             # Read variables
             ft_h_name = item.get("interface_type_hierarchy", "_default")  # "_default" InterfaceType Hierarchy NAME <<<<<<
-            ft_name = item.get("interface_type", None)
-            ft_sphere = item.get("sphere", None)
-            ft_roegen_type = item.get("roegen_type", None)
-            ft_parent = item.get("parent_interface_type", None)
-            ft_formula = item.get("formula", None)
-            ft_description = item.get("description", None)
-            ft_unit = item.get("unit", None)
-            # ft_orientation = item.get("orientation", None)
-            ft_unit = item.get("unit", None)
+            ft_name = item.get("interface_type")
+            ft_sphere = item.get("sphere")
+            ft_roegen_type = item.get("roegen_type")
+            ft_parent = item.get("parent_interface_type")
+            ft_formula = item.get("formula")
+            ft_description = item.get("description")
+            ft_unit = item.get("unit")
+            ft_opposite_processor_type = item.get("opposite_processor_type")
             ft_attributes = item.get("attributes", {})
             if ft_attributes:
                 try:
                     attributes = dictionary_from_key_value_list(ft_attributes, glb_idx)
                 except Exception as e:
-                    issues.append(Issue(itype=3,
+                    issues.append(Issue(itype=IType.ERROR,
                                         description=str(e),
                                         location=IssueLocation(sheet_name=name, row=r, column=None)))
                     return
@@ -40,13 +39,13 @@ class InterfaceTypesCommand(IExecutableCommand):
             # Process
             # Mandatory fields
             if not ft_h_name:
-                issues.append(Issue(itype=3,
+                issues.append(Issue(itype=IType.ERROR,
                                     description="Empty interface type hierarchy name. Skipped.",
                                     location=IssueLocation(sheet_name=name, row=r, column=None)))
                 return
 
             if not ft_name:
-                issues.append(Issue(itype=3,
+                issues.append(Issue(itype=IType.ERROR,
                                     description="Empty interface type name. Skipped.",
                                     location=IssueLocation(sheet_name=name, row=r, column=None)))
                 return
@@ -69,18 +68,18 @@ class InterfaceTypesCommand(IExecutableCommand):
                             parent = p
                             break
                     if not isinstance(parent, FactorType):
-                        issues.append(Issue(itype=3,
+                        issues.append(Issue(itype=IType.ERROR,
                                             description="Parent interface type name '"+ft_parent+"' not found in hierarchy '"+ft_h_name+"'",
                                             location=IssueLocation(sheet_name=name, row=r, column=None)))
                         return
                 else:
-                    issues.append(Issue(itype=3,
+                    issues.append(Issue(itype=IType.ERROR,
                                         description="Parent interface type name '" + ft_parent + "' not found",
                                         location=IssueLocation(sheet_name=name, row=r, column=None)))
                     return
                 # Double check, it must be defined in "hie"
                 if ft_parent not in hie.codes:
-                    issues.append(Issue(itype=3,
+                    issues.append(Issue(itype=IType.ERROR,
                                         description="Parent interface type name '" + ft_parent + "' not registered in the hierarchy '"+ft_h_name+"'",
                                         location=IssueLocation(sheet_name=name, row=r, column=None)))
                     return
@@ -101,15 +100,15 @@ class InterfaceTypesCommand(IExecutableCommand):
                                 tags=None,  # No tags
                                 attributes=dict(unit=ft_unit, description=ft_description, **ft_attributes),
                                 expression=ft_formula,
-                                # orientation=ft_orientation,
-                                sphere=ft_sphere
+                                sphere=ft_sphere,
+                                opposite_processor_type=ft_opposite_processor_type
                                 )
                 # Simple name
                 glb_idx.put(FactorType.partial_key(ft_name, ft.ident), ft)
                 if not strcmp(ft_name, ft.full_hierarchy_name()):
                     glb_idx.put(FactorType.partial_key(ft.full_hierarchy_name(), ft.ident), ft)
             else:
-                issues.append(Issue(itype=3,
+                issues.append(Issue(itype=IType.ERROR,
                                     description="Interface type name '" + ft_name + "' already registered",
                                     location=IssueLocation(sheet_name=name, row=r + 1, column=None)))
                 return
