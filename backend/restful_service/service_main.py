@@ -1498,8 +1498,9 @@ def reset_state_and_reproducible_session(isess: InteractiveSession):
                                     allow_saving=True
                                     )
 
-
-# MAIN POINT OF EXECUTION BY THE GENERIC CLIENT ("ANGULAR FRONTEND")
+# #################################################################################################################### #
+# MAIN POINT OF EXECUTION BY THE GENERIC CLIENT ("ANGULAR FRONTEND")                                                   #
+# #################################################################################################################### #
 @app.route(nis_api_base + "/isession/rsession/generator", methods=["POST"])
 def reproducible_session_append_command_generator():  # Receive a command_executors generator, like a Spreadsheet file, an R script, or a full JSON command_executors list (or other)
     def convert_issues(iss_lst):
@@ -3408,12 +3409,43 @@ def hello():
 
 
 if __name__ == '__main__':
-    # GUNICORN
-    # (start REDIS first at localhost:6379)
+    # from tasks import add
+    # from celery.task.control import inspect
+    # import time
+    # def f():
+    #     t = []
+    #     for i in range(10):
+    #         t.append(add.delay(i, i + 1))
+    #     i = inspect()
+    #     st = [ti.ready() for ti in t]
+    #     while not all(st):
+    #         print(f"Completos: {sum(st)}; quedan {len(st)-sum(st)}")
+    #         print(i.active())
+    #         time.sleep(1)
+    #         st = [ti.ready() for ti in t]
+    # f()
+
+    # 1) GUNICORN
+    # (start REDIS first at localhost:6379. E.g.: docker run --rm --name redis-local -p 6379:6379 redis:alpine)
     #
     # cd ~/AA_MAGIC/nis-backend
     # export MAGIC_NIS_SERVICE_CONFIG_FILE=/home/rnebot/GoogleDrive/AA_MAGIC/nis-backend-config/nis_local.conf
     # gunicorn --bind 0.0.0.0:8080 --workers 3 backend.restful_service.service_main:app
+
+    # 2) DOCKER. BASIC DEPLOYMENT
+    #
+    # PREVIOUSLY, COMPILE FRONTEND
+    # cd ~/GoogleDrive/AA_MAGIC/nis-frontend
+    # npm install
+    # rm dist -fr
+    # node --max_old_space_size=8192 node_modules/@angular/cli/bin/ng build --prod -c production_local --aot --base-href /nis_client/
+    # rm ~/GoogleDrive/AA_MAGIC/nis-backend/frontend/* -fr
+    # cp -r ~/GoogleDrive/AA_MAGIC/nis-frontend/dist/* ~/GoogleDrive/AA_MAGIC/nis-backend/frontend
+    #
+    # 2) (continuation) DOCKER COMMANDS (example)
+    # docker network create nis-net
+    # docker run --rm --name redis-local --net nis-net -p 6379:6379 redis:alpine
+    # docker create --name nis-local --net nis-net -p 5000:80 -v /home/rnebot/DATOS/docker_magic_nis:/srv -e MAGIC_NIS_SERVICE_CONFIG_FILE="nis_local_redis_docker.conf" magic-nis
 
     # cs = CaseStudy()
     # vs1 = CaseStudyVersion()
