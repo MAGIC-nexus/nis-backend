@@ -233,7 +233,6 @@ class RelationshipsCommand(IExecutableCommand):
             r_target_processor_name = item.get("target_processor")  # Mandatory, simple_ident
             r_target_interface_name = item.get("target_interface")  # Mandatory, simple_ident
             r_relation_type = item.get("relation_type").lower()  # Mandatory, simple_ident
-            r_change_type_scale = item.get("change_type_scale")  # Mandatory, simple_ident
             r_flow_weight = item.get("flow_weight")  # Mandatory, simple_ident
             r_source_cardinality = item.get("source_cardinality")  # Mandatory, simple_ident
             r_target_cardinality = item.get("target_cardinality")  # Mandatory, simple_ident
@@ -267,8 +266,6 @@ class RelationshipsCommand(IExecutableCommand):
                 add_issue(IType.ERROR, f"The target processor '{r_target_processor_name}' doesn't exist.")
                 return
 
-            change_type_scale: Optional[FactorTypesConverter] = None
-
             if not between_processors:
                 # Look for source and target Interfaces
                 source_interface = source_processor.factors_find(r_source_interface_name)
@@ -297,32 +294,22 @@ class RelationshipsCommand(IExecutableCommand):
                         return
 
                 if source_interface.taxon != target_interface.taxon:
-                    if not r_change_type_scale:
-                        # Check if a scale change has been specified
-                        scale_relations = find_factor_type_scale_relation(
-                            glb_idx, source_interface.taxon, target_interface.taxon, source_processor, target_processor)
+                    # Check if a scale change has been specified
+                    scale_relations = find_factor_type_scale_relation(
+                        glb_idx, source_interface.taxon, target_interface.taxon, source_processor, target_processor)
 
-                        if len(scale_relations) == 0:
-                            add_issue(IType.ERROR, f"Interface types are not the same (and transformation from one "
-                                                   f"to the other cannot be performed). Origin: "
-                                                   f"{source_interface.taxon.name}; Target: {target_interface.taxon.name}")
-                            return
-                        elif len(scale_relations) > 1:
-                            add_issue(IType.ERROR,
-                                      f"Multiple transformations can be applied between interfaces. Origin: "
-                                      f"{source_interface.taxon.name}; Target: {target_interface.taxon.name}")
-                            return
-                        else:
-                            change_type_scale = scale_relations[0].converter
+                    if len(scale_relations) == 0:
+                        add_issue(IType.ERROR, f"Interface types are not the same (and transformation from one "
+                                               f"to the other cannot be performed). Origin: "
+                                               f"{source_interface.taxon.name}; Target: {target_interface.taxon.name}")
+                        return
+                    elif len(scale_relations) > 1:
+                        add_issue(IType.ERROR,
+                                  f"Multiple transformations can be applied between interfaces. Origin: "
+                                  f"{source_interface.taxon.name}; Target: {target_interface.taxon.name}")
+                        return
                     else:
-                        change_type_scale = FactorTypesConverter(r_change_type_scale)
-
-            # TODO Pass full "attributes" dictionary
-            # Pass "change_type_scale" as attribute
-            if change_type_scale:
-                attributes = dict(_change_type_scale=change_type_scale)
-            else:
-                attributes = None
+                        attributes.update(dict(_change_type_scale=scale_relations[0].converter))
 
             if between_processors:
                 create_relation_observations(glb_idx,

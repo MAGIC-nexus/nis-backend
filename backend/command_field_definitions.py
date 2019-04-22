@@ -205,7 +205,6 @@ command_fields: Dict[str, List[CommandField]] = {
         CommandField(allowed_names=["DestinationProcessors", "DestinationProcessor"], name="target_processor", mandatory=True, parser=processor_names),
         CommandField(allowed_names=["DestinationInterface"], name="target_interface", parser=simple_ident),
         CommandField(allowed_names=["RelationType"], name="relation_type", mandatory=True, allowed_values=relation_types, parser=unquoted_string),
-        CommandField(allowed_names=["ChangeOfTypeScale"], name="change_type_scale", parser=expression_with_parameters),
         CommandField(allowed_names=["Weight"], name="flow_weight", parser=expression_with_parameters),
         CommandField(allowed_names=["OriginCardinality"], name="source_cardinality", allowed_values=source_cardinalities, parser=simple_ident),
         CommandField(allowed_names=["DestinationCardinality"], name="target_cardinality", allowed_values=target_cardinalities, parser=simple_ident),
