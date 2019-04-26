@@ -2,6 +2,8 @@ from enum import Enum
 from attr import attrs, attrib, validators
 from openpyxl.utils import get_column_letter
 
+import backend
+
 
 class IType(Enum):
     INFO = 1
@@ -24,7 +26,7 @@ class IssueLocation:
 @attrs
 class Issue:
     # (1) Info, (2) Warning, (3) Error
-    itype = attrib(validator=validators.instance_of(IType))  # type: IType
+    itype = attrib()  # type: IType
     # An english description of what happened
     description = attrib()  # type: str
     # Command type
@@ -34,3 +36,8 @@ class Issue:
 
     def __str__(self):
         return f'(level={self.itype.name}, msg="{self.description}", cmd="{self.ctype}", {self.location})'
+
+    @itype.validator
+    def check(self, attribute, value):
+        if not isinstance(value, backend.command_generators.IType):
+            raise ValueError("itype should be an instance of enum IType")

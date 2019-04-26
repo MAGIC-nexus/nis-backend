@@ -1329,3 +1329,13 @@ def class_full_name(c: Type) -> str:
 def object_full_name(o: object) -> str:
     """ Get the full class name of an object """
     return class_full_name(o.__class__)
+
+
+def split_and_strip(s: str, sep=",") -> List[str]:
+    """Split a string representing a comma separated list of strings into a list of strings
+    where each element has been stripped. If the string has no elements an empty list is returned."""
+    string_list: List[str] = []
+    if s is not None and isinstance(s, str):
+        string_list = [s.strip() for s in s.split(sep)]
+
+    return string_list

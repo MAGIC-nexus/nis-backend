@@ -1,90 +1,19 @@
-import json
-from typing import List, Dict, Union, Any, Optional, Tuple
+from typing import List, Dict, Union, Any, Tuple, NoReturn
 
-from backend import IssuesOutputPairType, CommandField
 from backend.command_field_definitions import get_command_fields_from_class
-from backend.common.helper import head, strcmp, PartialRetrievalDictionary
-from backend.model_services import IExecutableCommand, State, get_case_study_registry_objects
-from backend.command_generators import Issue, IType, IssueLocation
 from backend.command_generators.parser_ast_evaluators import ast_evaluator
 from backend.command_generators.parser_field_parsers import string_to_ast, expression_with_parameters
-from backend.models.musiasem_concepts import Processor, ProcessorsRelationPartOfObservation, Factor, \
-    ProcessorsRelationUpscaleObservation, FactorsRelationScaleObservation
-from backend.models.musiasem_concepts_helper import find_processor_by_name
+from backend.common.helper import strcmp
+from backend.models.musiasem_concepts import Processor, ProcessorsRelationPartOfObservation, \
+    FactorsRelationScaleObservation
+from command_executors import BasicCommand, CommandExecutionError
 
 
-class CommandExecutionError(Exception):
-    pass
-
-
-class ProcessorScalingsCommand(IExecutableCommand):
+class ProcessorScalingsCommand(BasicCommand):
     def __init__(self, name: str):
-        self._name = name
-        self._content: Dict = {}
-        self._command_name = ""
-        self._command_fields: List[CommandField] = get_command_fields_from_class(self.__class__)
+        BasicCommand.__init__(self, name, get_command_fields_from_class(self.__class__))
 
-        # Execution state
-        self._issues: List[Issue] = None
-        self._current_row_number: int = None
-        self._glb_idx: PartialRetrievalDictionary = None
-        self._fields_values = {}
-
-    def _get_command_fields_values(self, row: Dict[str, Any]) -> Dict[str, Any]:
-        return {f.name: row.get(f.name, head(f.allowed_values)) for f in self._command_fields}
-
-    def _check_all_mandatory_fields_have_values(self):
-        empty_fields: List[str] = [f.name for f in self._command_fields if f.mandatory and not self._fields_values[f.name]]
-
-        if len(empty_fields) > 0:
-            raise CommandExecutionError(f"Mandatory field/s '{', '.join(empty_fields)}' is/are empty.")
-
-    def _add_issue(self, itype: IType, description: str):
-        self._issues.append(
-            Issue(itype=itype,
-                  description=description,
-                  location=IssueLocation(sheet_name=self._command_name,
-                                         row=self._current_row_number, column=None))
-        )
-        return
-
-    def estimate_execution_time(self):
-        return 0
-
-    def json_serialize(self) -> Dict:
-        """Directly return the metadata dictionary"""
-        return self._content
-
-    def json_deserialize(self, json_input: Union[dict, str, bytes, bytearray]) -> List[Issue]:
-        # TODO Check validity
-        if isinstance(json_input, dict):
-            self._content = json_input
-        else:
-            self._content = json.loads(json_input)
-
-        self._command_name = self._content["command_name"]
-
-        return []
-
-    def execute(self, state: State) -> IssuesOutputPairType:
-        self._issues = []
-
-        self._glb_idx, _, _, _, _ = get_case_study_registry_objects(state)
-
-        for row in self._content["items"]:
-            try:
-                self._process_row(row)
-            except CommandExecutionError as e:
-                self._add_issue(IType.ERROR, str(e))
-
-        return self._issues, None
-
-    def _process_row(self, row: Dict[str, Any]):
-        self._current_row_number = row["_row"]
-        self._fields_values = self._get_command_fields_values(row)
-
-        self._check_all_mandatory_fields_have_values()
-
+    def _process_row(self, row: Dict[str, Any]) -> NoReturn:
         scaling_type = self._fields_values["scaling_type"]
         scale: str = self._fields_values["scale"]
 
@@ -148,15 +77,6 @@ class ProcessorScalingsCommand(IExecutableCommand):
             self._scale_observations_relative_to_interface(processor=requested_processor_clone,
                                                            interface_name=requested_interface_name,
                                                            scale=scale_value)
-
-    def _get_processor_from_field(self, field_name: str) -> Optional[Processor]:
-        processor_name = self._fields_values[field_name]
-        processor = find_processor_by_name(state=self._glb_idx, processor_name=processor_name)
-
-        if not processor:
-            raise CommandExecutionError(f"The processor '{processor_name}' defined in field '{field_name}' "
-                                        f"has not been previously declared.")
-        return processor
 
     def _clone_processor_as_child(self, processor: Processor, parent_processor: Processor, name: str = None) -> Processor:
             # Clone inherits some attributes from parent

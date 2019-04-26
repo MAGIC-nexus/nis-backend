@@ -9,7 +9,7 @@ from backend.command_generators.parser_field_parsers import simple_ident, unquot
     hierarchy_expression_v2, key_value_list, key_value, expression_with_parameters, \
     time_expression, indicator_expression, code_string, simple_h_name, domain_definition, unit_name, url_parser, \
     processor_names, value, list_simple_ident, reference, processor_name
-from backend.models.musiasem_concepts import Processor, Factor
+from backend.models.musiasem_concepts import Processor, Factor, RelationClassType
 from backend.command_definitions import valid_v2_command_names, commands
 from backend.common.helper import first, class_full_name
 from backend.model_services import IExecutableCommand
@@ -29,16 +29,6 @@ instance_or_archetype = ["Instance", "Archetype"]
 copy_interfaces_mode = ["No", "FromParent", "FromChildren", "Bidirectional"]
 source_cardinalities = ["One", "Zero", "ZeroOrOne", "ZeroOrMore", "OneOrMore"]
 target_cardinalities = source_cardinalities
-relation_types = [# Relationships between Processors
-                  "is_a", "IsA",  # "Left" gets a copy of ALL "Right" interface types
-                  "as_a", "AsA",  # Left must already have ALL interfaces from Right. Similar to "part-of" in the sense that ALL Right interfaces are connected from Left to Right
-                  "part_of", "|", "PartOf",  # The same thing. Left is inside Right. No assumptions on flows between child and parent.
-                  "aggregate", "aggregation",
-                  "compose",
-                  "associate", "association",
-                  # Relationships between interfaces
-                  "flow", "scale", ">", "<"
-                  ]
 processor_scaling_types = ["CloneAndScale", "Scale", "CloneScaled"]
 agent_types = ["Person", "Software", "Organization"]
 geographic_resource_types = ["dataset"]
@@ -204,7 +194,8 @@ command_fields: Dict[str, List[CommandField]] = {
         CommandField(allowed_names=["OriginInterface"], name="source_interface", parser=simple_ident),
         CommandField(allowed_names=["DestinationProcessors", "DestinationProcessor"], name="target_processor", mandatory=True, parser=processor_names),
         CommandField(allowed_names=["DestinationInterface"], name="target_interface", parser=simple_ident),
-        CommandField(allowed_names=["RelationType"], name="relation_type", mandatory=True, allowed_values=relation_types, parser=unquoted_string),
+        CommandField(allowed_names=["BackInterface"], name="back_interface", parser=simple_ident),
+        CommandField(allowed_names=["RelationType"], name="relation_type", mandatory=True, allowed_values=RelationClassType.all_labels(), parser=unquoted_string),
         CommandField(allowed_names=["Weight"], name="flow_weight", parser=expression_with_parameters),
         CommandField(allowed_names=["OriginCardinality"], name="source_cardinality", allowed_values=source_cardinalities, parser=simple_ident),
         CommandField(allowed_names=["DestinationCardinality"], name="target_cardinality", allowed_values=target_cardinalities, parser=simple_ident),

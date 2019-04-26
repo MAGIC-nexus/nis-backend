@@ -189,7 +189,7 @@ class ProcessorsCommand(IExecutableCommand):
                 return
 
             # Transform text of "attributes" into a dictionary
-            field_val = fields_value.get("attributes", None)
+            field_val = fields_value.get("attributes")
             if field_val:
                 try:
                     fields_value["attributes"] = dictionary_from_key_value_list(field_val, glb_idx)
@@ -203,7 +203,7 @@ class ProcessorsCommand(IExecutableCommand):
 
             # Obtain the parent: it must exist. It could be created dynamically but it's important to specify attributes
             parent_processor = None
-            field_val = fields_value.get("parent_processor", None)
+            field_val = fields_value.get("parent_processor")
             if field_val:
                 parent_processor = find_processor_by_name(state=glb_idx, processor_name=field_val)
                 if not parent_processor:
@@ -216,7 +216,7 @@ class ProcessorsCommand(IExecutableCommand):
             # TODO Improve allowing CLONE(<processor name>)
             # TODO Pass the attributes:
             # TODO p_type, p_f_or_s, p_i_or_a, p_alias, p_description, p_copy_interfaces
-            if fields_value.get("clone_processor", None):
+            if fields_value.get("clone_processor"):
                 # TODO Find origin processor
                 # TODO Clone it
                 pass
@@ -233,7 +233,7 @@ class ProcessorsCommand(IExecutableCommand):
                 )
 
             # Add to ProcessorsGroup, if specified
-            field_val = fields_value.get("processor_group", None)
+            field_val = fields_value.get("processor_group")
             if field_val:
                 p_set = p_sets.get(field_val, ProcessorsSet(field_val))
                 p_sets[field_val] = p_set

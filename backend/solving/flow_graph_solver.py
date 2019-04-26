@@ -139,11 +139,6 @@ def get_processor_name(processor: Processor, registry: PartialRetrievalDictionar
     return processor.full_hierarchy_names(registry)[0]
 
 
-def get_interface_name(interface: Factor, registry: PartialRetrievalDictionary) -> str:
-    """ Get the full interface name prefixed by the processor hierarchical name """
-    return get_processor_name(interface.processor, registry) + ":" + istr(interface.name)
-
-
 def get_circular_dependencies(parameters: Dict[str, Tuple[Any, list]]) -> list:
     # Graph, for evaluation of circular dependencies
     G = nx.DiGraph()

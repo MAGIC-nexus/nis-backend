@@ -1788,42 +1788,53 @@ class ProcessorsSet(Nameable):
 
 
 class RelationClassType(Enum):
-    pp_part_of = 1
-    pp_undirected_flow = 2
-    pp_upscale = 3
-    pp_isa = 4
-    pp_aggregate = 5
-    pp_associate = 6
+    # Relations between Processors
+    pp_part_of = ("part_of", "partof", "|")  # Left is inside Right. No assumptions on flows between child and parent.
+    pp_undirected_flow = ("<>", "><")
+    pp_upscale = "||"
+    pp_isa = ("is_a", "isa")  # "Left" gets a copy of ALL "Right" interface types
+    # pp_asa = ("as_a", "asa")  # Left must already have ALL interfaces from Right. Similar to "part-of" in the sense that ALL Right interfaces are connected from Left to Right
+    # pp_compose = "compose"
+    pp_aggregate = ("aggregate", "aggregation")
+    pp_associate = ("associate", "association")
 
-    ff_directed_flow = 10
-    ff_reverse_directed_flow = 11
-    ff_scale = 12
+    # Relations between Interfaces
+    ff_directed_flow = ("flow", ">")
+    ff_reverse_directed_flow = "<"
+    ff_scale = "scale"
+    ff_directed_flow_back = ("flowback", "flow_back")
+    ff_scale_change = ("scalechange", "scale_change")
 
-    ftft_directed_linear_transform = 20  # InterfaceType to InterfaceType
+    # Relations between Interface Types
+    ftft_directed_linear_transform = "interface_type_change"
+
+    def __init__(self, *labels):
+        self.labels = labels
+
+    @property
+    def is_between_processors(self) -> bool:
+        return self.name.startswith("pp_")
+
+    @property
+    def is_between_interfaces(self) -> bool:
+        return self.name.startswith("ff_")
+
+    @property
+    def is_flow(self) -> bool:
+        return self.name.endswith("_flow")
 
     @staticmethod
-    def from_str(label):
+    def from_str(label: str) -> "RelationClassType":
 
-        if label in ["is_a", "isa"]:
-            return RelationClassType.pp_isa
-        elif label in ["part_of", "partof", "|"]:
-            return RelationClassType.pp_part_of
-        elif label in ["aggregate", "aggregation"]:
-            return RelationClassType.pp_aggregate
-        elif label in ["associate", "association"]:
-            return RelationClassType.pp_associate
-        elif label in ["flow", ">"]:
-            return RelationClassType.ff_directed_flow
-        elif label in ["<"]:
-            return RelationClassType.ff_reverse_directed_flow
-        elif label in ["scale"]:
-            return RelationClassType.ff_scale
-        elif label in ["<>", "><"]:
-            return RelationClassType.pp_undirected_flow
-        elif label in ["||"]:
-            return RelationClassType.pp_upscale
-        else:
-            raise NotImplementedError
+        for member in list(RelationClassType):
+            if label.lower() in member.labels:
+                return member
+
+        raise NotImplementedError(f"The relation type '{label}' is not valid.")
+
+    @staticmethod
+    def all_labels() -> List[str]:
+        return [label for member in list(RelationClassType) for label in member.labels]
 
 
 class FactorQuantitativeObservation(Taggable, Qualifiable, Automatable, Encodable):
@@ -2411,6 +2422,70 @@ class FactorsRelationDirectedFlowObservation(FactorsRelationObservation, Encodab
 
     def key(self):
         d = {"_t": RelationClassType.ff_directed_flow.name, "__s": self._source.ident, "__t": self._target.ident}
+        if self._observer:
+            d["__oer"] = self._observer.ident
+        return d
+
+
+class FactorsRelationDirectedFlowBackObservation(FactorsRelationDirectedFlowObservation):
+    """
+    Represents a special directed Flow from a source to a target interface with a connection to a back interface
+    """
+
+    def __init__(self, source: Factor, target: Factor, back: Factor, observer: Observer = None, weight: str=None, tags=None, attributes=None):
+        FactorsRelationDirectedFlowObservation.__init__(self, source, target, observer, weight, tags, attributes)
+        self._back = back
+
+    def encode(self):
+        d = Encodable.parents_encode(self, __class__)
+
+        d.update({
+            "back": name_and_id_dict(self.back_factor)
+        })
+
+        return d
+
+    @staticmethod
+    def create_and_append(source: Factor, target: Factor, back: Factor, observer: Optional[Observer], weight: str=None, tags=None, attributes=None):
+        o = FactorsRelationDirectedFlowBackObservation(source, target, back, observer, weight, tags, attributes)
+        if source:
+            source.observations_append(o)
+        if target:
+            target.observations_append(o)
+        if back:
+            back.observations_append(o)
+        if observer:
+            observer.observables_append(source)
+            observer.observables_append(target)
+            observer.observables_append(back)
+        return o
+
+    @property
+    def back_factor(self):
+        return self._back
+
+    @staticmethod
+    def partial_key(source: Factor=None, target: Factor=None, back: Factor=None, observer: Observer=None):
+        d = {"_t": RelationClassType.ff_directed_flow_back.name}
+        if target:
+            d["__t"] = target.ident
+
+        if source:
+            d["__s"] = source.ident
+
+        if back:
+            d["__b"] = back.ident
+
+        if observer:
+            d["__oer"] = observer.ident
+
+        return d
+
+    def key(self):
+        d = {"_t": RelationClassType.ff_directed_flow_back.name,
+             "__s": self._source.ident,
+             "__t": self._target.ident,
+             "__b": self._back.ident}
         if self._observer:
             d["__oer"] = self._observer.ident
         return d
