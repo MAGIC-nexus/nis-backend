@@ -1954,22 +1954,24 @@ class FactorTypesConverter(Encodable):
             "destination_unit": self.destination_unit
         }
 
-    def convert(self, value: float, source_unit: str, target_unit: str) -> float:
-        quantity = value * ureg(source_unit)
+    @staticmethod
+    def conversion_ratio(from_unit: str, to_unit: str) -> float:
+        return ureg(from_unit).to(ureg(to_unit)).magnitude
 
+    def converted_scale(self, source_unit: str, target_unit: str) -> Union[float, str]:
+        ratio = 1.0
         if self.origin_unit and self.origin_unit.lower() != source_unit.lower():
-            # Transform input value from source_unit to origin_unit
-            quantity.ito(ureg(self.origin_unit))
-
-        result = quantity.magnitude * self.scale
+            ratio *= FactorTypesConverter.conversion_ratio(self.origin_unit, source_unit)
 
         if self.destination_unit and self.destination_unit.lower() != target_unit.lower():
-            # Transform result from destination_unit to target_unit
-            quantity = result * ureg(self.destination_unit)
-            quantity.ito(ureg(target_unit))
-            result = quantity.magnitude
+            ratio *= FactorTypesConverter.conversion_ratio(self.destination_unit, target_unit)
 
-        return result
+        if isinstance(self.scale, float):
+            return ratio * self.scale
+        elif isinstance(self.scale, str) and ratio != 1.0:
+            return f"{ratio}*({self.scale})"
+
+        return self.scale
 
 
 class FactorTypesRelationUnidirectionalLinearTransformObservation(FactorTypesRelationObservation, Encodable):
@@ -1986,7 +1988,12 @@ class FactorTypesRelationUnidirectionalLinearTransformObservation(FactorTypesRel
         Qualifiable.__init__(self, attributes)
         Automatable.__init__(self)
 
-        if weight:
+        if weight is not None:
+            if isinstance(weight, str):
+                try:
+                    weight = float(weight)
+                except ValueError:
+                    pass
             self.converter = FactorTypesConverter(weight, origin_unit, destination_unit)
         else:
             self.converter = None
