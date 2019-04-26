@@ -222,7 +222,7 @@ command_fields: Dict[str, List[CommandField]] = {
         CommandField(allowed_names=["DestinationInterfaceType"], name="target_interface_type", mandatory=True, parser=simple_ident),
         CommandField(allowed_names=["OriginContext"], name="source_context", parser=processor_names),
         CommandField(allowed_names=["DestinationContext"], name="target_context", parser=processor_names),
-        CommandField(allowed_names=["Scale"], name="scale", parser=expression_with_parameters),
+        CommandField(allowed_names=["Scale"], name="scale", mandatory=True, parser=expression_with_parameters),
         CommandField(allowed_names=["OriginUnit"], name="source_unit", parser=unit_name),
         CommandField(allowed_names=["DestinationUnit"], name="target_unit", parser=unit_name)
     ],

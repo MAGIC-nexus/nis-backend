@@ -21,8 +21,7 @@ class RelationshipsCommand(BasicCommand):
         BasicCommand.__init__(self, name, get_command_fields_from_class(self.__class__))
 
     def execute(self, state: "State") -> IssuesOutputPairType:
-        self._issues = []
-
+        self._init_execution_state()
         self._glb_idx, _, hh, datasets, _ = get_case_study_registry_objects(state)
 
         # Obtain the names of all parameters
@@ -40,21 +39,21 @@ class RelationshipsCommand(BasicCommand):
 
         return self._issues, None
 
-    def _process_row(self, row: Dict[str, Any]) -> NoReturn:
-        # source_cardinality = self._fields_values["source_cardinality"]
-        # target_cardinality = self._fields_values["target_cardinality"]
+    def _process_row(self, fields: Dict[str, Any]) -> NoReturn:
+        # source_cardinality = fields["source_cardinality"]
+        # target_cardinality = fields["target_cardinality"]
 
         source_processor = self._get_processor_from_field("source_processor")
         target_processor = self._get_processor_from_field("target_processor")
         attributes = self._get_attributes_from_field("attributes")
 
         try:  # Get relation class type
-            relation_class = RelationClassType.from_str(self._fields_values["relation_type"])
+            relation_class = RelationClassType.from_str(fields["relation_type"])
         except NotImplementedError as e:
             raise CommandExecutionError(str(e))
 
         # Allow use of column "BackInterface" for "Flow" relation type
-        if self._fields_values["back_interface"] is not None and relation_class == RelationClassType.ff_directed_flow:
+        if fields["back_interface"] is not None and relation_class == RelationClassType.ff_directed_flow:
             relation_class = RelationClassType.ff_directed_flow_back
 
         if relation_class.is_between_processors:
@@ -94,7 +93,7 @@ class RelationshipsCommand(BasicCommand):
                 )
 
             create_relation_observations(self._glb_idx, source_interface,
-                                         [(target_interface, relation_class, self._fields_values["flow_weight"])],
+                                         [(target_interface, relation_class, fields["flow_weight"])],
                                          relation_class, None, attributes=attributes)
 
     def _get_interface_types_converter(
@@ -162,7 +161,7 @@ class RelationshipsCommand(BasicCommand):
         # Look for multiple items in r_source_processor_name, source_interface_name,
         #                            r_target_processor_name, target_interface_name
         if item["_complex"]:
-            asts = parse_line(item, self._fields_values)
+            asts = parse_line(item, self._command_fields)
             if item["_expandable"]:
                 # It is an expandable line
                 # Look for fields which are specified to be variable in order to originate the expansion
@@ -212,7 +211,7 @@ class RelationshipsCommand(BasicCommand):
                         for c in ds_concepts:
                             d["{" + ds.code + "." + c + "}"] = row[c]
                         # Expand in all fields
-                        for f in self._fields_values:
+                        for f in self._command_fields:
                             if f not in const_dict:
                                 # Replace all
                                 string = item[f]
@@ -221,8 +220,8 @@ class RelationshipsCommand(BasicCommand):
                                     string = re.sub(item, d[item], string)
                                 item2[f] = string
                         # Now, look for wildcards where it is allowed
-                        r_source_processor_name = string_to_ast(processor_names, item2.get("source_processor", None))
-                        r_target_processor_name = string_to_ast(processor_names, item2.get("target_processor", None))
+                        r_source_processor_name = string_to_ast(processor_names, item2.get("source_processor"))
+                        r_target_processor_name = string_to_ast(processor_names, item2.get("target_processor"))
                         if ".." in r_source_processor_name or ".." in r_target_processor_name:
                             if ".." in r_source_processor_name:
                                 source_processor_names = obtain_matching_processors(r_source_processor_name, all_processors)
@@ -248,8 +247,8 @@ class RelationshipsCommand(BasicCommand):
                     wildcard_in_source = ".." in item.get("source_processor", "")
                     wildcard_in_target = ".." in item.get("target_processor", "")
                     if wildcard_in_source or wildcard_in_target:
-                        r_source_processor_name = string_to_ast(processor_names, item.get("source_processor", None))
-                        r_target_processor_name = string_to_ast(processor_names, item.get("target_processor", None))
+                        r_source_processor_name = string_to_ast(processor_names, item.get("source_processor"))
+                        r_target_processor_name = string_to_ast(processor_names, item.get("target_processor"))
                         if wildcard_in_source:
                             source_processor_names = obtain_matching_processors(r_source_processor_name, all_processors)
                         else:

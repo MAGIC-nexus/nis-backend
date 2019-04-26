@@ -13,18 +13,18 @@ class ProcessorScalingsCommand(BasicCommand):
     def __init__(self, name: str):
         BasicCommand.__init__(self, name, get_command_fields_from_class(self.__class__))
 
-    def _process_row(self, row: Dict[str, Any]) -> NoReturn:
-        scaling_type = self._fields_values["scaling_type"]
-        scale: str = self._fields_values["scale"]
+    def _process_row(self, fields: Dict[str, Any]) -> NoReturn:
+        scaling_type = fields["scaling_type"]
+        scale: str = fields["scale"]
 
         # Find processors
         invoking_processor = self._get_processor_from_field("invoking_processor")
         requested_processor = self._get_processor_from_field("requested_processor")
 
-        invoking_interface_name: str = self._fields_values["invoking_interface"]
-        requested_interface_name: str = self._fields_values["requested_interface"]
+        invoking_interface_name: str = fields["invoking_interface"]
+        requested_interface_name: str = fields["requested_interface"]
 
-        requested_new_processor_name: str = self._fields_values["new_processor_name"]
+        requested_new_processor_name: str = fields["new_processor_name"]
 
         print(f"Invoking: {invoking_processor.name}:{invoking_interface_name}, Requested: {requested_processor.name}:{requested_interface_name}")
 

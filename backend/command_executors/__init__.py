@@ -3,11 +3,11 @@ from typing import Optional, List, Dict, Any, Union, NoReturn
 
 from backend import ExecutableCommandIssuesPairType, Command, CommandField, IssuesOutputPairType
 from backend.command_definitions import commands
-from backend.common.helper import first, PartialRetrievalDictionary, head
+from backend.common.helper import first, PartialRetrievalDictionary, head, strcmp
 from command_generators import IType, IssueLocation, Issue
 from command_generators.parser_ast_evaluators import dictionary_from_key_value_list
 from model_services import IExecutableCommand, get_case_study_registry_objects
-from models.musiasem_concepts import Processor, Factor
+from models.musiasem_concepts import Processor, Factor, FactorType
 from models.musiasem_concepts_helper import find_processor_by_name
 
 
@@ -23,10 +23,19 @@ class BasicCommand(IExecutableCommand):
         self._command_fields = command_fields
 
         # Execution state
-        self._issues: List[Issue] = None
-        self._current_row_number: int = None
-        self._glb_idx: PartialRetrievalDictionary = None
-        self._fields_values = {}
+        self._issues: List[Issue] = []
+        self._current_row_number: Optional[int] = None
+        self._glb_idx: Optional[PartialRetrievalDictionary] = None
+        self._fields: Dict[str, Any] = {}
+
+    def _init_execution_state(self, state: Optional["State"] = None) -> NoReturn:
+        self._issues = []
+        self._current_row_number = None
+        self._glb_idx = None
+        self._fields = {}
+
+        if state:
+            self._glb_idx, _, _, _, _ = get_case_study_registry_objects(state)
 
     def _get_command_fields_values(self, row: Dict[str, Any]) -> Dict[str, Any]:
         return {f.name: row.get(f.name, head(f.allowed_values)) for f in self._command_fields}
@@ -34,7 +43,7 @@ class BasicCommand(IExecutableCommand):
     def _check_all_mandatory_fields_have_values(self) -> NoReturn:
         empty_fields: List[str] = [f.name
                                    for f in self._command_fields
-                                   if f.mandatory and self._fields_values[f.name] is None]
+                                   if f.mandatory and self._fields[f.name] is None]
 
         if len(empty_fields) > 0:
             raise CommandExecutionError(f"Mandatory field/s '{', '.join(empty_fields)}' is/are empty.")
@@ -47,6 +56,26 @@ class BasicCommand(IExecutableCommand):
                                          row=self._current_row_number, column=None))
         )
         return
+
+    def _init_and_process_row(self, row: Dict[str, Any]) -> NoReturn:
+        self._current_row_number = row["_row"]
+        self._fields = self._get_command_fields_values(row)
+        self._check_all_mandatory_fields_have_values()
+        self._process_row(self._fields)
+
+    def _process_row(self, fields: Dict[str, Any]) -> NoReturn:
+        pass
+
+    def execute(self, state: "State") -> IssuesOutputPairType:
+        self._init_execution_state(state)
+
+        for row in self._content["items"]:
+            try:
+                self._init_and_process_row(row)
+            except CommandExecutionError as e:
+                self._add_issue(IType.ERROR, str(e))
+
+        return self._issues, None
 
     def estimate_execution_time(self) -> int:
         return 0
@@ -66,30 +95,8 @@ class BasicCommand(IExecutableCommand):
 
         return []
 
-    def execute(self, state: "State") -> IssuesOutputPairType:
-        self._issues = []
-
-        self._glb_idx, _, _, _, _ = get_case_study_registry_objects(state)
-
-        for row in self._content["items"]:
-            try:
-                self._init_and_process_row(row)
-            except CommandExecutionError as e:
-                self._add_issue(IType.ERROR, str(e))
-
-        return self._issues, None
-
-    def _init_and_process_row(self, row: Dict[str, Any]) -> NoReturn:
-        self._current_row_number = row["_row"]
-        self._fields_values = self._get_command_fields_values(row)
-        self._check_all_mandatory_fields_have_values()
-        self._process_row(row)
-
-    def _process_row(self, row: Dict[str, Any]) -> NoReturn:
-        pass
-
     def _get_processor_from_field(self, field_name: str) -> Optional[Processor]:
-        processor_name = self._fields_values[field_name]
+        processor_name = self._fields[field_name]
         processor = find_processor_by_name(state=self._glb_idx, processor_name=processor_name)
 
         if not processor:
@@ -98,7 +105,7 @@ class BasicCommand(IExecutableCommand):
         return processor
 
     def _get_interface_from_field(self, field_name: str, processor: Processor) -> Factor:
-        interface_name = self._fields_values[field_name]
+        interface_name = self._fields[field_name]
 
         if interface_name is None:
             raise CommandExecutionError(f"No interface has been defined for field '{field_name}'.")
@@ -110,8 +117,33 @@ class BasicCommand(IExecutableCommand):
 
         return interface
 
+    def _get_factor_type_from_field(self, hierarchy_field_name: str, interface_type_field_name: str) -> FactorType:
+        interface_type_name = self._fields[interface_type_field_name]
+        if not interface_type_name:
+            raise CommandExecutionError(f"The field '{interface_type_field_name}' has not been specified")
+
+        # Check if FactorType exists
+        interface_types = self._glb_idx.get(FactorType.partial_key(interface_type_name))
+
+        if len(interface_types) == 1:
+            return interface_types[0]
+        elif len(interface_types) == 0:
+            raise CommandExecutionError(f"The interface type '{interface_type_name}' has not been found")
+        else:
+            hierarchy_name = self._fields[hierarchy_field_name]
+            if not hierarchy_name:
+                raise CommandExecutionError(f"The field '{hierarchy_field_name}' has not been specified and "
+                                            f"the interface type '{interface_type_name}' is not unique")
+
+            interface_type = first(interface_types, lambda t: strcmp(t.hierarchy.name, hierarchy_name))
+            if not interface_type:
+                raise CommandExecutionError(f"The interface type '{interface_type_name}' has not been found in "
+                                            f"hierarchy '{hierarchy_name}'")
+
+            return interface_type
+
     def _get_attributes_from_field(self, field_name: str) -> Dict:
-        attributes_list = self._fields_values[field_name]
+        attributes_list = self._fields[field_name]
         attributes = {}
         if attributes_list:
             try:
