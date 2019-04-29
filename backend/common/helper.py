@@ -14,7 +14,7 @@ import urllib.request
 import uuid
 from functools import partial
 from io import BytesIO
-from typing import IO, List, Tuple, Dict, Any, Optional, Iterable, Callable, TypeVar, Type
+from typing import IO, List, Tuple, Dict, Any, Optional, Iterable, Callable, TypeVar, Type, Union
 from urllib.parse import urlparse
 from uuid import UUID
 
@@ -28,6 +28,7 @@ from pandas import DataFrame
 import backend
 from backend import case_sensitive, SDMXConcept
 from backend.command_generators import Issue
+from backend.models import ureg
 #import webdav.client as wc
 
 
@@ -1339,3 +1340,58 @@ def split_and_strip(s: str, sep=",") -> List[str]:
         string_list = [s.strip() for s in s.split(sep)]
 
     return string_list
+
+
+FloatOrStringT = Union[str, float]
+
+
+class FloatOrString:
+    @staticmethod
+    def to_float(value: Optional[FloatOrStringT]) -> Optional[FloatOrStringT]:
+        if value is None:
+            return None
+        try:
+            return float(value)
+        except ValueError:
+            return value
+
+    @staticmethod
+    def multiply(a: Optional[FloatOrStringT], b: Optional[FloatOrStringT]) -> Optional[FloatOrStringT]:
+        value_a = FloatOrString.to_float(a)
+        value_b = FloatOrString.to_float(b)
+
+        if value_a is None or value_b is None:
+            return ifnull(value_a, value_b)
+
+        if isinstance(value_a, float) and isinstance(value_b, float):
+            return value_a * value_b
+        else:
+            return f"({value_a})*({value_b})"
+
+    @staticmethod
+    def multiply_with_float(a: FloatOrStringT, b: float) -> FloatOrStringT:
+        value_a = FloatOrString.to_float(a)
+
+        if isinstance(value_a, float):
+            return value_a * b
+        else:
+            return f"({value_a})*{b}"
+
+
+class UnitConversion:
+    @staticmethod
+    def ratio(from_unit: str, to_unit: str) -> float:
+        return ureg(from_unit).to(ureg(to_unit)).magnitude
+
+    @staticmethod
+    def get_scaled_weight(weight: FloatOrStringT,
+                          source_from_unit: str, source_to_unit: Optional[str],
+                          target_from_unit: Optional[str], target_to_unit: str) -> FloatOrStringT:
+        ratio = 1.0
+        if source_to_unit:
+            ratio *= UnitConversion.ratio(source_from_unit, source_to_unit)
+
+        if target_from_unit:
+            ratio *= UnitConversion.ratio(target_from_unit, target_to_unit)
+
+        return FloatOrString.multiply_with_float(weight, ratio)

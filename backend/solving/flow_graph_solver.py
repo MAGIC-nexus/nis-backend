@@ -404,7 +404,7 @@ class Edge(NamedTuple):
 FactorsRelationClassType = Type[Union[FactorsRelationDirectedFlowObservation, FactorsRelationScaleObservation]]
 
 
-def create_factor_edges(glb_idx, factors_relation_class: FactorsRelationClassType, attributes: Tuple[str, str, str]) \
+def create_interface_edges(glb_idx, factors_relation_class: FactorsRelationClassType, attributes: Tuple[str, str, str]) \
         -> Generator[Tuple[InterfaceNode, InterfaceNode, Dict], None, None]:
     edges: List[Tuple[Factor, Factor, Optional[str]]] = \
         [(getattr(r, attributes[0]), getattr(r, attributes[1]), getattr(r, attributes[2]))
@@ -477,16 +477,16 @@ def compute_flow_results(state: State, glb_idx, global_parameters, problem_state
 
     # Add Interfaces -Flow- relations (time independent)
     relations_flow = nx.DiGraph(
-        incoming_graph_data=create_factor_edges(glb_idx,
-                                                FactorsRelationDirectedFlowObservation,
-                                                ("source_factor", "target_factor", "weight"))
+        incoming_graph_data=create_interface_edges(glb_idx,
+                                                   FactorsRelationDirectedFlowObservation,
+                                                   ("source_factor", "target_factor", "weight"))
     )
 
     # Add Processors -Scale- relations (time independent)
     relations_scale = nx.DiGraph(
-        incoming_graph_data=create_factor_edges(glb_idx,
-                                                FactorsRelationScaleObservation,
-                                                ("origin", "destination", "quantity"))
+        incoming_graph_data=create_interface_edges(glb_idx,
+                                                   FactorsRelationScaleObservation,
+                                                   ("origin", "destination", "quantity"))
     )
 
     # TODO Expand flow graph with it2it transforms

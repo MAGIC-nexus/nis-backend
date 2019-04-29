@@ -1007,31 +1007,38 @@ def _find_or_create_relation(origin, destination, rel_type: Union[str, RelationC
             # Find or Create the relation
             r = glb_idx.get(FactorsRelationDirectedFlowObservation.partial_key(source=origin, target=destination))
             if not r:
-                r = FactorsRelationDirectedFlowObservation.create_and_append(origin, destination, oer, weight, attributes=attributes)  # Directed flow
+                r = FactorsRelationDirectedFlowObservation.create_and_append(origin, destination, oer, weight,
+                                                                             attributes=attributes)
                 glb_idx.put(r.key(), r)
             else:
                 r = r[0]
                 r._weight = weight
                 r._observer = oer
                 r._attributes = attributes
+
         elif rel_type in (RelationClassType.ff_scale, RelationClassType.ff_scale_change):
             # Find or Create the relation
             r = glb_idx.get(FactorsRelationScaleObservation.partial_key(origin=origin, destination=destination))
             if not r:
-                r = FactorsRelationScaleObservation.create_and_append(origin, destination, oer, weight, attributes=attributes)  # Directed flow
+                r = FactorsRelationScaleObservation.create_and_append(origin, destination, oer, weight,
+                                                                      attributes=attributes)
                 glb_idx.put(r.key(), r)
             else:
                 r = r[0]
                 r._quantity = weight
                 r._observer = oer
                 r._attributes = attributes
+
         elif rel_type == RelationClassType.ff_directed_flow_back:
             back_interface: Factor = attributes.pop("back_interface")
 
             # Find or Create the relation
-            r = glb_idx.get(FactorsRelationDirectedFlowBackObservation.partial_key(source=origin, target=destination, back=back_interface))
+            r = glb_idx.get(FactorsRelationDirectedFlowBackObservation.partial_key(source=origin,
+                                                                                   target=destination,
+                                                                                   back=back_interface))
             if not r:
-                r = FactorsRelationDirectedFlowBackObservation.create_and_append(origin, destination, back_interface, oer, weight, attributes=attributes)  # Directed flow
+                r = FactorsRelationDirectedFlowBackObservation.create_and_append(origin, destination, back_interface,
+                                                                                 oer, weight, attributes=attributes)
                 glb_idx.put(r.key(), r)
             else:
                 r = r[0]

@@ -8,10 +8,10 @@ from backend.command_executors.execution_helpers import parse_line, classify_var
 from backend.command_field_definitions import get_command_fields_from_class
 from backend.command_generators import IType
 from backend.command_generators.parser_field_parsers import string_to_ast, processor_names
-from backend.common.helper import strcmp
+from backend.common.helper import strcmp, FloatOrString
 from backend.model_services import get_case_study_registry_objects
 from backend.models.musiasem_concepts import Factor, RelationClassType, Parameter, Processor, FactorType, \
-    FactorTypesConverter
+    FactorTypesRelationUnidirectionalLinearTransformObservation
 from backend.models.musiasem_concepts_helper import create_relation_observations, find_factor_types_transform_relation
 from backend.solving import get_processor_names_to_processors_dictionary
 
@@ -87,19 +87,21 @@ class RelationshipsCommand(BasicCommand):
                     is_direct_flow=(relation_class == RelationClassType.ff_directed_flow)
                 )
 
+            weight = fields["flow_weight"]
             if source_interface.taxon != target_interface.taxon:
-                attributes.update(dict(interface_types_converter=self._get_interface_types_converter(
-                    source_interface.taxon, source_processor, target_interface.taxon, target_processor))
-                )
+                interface_types_transform = self._get_interface_types_transform(
+                    source_interface.taxon, source_processor, target_interface.taxon, target_processor)
+                attributes.update(dict(interface_types_transform=interface_types_transform))
+                weight = FloatOrString.multiply(weight, interface_types_transform.scaled_weight)
 
             create_relation_observations(self._glb_idx, source_interface,
-                                         [(target_interface, relation_class, fields["flow_weight"])],
+                                         [(target_interface, relation_class, weight)],
                                          relation_class, None, attributes=attributes)
 
-    def _get_interface_types_converter(
-            self,
-            source_interface_type: FactorType, source_processor: Processor,
-            target_interface_type: FactorType, target_processor: Processor) -> FactorTypesConverter:
+    def _get_interface_types_transform(self,
+                                       source_interface_type: FactorType, source_processor: Processor,
+                                       target_interface_type: FactorType, target_processor: Processor) \
+            -> FactorTypesRelationUnidirectionalLinearTransformObservation:
         """Check if a transformation between interfaces has been specified"""
 
         interface_types_transforms = find_factor_types_transform_relation(
@@ -114,7 +116,7 @@ class RelationshipsCommand(BasicCommand):
                 f"Multiple transformations can be applied between interfaces. Origin: "
                 f"{source_interface_type.name}; Target: {target_interface_type.name}")
 
-        return interface_types_transforms[0].converter
+        return interface_types_transforms[0]
 
     def _check_flow_orientation(self, source_processor: Processor, target_processor: Processor,
                                 source_interface: Factor, target_interface: Factor, is_direct_flow: bool):
