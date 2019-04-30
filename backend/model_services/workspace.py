@@ -183,6 +183,11 @@ def execute_command_container_file(state, generator_type, file_type: str, file):
     outputs = []
     cmd_number = 0
     for cmd, issues in commands_generator:
+        if len(issues) > 0:
+            c = "\n"
+            print(f"Issues:\n{c.join([i.message for i in issues])}")
+        else:
+            print(f"{type(cmd)} {cmd._source_block_name}; # syntax issues: {len(issues)}")
         cmd_number += 1  # Command counter
 
         errors_exist = False
@@ -1032,10 +1037,10 @@ def execute_file(file_name, generator_type):
     return execute_file_return_issues(file_name, generator_type)[0]  # Return just "isession"
 
 
-def prepare_and_reset_database_for_tests(prepare=False):
+def prepare_and_reset_database_for_tests(prepare=False, metadata_string="sqlite://", data_string="sqlite://"):
     if prepare:
-        backend.engine = sqlalchemy.create_engine("sqlite://", echo=True)
-        backend.data_engine = sqlalchemy.create_engine("sqlite://", echo=True)
+        backend.engine = sqlalchemy.create_engine(metadata_string, echo=True)
+        backend.data_engine = sqlalchemy.create_engine(data_string, echo=True)
 
         # global DBSession # global DBSession registry to get the scoped_session
         DBSession.configure(bind=backend.engine)  # reconfigure the sessionmaker used by this scoped_session

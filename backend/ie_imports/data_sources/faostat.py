@@ -1,3 +1,4 @@
+import logging
 import os
 import subprocess
 from io import StringIO
@@ -9,11 +10,15 @@ import requests
 import sqlalchemy
 
 from backend.ie_imports.data_source_manager import IDataSourceManager, get_dataset_structure
+from backend.models import log_level
 from backend.models.statistical_datasets import DataSource, Database, Dataset, Dimension, CodeList, CodeImmutable
 
 # eng = sqlalchemy.create_engine("monetdb:///demo:", echo=True)
 # df = pd.DataFrame(np.random.randn(6, 4), index=pd.date_range('20130101', periods=6), columns=list('ABCD'))
 # df.to_sql('test', eng, if_exists='append')
+
+logger = logging.getLogger(__name__)
+logger.setLevel(log_level)
 
 
 """
@@ -64,6 +69,7 @@ GH,Emissions_Agriculture_Burning_Savanna,Burning – Savanna
 GI,Emissions_Land_Use_Burning_Biomass,Burning – Biomass
 GL,Emissions_Land_Use_Land_Use_Total,Land Use Total
 GM,Emissions_Agriculture_Manure_Management,Manure management
+GN,Emissions_Agriculture_Energy,Energy Use
 GP,Emissions_Agriculture_Manure_left_on_pasture,Manure left on Pasture
 GR,Emissions_Agriculture_Rice_Cultivation,Rice Cultivation
 GT,Emissions_Agriculture_Agriculture_total,Agriculture Total
@@ -83,6 +89,7 @@ PE,Exchange_rate,Exchange rates – Annual
 PI,Price_Indices,Producer Price Indices – Annual
 PM,Prices_Monthly,Producer Prices – Monthly
 PP,Prices,Producer Prices – Annual
+QA,Production_Livestock,Live animals
 QC,Production_Crops,Crops
 QD,Production_CropsProcessed,Crops processed
 QI,Production_Indices,Production Indices
@@ -101,8 +108,6 @@ TA,Trade_LiveAnimals,Live animals
 TI,Trade_Indices,Trade indices
 TM,Trade_DetailedTradeMatrix,Detailed trade matrix
 TP,Trade_Crops_Livestock,Crops and livestock products
-QA,Production_Livestock,Live animals
-GN,Emissions_Agriculture_Energy,Energy Use
 """
 
 
@@ -153,7 +158,22 @@ class FAOSTAT(IDataSourceManager):  # FAOStat (not AquaStat)
         #
         # TODO Signal a "being updated" status for the dataset
         # TODO Delete all metadata about the dataset.
-        return get_dataset_structure(self._metadata_session_factory, self, dataset)
+        ds = get_dataset_structure(self._metadata_session_factory, self, dataset)
+        measure_found = False
+        for d in ds.dimensions:
+            if d.code.lower() == "value":
+                measure_found = True
+                break
+        if not measure_found:
+            dd = Dimension()
+            dd.code = "Value"
+            dd.description = None
+            dd.attributes = None
+            dd.is_time = False
+            dd.is_measure = True
+            dd.dataset = ds
+
+        return ds
 
     def get_dataset_filtered(self, dataset, dataset_params: List[tuple]) -> Dataset:
         """ This method has to consider the last dataset download, to re"""
@@ -165,6 +185,21 @@ class FAOSTAT(IDataSourceManager):  # FAOStat (not AquaStat)
         dims = {}
         for dim in ds.dimensions:
             dims[dim.code] = dim.code_list.to_dict()
+            if dim.is_time:
+                interval_start = None
+                interval_end = None
+                for p in dataset_params.copy():
+                    if p.lower() in ["starttime", "startperiod"]:
+                        interval_start = dataset_params[p][0]
+                        del dataset_params[p]
+                    elif p.lower() in ["endtime", "endperiod"]:
+                        interval_end = dataset_params[p][0]
+                        del dataset_params[p]
+                if interval_start and interval_end:
+                    dataset_params[dim.code] = [str(i) for i in range(int(interval_start), int(interval_end)+1)]
+
+        # Time
+
 
         # Prepare the query (WITH count and columns versions)
         # TODO IMPROVEMENTS: Add GROUP BY if a pivot table is available. Pass the list of dimensions, plus the aggregation as TWO new parameters
@@ -340,7 +375,8 @@ class FAOSTAT(IDataSourceManager):  # FAOStat (not AquaStat)
 
         # A pass through ALL the file, gather a DICT for each DIMENSION -> CodeList
         count2 = 0
-        for data in pd.read_csv(file, chunksize=10000, encoding="cp1252"):
+        for data in pd.read_csv(file, chunksize=100000, encoding="cp1252"):
+            logger.debug(f"Chunk: {count2+1}")
             print("Chunk "+str(count2+1))
             if add_year_code_column:
                 data["Year Code"] = data["Year"]
@@ -359,6 +395,7 @@ class FAOSTAT(IDataSourceManager):  # FAOStat (not AquaStat)
                         cl.update(dict(zip(data[dname+suffix].values, data[dname].values)))
             dtypes = {}
             if engine_data:
+                logger.debug(f"Writing")
                 # Remove unneeded columns
                 data = data[cols_to_keep]
                 data.reset_index(inplace=True)
@@ -375,6 +412,7 @@ class FAOSTAT(IDataSourceManager):  # FAOStat (not AquaStat)
                 # TODO Possibly, add convenient columns
                 # Insert into "Datamart", regenerate table if it exists, only in the first chunk
                 data.to_sql(dataset_row["Code"], engine_data, if_exists='append' if count2 > 0 else 'replace', index=False, dtype=dtypes)
+                logger.debug("Written")
             count2 += 1
 
         # ------------------------------

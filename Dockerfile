@@ -93,5 +93,5 @@ VOLUME /srv
 ENV C_FORCE_ROOT=1
 
 # run supervisord
-CMD ["/usr/local/bin/gunicorn", "--bind", "0.0.0.0:80", "backend.restful_service.service_main:app"]
+CMD ["/usr/local/bin/gunicorn", "--workers=3", "--log-level=debug", "--timeout=2000", "--bind", "0.0.0.0:80", "backend.restful_service.service_main:app"]
 #CMD ["supervisord", "-c", "/etc/supervisord.conf"]
