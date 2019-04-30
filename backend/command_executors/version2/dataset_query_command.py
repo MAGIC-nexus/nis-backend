@@ -80,7 +80,7 @@ class DatasetQryCommand(IExecutableCommand):
         for dim in self._content["where"]:
             lst = self._content["where"][dim]
             native_dim = None
-            if dim.lower() in ["startperiod", "endperiod"]:
+            if dim.lower() in ["startperiod", "starttime", "endperiod", "endtime"]:
                 native_dim = dim
                 lst = [lst]
             elif dim not in dims:
@@ -129,6 +129,14 @@ class DatasetQryCommand(IExecutableCommand):
             # Column names where data is
             # HACK: for the case where the measure has been named "obs_value", use "value"
             values = [m.lower() if m.lower() != "obs_value" else "value" for m in self._content["measures"]]
+            for v in values:
+                v2 = []
+                for c in df.columns:
+                    if v.lower() == c.lower():
+                        v2.append(c)
+                        break
+            values = v2
+
             # TODO: use metadata name (e.g. "OBS_VALUE") instead of hardcoded "value"
             # values = self._content["measures"]
             out_names = self._content["measures_as"]

@@ -18,6 +18,40 @@ from backend.restful_service.serialization import serialize_state, deserialize_s
 from backend.solving import get_processor_names_to_processors_dictionary
 
 
+class TestFAOCommandFiles(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        # Executed BEFORE test methods of the class
+        prepare_and_reset_database_for_tests(
+            prepare=True,
+            metadata_string="sqlite:////home/rnebot/GoogleDrive/AA_MAGIC/nis_metadata.db",
+            data_string="sqlite:////home/rnebot/GoogleDrive/AA_MAGIC/nis_cached_datasets.db")
+        backend.data_source_manager = register_external_datasources(
+            {"FAO_DATASETS_DIR": "/home/marco/temp/Data/FAOSTAT/"})
+
+    @classmethod
+    def tearDownClass(cls):
+        pass  # Executed AFTER tests methods of the class
+
+    def setUp(self):
+        super().setUp()
+        pass  # Repeated BEFORE each test...
+
+    def tearDown(self):
+        pass  # Repeated AFTER each test...
+        super().tearDown()
+
+    def test_001_fao(self):
+        file_path = os.path.dirname(
+            os.path.abspath(__file__)) + "/z_input_files/v2/16_fao_fbs_test.xlsx"
+        isess, issues = execute_file_return_issues(file_path, generator_type="spreadsheet")
+        # Check State of things
+        self.assertEqual(len(issues), 0)  # Just one issue
+        glb_idx, p_sets, hh, datasets, mappings = get_case_study_registry_objects(isess.state)
+        # Close interactive session
+        isess.close_db_session()
+
+
 class TestCommandFiles(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
@@ -522,24 +556,44 @@ class TestCommandFiles(unittest.TestCase):
         # Close interactive session
         isess.close_db_session()
 
+    def test_026_NL_ES(self):
+        file_path = os.path.dirname(
+            os.path.abspath(__file__)) + "/../../nis-undisclosed-tests/NL_ES.xlsx"
+        isess, issues = execute_file_return_issues(file_path, generator_type="spreadsheet")
+        # Check State of things
+        self.assertEqual(len(issues), 1)  # Just one issue
+        glb_idx, p_sets, hh, datasets, mappings = get_case_study_registry_objects(isess.state)
+        # Close interactive session
+        isess.close_db_session()
+
 
 if __name__ == '__main__':
-    i = TestCommandFiles()
-    prepare_and_reset_database_for_tests(prepare=True)
+    is_fao_test = False
     backend.data_source_manager = register_external_datasources({"FAO_DATASETS_DIR": "/home/marco/temp/Data/FAOSTAT/"})
-    #i.test_002_execute_file_two()
-    # i.test_006_execute_file_five()  # TODO: This test from v1 has problems with the case sensitiveness!
-    #i.test_008_execute_file_v2_two()
-    #i.test_009_execute_file_v2_three()  # Soslaires. v2 syntax
-    #i.test_011_execute_file_v2_five()  # Dataset
-    #i.test_012_execute_file_v2_six()  # Almeria using v2 commands and v1 upscale
-    #i.test_013_execute_file_v2_seven()
-    #i.test_014_execute_file_v2_eight()
-    #i.test_018_many_to_many_mappings()
-    #i.test_019_import_commands()
-    #i.test_020_list_of_commands()
-    #i.test_021_export_to_json()
-    #i.test_022_processor_scalings()
-    i.test_023_solving()
-    #i.test_024_maddalena_dataset()
-    #i.test_025()
+    if is_fao_test:
+        i = TestFAOCommandFiles()
+        prepare_and_reset_database_for_tests(
+            prepare=True,
+            metadata_string="sqlite:////home/rnebot/GoogleDrive/AA_MAGIC/nis_metadata.db",
+            data_string="sqlite:////home/rnebot/GoogleDrive/AA_MAGIC/nis_cached_datasets.db")
+        i.test_001_fao()
+    else:
+        i = TestCommandFiles()
+        prepare_and_reset_database_for_tests(prepare=True)
+        #i.test_002_execute_file_two()
+        # i.test_006_execute_file_five()  # TODO: This test from v1 has problems with the case sensitiveness!
+        #i.test_008_execute_file_v2_two()
+        #i.test_009_execute_file_v2_three()  # Soslaires. v2 syntax
+        #i.test_011_execute_file_v2_five()  # Dataset
+        #i.test_012_execute_file_v2_six()  # Almeria using v2 commands and v1 upscale
+        #i.test_013_execute_file_v2_seven()
+        #i.test_014_execute_file_v2_eight()
+        #i.test_018_many_to_many_mappings()
+        #i.test_019_import_commands()
+        #i.test_020_list_of_commands()
+        #i.test_021_export_to_json()
+        #i.test_022_processor_scalings()
+        #i.test_023_solving()
+        #i.test_024_maddalena_dataset()
+        #i.test_025()
+        i.test_026_NL_ES()

@@ -134,7 +134,7 @@ def parse_dataset_qry_command(sh: Worksheet, area: AreaTupleType, name, state) -
                     continue
                 if m not in meas:
                     issues.append(Issue(itype=IType.ERROR,
-                                        description="The specified measure, '"+m+"' is not a measure available in the dataset. ["+', '.join([m2 for m2 in measures])+"]",
+                                        description="The specified measure, '"+m+"' is not a measure available in the dataset. ["+', '.join([m2["measure"] for m2 in out_measures.values])+"]",
                                         location=IssueLocation(sheet_name=name, row=r + 1, column=c + 1)))
                 else:
                     out_measures[r+area[0]+1]["measure"] = m
@@ -172,11 +172,15 @@ def parse_dataset_qry_command(sh: Worksheet, area: AreaTupleType, name, state) -
                     else:
                         lst2 = filter_[col_name]
                     lst2.append(cd)
-        elif we_have_time and col_name.lower() in ["startperiod", "endperiod"]:  # SPECIAL "WHERE" FOR TIME
+        elif we_have_time and col_name.lower() in ["startperiod", "starttime", "endperiod", "endtime"]:  # SPECIAL "WHERE" FOR TIME
             # TODO Instead, should use a single column, "Time", using the interval syntax of the Time column in the Data Input command
             # Interval of time periods
             lst = obtain_column(c, area[0] + 1, area[1])
             if len(lst) > 0:
+                if col_name.lower() == "starttime":
+                    col_name = "StartPeriod"
+                elif col_name.lower() == "endtime":
+                    col_name = "EndPeriod"
                 filter_[col_name] = lst[0]  # In this case it is not a list, but a number or string !!!!
         elif col_name.lower() in ["outputdatasetname", "outputdataset", "result_name", "result name", "resultname"]:
             lst = obtain_column(c, area[0] + 1, area[1])

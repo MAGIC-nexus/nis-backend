@@ -164,13 +164,13 @@ class ETLExternalDatasetCommand(IExecutableCommand):
                 elif f.lower() in ["sumna"]:
                     aggs.append(np.nansum)
                     agg_names[np.nansum] = "sumna"
-                elif f.lower() in ["countav"]:
-                    aggs.append("count")
+                elif f.lower() in ["countav"]:  # countav=="Count Available"
+                    aggs.append("count")  # Count number of non-NaN elements
                     agg_names["count"] = "countav"
-                elif f.lower() in ["avgna"]:
+                elif f.lower() in ["avgav", "avgna"]:  # avgna=="Average without
                     aggs.append(np.nanmean)
                     agg_names[np.nanmean] = "avgna"
-                elif f.lower() in ["pctna"]:
+                elif f.lower() in ["pctna"]:  # % of NaN vs total elements
                     aggs.append(pctna)
                     agg_names[pctna] = "pctna"
 

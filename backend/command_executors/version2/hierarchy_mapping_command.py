@@ -1,7 +1,7 @@
 import json
 from dotted.collection import DottedDict
 
-from backend.command_generators import Issue, IssueLocation
+from backend.command_generators import Issue, IssueLocation, IType
 from backend.model_services import IExecutableCommand, get_case_study_registry_objects
 from backend.common.helper import obtain_dataset_metadata, create_dictionary, obtain_dataset_source
 from backend.models.musiasem_concepts import Mapping
@@ -104,6 +104,11 @@ class HierarchyMappingCommand(IExecutableCommand):
                     lst.append(dict(d=dst, w=local_mappings[d].mapping[orig][dst]))
                 mapping.append(dict(o=orig, to=lst))
             if local_mappings[d].origin_dataset:
+                if not obtain_dataset_source(local_mappings[d].origin_dataset):
+                    issues.append(Issue(itype=IType.ERROR,
+                                        description=f"The dataset '{local_mappings[d].origin_dataset}' was not found",
+                                        location=IssueLocation(sheet_name=name, row=r, column=None)))
+                    continue
                 dims, attrs, meas = obtain_dataset_metadata(local_mappings[d].origin_dataset)
                 if local_mappings[d].origin_hierarchy not in dims:
                     issues.append(Issue(itype=IType.ERROR,
