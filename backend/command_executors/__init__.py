@@ -4,11 +4,11 @@ from typing import Optional, List, Dict, Any, Union, NoReturn
 from backend import ExecutableCommandIssuesPairType, Command, CommandField, IssuesOutputPairType
 from backend.command_definitions import commands
 from backend.common.helper import first, PartialRetrievalDictionary, head, strcmp
-from command_generators import IType, IssueLocation, Issue
-from command_generators.parser_ast_evaluators import dictionary_from_key_value_list
-from model_services import IExecutableCommand, get_case_study_registry_objects
-from models.musiasem_concepts import Processor, Factor, FactorType
-from models.musiasem_concepts_helper import find_processor_by_name
+from backend.command_generators import IType, IssueLocation, Issue
+from backend.command_generators.parser_ast_evaluators import dictionary_from_key_value_list
+from backend.model_services import IExecutableCommand, get_case_study_registry_objects
+from backend.models.musiasem_concepts import Processor, Factor, FactorType
+from backend.models.musiasem_concepts_helper import find_processor_by_name
 
 
 class CommandExecutionError(Exception):
