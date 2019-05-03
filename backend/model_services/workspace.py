@@ -155,7 +155,7 @@ def execute_command(state, e_cmd: "IExecutableCommand") -> backend.IssuesOutputP
     if e_cmd:
         return e_cmd.execute(state)
     else:
-        return None, None  # issues, output
+        return [], None  # issues, output
 
 
 def execute_command_container(state, p_cmd: CommandsContainer):

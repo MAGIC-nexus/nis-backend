@@ -64,9 +64,11 @@ class BasicCommand(IExecutableCommand):
         self._process_row(self._fields)
 
     def _process_row(self, fields: Dict[str, Any]) -> NoReturn:
+        """This is the basic method to define"""
         pass
 
     def execute(self, state: "State") -> IssuesOutputPairType:
+        """Main entry point"""
         self._init_execution_state(state)
 
         for row in self._content["items"]:

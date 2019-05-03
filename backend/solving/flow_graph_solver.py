@@ -32,7 +32,7 @@ from itertools import chain
 
 import pandas as pd
 import networkx as nx
-# import matplotlib.pyplot as plt
+import matplotlib.pyplot as plt
 from typing import Dict, List, Set, Any, Tuple, Union, Optional, NamedTuple, NoReturn, Generator, Type
 
 from backend.command_generators.parser_ast_evaluators import ast_evaluator
@@ -56,7 +56,8 @@ class SolvingException(Exception):
 class InterfaceNode:
     registry: PartialRetrievalDictionary = None
 
-    def __init__(self, interface_or_type: Union[Factor, FactorType], processor: Processor = None, orientation: str = None):
+    def __init__(self, interface_or_type: Union[Factor, FactorType], processor: Processor = None,
+                 orientation: str = None, processor_name: str = None):
         if isinstance(interface_or_type, Factor):
             self.interface: Optional[Factor] = interface_or_type
             self.interface_type = self.interface.taxon
@@ -66,14 +67,13 @@ class InterfaceNode:
             self.interface: Optional[Factor] = None
             self.interface_type = interface_or_type
             self.orientation = orientation
-            assert(processor is not None)
             self.processor = processor
         else:
             raise Exception(f"Invalid object type '{type(interface_or_type)}' for the first parameter. "
                             f"Valid object types are [Factor, FactorType].")
 
         self.interface_name: str = interface_or_type.name
-        self.processor_name: str = get_processor_name(self.processor, self.registry)
+        self.processor_name: str = get_processor_name(self.processor, self.registry) if self.processor else processor_name
         self.name: str = self.processor_name + ":" + self.interface_name + ":" + self.orientation
 
     @property
@@ -104,11 +104,11 @@ class InterfaceNode:
 
     @property
     def system(self):
-        return self.processor.processor_system
+        return self.processor.processor_system if self.processor else None
 
     @property
     def subsystem(self):
-        return self.processor.subsystem_type
+        return self.processor.subsystem_type if self.processor else None
 
     def __str__(self):
         return self.name
@@ -401,20 +401,16 @@ class Edge(NamedTuple):
     weight: Optional[str]
 
 
-FactorsRelationClassType = Type[Union[FactorsRelationDirectedFlowObservation, FactorsRelationScaleObservation]]
+InterfacesRelationClassType = Type[Union[FactorsRelationDirectedFlowObservation, FactorsRelationScaleObservation]]
 
 
-def create_interface_edges(glb_idx, factors_relation_class: FactorsRelationClassType, attributes: Tuple[str, str, str]) \
+def create_interface_edges(edges: List[Tuple[Factor, Factor, Optional[str]]]) \
         -> Generator[Tuple[InterfaceNode, InterfaceNode, Dict], None, None]:
-    edges: List[Tuple[Factor, Factor, Optional[str]]] = \
-        [(getattr(r, attributes[0]), getattr(r, attributes[1]), getattr(r, attributes[2]))
-         for r in glb_idx.get(factors_relation_class.partial_key())]
-
     for src, dst, weight in edges:
         src_node = InterfaceNode(src)
         dst_node = InterfaceNode(dst)
         if "Archetype" in [src.processor.instance_or_archetype, dst.processor.instance_or_archetype]:
-            print(f"WARNING: excluding relation from '{src_node.name}' to '{dst_node.name}' because of Archetype processor")
+            print(f"WARNING: excluding relation from '{src_node}' to '{dst_node}' because of Archetype processor")
         else:
             yield src_node, dst_node, dict(weight=weight)
 
@@ -436,14 +432,15 @@ def resolve_weight_expressions(graph_list: List[nx.DiGraph], state: State, raise
                 data["weight"] = ifnull(value, ast)
 
 
-def iterative_solving(comp_graph_list: List[ComputationGraph], observations: NodeFloatDict):
+def iterative_solving(comp_graph_list: List[ComputationGraph], observations: NodeFloatDict) -> Tuple[NodeFloatDict, List[InterfaceNode]]:
     num_unknown_nodes: int = reduce(add, [len(g.nodes) for g in comp_graph_list])
     prev_num_unknown_nodes: int = num_unknown_nodes + 1
     params: List[Optional[NodeFloatDict]] = [None] * len(comp_graph_list)
     other_values: List[NodeFloatDict] = [{}] * len(comp_graph_list)
     unknown_nodes: List[List[InterfaceNode]] = [[]] * len(comp_graph_list)
-    data = {}
-    all_data = {}
+    data: NodeFloatDict = {}
+    all_data: NodeFloatDict = {}
+
     while prev_num_unknown_nodes > num_unknown_nodes > 0:
         prev_num_unknown_nodes = num_unknown_nodes
 
@@ -458,14 +455,58 @@ def iterative_solving(comp_graph_list: List[ComputationGraph], observations: Nod
 
         num_unknown_nodes = reduce(add, [len(l) for l in unknown_nodes])
 
-    all_unkwown_nodes = []
+    all_unknown_nodes = []
     for l in unknown_nodes:
-        all_unkwown_nodes.extend(l)
+        all_unknown_nodes.extend(l)
 
-    return all_data, all_unkwown_nodes
+    return all_data, all_unknown_nodes
 
 
-def compute_flow_results(state: State, glb_idx, global_parameters, problem_statement):
+def create_scale_change_relations_and_update_flow_relations(relations_flow: nx.DiGraph, registry) -> nx.DiGraph:
+    relations_scale_change = nx.DiGraph()
+
+    edges = [(r.source_factor, r.target_factor, r.back_factor, r.weight, r.scale_change_weight)
+             for r in registry.get(FactorsRelationDirectedFlowObservation.partial_key())
+             if r.scale_change_weight is not None or r.back_factor is not None]
+
+    for src, dst, bck, weight, scale_change_weight in edges:
+
+        source_node = InterfaceNode(src)
+        dest_node = InterfaceNode(dst)
+        back_node = InterfaceNode(bck) if bck else None
+
+        if "Archetype" in [src.processor.instance_or_archetype,
+                           dst.processor.instance_or_archetype,
+                           bck.processor.instance_or_archetype if bck else None]:
+            print(f"WARNING: excluding relation from '{source_node}' to '{dest_node}' "
+                  f"and back to '{back_node}' because of Archetype processor")
+            continue
+
+        hidden_node = InterfaceNode(src.taxon,
+                                    processor_name=f"{get_processor_name(src.processor, registry)}-"
+                                                   f"{get_processor_name(dst.processor, registry)}",
+                                    orientation="Input/Output")
+
+        relations_flow.add_edge(source_node, hidden_node, weight=weight)
+        relations_scale_change.add_edge(hidden_node, dest_node, weight=scale_change_weight, add_reverse_weight="yes")
+        if back_node:
+            relations_scale_change.add_edge(hidden_node, back_node, weight=scale_change_weight, add_reverse_weight="yes")
+
+        relations_scale_change.nodes[hidden_node]["add_split"] = "yes"
+
+        real_dest_node = InterfaceNode(source_node.interface_type, dest_node.processor,
+                                       orientation="Input" if source_node.orientation.lower() == "output" else "Output")
+
+        if relations_flow.has_edge(source_node, real_dest_node):
+            # weight = relations_flow[source_node][real_dest_node]['weight']
+            relations_flow.remove_edge(source_node, real_dest_node)
+            # relations_flow.add_edge(source_node, hidden_node, weight=weight)  # This "weight" should be the same
+            relations_flow.add_edge(hidden_node, real_dest_node, weight=1.0)
+
+    return relations_scale_change
+
+
+def compute_flow_and_scale_results(state: State, glb_idx, global_parameters, problem_statement):
     # Get all interface observations. Also resolve expressions without parameters. Cannot resolve expressions
     # depending only on global parameters because some of them can be overridden by scenario parameters.
     time_observations_absolute, time_observations_relative = get_observations_by_time(glb_idx)
@@ -477,23 +518,26 @@ def compute_flow_results(state: State, glb_idx, global_parameters, problem_state
 
     # Add Interfaces -Flow- relations (time independent)
     relations_flow = nx.DiGraph(
-        incoming_graph_data=create_interface_edges(glb_idx,
-                                                   FactorsRelationDirectedFlowObservation,
-                                                   ("source_factor", "target_factor", "weight"))
+        incoming_graph_data=create_interface_edges(
+            [(r.source_factor, r.target_factor, r.weight)
+             for r in glb_idx.get(FactorsRelationDirectedFlowObservation.partial_key())
+             if r.scale_change_weight is None and r.back_factor is None]
+        )
     )
 
     # Add Processors -Scale- relations (time independent)
     relations_scale = nx.DiGraph(
-        incoming_graph_data=create_interface_edges(glb_idx,
-                                                   FactorsRelationScaleObservation,
-                                                   ("origin", "destination", "quantity"))
+        incoming_graph_data=create_interface_edges(
+            [(r.origin, r.destination, r.quantity)
+             for r in glb_idx.get(FactorsRelationScaleObservation.partial_key())]
+        )
     )
 
-    # TODO Expand flow graph with it2it transforms
-    # relations_scale_it2it = glb_idx.get(FactorTypesRelationUnidirectionalLinearTransformObservation.partial_key())
+    # Add Interfaces -Scale Change- relations (time independent). Also update Flow relations.
+    relations_scale_change = create_scale_change_relations_and_update_flow_relations(relations_flow, glb_idx)
 
     # First pass to resolve weight expressions: only expressions without parameters can be solved
-    resolve_weight_expressions([relations_flow, relations_scale], state)
+    resolve_weight_expressions([relations_flow, relations_scale, relations_scale_change], state)
 
     results: ResultDict = {}
 
@@ -509,11 +553,12 @@ def compute_flow_results(state: State, glb_idx, global_parameters, problem_state
             # Create a copy of the main relations structures that are modified with time-dependent values
             time_relations_flow = relations_flow.copy()
             time_relations_scale = relations_scale.copy()
+            time_relations_scale_change = relations_scale_change.copy()
 
             # Second and last pass to resolve observation expressions with parameters
             for expression, obs in observations:
                 obs_node = InterfaceNode(obs.factor)
-                if obs_node not in chain(time_relations_flow.nodes, time_relations_scale.nodes):
+                if obs_node not in chain(time_relations_flow.nodes, time_relations_scale.nodes, time_relations_scale_change.nodes):
                     print(f"WARNING: observation at interface '{obs_node}' is not taken into account.")
                 else:
                     value, _, params, issues = evaluate_numeric_expression_with_parameters(expression, scenario_state)
@@ -536,8 +581,9 @@ def compute_flow_results(state: State, glb_idx, global_parameters, problem_state
                                               weight=expression)
 
             # Second and last pass to resolve weight expressions: expressions with parameters can be solved
-            resolve_weight_expressions([time_relations_flow, time_relations_scale], scenario_state, raise_error=True)
+            resolve_weight_expressions([time_relations_flow, time_relations_scale, time_relations_scale_change], scenario_state, raise_error=True)
 
+            # Show graphs with Matplotlib. Use only for debugging!
             # if scenario_name == 'Scenario1' and time_period == '2011':
             #     for graph in [time_relations_scale]:  # time_relations_flow
             #         for component in nx.weakly_connected_components(graph):
@@ -546,25 +592,20 @@ def compute_flow_results(state: State, glb_idx, global_parameters, problem_state
             #             # nx.draw_kamada_kawai(graph.subgraph(component), with_labels=True)
             #             plt.show()
 
-            flow_graph = FlowGraph(time_relations_flow)
-            comp_graph_flow, issues = flow_graph.get_computation_graph(time_relations_scale)
-
-            for issue in issues:
-                print(issue)
-
-            error_issues = [e.description for e in issues if e.itype == IType.ERROR]
-            if len(error_issues) > 0:
-                raise SolvingException(
-                    IType.ERROR,
-                    f"Scenario '{scenario_name}' - period '{time_period}'. The computation graph cannot "
-                    f"be generated. Issues: {', '.join(error_issues)}"
-                )
-
+            # Create computation graphs
+            comp_graph_flow = create_computation_graph_from_flows(time_relations_flow, time_relations_scale)
             comp_graph_scale = ComputationGraph(time_relations_scale)
+            comp_graph_scale_change = ComputationGraph(relations_scale_change)
 
-            data, unknown_data = iterative_solving([comp_graph_scale, comp_graph_flow], known_observations)
+            # Solve computation graphs
+            data, unknown_data = iterative_solving([comp_graph_scale, comp_graph_scale_change, comp_graph_flow],
+                                                   known_observations)
 
             print(f"Unknown data: {unknown_data}")
+
+            # Filter out results without a real processor
+            data = {k: v for k, v in data.items() if k.processor}
+
             data = {**known_observations, **data}
             results[(scenario_name, time_period, Scope.Total.name)] = data
 
@@ -578,6 +619,22 @@ def compute_flow_results(state: State, glb_idx, global_parameters, problem_state
                 results[(scenario_name, time_period, Scope.Internal.name)] = internal_data
 
     return results
+
+
+def create_computation_graph_from_flows(relations_flow: nx.DiGraph, relations_scale: Optional[nx.DiGraph] = None) -> ComputationGraph:
+    flow_graph = FlowGraph(relations_flow)
+    comp_graph_flow, issues = flow_graph.get_computation_graph(relations_scale)
+
+    for issue in issues:
+        print(issue)
+
+    error_issues = [e.description for e in issues if e.itype == IType.ERROR]
+    if len(error_issues) > 0:
+        raise SolvingException(
+            IType.ERROR, f"The computation graph cannot be generated. Issues: {', '.join(error_issues)}"
+        )
+
+    return comp_graph_flow
 
 
 def compute_separated_results(values: NodeFloatDict, comp_graph: ComputationGraph) -> Tuple[NodeFloatDict, NodeFloatDict]:
@@ -757,7 +814,7 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
     InterfaceNode.registry = glb_idx
 
     try:
-        results = compute_flow_results(state, glb_idx, global_parameters, problem_statement)
+        results = compute_flow_and_scale_results(state, glb_idx, global_parameters, problem_statement)
 
         agg_results = compute_partof_aggregates(glb_idx, input_systems, results)
 

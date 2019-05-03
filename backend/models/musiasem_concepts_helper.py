@@ -5,7 +5,7 @@ import jsonpickle
 from backend import ureg
 from backend.command_generators import parser_field_parsers
 from backend.command_generators.parser_ast_evaluators import ast_to_string
-from backend.common.helper import PartialRetrievalDictionary, create_dictionary, strcmp
+from backend.common.helper import PartialRetrievalDictionary, create_dictionary, strcmp, FloatOrString
 from backend.model_services import State, get_case_study_registry_objects
 from backend.models.musiasem_concepts import \
     FlowFundRoegenType, FactorInProcessorType, RelationClassType, \
@@ -14,7 +14,7 @@ from backend.models.musiasem_concepts import \
     ProcessorsRelationUpscaleObservation, \
     FactorsRelationDirectedFlowObservation, Hierarchy, Taxon, \
     FactorQuantitativeObservation, HierarchyLevel, Geolocation, FactorsRelationScaleObservation, \
-    FactorTypesRelationUnidirectionalLinearTransformObservation, FactorsRelationDirectedFlowBackObservation
+    FactorTypesRelationUnidirectionalLinearTransformObservation
 from backend.models.statistical_datasets import CodeList, CodeListLevel, Code
 
 
@@ -998,17 +998,29 @@ def _find_or_create_relation(origin, destination, rel_type: Union[str, RelationC
                 r._observer = oer
                 r._attributes = attributes
     elif rel_type.is_between_interfaces and isinstance(origin, Factor) and isinstance(destination, Factor):
-        if rel_type in (RelationClassType.ff_directed_flow, RelationClassType.ff_reverse_directed_flow):
+
+        if rel_type in (RelationClassType.ff_directed_flow, RelationClassType.ff_reverse_directed_flow,
+                        RelationClassType.ff_directed_flow_back):
             if rel_type == RelationClassType.ff_reverse_directed_flow:
                 origin, destination = destination, origin
 
                 if weight:
-                    weight = "1/("+weight+")"
+                    weight = f"1/({weight})"
+
+                scale_change_weight = attributes.get("scale_change_weight") if attributes else None
+                if scale_change_weight:
+                    attributes["scale_change_weight"] = f"1/({scale_change_weight})"
+
+            back_interface: Optional[Factor] = attributes.pop("back_interface", None) if attributes else None
+
             # Find or Create the relation
-            r = glb_idx.get(FactorsRelationDirectedFlowObservation.partial_key(source=origin, target=destination))
+            r = glb_idx.get(FactorsRelationDirectedFlowObservation.partial_key(source=origin,
+                                                                               target=destination,
+                                                                               back=back_interface))
             if not r:
                 r = FactorsRelationDirectedFlowObservation.create_and_append(origin, destination, oer, weight,
-                                                                             attributes=attributes)
+                                                                             attributes=attributes,
+                                                                             back=back_interface)
                 glb_idx.put(r.key(), r)
             else:
                 r = r[0]
@@ -1017,6 +1029,10 @@ def _find_or_create_relation(origin, destination, rel_type: Union[str, RelationC
                 r._attributes = attributes
 
         elif rel_type in (RelationClassType.ff_scale, RelationClassType.ff_scale_change):
+            scale_change_weight = attributes.pop("scale_change_weight", None) if attributes else None
+            if scale_change_weight is not None:
+                weight = FloatOrString.multiply(weight, scale_change_weight)
+
             # Find or Create the relation
             r = glb_idx.get(FactorsRelationScaleObservation.partial_key(origin=origin, destination=destination))
             if not r:
@@ -1026,23 +1042,6 @@ def _find_or_create_relation(origin, destination, rel_type: Union[str, RelationC
             else:
                 r = r[0]
                 r._quantity = weight
-                r._observer = oer
-                r._attributes = attributes
-
-        elif rel_type == RelationClassType.ff_directed_flow_back:
-            back_interface: Factor = attributes.pop("back_interface")
-
-            # Find or Create the relation
-            r = glb_idx.get(FactorsRelationDirectedFlowBackObservation.partial_key(source=origin,
-                                                                                   target=destination,
-                                                                                   back=back_interface))
-            if not r:
-                r = FactorsRelationDirectedFlowBackObservation.create_and_append(origin, destination, back_interface,
-                                                                                 oer, weight, attributes=attributes)
-                glb_idx.put(r.key(), r)
-            else:
-                r = r[0]
-                r._weight = weight
                 r._observer = oer
                 r._attributes = attributes
 

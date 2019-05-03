@@ -1390,63 +1390,58 @@ class Processor(Identifiable, Nameable, Taggable, Qualifiable, Automatable, Obse
                     # Flows where the Interface is origin
                     for f in glb_idx.get(FactorsRelationDirectedFlowObservation.partial_key(source=o)):
                         if f not in considered_flows:
-                            if f.target_factor in objects_already_cloned:
-                                new_f = FactorsRelationDirectedFlowObservation(source=objects_already_cloned[o],
-                                                                               target=objects_already_cloned[f.target_factor],
-                                                                               observer=f.observer,
-                                                                               weight=f.weight,
-                                                                               tags=f.tags,
-                                                                               attributes=f.attributes)
-                            else:
-                                new_f = FactorsRelationDirectedFlowObservation(source=objects_already_cloned[o],
-                                                                               target=f.target_factor,
-                                                                               observer=f.observer,
-                                                                               weight=f.weight,
-                                                                               tags=f.tags,
-                                                                               attributes=f.attributes)
+                            new_f = FactorsRelationDirectedFlowObservation(source=objects_already_cloned[o],
+                                                                           target=objects_already_cloned.get(f.target_factor, f.target_factor),
+                                                                           observer=f.observer,
+                                                                           weight=f.weight,
+                                                                           tags=f.tags,
+                                                                           attributes=f.attributes,
+                                                                           back=objects_already_cloned.get(f.back_factor, f.back_factor))
                             glb_idx.put(new_f.key(), new_f)
                             considered_flows.add(f)
                     # Flows where the Interface is destination
-                    for f in glb_idx.get(FactorsRelationDirectedFlowObservation.partial_key(target=o)):  # Destination
+                    for f in glb_idx.get(FactorsRelationDirectedFlowObservation.partial_key(target=o)):
                         if f not in considered_flows:
-                            if f.source_factor in objects_already_cloned:
-                                new_f = FactorsRelationDirectedFlowObservation(source=objects_already_cloned[f.source_factor], target=objects_already_cloned[o], observer=f.observer, weight=f.weight, tags=f.tags, attributes=f.attributes)
-                            else:
-                                new_f = FactorsRelationDirectedFlowObservation(source=f.source_factor, target=objects_already_cloned[o], observer=f.observer, weight=f.weight, tags=f.tags, attributes=f.attributes)
+                            new_f = FactorsRelationDirectedFlowObservation(source=objects_already_cloned.get(f.source_factor, f.source_factor),
+                                                                           target=objects_already_cloned[o],
+                                                                           observer=f.observer,
+                                                                           weight=f.weight,
+                                                                           tags=f.tags,
+                                                                           attributes=f.attributes,
+                                                                           back=objects_already_cloned.get(f.back_factor, f.back_factor))
+
+                            glb_idx.put(new_f.key(), new_f)
+                            considered_flows.add(f)
+                    # Flows where the Interface is back interface
+                    for f in glb_idx.get(FactorsRelationDirectedFlowObservation.partial_key(back=o)):
+                        if f not in considered_flows:
+                            new_f = FactorsRelationDirectedFlowObservation(source=objects_already_cloned.get(f.source_factor, f.source_factor),
+                                                                           target=objects_already_cloned.get(f.target_factor, f.target_factor),
+                                                                           observer=f.observer,
+                                                                           weight=f.weight,
+                                                                           tags=f.tags,
+                                                                           attributes=f.attributes,
+                                                                           back=objects_already_cloned[o])
 
                             glb_idx.put(new_f.key(), new_f)
                             considered_flows.add(f)
                     # Scales
                     for f in glb_idx.get(FactorsRelationScaleObservation.partial_key(origin=o)):
                         if f not in considered_scales:
-                            if f.destination in objects_already_cloned:
-                                new_f = FactorsRelationScaleObservation(origin=objects_already_cloned[o],
-                                                                        destination=objects_already_cloned[f.destination],
-                                                                        observer=f.observer,
-                                                                        quantity=f.quantity,
-                                                                        tags=f.tags,
-                                                                        attributes=f.attributes)
-                            else:
-                                new_f = FactorsRelationScaleObservation(origin=objects_already_cloned[o],
-                                                                        destination=f.destination,
-                                                                        observer=f.observer,
-                                                                        quantity=f.quantity,
-                                                                        tags=f.tags,
-                                                                        attributes=f.attributes)
+                            new_f = FactorsRelationScaleObservation(origin=objects_already_cloned[o],
+                                                                    destination=objects_already_cloned.get(f.destination, f.destination),
+                                                                    observer=f.observer,
+                                                                    quantity=f.quantity,
+                                                                    tags=f.tags,
+                                                                    attributes=f.attributes)
                             glb_idx.put(new_f.key(), new_f)
                             considered_scales.add(f)
                     # Scales where the Interface is destination
                     for f in glb_idx.get(FactorsRelationScaleObservation.partial_key(destination=o)):  # Destination
                         if f not in considered_scales:
-                            if f.origin in objects_already_cloned:
-                                new_f = FactorsRelationScaleObservation(
-                                    origin=objects_already_cloned[f.origin], destination=objects_already_cloned[o],
-                                    observer=f.observer, quantity=f.quantity, tags=f.tags, attributes=f.attributes)
-                            else:
-                                new_f = FactorsRelationScaleObservation(source=f.origin,
-                                                                        target=objects_already_cloned[o],
-                                                                        observer=f.observer, quantity=f.quantity,
-                                                                        tags=f.tags, attributes=f.attributes)
+                            new_f = FactorsRelationScaleObservation(
+                                origin=objects_already_cloned.get(f.origin, f.origin), destination=objects_already_cloned[o],
+                                observer=f.observer, quantity=f.quantity, tags=f.tags, attributes=f.attributes)
 
                             glb_idx.put(new_f.key(), new_f)
                             considered_scales.add(f)
@@ -1454,18 +1449,12 @@ class Processor(Identifiable, Nameable, Taggable, Qualifiable, Automatable, Obse
                 else:  # "o" is a Processor
                     for f in glb_idx.get(ProcessorsRelationUndirectedFlowObservation.partial_key(source=o)): # As Source
                         if f not in considered_flows:
-                            if f.target_factor in objects_already_cloned:
-                                new_f = ProcessorsRelationUndirectedFlowObservation(source=o, target=objects_already_cloned[f.target_factor], observer=f.observer, weight=f.weight, tags=f.tags, attributes=f.attributes)
-                            else:
-                                new_f = ProcessorsRelationUndirectedFlowObservation(source=o, target=f.target_factor, observer=f.observer, weight=f.weight, tags=f.tags, attributes=f.attributes)
+                            new_f = ProcessorsRelationUndirectedFlowObservation(source=o, target=objects_already_cloned.get(f.target_factor, f.target_factor), observer=f.observer, weight=f.weight, tags=f.tags, attributes=f.attributes)
                             glb_idx.put(new_f.key(), new_f)
                             considered_flows.add(f)
                     for f in glb_idx.get(FactorsRelationDirectedFlowObservation.partial_key(target=o)): # As Target
                         if f not in considered_flows:
-                            if f.source_factor in objects_already_cloned:
-                                new_f = ProcessorsRelationUndirectedFlowObservation(source=objects_already_cloned[f.source_factor], target=o, observer=f.observer, weight=f.weight, tags=f.tags, attributes=f.attributes)
-                            else:
-                                new_f = ProcessorsRelationUndirectedFlowObservation(source=f.source_factor, target=o, observer=f.observer, weight=f.weight, tags=f.tags, attributes=f.attributes)
+                            new_f = ProcessorsRelationUndirectedFlowObservation(source=objects_already_cloned.get(f.source_factor, f.source_factor), target=o, observer=f.observer, weight=f.weight, tags=f.tags, attributes=f.attributes)
 
                             glb_idx.put(new_f.key(), new_f)
                             considered_flows.add(f)
@@ -2330,12 +2319,14 @@ class FactorsRelationDirectedFlowObservation(FactorsRelationObservation, Encodab
 
     """
 
-    def __init__(self, source: Factor, target: Factor, observer: Observer = None, weight: str=None, tags=None, attributes=None):
+    def __init__(self, source: Factor, target: Factor, observer: Observer = None, weight: str=None, tags=None,
+                 attributes=None, back: Factor = None):
         Taggable.__init__(self, tags)
         Qualifiable.__init__(self, attributes)
         Automatable.__init__(self)
         self._source = source
         self._target = target
+        self._back = back
         self._weight = weight
         self._observer = observer
 
@@ -2349,78 +2340,17 @@ class FactorsRelationDirectedFlowObservation(FactorsRelationObservation, Encodab
             "weight": self.weight
         })
 
-        return d
-
-    @staticmethod
-    def create_and_append(source: Factor, target: Factor, observer: Optional[Observer], weight: str=None, tags=None, attributes=None):
-        o = FactorsRelationDirectedFlowObservation(source, target, observer, weight, tags, attributes)
-        if source:
-            source.observations_append(o)
-        if target:
-            target.observations_append(o)
-        if observer:
-            observer.observables_append(source)
-            observer.observables_append(target)
-        return o
-
-    @property
-    def source_factor(self):
-        return self._source
-
-    @property
-    def target_factor(self):
-        return self._target
-
-    @property
-    def weight(self):
-        return self._weight
-
-    @property
-    def observer(self):
-        return self._observer
-
-    @staticmethod
-    def partial_key(source: Factor=None, target: Factor=None, observer: Observer=None):
-        d = {"_t": RelationClassType.ff_directed_flow.name}
-        if target:
-            d["__t"] = target.ident
-
-        if source:
-            d["__s"] = source.ident
-
-        if observer:
-            d["__oer"] = observer.ident
-
-        return d
-
-    def key(self):
-        d = {"_t": RelationClassType.ff_directed_flow.name, "__s": self._source.ident, "__t": self._target.ident}
-        if self._observer:
-            d["__oer"] = self._observer.ident
-        return d
-
-
-class FactorsRelationDirectedFlowBackObservation(FactorsRelationDirectedFlowObservation):
-    """
-    Represents a special directed Flow from a source to a target interface with a connection to a back interface
-    """
-
-    def __init__(self, source: Factor, target: Factor, back: Factor, observer: Observer = None, weight: str=None, tags=None, attributes=None):
-        FactorsRelationDirectedFlowObservation.__init__(self, source, target, observer, weight, tags, attributes)
-        self._back = back
-
-    def encode(self):
-        d = Encodable.parents_encode(self, __class__)
-
-        d.update({
-            "back": name_and_id_dict(self.back_factor)
-        })
+        if self.back_factor:
+            d.update({
+                "back": name_and_id_dict(self.back_factor)
+            })
 
         return d
 
     @staticmethod
-    def create_and_append(source: Factor, target: Factor, back: Factor, observer: Optional[Observer], weight: str=None, tags=None, attributes=None):
-        o = FactorsRelationDirectedFlowBackObservation(source, target, back, observer, weight, tags, attributes)
+    def create_and_append(source: Factor, target: Factor, observer: Optional[Observer], weight: str=None, tags=None,
+                          attributes=None, back: Factor = None):
+        o = FactorsRelationDirectedFlowObservation(source, target, observer, weight, tags, attributes, back=back)
         if source:
             source.observations_append(o)
         if target:
@@ -2434,12 +2364,32 @@ class FactorsRelationDirectedFlowBackObservation(FactorsRelationDirectedFlowObse
         return o
 
     @property
+    def source_factor(self):
+        return self._source
+
+    @property
+    def target_factor(self):
+        return self._target
+
+    @property
     def back_factor(self):
         return self._back
 
+    @property
+    def weight(self):
+        return self._weight
+
+    @property
+    def scale_change_weight(self):
+        return self.attributes.get("scale_change_weight")
+
+    @property
+    def observer(self):
+        return self._observer
+
     @staticmethod
-    def partial_key(source: Factor=None, target: Factor=None, back: Factor=None, observer: Observer=None):
-        d = {"_t": RelationClassType.ff_directed_flow_back.name}
+    def partial_key(source: Factor = None, target: Factor = None, observer: Observer = None, back: Factor = None):
+        d = {"_t": RelationClassType.ff_directed_flow.name}
         if target:
             d["__t"] = target.ident
 
@@ -2455,10 +2405,10 @@ class FactorsRelationDirectedFlowBackObservation(FactorsRelationDirectedFlowObse
         return d
 
     def key(self):
-        d = {"_t": RelationClassType.ff_directed_flow_back.name,
+        d = {"_t": RelationClassType.ff_directed_flow.name,
              "__s": self._source.ident,
              "__t": self._target.ident,
-             "__b": self._back.ident}
+             "__b": self._back.ident if self._back else None}
         if self._observer:
             d["__oer"] = self._observer.ident
         return d

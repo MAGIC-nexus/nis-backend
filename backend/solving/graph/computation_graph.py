@@ -27,7 +27,12 @@ class ComputationGraph:
 
         if graph:
             for u, v, data in graph.edges(data=True):
-                self.add_edge(u, v, data["weight"], None)
+                reverse_weight = (1/data["weight"]) if data.get("add_reverse_weight") else None
+                self.add_edge(u, v, data["weight"], reverse_weight)
+
+            for n, data in graph.nodes(data=True):
+                if data.get("add_split"):
+                    self.mark_node_split(n, EdgeType.DIRECT)
 
     @property
     def nodes(self):
@@ -183,11 +188,11 @@ class ComputationGraph:
 
                 # If node 'n' is a 'split' only one result is needed to compute the result
                 if split:
-                    if res_backward:
+                    if res_backward is not None:
                         return res_backward * weight
                 else:
                     if res_backward is not None and weight is not None:
-                        result = (result if result else 0) + res_backward * weight
+                        result = (result if result is not None else 0) + res_backward * weight
                     else:
                         return None
 
@@ -201,7 +206,6 @@ class ComputationGraph:
             # Does a parameter exist for this node?
             param = params.get(node)
             if param is not None:
-
                 values[node] = param
                 return param
 

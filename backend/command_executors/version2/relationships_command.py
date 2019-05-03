@@ -52,50 +52,37 @@ class RelationshipsCommand(BasicCommand):
         except NotImplementedError as e:
             raise CommandExecutionError(str(e))
 
-        # Allow use of column "BackInterface" for "Flow" relation type
-        if fields["back_interface"] is not None and relation_class == RelationClassType.ff_directed_flow:
-            relation_class = RelationClassType.ff_directed_flow_back
+        self._check_fields(relation_class, source_processor, target_processor)
 
         if relation_class.is_between_processors:
             create_relation_observations(self._glb_idx, source_processor, [(target_processor, relation_class)],
                                          relation_class, None, attributes=attributes)
 
         elif relation_class.is_between_interfaces:
-            # Processors should be the same when relation is "Scale Change"
-            if relation_class == RelationClassType.ff_scale_change and source_processor.name != target_processor.name:
-                raise CommandExecutionError(
-                    f"Source and target processors should be the same for a relation of type"
-                    f" 'Scale Change': '{source_processor.name}' != '{target_processor.name}'")
-
-            # Look for interfaces
             source_interface = self._get_interface_from_field("source_interface", source_processor)
             target_interface = self._get_interface_from_field("target_interface", target_processor)
 
+            if fields["back_interface"]:
+                relation_class = RelationClassType.ff_directed_flow_back
+
             if relation_class == RelationClassType.ff_directed_flow_back:
                 back_interface = self._get_interface_from_field("back_interface", source_processor)
-
-                if back_interface.taxon != target_interface.taxon:
-                    raise CommandExecutionError(f"The type of target and back interfaces should be the same. Target: "
-                                                f"{target_interface.taxon.name}; Back: {back_interface.taxon.name}")
-
+                self._check_flow_back_interface_types(source_interface, target_interface, back_interface)
                 attributes.update(dict(back_interface=back_interface))
 
             if relation_class.is_flow:
-                # Check for correct interfaces orientation (input/output) of source and target
                 self._check_flow_orientation(
                     source_processor, target_processor, source_interface, target_interface,
                     is_direct_flow=(relation_class == RelationClassType.ff_directed_flow)
                 )
 
-            weight = fields["flow_weight"]
             if source_interface.taxon != target_interface.taxon:
                 interface_types_transform = self._get_interface_types_transform(
                     source_interface.taxon, source_processor, target_interface.taxon, target_processor)
-                attributes.update(dict(interface_types_transform=interface_types_transform))
-                weight = FloatOrString.multiply(weight, interface_types_transform.scaled_weight)
+                attributes.update(dict(scale_change_weight=interface_types_transform.scaled_weight))
 
             create_relation_observations(self._glb_idx, source_interface,
-                                         [(target_interface, relation_class, weight)],
+                                         [(target_interface, relation_class, fields["flow_weight"])],
                                          relation_class, None, attributes=attributes)
 
     def _get_interface_types_transform(self,
@@ -118,20 +105,51 @@ class RelationshipsCommand(BasicCommand):
 
         return interface_types_transforms[0]
 
+    def _check_fields(self, relation_class: RelationClassType, source_processor: Processor, target_processor: Processor):
+        # Use of column BackInterface is only allowed in some relation types
+        back_allowed_classes = [RelationClassType.ff_directed_flow, RelationClassType.ff_reverse_directed_flow,
+                                RelationClassType.ff_directed_flow_back]
+        if self._fields["back_interface"] and relation_class not in back_allowed_classes:
+            raise CommandExecutionError(f"Column 'BackInterface' is only allowed in relations of type: "
+                                        f"{back_allowed_classes}")
+
+        # Use of column Weight is only allowed in some relation types
+        weight_allowed_classes = [RelationClassType.ff_directed_flow, RelationClassType.ff_reverse_directed_flow,
+                                  RelationClassType.ff_directed_flow_back, RelationClassType.ff_scale]
+        if self._fields["flow_weight"] and relation_class not in weight_allowed_classes:
+            raise CommandExecutionError(f"Column 'Weight' is only allowed in relations of type: "
+                                        f"{weight_allowed_classes}")
+
+        # Processors should be the same when relation is "Scale Change"
+        if relation_class == RelationClassType.ff_scale_change and source_processor.name != target_processor.name:
+            raise CommandExecutionError(
+                f"Source and target processors should be the same for a relation of type"
+                f" 'Scale Change': '{source_processor.name}' != '{target_processor.name}'")
+
+        # TODO: all flows from same "proc:iface" to same "proc" should have the same Weight
+
+    def _check_flow_back_interface_types(self, source: Factor, target: Factor, back: Factor):
+        if source.taxon == target.taxon:
+            raise CommandExecutionError(f"The type of source and target interfaces should be different. "
+                                        f"Source and Target: {source.taxon.name}")
+
+        if back.taxon != target.taxon:
+            raise CommandExecutionError(f"The type of target and back interfaces should be the same. Target: "
+                                        f"{target.taxon.name}; Back: {back.taxon.name}")
+
     def _check_flow_orientation(self, source_processor: Processor, target_processor: Processor,
                                 source_interface: Factor, target_interface: Factor, is_direct_flow: bool):
+        """Check for correct interfaces orientation (input/output) of source and target"""
         allowed_source_orientation = ("Output" if is_direct_flow else "Input")
 
         # Are the orientations equal?
         if strcmp(source_interface.orientation, target_interface.orientation):
             if strcmp(source_interface.orientation, allowed_source_orientation):
                 # Target processor should be parent of source processor
-                parent_processor = target_processor
-                child_processor = source_processor
+                parent_processor, child_processor = target_processor, source_processor
             else:
                 # Source processor should be parent of target processor
-                parent_processor = source_processor
-                child_processor = target_processor
+                parent_processor, child_processor = source_processor, target_processor
 
             if child_processor not in parent_processor.children(self._glb_idx):
                 raise CommandExecutionError(f"The processor '{child_processor.name}' should be part of the "

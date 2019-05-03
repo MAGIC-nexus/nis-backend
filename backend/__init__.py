@@ -38,7 +38,7 @@ SDMXConcept = namedtuple('Concept', 'type name istime description code_list')
 
 # Global Types
 
-IssuesOutputPairType = Tuple[Optional[List[Issue]], Optional[Any]]
+IssuesOutputPairType = Tuple[List[Issue], Optional[Any]]
 ExecutableCommandIssuesPairType = Tuple[Optional["IExecutableCommand"], List[Issue]]
 IssuesLabelContentTripleType = Tuple[List[Issue], Optional[Any], Optional[Dict[str, Any]]]
 # Tuple (top, bottom, left, right) representing the rectangular area of the input worksheet where the command is present
