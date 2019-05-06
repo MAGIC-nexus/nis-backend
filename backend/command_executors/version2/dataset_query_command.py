@@ -7,6 +7,9 @@ import pandas as pd
 import backend
 from backend.common.helper import strcmp, create_dictionary, obtain_dataset_metadata, \
     augment_dataframe_with_mapped_columns, translate_case
+import pyximport
+pyximport.install(reload_support=True)
+from backend.common.helper_accel import augment_dataframe_with_mapped_columns2
 from backend.model_services import IExecutableCommand, get_case_study_registry_objects
 
 
@@ -122,7 +125,7 @@ class DatasetQryCommand(IExecutableCommand):
                 # mapping_tuples.append((mappings[m].origin, mappings[m].destination, mappings[m].map))
                 mapping_dict[mappings[m].origin] = (mappings[m].destination, {d["o"]: d["to"] for d in mappings[m].map})
 
-        df = augment_dataframe_with_mapped_columns(df, mapping_dict, ["value"])
+        df = augment_dataframe_with_mapped_columns2(df, mapping_dict, ["value"])
 
         # Aggregate (If any dimension has been specified)
         if len(self._content["group_by"]) > 0:

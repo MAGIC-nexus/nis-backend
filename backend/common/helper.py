@@ -36,7 +36,6 @@ from backend.models import ureg
 # >>>> JSON FUNCTIONS <<<<
 # #####################################################################################################################
 
-
 def _json_serial(obj):
     """JSON serializer for objects not serializable by default json code"""
     from datetime import datetime
@@ -1395,3 +1394,38 @@ class UnitConversion:
             ratio *= UnitConversion.ratio(target_from_unit, target_to_unit)
 
         return FloatOrString.multiply_with_float(weight, ratio)
+
+
+def add_label_columns_to_dataframe(ds_name, df, prd):
+    """
+    Add columns containing labels describing codes in the input Dataframe
+    The labels must be in the CodeHierarchies or CodeLists
+
+    :param ds_name: Dataset name
+    :param df: pd.Dataframe to enhance
+    :param prd: PartialRetrievalDictionary
+    :return: Enhanced pd.Dataframe
+    """
+    from backend.models.musiasem_concepts import Hierarchy
+    # Merge with Taxonomy LABELS, IF available
+    for col in df.columns:
+        hs = prd.get(Hierarchy.partial_key(ds_name + "_" + col))
+        if len(hs) == 1:
+            h = hs[0]
+            nodes = h.get_all_nodes()
+            tmp = []
+            for nn in nodes:
+                t = nodes[nn]
+                tmp.append([t[0].lower(), t[1]])  # CSens
+            if not backend.case_sensitive and df[col].dtype == 'O':
+                df[col + "_l"] = df[col].str.lower()
+                col = col + "_l"
+
+            # Dataframe of codes and descriptions
+            df_dst = pd.DataFrame(tmp, columns=['sou_rce', col + "_desc"])
+            df = pd.merge(df, df_dst, how='left', left_on=col, right_on='sou_rce')
+            del df['sou_rce']
+            if not backend.case_sensitive:
+                del df[col]
+
+    return df

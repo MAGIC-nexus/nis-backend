@@ -46,8 +46,11 @@ class TestFAOCommandFiles(unittest.TestCase):
             os.path.abspath(__file__)) + "/z_input_files/v2/16_fao_fbs_test.xlsx"
         isess, issues = execute_file_return_issues(file_path, generator_type="spreadsheet")
         # Check State of things
-        self.assertEqual(len(issues), 0)  # Just one issue
         glb_idx, p_sets, hh, datasets, mappings = get_case_study_registry_objects(isess.state)
+        df = datasets["fbs2"].data
+        df = add_label_columns_to_dataframe("fbs2", df, glb_idx)
+        tmp = df.to_csv(date_format="%Y-%m-%d %H:%M:%S", index=False, na_rep="")
+        self.assertTrue(tmp)
         # Close interactive session
         isess.close_db_session()
 
@@ -584,18 +587,25 @@ class TestCommandFiles(unittest.TestCase):
 
 
 if __name__ == '__main__':
-    is_fao_test = False
-    backend.data_source_manager = register_external_datasources({"FAO_DATASETS_DIR": "/home/marco/temp/Data/FAOSTAT/"})
+    from backend.common.helper import add_label_columns_to_dataframe
+
+    is_fao_test = True
+    fao_dir = "/home/marco/temp/Data/FAOSTAT/"
     if is_fao_test:
         i = TestFAOCommandFiles()
         prepare_and_reset_database_for_tests(
             prepare=True,
             metadata_string="sqlite:////home/rnebot/GoogleDrive/AA_MAGIC/nis_metadata.db",
             data_string="sqlite:////home/rnebot/GoogleDrive/AA_MAGIC/nis_cached_datasets.db")
+        backend.data_source_manager = register_external_datasources(
+            {"FAO_DATASETS_DIR": fao_dir})
         i.test_001_fao()
     else:
         i = TestCommandFiles()
         prepare_and_reset_database_for_tests(prepare=True)
+        backend.data_source_manager = register_external_datasources(
+            {"FAO_DATASETS_DIR": fao_dir})
+
         #i.test_002_execute_file_two()
         # i.test_006_execute_file_five()  # TODO: This test from v1 has problems with the case sensitiveness!
         #i.test_008_execute_file_v2_two()

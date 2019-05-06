@@ -1,12 +1,10 @@
 import io
 import os
-import sys
 import binascii
 import urllib
 import openpyxl
 import redis
 import logging
-import pandas as pd
 from pathlib import Path
 import sqlalchemy.schema
 from openpyxl.writer.excel import save_virtual_workbook
@@ -37,7 +35,8 @@ if __name__ == '__main__':
     print("Executing locally!")
     os.environ["MAGIC_NIS_SERVICE_CONFIG_FILE"] = "../../../nis-backend-config/nis_local.conf"
 
-from backend.common.helper import generate_json, obtain_dataset_source, gzipped, str2bool
+from backend.common.helper import generate_json, obtain_dataset_source, gzipped, str2bool, \
+    add_label_columns_to_dataframe
 from backend.models.musiasem_methodology_support import *
 from backend.common.create_database import create_pg_database_engine, create_monet_database_engine
 from backend.restful_service import app, register_external_datasources
@@ -55,8 +54,7 @@ from backend.restful_service import nis_api_base, nis_client_base, nis_external_
 from backend.models import log_level
 from backend.restful_service.serialization import serialize, deserialize, serialize_state, deserialize_state
 from backend.ie_exports.flows_graph import BasicQuery, construct_flow_graph, construct_flow_graph_2
-from backend.ie_exports.processors_graph import construct_processors_graph, construct_processors_graph_2
-from backend.models.musiasem_concepts import Hierarchy
+from backend.ie_exports.processors_graph import construct_processors_graph_2
 
 
 # #####################################################################################################################
@@ -1288,26 +1286,7 @@ def reproducible_session_query_state_get_dataset(name, format):  # Query list of
                 labels_enabled = request.args.get("labels", "True") == "True"
                 if labels_enabled:
                     print("Preparing Dataset labels")
-                    # Merge with Taxonomy LABELS, IF available
-                    for col in ds2.columns:
-                        hs = glb_idx.get(Hierarchy.partial_key(name + "_" + col))
-                        if len(hs) == 1:
-                            h = hs[0]
-                            nodes = h.get_all_nodes()
-                            tmp = []
-                            for nn in nodes:
-                                t = nodes[nn]
-                                tmp.append([t[0].lower(), t[1]])  # CSens
-                            if not backend.case_sensitive and ds2[col].dtype == 'O':
-                                ds2[col + "_l"] = ds2[col].str.lower()
-                                col = col + "_l"
-
-                            # Dataframe of codes and descriptions
-                            df_dst = pd.DataFrame(tmp, columns=['sou_rce', col + "_desc"])
-                            ds2 = pd.merge(ds2, df_dst, how='left', left_on=col, right_on='sou_rce')
-                            del ds2['sou_rce']
-                            if not backend.case_sensitive:
-                                del ds2[col]
+                    ds2 = add_label_columns_to_dataframe(name, ds2, glb_idx)
 
                 # TODO Elaborate "meta-workbook" (workbook capable of reproducing dataset)
                 if format == "json":

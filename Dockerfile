@@ -62,8 +62,11 @@ RUN apt-get update && \
     gcc \
     git \
     curl \
-    libpq-dev && \
-	apt-get clean
+    libpq-dev \
+	libcurl4-openssl-dev \
+	libssl-dev \
+	&& apt-get clean
+
 
 # COMMON
 

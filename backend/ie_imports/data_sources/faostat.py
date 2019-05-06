@@ -200,7 +200,6 @@ class FAOSTAT(IDataSourceManager):  # FAOStat (not AquaStat)
 
         # Time
 
-
         # Prepare the query (WITH count and columns versions)
         # TODO IMPROVEMENTS: Add GROUP BY if a pivot table is available. Pass the list of dimensions, plus the aggregation as TWO new parameters
         sql = "SELECT * FROM \""+dataset+"\" WHERE "

@@ -1,5 +1,7 @@
 from sqlalchemy.orm import class_mapper
 import pandas as pd
+import numpy as np
+import json
 
 # Some ideas from function "model_to_dict" (Google it, StackOverflow Q&A)
 from backend.common.helper import PartialRetrievalDictionary, create_dictionary
@@ -7,6 +9,7 @@ from backend.models import MODEL_VERSION
 from backend.models.musiasem_methodology_support import serialize_from_object, deserialize_to_object
 from backend.model_services import State, get_case_study_registry_objects
 import sys
+
 
 def serialize(o_list):
     """
@@ -129,7 +132,9 @@ def serialize_state(state: State):
     """
 
     def serialize_dataframe(df):
-        return df.to_json(orient="split")  # list(df.index.names), df.to_dict()
+        return df.to_json(orient="split", index=False), \
+               json.dumps({i[0]: str(i[1]) for i in df.dtypes.to_dict().items()})
+        # list(df.index.names), df.to_dict()
 
     print("  serialize_state IN")
 
@@ -186,7 +191,8 @@ def deserialize_state(st: str, state_version: int = MODEL_VERSION):
     :return:
     """
     def deserialize_dataframe(t):
-        df = pd.read_json(t, orient="split")  # pd.DataFrame(t[1])
+        dtypes = {i[0]: np.dtype(i[1]) for i in json.loads(t[1]).items()}
+        df = pd.read_json(t[0], orient="split", dtype=dtypes)  # pd.DataFrame(t[1])
         # df.index.names = t[0]
         return df
 
