@@ -13,7 +13,7 @@ from backend.command_generators.parser_spreadsheet_utils import binary_mask_from
     obtain_rectangular_submatrices
 from backend.common.helper import create_dictionary, first
 from backend.command_definitions import valid_v2_command_names, commands
-from backend.command_generators.spreadsheet_command_parsers_v2 import parse_command
+from backend.command_generators.spreadsheet_command_parsers_v2 import parse_command_in_worksheet
 from backend.command_generators import IType
 
 
@@ -63,7 +63,7 @@ def commands_generator_from_ooxml_file(input, state, sublist, stack) -> backend.
 
     :param input: A bytes input
     :param state: State used to check variables
-    :param sublist: List of worksheets to consider
+    :param sublist: List of worksheets to consider. If not defined, ALL worksheets
     :param stack: Stack of nested files. Just pass it...
     :return:
     """
@@ -130,7 +130,7 @@ def commands_generator_from_ooxml_file(input, state, sublist, stack) -> backend.
                           f"It seems there are no parameters for the dataset import command at worksheet '{sheet_name}'"))
 
         elif c_type == "list_of_commands":
-            issues, c_label, c_content = parse_command(sheet, t, None, cmd.name)
+            issues, c_label, c_content = parse_command_in_worksheet(sheet, t, None, cmd.name)
             c_type = None
             if IType.ERROR not in [issue.itype for issue in issues]:
                 for r in c_content["items"]:
@@ -145,7 +145,7 @@ def commands_generator_from_ooxml_file(input, state, sublist, stack) -> backend.
                         worksheet_to_command[worksheet] = command
 
         elif c_type == "import_commands":
-            issues, c_label, c_content = parse_command(sheet, t, None, cmd.name)
+            issues, c_label, c_content = parse_command_in_worksheet(sheet, t, None, cmd.name)
             if IType.ERROR not in [issue.itype for issue in issues]:
                 # Declared at this point to avoid circular reference ("parsers_factory" imports "parsers_spreadsheet")
                 from backend.command_generators.parsers_factory import commands_container_parser_factory
@@ -188,7 +188,7 @@ def commands_generator_from_ooxml_file(input, state, sublist, stack) -> backend.
             if cmd.parse_function:
                 issues, c_label, c_content = cmd.parse_function(sheet, t, sheet_name)
             else:
-                issues, c_label, c_content = parse_command(sheet, t, sheet_name, cmd.name)
+                issues, c_label, c_content = parse_command_in_worksheet(sheet, t, sheet_name, cmd.name)
 
         # -------------------------------------------------------------------------------------------------------------
         # Command parsed, now append "issues"

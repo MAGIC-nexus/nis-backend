@@ -2,7 +2,7 @@ import unittest
 import pandas as pd
 import pyximport
 
-pyximport.install(reload_support=True)
+pyximport.install(reload_support=True, language_level=3)
 
 from backend.common.helper_accel import augment_dataframe_with_mapped_columns2
 import backend.common.helper

@@ -4,6 +4,7 @@ from openpyxl.worksheet.worksheet import Worksheet
 
 from backend import CommandField, IssuesLabelContentTripleType, AreaTupleType
 from backend.command_generators import Issue, parser_field_parsers, IssueLocation, IType
+from backend.command_generators.parser_field_parsers import simple_h_name
 
 
 def check_columns(sh, name: str, area: Tuple, cols: List[CommandField], command_name: str, ignore_not_found=False):
@@ -27,7 +28,7 @@ def check_columns(sh, name: str, area: Tuple, cols: List[CommandField], command_
     mandatory_not_found = set([c.name for c in cols if c.mandatory])
 
     # Check columns
-    col_map = {}  # From CommandField to a list of column index
+    col_map = {}  # From CommandField to a list of tuples (column, index)
     for c in range(area[2], area[3]):  # For each column of row 0 (Header Row)
         ##val = sh.get((area[0], c), None)
         val = sh.cell(row=area[0], column=c).value
@@ -81,7 +82,7 @@ def read_worksheet(sh: Worksheet) -> Dict:
     return data
 
 
-def parse_command(sh: Worksheet, area: AreaTupleType, name: Optional[str], cmd_name: str) -> IssuesLabelContentTripleType:
+def parse_command_in_worksheet(sh: Worksheet, area: AreaTupleType, name: Optional[str], cmd_name: str) -> IssuesLabelContentTripleType:
     """
     Parse command in general
     Generate a JSON
@@ -94,13 +95,42 @@ def parse_command(sh: Worksheet, area: AreaTupleType, name: Optional[str], cmd_n
     :return: issues List, None, content (JSON)
     """
 
+    def check_expandable(v, location):
+        """
+        Check if curly braces match, that what is inside is syntactically correct, (and that the value exists)
+
+        :param v:
+        :return:
+        """
+        import re
+        reg = re.compile(r"{.*?}")
+        matches = reg.findall(v)
+        output = set()
+        if len(matches) == 0:
+            issues.append(
+                Issue(itype=IType.ERROR,
+                      description=f"Incorrect syntax, no macro expansion found",
+                      location=location)
+            )
+        else:
+            for m in matches:
+                h_name = m[1:-1]
+                try:
+                    parser_field_parsers.string_to_ast(simple_h_name, h_name)
+                    output.add(h_name)
+                except:
+                    issues.append(
+                        Issue(itype=IType.ERROR,
+                          description=f"The value {m[1:-1]} is not a valid hierarchical name",
+                          location=location)
+                    )
+        return output
+
     issues: List[Issue] = []
 
     from backend.command_field_definitions import command_fields
 
     cols = command_fields[cmd_name]  # List of CommandField that will guide the parsing
-    ##sh_dict = read_worksheet(sh)
-    ##col_map, local_issues = check_columns(sh_dict, name, area, cols, cmd_name)
     col_map, local_issues = check_columns(sh, name, area, cols, cmd_name)
 
     if any([i.itype == IType.ERROR for i in local_issues]):
@@ -108,7 +138,7 @@ def parse_command(sh: Worksheet, area: AreaTupleType, name: Optional[str], cmd_n
 
     issues.extend(local_issues)
 
-    # "mandatory" can be defined as expression depending on other base fields (like in RefBibliographic command fields)
+    # The "mandatoriness" of a field may depend on values in other fields (like in RefBibliographic command fields)
     # Elaborate a list of fields having this "complex" mandatory property
     complex_mandatory_cols = [c for c in cols if isinstance(c.mandatory, str)]
 
@@ -116,19 +146,18 @@ def parse_command(sh: Worksheet, area: AreaTupleType, name: Optional[str], cmd_n
     # Parse each Row
     for r in range(area[0] + 1, area[1]):
         line = {}
-        expandable = False  # The line contains at least one field implying expansion into multiple lines
+        expandable = set()  # A set of variables to be expanded. If empty, it is a literal line (not expandable)
         complex = False  # The line contains at least one field with a complex rule (which cannot be evaluated with a simple cast)
 
         # Constant mandatory values
         mandatory_not_found = set([c.name for c in cols if c.mandatory and isinstance(c.mandatory, bool)])
 
         # Each "field"
-        for col in col_map.keys():
-            cname = col.name
+        for field_def in col_map.keys():
+            field_name = field_def.name
             # Appearances of field (normally just once, there attributes allowing more than one appearance)
-            for col_name, col_idx in col_map[col]:
+            for col_name, col_idx in col_map[field_def]:
                 # Read and prepare "value"
-                ##value = sh_dict.get((r, col_idx), None)
                 value = sh.cell(row=r, column=col_idx).value
                 if value is not None:
                     if not isinstance(value, str):
@@ -137,54 +166,76 @@ def parse_command(sh: Worksheet, area: AreaTupleType, name: Optional[str], cmd_n
                 else:
                     continue
 
-                if col.allowed_values:  # If the CommandField checks for a list of allowed values
-                    if value.lower() not in [v.lower() for v in col.allowed_values]:  # TODO Case insensitive CI
-                        issues.append(
-                            Issue(itype=IType.ERROR,
-                                  description=f"Field '{col_name}' of command '{cmd_name}' has invalid value '{value}'."
-                                              f" Allowed values are: {', '.join(col.allowed_values)}.",
-                                  location=IssueLocation(sheet_name=name, row=r, column=col_idx)))
+                # TODO Check if value contains "{", expansion
+                if "{" in value:
+                    # Expandable. Do not parse now. Check: curly pairs, and that what is between is a
+                    #  simple_h_name and that it exists: as dataset
+                    expandable.update(
+                        check_expandable(value, IssueLocation(sheet_name=name, row=r, column=col_idx))
+                    )
+                    # With many appearances, just a "Key-Value list" syntax is permitted
+                    if field_def.many_appearances:
+                        if field_name in line:
+                            line[field_name] += ", " + col_name + "='" + value + "'"
+                        else:
+                            line[field_name] = col_name + "='" + value + "'"
                     else:
-                        line[cname] = value
-                else:  # Instead of a list of values, check if a syntactic rule is met by the value
-                    if col.parser:  # Parse, just check syntax (do not store the AST)
-                        try:
-                            ast = parser_field_parsers.string_to_ast(col.parser, value)
-                            # Rules are in charge of informing if the result is expandable and if it complex
-                            if "expandable" in ast and ast["expandable"]:
-                                expandable = True
-                            if "complex" in ast and ast["complex"]:
-                                complex = True
+                        if field_name in line:
+                            line[field_name] += ", " + value
+                        else:
+                            line[field_name] = value  # Store the value
+                else:
+                    if field_def.allowed_values:  # If the CommandField checks for a list of allowed values
+                        if value.lower() not in [v.lower() for v in field_def.allowed_values]:  # TODO Case insensitive CI
+                            issues.append(
+                                Issue(itype=IType.ERROR,
+                                      description=f"Field '{col_name}' of command '{cmd_name}' has invalid value "
+                                      f"'{value}'. Allowed values are: {', '.join(field_def.allowed_values)}.",
+                                      location=IssueLocation(sheet_name=name, row=r, column=col_idx)))
+                        else:
+                            line[field_name] = value
+                    else:  # Instead of a list of values, check if a syntactic rule is met by the value
+                        if field_def.parser:  # Parse, just check syntax (do not store the AST)
+                            try:
+                                ast = parser_field_parsers.string_to_ast(field_def.parser, value)
+                                # Rules are in charge of informing if the result is expandable and if it complex
+                                if "expandable" in ast and ast["expandable"]:
+                                    issues.append(Issue(itype=IType.ERROR,
+                                                        description=f"The value in field '{col_header}' of command "
+                                                        f"'{cmd_name}' should not be expandable. Entered: {value}",
+                                                        location=IssueLocation(sheet_name=name, row=r, column=col_idx)))
+                                if "complex" in ast and ast["complex"]:
+                                    complex = True
 
-                            # With many appearances, just a "Key-Value list" syntax is permitted
-                            if col.many_appearances:
-                                if cname in line:
-                                    line[cname] += ", " + col_name + "='" + value + "'"
+                                # With many appearances, just a "Key-Value list" syntax is permitted
+                                if field_def.many_appearances:
+                                    if field_name in line:
+                                        line[field_name] += ", " + col_name + "='" + value + "'"
+                                    else:
+                                        line[field_name] = col_name + "='" + value + "'"
                                 else:
-                                    line[cname] = col_name + "='" + value + "'"
-                            else:
-                                if cname in line:
-                                    line[cname] += ", " + value
-                                else:
-                                    line[cname] = value  # Store the value
-                        except:
-                            ##col_header = sh_dict.get((1, col_idx), None)
-                            col_header = sh.cell(row=1, column=col_idx).value
-                            issues.append(Issue(itype=IType.ERROR,
-                                                description="The value in field '" + col_header + "' of command '" + cmd_name + "' is not syntactically correct. Entered: " + value,
-                                                location=IssueLocation(sheet_name=name, row=r, column=col_idx)))
-                    else:
-                        line[cname] = value  # No parser, just store blindly the value
+                                    if field_name in line:
+                                        line[field_name] += ", " + value
+                                    else:
+                                        line[field_name] = value  # Store the value
+                            except:
+                                col_header = sh.cell(row=1, column=col_idx).value
+                                issues.append(Issue(itype=IType.ERROR,
+                                                    description=f"The value in field '{col_header}' of command "
+                                                    f"'{cmd_name}' is not syntactically correct. Entered: {value}",
+                                                    location=IssueLocation(sheet_name=name, row=r, column=col_idx)))
+                        else:
+                            line[field_name] = value  # No parser, just store blindly the value
 
-            if col.name in mandatory_not_found:
-                mandatory_not_found.discard(col.name)
+            if field_def.name in mandatory_not_found:
+                mandatory_not_found.discard(field_def.name)
 
         if len(line) == 0:
             continue  # Empty line (allowed)
 
         # Flags to accelerate the second evaluation, during execution
         line["_row"] = r
-        line["_expandable"] = expandable
+        line["_expandable"] = list(expandable)
         line["_complex"] = complex
 
         # Append if all mandatory fields have been filled
@@ -198,14 +249,14 @@ def parse_command(sh: Worksheet, area: AreaTupleType, name: Optional[str], cmd_n
 
         # Check varying mandatory fields (fields depending on the value of other fields)
         for c in complex_mandatory_cols:
-            col = c.name  # next(c2 for c2 in col_map if strcmp(c.name, c2.name))
+            field_def = c.name  # next(c2 for c2 in col_map if strcmp(c.name, c2.name))
             if isinstance(c.mandatory, str):
                 # Evaluate
                 mandatory = eval(c.mandatory, None, line)
-                may_append = (mandatory and col in line) or (not mandatory)
-                if mandatory and col not in line:
+                may_append = (mandatory and field_def in line) or (not mandatory)
+                if mandatory and field_def not in line:
                     issues.append(Issue(itype=IType.ERROR,
-                                        description="Mandatory column: " + col + " has not been specified",
+                                        description="Mandatory column: " + field_def + " has not been specified",
                                         location=IssueLocation(sheet_name=name, row=r, column=None)))
 
         if may_append:

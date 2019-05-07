@@ -1,13 +1,15 @@
 import json
-from typing import Optional, List, Dict, Any, Union, NoReturn
+import re
+from typing import Optional, List, Dict, Any, Union, NoReturn, Tuple, Set
 
-from backend import ExecutableCommandIssuesPairType, Command, CommandField, IssuesOutputPairType
+from backend import ExecutableCommandIssuesPairType, Command, CommandField, IssuesOutputPairType, case_sensitive
 from backend.command_definitions import commands
+from backend.command_executors.execution_helpers import classify_variables2
 from backend.common.helper import first, PartialRetrievalDictionary, head, strcmp
-from backend.command_generators import IType, IssueLocation, Issue
+from backend.command_generators import IType, IssueLocation, Issue, parser_field_parsers
 from backend.command_generators.parser_ast_evaluators import dictionary_from_key_value_list
 from backend.model_services import IExecutableCommand, get_case_study_registry_objects
-from backend.models.musiasem_concepts import Processor, Factor, FactorType
+from backend.models.musiasem_concepts import Processor, Factor, FactorType, Parameter
 from backend.models.musiasem_concepts_helper import find_processor_by_name
 
 
@@ -22,20 +24,32 @@ class BasicCommand(IExecutableCommand):
         self._command_name = ""
         self._command_fields = command_fields
 
-        # Execution state
-        self._issues: List[Issue] = []
-        self._current_row_number: Optional[int] = None
+        # Convenience
         self._glb_idx: Optional[PartialRetrievalDictionary] = None
+        self._hierarchies = None
+        self._datasets = None
+        self._mappings = None
+        self._parameters = None
+        # Execution state per command
+        self._issues: List[Issue] = []
+        # Execution state per row
+        self._current_row_number: Optional[int] = None
         self._fields: Dict[str, Any] = {}
 
     def _init_execution_state(self, state: Optional["State"] = None) -> NoReturn:
         self._issues = []
         self._current_row_number = None
         self._glb_idx = None
+        self._hierarchies = None
+        self._p_sets = None
+        self._datasets = None
+        self._mappings = None
+        self._parameters = None
         self._fields = {}
 
         if state:
-            self._glb_idx, _, _, _, _ = get_case_study_registry_objects(state)
+            self._glb_idx, self._p_sets, self._hierarchies, self._datasets, self._mappings = get_case_study_registry_objects(state)
+            self._parameters = [p.name for p in self._glb_idx.get(Parameter.partial_key())]
 
     def _get_command_fields_values(self, row: Dict[str, Any]) -> Dict[str, Any]:
         return {f.name: row.get(f.name, head(f.allowed_values)) for f in self._command_fields}
@@ -58,10 +72,118 @@ class BasicCommand(IExecutableCommand):
         return
 
     def _init_and_process_row(self, row: Dict[str, Any]) -> NoReturn:
+        def obtain_dictionary_with_not_expandable_fields(d):
+            output = {}
+            for k, v in d.items():
+                if v is None or "{" not in v:
+                    output[k] = v
+            return output
+
         self._current_row_number = row["_row"]
         self._fields = self._get_command_fields_values(row)
         self._check_all_mandatory_fields_have_values()
-        self._process_row(self._fields)
+        # TODO If expandable, do it now
+        expandable = row["_expandable"]
+        if expandable:
+            res = classify_variables2(expandable, self._datasets, self._hierarchies, self._parameters)
+            ds_list = res["datasets"]
+            ds_concepts = res["ds_concepts"]
+            h_list = res["hierarchies"]
+            if len(ds_list) >= 1 and len(h_list) >= 1:
+                self._add_issue(itype=IType.ERROR,
+                                description="Dataset(s): " + ", ".join(
+                                        [d.name for d in ds_list]) + ", and hierarchy(ies): " + ", ".join([h.name for h in
+                                                                                                           h_list]) + ", have been specified. Only a single dataset is supported.")
+                return
+            elif len(ds_list) > 1:
+                self._add_issue(itype=IType.ERROR,
+                                description="More than one dataset has been specified: " + ", ".join(
+                                        [d.name for d in ds_list]) + ", just one dataset is supported.")
+                return
+            elif len(h_list) > 0:
+                self._add_issue(itype=IType.ERROR,
+                                description="One or more hierarchies have been specified: " + ", ".join(
+                                        [h.name for h in h_list])
+                                )
+                return
+            if len(ds_list) == 1:  # Expand dataset
+                ds = ds_list[0]
+                measure_requested = False
+                all_dimensions = set([c.code for c in ds.dimensions if not c.is_measure])
+                requested_dimensions = set()
+                requested_measures = set()
+                for con in ds_concepts:
+                    found = False
+                    for c in ds.dimensions:
+                        if strcmp(c.code, con):
+                            found = True
+                            if c.is_measure:
+                                measure_requested = True
+                                requested_measures.add(c.code)
+                            else:  # Dimension
+                                all_dimensions.remove(c.code)
+                                requested_dimensions.add(c.code)
+                    if not found:
+                        self._add_issue(
+                            itype=IType.ERROR,
+                            description=f"The concept '{{{ds.code}.{con}}}' is not in the dataset '{ds.code}'"
+                        )
+                        return
+                ds_concepts = list(requested_measures)
+                ds_concepts.extend(list(requested_dimensions))
+                all_dimensions_requested = len(all_dimensions) == 0
+
+                if measure_requested and not all_dimensions_requested:
+                    self._add_issue(IType.ERROR,
+                                    f"It is not possible to use a measure ({', '.join(requested_measures)}), if not all dimensions are used "
+                                    f"(cannot assume implicit aggregation). Dimensions not used: {', '.join(all_dimensions)}")
+                    return
+                elif not measure_requested and not all_dimensions_requested:
+                    # Reduce the Dataframe to unique tuples of the specified dimensions
+                    # TODO Consider the current case -sensitive or not-sensitive-
+                    data = ds.data[requested_dimensions].drop_duplicates()
+                else:  # Take the dataset as-is
+                    data = ds.data
+
+                const_dict = obtain_dictionary_with_not_expandable_fields(self._fields)  # row?
+                var_dict = set([f for f in self._fields.keys() if f not in const_dict])
+
+                re_concepts = {}
+                for c in ds_concepts:
+                    c_name = f"{{{ds.code}.{c}}}"
+                    if case_sensitive:
+                        re_concepts[c_name] = re.compile(c_name)
+                    else:
+                        re_concepts[c_name] = re.compile(c_name, re.IGNORECASE)
+
+                location = IssueLocation(sheet_name=self._command_name, row=self._current_row_number, column=None)
+                already_parsed_fields = set(const_dict.keys())
+                for row2 in data.iterrows():
+                    row3 = const_dict.copy()
+                    # Concepts change dictionary
+                    concepts = {}
+                    for c in ds_concepts:
+                        concepts[f"{{{ds.code}.{c}}}"] = str(row2[1][c])
+                    # Expansion into var_dict
+                    for f in var_dict:
+                        v = self._fields[f]  # Initial value
+                        for item in sorted(concepts.keys(), key=len, reverse=True):
+                            v = re_concepts[item].sub(concepts[item], v)
+                        row3[f] = v
+                    # Syntactic verification
+                    processable, tmp_issues = parse_cmd_row_dict(self._serialization_type,
+                                                                 row3,
+                                                                 already_parsed_fields,
+                                                                 location)
+                    if len(tmp_issues)>0:
+                        self._issues.extend(tmp_issues)
+                    # Process row
+                    if processable:
+                        self._process_row(row3)
+            elif len(h_list) == 1:  # Expand hierarchy
+                pass
+        else:
+            self._process_row(self._fields)  # Process row
 
     def _process_row(self, fields: Dict[str, Any]) -> NoReturn:
         """This is the basic method to define"""
@@ -154,6 +276,107 @@ class BasicCommand(IExecutableCommand):
                 raise CommandExecutionError(str(e))
 
         return attributes
+
+
+class ParseException(Exception):
+    pass
+
+
+def parse_cmd_row_dict(cmd_name: str, row: Dict[str, str], already_parsed_fields: Set[str], location: IssueLocation) -> Tuple[bool, List[Issue]]:
+    """
+    Parse a row (as a dictionary) from a command
+    It is used after expansion of "macros"
+
+    :param cmd_name: Name of command
+    :param row: A dictionary containing the values to parse syntactically. Keys are field names, Values are field values
+    :param already_parsed_fields: Set of fields already known to be syntactically valid
+    :param location: IssueLocation object to use when creating Issues
+    :return: A tuple: a boolean (True if the row can be used, otherwise False) and a list of Issues
+    """
+
+    issues: List[Issue] = []
+
+    from backend.command_field_definitions import command_fields
+    field_defs_dict = {f.name: f for f in command_fields[cmd_name]}
+    mandatory_not_found = set([c.name for c in command_fields[cmd_name] if c.mandatory and isinstance(c.mandatory, bool)])
+    complex_mandatory_cols = [c for c in command_fields[cmd_name] if isinstance(c.mandatory, str)]
+    may_append = True
+    complex_row = False
+    for field_name, field_value in row.items():
+        field_def = field_defs_dict.get(field_name)
+        if not field_def:
+            return ParseException(f"Field {field_name} not found for command {cmd_name}")
+
+        if field_value is not None:
+            if not isinstance(field_value, str):
+                field_value = str(field_value)
+            field_value = field_value.strip()
+        else:
+            continue
+
+        # Parse the field
+        if field_def.allowed_values:
+            if field_value.lower() not in [v.lower() for v in field_def.allowed_values]:  # TODO Case insensitive CI
+                issues.append(
+                    Issue(itype=IType.ERROR,
+                          description=f"Field '{field_name}' of command '{cmd_name}' has invalid value '{field_value}'."
+                                      f" Allowed values are: {', '.join(field_def.allowed_values)}.",
+                          location=location))
+                may_append = False
+            else:
+                pass  # OK
+        else:  # Instead of a list of values, check if a syntactic rule is met by the value
+            if field_def.parser:  # Parse, just check syntax (do not store the AST)
+                try:
+                    if field_name not in already_parsed_fields:
+                        ast = parser_field_parsers.string_to_ast(field_def.parser, field_value)
+                        # Rules are in charge of informing if the result is expandable and if it complex
+                        if "expandable" in ast and ast["expandable"]:
+                            issues.append(
+                                Issue(itype=IType.ERROR,
+                                      description=f"Field '{field_name}' of command '{cmd_name}' cannot be expandable again.",
+                                      location=location)
+                            )
+                            may_append = False
+                        if "complex" in ast and ast["complex"]:
+                            complex_row = True
+                except:
+                    issues.append(Issue(itype=IType.ERROR,
+                                        description=f"The value in field '{field_name}' of command '{cmd_name}' "
+                                        f"is not syntactically correct. Entered: {field_value}",
+                                        location=location))
+                    may_append = False
+            else:
+                pass  # Valid
+
+        if field_def.name in mandatory_not_found:
+            mandatory_not_found.discard(field_def.name)
+
+    # MODIFY INPUT Dictionary with this new Key
+    if complex_row:
+        row["_complex"] = complex_row
+
+    # Append if all mandatory fields have been filled
+    if len(mandatory_not_found) > 0:
+        issues.append(Issue(itype=IType.ERROR,
+                            description=f"Mandatory columns: {', '.join(mandatory_not_found)} have not been specified",
+                            location=location))
+        may_append = False
+
+    # Check varying mandatory fields (fields depending on the value of other fields)
+    for c in complex_mandatory_cols:
+        field_def = c.name  # next(c2 for c2 in col_map if strcmp(c.name, c2.name))
+        if isinstance(c.mandatory, str):
+            # Evaluate
+            mandatory = eval(c.mandatory, None, row)
+            may_append = (mandatory and field_def in row) or (not mandatory)
+            if mandatory and field_def not in row:
+                issues.append(Issue(itype=IType.ERROR,
+                                    description="Mandatory column: " + field_def + " has not been specified",
+                                    location=location))
+                may_append = False
+
+    return may_append, issues
 
 
 def create_command(cmd_type, name, json_input, source_block=None) -> ExecutableCommandIssuesPairType:

@@ -534,34 +534,32 @@ class TestCommandFiles(unittest.TestCase):
         # Close interactive session
         isess.close_db_session()
 
-    def test_025(self):
+    def test_025_biofuel(self):
         file_path = os.path.dirname(
-            os.path.abspath(__file__)) + "/../../nis-undisclosed-tests/utest1.xlsx"
+            os.path.abspath(__file__)) + "/../../nis-internal-tests/Biofuel_NIS.xlsx"
         isess, issues = execute_file_return_issues(file_path, generator_type="spreadsheet")
         # Check State of things
-        self.assertEqual(len(issues), 1)  # Just one issue
+        self.assertEqual(len(issues), 6)  # One issue
         glb_idx, p_sets, hh, datasets, mappings = get_case_study_registry_objects(isess.state)
         p = glb_idx.get(Processor.partial_key("Society"))
         self.assertEqual(len(p), 1)
         p = p[0]
-        self.assertEqual(len(p.factors), 4)
+        self.assertEqual(len(p.factors), 2)
         f = glb_idx.get(Factor.partial_key(p, None, name="Bioethanol"))
         self.assertEqual(len(f), 1)
-        self.assertEqual(len(f[0].observations), 4)
+        self.assertEqual(len(f[0].observations), 2)
         # TODO These Observations are not registered, uncomment in case they are
         # obs = glb_idx.get(FactorQuantitativeObservation.partial_key(f[0]))
         #self.assertEqual(len(obs), 2)
-        f = glb_idx.get(Factor.partial_key(p, None, name="BioethIn2"))
+        f = glb_idx.get(Factor.partial_key(p, None, name="Biodiesel"))
         self.assertEqual(len(f), 1)
-        self.assertEqual(len(f[0].observations), 0)
-        # TODO Check things!!!
-        # self.assertEqual(len(p_sets), 3)
+        self.assertEqual(len(f[0].observations), 2)
         # Close interactive session
         isess.close_db_session()
 
     def test_026_NL_ES(self):
         file_path = os.path.dirname(
-            os.path.abspath(__file__)) + "/../../nis-undisclosed-tests/NL_ES.xlsx"
+            os.path.abspath(__file__)) + "/../../nis-internal-tests/NL_ES.xlsx"
         isess, issues = execute_file_return_issues(file_path, generator_type="spreadsheet")
         # Check State of things
         self.assertEqual(len(issues), 1)  # Just one issue
@@ -585,11 +583,30 @@ class TestCommandFiles(unittest.TestCase):
         # Close interactive session
         isess.close_db_session()
 
+    def test_028_dataset_expansion_and_integration(self):
+        file_path = os.path.dirname(
+            os.path.abspath(__file__)) + "/../../nis-internal-tests/test_dataset_expansion.xlsx"
+
+        isess = execute_file(file_path, generator_type="spreadsheet")
+
+        # issues = prepare_and_solve_model(isess.state)
+        # for idx, issue in enumerate(issues):
+        #     print(f"Issue {idx + 1}/{len(issues)} = {issue}")
+
+        # Check State of things
+        glb_idx, p_sets, hh, datasets, mappings = get_case_study_registry_objects(isess.state)
+        p = glb_idx.get(Processor.partial_key())
+        self.assertGreater(len(p), 50)
+        p = p[0]
+
+        # Close interactive session
+        isess.close_db_session()
+
 
 if __name__ == '__main__':
     from backend.common.helper import add_label_columns_to_dataframe
 
-    is_fao_test = True
+    is_fao_test = False
     fao_dir = "/home/marco/temp/Data/FAOSTAT/"
     if is_fao_test:
         i = TestFAOCommandFiles()
@@ -621,6 +638,7 @@ if __name__ == '__main__':
         #i.test_022_processor_scalings()
         #i.test_023_solving()
         #i.test_024_maddalena_dataset()
-        #i.test_025()
-        # i.test_026_NL_ES()
-        i.test_027_solving_it2it()
+        #i.test_025_biofuel()
+        #i.test_026_NL_ES()
+        #i.test_027_solving_it2it()
+        i.test_028_dataset_expansion_and_integration()

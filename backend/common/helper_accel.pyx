@@ -12,7 +12,7 @@ is recommended to find bugs. Changes should be applied to both functions.
 Modules using these functions must include, before importing the module, the following lines:
 
 import pyximport
-pyximport.install(reload_support=True)
+pyximport.install(reload_support=True, language_level=3)
 
 """
 import itertools

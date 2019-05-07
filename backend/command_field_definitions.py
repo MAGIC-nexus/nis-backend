@@ -147,8 +147,8 @@ command_fields: Dict[str, List[CommandField]] = {
         CommandField(allowed_names=["Description"], name="description", parser=unquoted_string),
         CommandField(allowed_names=["GeolocationRef"], name="geolocation_ref", parser=reference),
         CommandField(allowed_names=["GeolocationCode"], name="geolocation_code", parser=code_string),
-        CommandField(allowed_names=["Attributes"], name="attributes", parser=key_value_list),
-        CommandField(allowed_names=[attributeRegex], name="attributes", many_appearances=True, parser=value)
+        CommandField(allowed_names=[attributeRegex], name="attributes", many_appearances=True, parser=value),
+        CommandField(allowed_names=["Attributes"], name="attributes", parser=key_value_list)
     ],
 
     "interfaces_and_qq": [

@@ -6,7 +6,7 @@ from backend.command_generators.parser_field_parsers import string_to_ast, expre
 from backend.common.helper import strcmp
 from backend.models.musiasem_concepts import Processor, ProcessorsRelationPartOfObservation, \
     FactorsRelationScaleObservation
-from command_executors import BasicCommand, CommandExecutionError
+from backend.command_executors import BasicCommand, CommandExecutionError
 
 
 class ProcessorScalingsCommand(BasicCommand):

@@ -3,12 +3,17 @@ from collections import OrderedDict
 import traceback
 import numpy as np
 import pandas as pd
+from typing import List
 
 import backend
 from backend.common.helper import strcmp, create_dictionary, obtain_dataset_metadata, \
     augment_dataframe_with_mapped_columns, translate_case
 import pyximport
-pyximport.install(reload_support=True)
+
+from backend.models import CodeImmutable
+from backend.models.statistical_datasets import Dataset, Dimension, CodeList
+
+pyximport.install(reload_support=True, language_level=3)
 from backend.common.helper_accel import augment_dataframe_with_mapped_columns2
 from backend.model_services import IExecutableCommand, get_case_study_registry_objects
 
@@ -53,6 +58,48 @@ class DatasetQryCommand(IExecutableCommand):
     def __init__(self, name: str):
         self._name = name
         self._content = None
+
+    def _create_new_dataset(self, name: str, in_ds: Dataset, df: pd.DataFrame, dimension_names: List[str], measure_names: List[str]):
+        """
+        Create a dataset using the original ds
+        :param in_ds:
+        :param df:
+        :return:
+        """
+        ds = Dataset()
+
+        ds.data = df
+        ds.code = name
+        ds.description = "Result of DatasetQry command"
+        ds.attributes = {}
+        ds.metadata = None
+        ds.database = None
+
+        for dimension in dimension_names:  # type: str
+            d = Dimension()
+            d.code = dimension
+            d.description = None
+            d.attributes = None
+            d.is_time = "period" in dimension.lower()
+            d.is_measure = False
+            cl = df[dimension].unique().tolist()
+            d.code_list = CodeList.construct(
+                dimension, dimension, [""],
+                codes=[CodeImmutable(c, c, "", []) for c in cl]
+            )
+            d.dataset = ds
+
+        for measure in measure_names:  # type: str
+            d = Dimension()
+            d.code = measure
+            d.description = None
+            d.attributes = None
+            d.is_time = False
+            d.is_measure = True
+            d.code_list = None
+            d.dataset = ds
+
+        return ds
 
     def execute(self, state: "State"):
         """
@@ -132,8 +179,8 @@ class DatasetQryCommand(IExecutableCommand):
             # Column names where data is
             # HACK: for the case where the measure has been named "obs_value", use "value"
             values = [m.lower() if m.lower() != "obs_value" else "value" for m in self._content["measures"]]
+            v2 = []
             for v in values:
-                v2 = []
                 for c in df.columns:
                     if v.lower() == c.lower():
                         v2.append(c)
@@ -245,19 +292,19 @@ class DatasetQryCommand(IExecutableCommand):
 
                     # Rename the aggregated columns
                     df2.columns = group_by_dims + lst_names
-                else:
-                    # Pivot table
-                    df2 = pd.pivot_table(df,
-                                         values=values,
-                                         index=group_by_dims,
-                                         aggfunc=[agg_funcs[0]], fill_value=np.NaN, margins=False,
-                                         dropna=True)
-                    # Remove the multiindex in columns
-                    df2.columns = [col[-1] for col in df2.columns.values]
-                    # Remove the index
-                    df2.reset_index(inplace=True)
+                # else:
+                #     # Pivot table
+                #     df2 = pd.pivot_table(df,
+                #                          values=values,
+                #                          index=group_by_dims,
+                #                          aggfunc=[agg_funcs[0]], fill_value=np.NaN, margins=False,
+                #                          dropna=True)
+                #     # Remove the multiindex in columns
+                #     df2.columns = [col[-1] for col in df2.columns.values]
+                #     # Remove the index
+                #     df2.reset_index(inplace=True)
                 # The result, all columns (no index), is stored for later use
-                ds.data = df2
+                ds = self._create_new_dataset(result_name, ds, df2, group_by_dims, out_names)
             except Exception as e:
                 traceback.print_exc()
                 issues.append((3, "There was a problem: "+str(e)))

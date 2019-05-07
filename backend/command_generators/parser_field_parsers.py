@@ -127,17 +127,17 @@ factor_name = (Optional(simple_h_name.setResultsName("processor")) + Optional(Gr
                                 )
 
 # RULES - processor_name
-# "h{c}ola{b}.sdf{c}",
-# "{a}.h{c}ola{b}.sdf{c}",
+# "h{a.c}ola{b}.sdf{c}",
+# "{a.b.c}.h{c}ola{b}.sdf{c}",
 # "{a}b",
 # "{a}b{c}",
 # "aa",
 # "aa{b}aa",
 # "{a}",
-item = lcurly.suppress() + simple_ident + rcurly.suppress()
-processor_name_part_separator = Literal(".")
-processor_name_part = Group((item("variable") | Word(alphanums)("literal")) + ZeroOrMore(
-    item("variable") | Word(alphanums + "_")("literal")))
+# NOT USED, NOW THERE IS A PREVIOUS MACRO EXPANSION for names like "{a.b}_proc", APPLIED *BEFORE* SYNTAX ANALYSIS
+# item = lcurly.suppress() + simple_h_name + rcurly.suppress()
+# processor_name_part = Group((item("variable") | Word(alphanums)("literal")) + ZeroOrMore(
+#     item("variable") | Word(alphanums + "_")("literal")))
 
 
 def parse_action_processor_name(s, l, tt, node_type="processor_name"):
@@ -166,24 +166,13 @@ def parse_action_processor_name(s, l, tt, node_type="processor_name"):
             # Find it in literals or in variables
             if "literal" in classif and tok in classif["literal"]:
                 parts.append(("literal", tok))
-            else:
-                parts.append(("variable", tok))
-                variables.add(tok)
-                expandable = True
-
-    # s2 = ""
-    # for t in parts:
-    #     if t[0] == "literal":
-    #         s2 += t[1]
-    #     elif t[0] == "separator":
-    #         s2 += "."
-    #     else:
-    #         s2 += "{" + t[1] + "}"
-    # print(s2)
 
     return dict(type=node_type, parts=parts, variables=variables, input=s, expandable=expandable, complex=expandable)
 
 
+processor_name_part_separator = Literal(".")
+processor_name_part = Group(simple_ident("literal"))
+# processor_name = simple_h_name TODO Currently this has the syntax of a hierarchical name
 processor_name = (processor_name_part("part") + ZeroOrMore(processor_name_part_separator("separator") + processor_name_part("part"))).\
     setParseAction(parse_action_processor_name)
 
@@ -213,9 +202,9 @@ processor_names = ((processor_names_wildcard_separator + Optional(processor_name
 
 
 # RULES - context_query
-# Right now, context_query would be exactly equal to "processor_names", i.e., a way to specify a set of processors (idea proposed by Michele)
+# Right now, context_query would be exactly equal to "processor_names", i.e., a way to specify a set of
+# processors (idea proposed by Michele)
 context_query << processor_names
-
 
 # RULES - domain_definition
 number_interval = (Or(Literal("["), Literal("("))("left") + signed_float("number") + Literal(", ") + signed_float + Or(Literal("]"), Literal(")"))("right"))\
@@ -301,7 +290,7 @@ h_name = (Optional(namespace).setResultsName("namespace") +
 
 # RULES - Arithmetic expression AND Arithmetic Plus Boolean expression
 arith_expression << operatorPrecedence(Or([positive_float, positive_int, string, code_string_reference,
-                                       Optional(Literal('{')).suppress() + simple_h_name + Optional(Literal('}')).suppress(),
+                                       simple_h_name,
                                        func_call]),  # Operand types (REMOVED h_name: no "namespace" and no "datasets")
                                  [(signop, 1, opAssoc.RIGHT, lambda _s, l, t: {
                                      'type': 'u'+t.asList()[0][0],
@@ -322,9 +311,13 @@ arith_expression << operatorPrecedence(Or([positive_float, positive_int, string,
                                  lpar=lparen.suppress(),
                                  rpar=rparen.suppress())
 
-arith_boolean_expression << operatorPrecedence(Or([positive_float, positive_int, string, boolean, code_string_reference, bracketed_reference, conditions_list,
-                                     Optional(Literal('{')).suppress() + simple_h_name + Optional(Literal('}')).suppress(),
-                                     func_call]),  # Operand types (REMOVED h_name: no "namespace" and no "datasets")
+# "The" expression, the most complex rule of this file
+arith_boolean_expression << operatorPrecedence(Or([positive_float, positive_int,
+                                                   string, boolean, code_string_reference,
+                                                   bracketed_reference,
+                                                   conditions_list,
+                                                   simple_h_name,
+                                                   func_call]),
                                  [(signop, 1, opAssoc.RIGHT, lambda _s, l, t: {
                                      'type': 'u'+t.asList()[0][0],
                                      'terms': [0, t.asList()[0][1]],
@@ -571,11 +564,22 @@ if __name__ == '__main__':
     from backend.model_services import State
     from dotted.collection import DottedDict
 
+    processor_name_examples = [
+        "BFGas_DE_2016",
+        "BFGas_DE_2016.b"
+    ]
+    for e in processor_name_examples:
+        try:
+            ast = string_to_ast(processor_name, e)
+            print(ast)
+        except:
+            print("Incorrect")
+
     examples = ["a * 3 >= 0.3", "?a > 5 -> 3, a> 10 -> 6?",
                 "'Hola'",
                 "'Hola' + 'Adios'",
-                "{Param} * 3 >= 0.3",
-                "5 * {Param1}",
+                "Param * 3 >= 0.3",
+                "5 * Param1",
                 "True",
                 "(Param * 3 >= 0.3) AND (Param2 * 2 <= 0.345)",
                 "cos(Param*3.1415)",
