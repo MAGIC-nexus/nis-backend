@@ -199,26 +199,26 @@ class ProcessorsCommand(BasicCommand):
     #
     #     return issues, None  # Issues, Output
 
-    def _process_row(self, fields: Dict[str, Any]) -> NoReturn:
+    def _process_row(self, field_values: Dict[str, Any]) -> NoReturn:
 
         # Transform text of "attributes" into a dictionary
-        if fields.get("attributes"):
+        if field_values.get("attributes"):
             try:
-                fields["attributes"] = dictionary_from_key_value_list(fields["attributes"], self._glb_idx)
+                field_values["attributes"] = dictionary_from_key_value_list(field_values["attributes"], self._glb_idx)
             except Exception as e:
                 self._add_issue(IType.ERROR, str(e))
                 return
         else:
-            fields["attributes"] = {}
+            field_values["attributes"] = {}
 
         # Process specific fields
 
         # Obtain the parent: it must exist. It could be created dynamically but it's important to specify attributes
-        if fields.get("parent_processor"):
+        if field_values.get("parent_processor"):
             try:
                 parent_processor = self._get_processor_from_field("parent_processor")
             except CommandExecutionError:
-                self._add_issue(IType.ERROR, f"Specified parent processor, '{fields.get('parent_processor')}', does not exist")
+                self._add_issue(IType.ERROR, f"Specified parent processor, '{field_values.get('parent_processor')}', does not exist")
                 return
         else:
             parent_processor = None
@@ -229,29 +229,29 @@ class ProcessorsCommand(BasicCommand):
         # TODO Improve allowing CLONE(<processor name>)
         # TODO Pass the attributes:
         # TODO p_type, p_f_or_s, p_i_or_a, p_alias, p_description, p_copy_interfaces
-        if fields.get("clone_processor"):
+        if field_values.get("clone_processor"):
             # TODO Find origin processor
             # TODO Clone it
             pass
         else:
             # Get internal and user-defined attributes in one dictionary
-            attributes = {c.name: fields[c.name] for c in self._command_fields if c.attribute_of == Processor}
-            attributes.update(fields["attributes"])
+            attributes = {c.name: field_values[c.name] for c in self._command_fields if c.attribute_of == Processor}
+            attributes.update(field_values["attributes"])
 
             p = find_or_create_processor(
                 state=self._glb_idx,
-                name=fields["processor"],  # TODO: add parent hierarchical name
+                name=field_values["processor"],  # TODO: add parent hierarchical name
                 proc_attributes=attributes,
-                proc_location=Geolocation.create(fields["geolocation_ref"], fields["geolocation_code"])
+                proc_location=Geolocation.create(field_values["geolocation_ref"], field_values["geolocation_code"])
             )
 
         # Add to ProcessorsGroup, if specified
-        field_val = fields.get("processor_group")
+        field_val = field_values.get("processor_group")
         if field_val:
             p_set = self._p_sets.get(field_val, ProcessorsSet(field_val))
             self._p_sets[field_val] = p_set
             if p_set.append(p, self._glb_idx):  # Appends codes to the pset if the processor was not member of the pset
-                p_set.append_attributes_codes(fields["attributes"])
+                p_set.append_attributes_codes(field_values["attributes"])
 
         # Add Relationship "part-of" if parent was specified
         # The processor may have previously other parent processors that will keep its parentship

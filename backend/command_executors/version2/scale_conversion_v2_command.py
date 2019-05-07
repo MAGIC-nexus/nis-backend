@@ -6,9 +6,9 @@ from backend.common.helper import strcmp, first
 from backend.model_services import IExecutableCommand, get_case_study_registry_objects
 from backend.models.musiasem_concepts import Observer, FactorTypesRelationUnidirectionalLinearTransformObservation, \
     FactorType, Processor
-from command_executors import BasicCommand, CommandExecutionError
-from command_field_definitions import get_command_fields_from_class
-from models.musiasem_concepts_helper import find_or_create_observer, find_processor_by_name
+from backend.command_executors import BasicCommand, CommandExecutionError
+from backend.command_field_definitions import get_command_fields_from_class
+from backend.models.musiasem_concepts_helper import find_or_create_observer, find_processor_by_name
 
 
 class ScaleConversionV2Command(BasicCommand):

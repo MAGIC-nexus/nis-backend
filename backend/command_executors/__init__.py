@@ -51,6 +51,10 @@ class BasicCommand(IExecutableCommand):
             self._glb_idx, self._p_sets, self._hierarchies, self._datasets, self._mappings = get_case_study_registry_objects(state)
             self._parameters = [p.name for p in self._glb_idx.get(Parameter.partial_key())]
 
+    def _process_row(self, fields: Dict[str, Any]) -> NoReturn:
+        """This is the only method subclasses need to define. See current subclasses as examples"""
+        pass
+
     def _get_command_fields_values(self, row: Dict[str, Any]) -> Dict[str, Any]:
         return {f.name: row.get(f.name, head(f.allowed_values)) for f in self._command_fields}
 
@@ -184,10 +188,6 @@ class BasicCommand(IExecutableCommand):
                 pass
         else:
             self._process_row(self._fields)  # Process row
-
-    def _process_row(self, fields: Dict[str, Any]) -> NoReturn:
-        """This is the basic method to define"""
-        pass
 
     def execute(self, state: "State") -> IssuesOutputPairType:
         """Main entry point"""
