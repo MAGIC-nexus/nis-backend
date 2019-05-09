@@ -42,6 +42,12 @@ domain_definition = Forward()  # TODO Domain definition. Either a Category Hiera
 parameter_value = Forward()  # TODO Parameter Value. Could be "expression_with_parameters"
 indicator_expression = Forward()
 
+# Expressions for "MatrixIndicators" command
+processors_selector_expression = Forward()  # Expression recognized by "lxml"
+interfaces_list_expression = Forward()  # A list of simple_idents
+indicators_list_expression = Forward()  # A list of simple_idents
+attributes_list_expression = Forward()  # A list of simple_idents
+
 # TOKENS
 
 # Separators and operators (arithmetic and boolean)
@@ -67,6 +73,10 @@ false = Keyword("False")
 # Simple identifier
 simple_ident = Word(alphas, alphanums+"_")  # Start in letter, then "_" + letters + numbers
 list_simple_ident = delimitedList(simple_ident, ",")
+
+interfaces_list_expression = list_simple_ident
+indicators_list_expression = list_simple_ident
+attributes_list_expression = list_simple_ident
 
 # Basic data types
 positive_int = Word(nums).setParseAction(lambda t: {'type': 'int', 'value': int(t[0])})
@@ -396,14 +406,49 @@ hierarchy_expression << operatorPrecedence(Or([positive_float, positive_int, sim
                                            rpar=rparen.suppress())
 
 # RULES: Expression type 4. For indicators. Can mention only numbers and core concepts
-indicator_expression << operatorPrecedence(Or([positive_float, positive_int, factor_name]),  # Operand types
-                                           [(signop, 1, opAssoc.RIGHT, lambda _s, l, t: {'type': 'u'+t.asList()[0][0], 'terms': [0, t.asList()[0][1]], 'ops': ['u'+t.asList()[0][0]]}),
-                                            (multop, 2, opAssoc.LEFT, lambda _s, l, t: {'type': 'multipliers', 'terms': t.asList()[0][0::2], 'ops': t.asList()[0][1::2]}),
-                                            (plusop, 2, opAssoc.LEFT, lambda _s, l, t: {'type': 'adders', 'terms': t.asList()[0][0::2], 'ops': t.asList()[0][1::2]}),
-                                            ],
-                                           lpar=lparen.suppress(),
-                                           rpar=rparen.suppress())
-
+indicator_expression << operatorPrecedence(Or([positive_float, positive_int,
+                                               string, boolean,
+                                               conditions_list,
+                                               simple_h_name,
+                                               func_call]),  # Operand types
+                                 [(signop, 1, opAssoc.RIGHT, lambda _s, l, t: {
+                                     'type': 'u'+t.asList()[0][0],
+                                     'terms': [0, t.asList()[0][1]],
+                                     'ops': ['u'+t.asList()[0][0]]
+                                  }),
+                                  (multop, 2, opAssoc.LEFT, lambda _s, l, t: {
+                                      'type': 'multipliers',
+                                      'terms': t.asList()[0][0::2],
+                                      'ops': t.asList()[0][1::2]
+                                  }),
+                                  (plusop, 2, opAssoc.LEFT, lambda _s, l, t: {
+                                      'type': 'adders',
+                                      'terms': t.asList()[0][0::2],
+                                      'ops': t.asList()[0][1::2]
+                                  }),
+                                  (comparisonop, 2, opAssoc.LEFT, lambda _s, l, t: {
+                                      'type': 'comparison',
+                                      'terms': t.asList()[0][0::2],
+                                      'ops': t.asList()[0][1::2]
+                                  }),
+                                  (notop, 1, opAssoc.RIGHT, lambda _s, l, t: {
+                                      'type': 'not',
+                                      'terms': [0, t.asList()[0][1]],
+                                      'ops': ['u'+t.asList()[0][0]]
+                                  }),
+                                  (andop, 2, opAssoc.LEFT, lambda _s, l, t: {
+                                      'type': 'and',
+                                      'terms': t.asList()[0][0::2],
+                                      'ops': t.asList()[0][1::2]
+                                  }),
+                                  (orop, 2, opAssoc.LEFT, lambda _s, l, t: {
+                                      'type': 'or',
+                                      'terms': t.asList()[0][0::2],
+                                      'ops': t.asList()[0][1::2]
+                                  }),
+                                  ],
+                                 lpar=lparen.suppress(),
+                                 rpar=rparen.suppress())
 
 # [expression2 (previously parsed)] [relation_operator] processor_or_factor_name
 relation_operators = Or([Literal('|'),  # Part-of

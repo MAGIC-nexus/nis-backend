@@ -33,7 +33,8 @@ from backend.ie_exports.json import export_model_to_json
 
 if __name__ == '__main__':
     print("Executing locally!")
-    os.environ["MAGIC_NIS_SERVICE_CONFIG_FILE"] = "../../../nis-backend-config/nis_local.conf"
+    if not os.environ.get("MAGIC_NIS_SERVICE_CONFIG_FILE"):
+        os.environ["MAGIC_NIS_SERVICE_CONFIG_FILE"] = "../../../nis-backend-config/nis_local.conf"
 
 from backend.common.helper import generate_json, obtain_dataset_source, gzipped, str2bool, \
     add_label_columns_to_dataframe

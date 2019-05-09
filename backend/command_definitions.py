@@ -133,11 +133,11 @@ commands: List[Command] = [
 
     Command(name="scalar_indicators", allowed_names=["ScalarIndicators"], is_v2=True,
             cmd_type=CommandType.analysis,
-            execution_class_name=None),
+            execution_class_name="backend.command_executors.version2.scalar_indicators_command.ScalarIndicatorsCommand"),
 
     Command(name="matrix_indicators", allowed_names=["MatrixIndicators"], is_v2=True,
             cmd_type=CommandType.analysis,
-            execution_class_name=None),
+            execution_class_name="backend.command_executors.version2.matrix_indicators_command.MatrixIndicatorsCommand"),
 
     Command(name="problem_statement", allowed_names=["ProblemStatement"], is_v2=True,
             cmd_type=CommandType.analysis,

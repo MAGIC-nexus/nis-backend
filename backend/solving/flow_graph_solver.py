@@ -40,7 +40,7 @@ from backend.command_generators.parser_field_parsers import string_to_ast, expre
 from backend.common.helper import create_dictionary, PartialRetrievalDictionary, ifnull, Memoize, istr
 from backend.models.musiasem_concepts import ProblemStatement, Parameter, FactorsRelationDirectedFlowObservation, \
     FactorsRelationScaleObservation, Processor, FactorQuantitativeObservation, Factor, \
-    ProcessorsRelationPartOfObservation, FactorType
+    ProcessorsRelationPartOfObservation, FactorType, Indicator
 from backend.model_services import get_case_study_registry_objects, State
 from backend.models.musiasem_concepts_helper import find_quantitative_observations
 from backend.solving.graph.computation_graph import ComputationGraph
@@ -91,9 +91,17 @@ class InterfaceNode:
     @property
     def roegen_type(self):
         if self.interface and self.interface.roegen_type:
-            return self.interface.roegen_type.name
-        elif self.interface_type.roegen_type:
-            return self.interface_type.roegen_type.name
+            if isinstance(self.interface.roegen_type, str):
+                return self.interface.roegen_type
+            else:
+                return self.interface.roegen_type.name
+        elif self.interface_type and self.interface_type.roegen_type:
+            if isinstance(self.interface_type.roegen_type, str):
+                return self.interface_type.roegen_type
+            else:
+                return self.interface_type.roegen_type.name
+        else:
+            return ""
 
     @property
     def sphere(self):
@@ -832,12 +840,12 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
         results[key].update(value)
 
     data = {k + node.key: {"Value": value,
-                           "Unit": node.unit,
-                           "Level": node.processor.attributes.get('level', ''),
-                           "System": node.system,
-                           "Subsystem": node.subsystem,
-                           "Sphere": node.sphere,
-                           "RoegenType": node.roegen_type}
+                           "Unit": node.unit if node else "-",
+                           "Level": node.processor.attributes.get('level', '') if node else "-",
+                           "System": node.system if node else "-",
+                           "Subsystem": node.subsystem if node else "-",
+                           "Sphere": node.sphere if node else "-",
+                           "RoegenType": node.roegen_type if node else "-"}
             for k, v in results.items()
             for node, value in v.items()}
 
@@ -855,9 +863,16 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
 
     print(df)
 
+    # TODO Calculate ScalarIndicators
+    # indicators = glb_idx.get(Indicator.partial_key())
+    # calculate_scalar_indicators(indicators, glb_idx, df)
+
     # Create dataset and store in State
     datasets["flow_graph_solution"] = get_dataset(df)
 
+    # TODO Calculate and publish MatrixIndicators
+    # calculate_matrix_indicators(indicator.partial_key(), glb_idx, df)
+    #
     # Create dataset and store in State
     datasets["end_use_matrix"] = get_eum_dataset(df)
 

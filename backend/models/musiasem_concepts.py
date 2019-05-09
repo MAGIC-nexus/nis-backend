@@ -2736,6 +2736,62 @@ class Indicator(Nameable, Identifiable, Encodable):
         return {"_t": "i", "_n": self.name, "__id": self.ident}
 
 
+class MatrixIndicator(Nameable, Identifiable, Encodable):
+    """ An arrangement of the results of accounting, where rows are a subset of all processors, and columns
+        can be InterfaceTypes, Indicators (scalar), and Attributes (of the processor)
+    Categorize indicators:
+    * Attached to FactorType
+    * Attached to Processor
+    * Attached to CaseStudy
+    """
+    # TODO Expressions should support rich selectors, of the form "factors from processors matching these properties
+    #  and factor types with those properties (include "all factors in a processor") AND/OR ..." plus set operations
+    #  (union/intersection).
+    # TODO Then, compute an operation over all selected factors.
+    # TODO To generate multiple instances of the indicator or a single indicator accumulating many things.
+    def __init__(self, name: str, context_type: str, processors_selector: str, interfaces_selector: str,
+                 indicators_selector: str, attributes_selector: str, description=None):
+        Identifiable.__init__(self)
+        Nameable.__init__(self, name)
+        self._context_type = context_type
+        self._processors_selector = processors_selector
+        self._interfaces_selector = interfaces_selector
+        self._indicators_selector = indicators_selector
+        self._attributes_selector = attributes_selector
+        self._description = description
+
+    def encode(self):
+        d = Encodable.parents_encode(self, __class__)
+
+        d.update({
+            'context_type': self._context_type,
+            'processors_selector': self._processors_selector,
+            'interfaces_selector': self._interfaces_selector,
+            'indicators_selector': self._indicators_selector,
+            'attributes_selector': self._attributes_selector,
+            'description': self._description
+        })
+
+        return d
+
+    @staticmethod
+    def partial_key(name: str=None):
+        d = dict(_t="mi")
+        if name:
+            d["_n"] = name
+
+        return d
+
+    def key(self):
+        """
+        Return a Key for the identification of the Hierarchy in the registry
+
+        :param registry:
+        :return:
+        """
+        return {"_t": "mi", "_n": self.name, "__id": self.ident}
+
+
 # #################################################################################################################### #
 # MAPPING, EXTERNAL DATASETS
 # #################################################################################################################### #

@@ -26,7 +26,7 @@ import importlib
 """
 
 import backend.restful_service  # Just to remove error in the "importlib.reload" sentence below
-os.environ["MAGIC_NIS_SERVICE_CONFIG_FILE"] = "./nis_unittests.conf"
+os.environ["MAGIC_NIS_SERVICE_CONFIG_FILE"] = "../../../nis-backend-config/nis_unittests.conf"
 if "backend.restful_service" in sys.modules:
     importlib.reload(backend.restful_service)
 backend.restful_service.app.config["TESTING"] = "True"

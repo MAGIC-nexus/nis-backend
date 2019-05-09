@@ -104,6 +104,7 @@ def create_json_string_from_objects(objects: Dict[type, List[object]], json_stru
     return json_structure_to_string(json_structure)
 
 
+# ------ MAIN FUNCTION ------
 def export_model_to_json(state: State) -> str:
 
     # Get Metadata dictionary

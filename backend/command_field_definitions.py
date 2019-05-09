@@ -8,7 +8,8 @@ from backend import CommandField
 from backend.command_generators.parser_field_parsers import simple_ident, unquoted_string, alphanums_string, \
     hierarchy_expression_v2, key_value_list, key_value, expression_with_parameters, \
     time_expression, indicator_expression, code_string, simple_h_name, domain_definition, unit_name, url_parser, \
-    processor_names, value, list_simple_ident, reference, processor_name
+    processor_names, value, list_simple_ident, reference, processor_name, processors_selector_expression, \
+    interfaces_list_expression, attributes_list_expression, indicators_list_expression
 from backend.models.musiasem_concepts import Processor, Factor, RelationClassType
 from backend.command_definitions import valid_v2_command_names, commands
 from backend.common.helper import first, class_full_name
@@ -36,6 +37,7 @@ geographic_topic_categories = ["Farming", "Biota", "Boundaries", "Climatology", 
 bib_entry_types = ["article", "book", "booklet", "conference", "inbook", "incollection", "inproceedings",
                    "manual", "mastersthesis", "misc", "phdtesis", "proceedings", "techreport", "unpublished"]
 bib_months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
+context_types = ["Total", "Internal", "External"]
 
 attributeRegex = "@.+"
 
@@ -58,8 +60,8 @@ command_fields: Dict[str, List[CommandField]] = {
         CommandField(allowed_names=["Expression", "Formula"], name="expression", parser=hierarchy_expression_v2),
         CommandField(allowed_names=["GeolocationRef"], name="geolocation_ref", parser=reference),
         CommandField(allowed_names=["GeolocationCode"], name="geolocation_code", parser=code_string),
-        CommandField(allowed_names=["Attributes"], name="attributes", parser=key_value_list),
-        CommandField(allowed_names=[attributeRegex], name="attributes", many_appearances=True, parser=value)
+        CommandField(allowed_names=[attributeRegex], name="attributes", many_appearances=True, parser=value),
+        CommandField(allowed_names=["Attributes"], name="attributes", parser=key_value_list)
     ],
     
     "cat_hier_mapping": [
@@ -86,13 +88,14 @@ command_fields: Dict[str, List[CommandField]] = {
         CommandField(allowed_names=["DataType", "ConceptDataType"], name="concept_data_type", mandatory=True, allowed_values=data_types, parser=simple_ident),
         CommandField(allowed_names=["Domain", "ConceptDomain"], name="concept_domain", parser=domain_definition),
         CommandField(allowed_names=["Description", "ConceptDescription"], name="concept_description", parser=unquoted_string),
+        CommandField(allowed_names=[attributeRegex], name="attributes", many_appearances=True, parser=value),
         CommandField(allowed_names=["Attributes"], name="attributes", parser=key_value_list)
     ],
 
     "attribute_sets": [
         CommandField(allowed_names=["AttributeSetName"], name="attribute_set_name", mandatory=True, parser=simple_ident),
-        CommandField(allowed_names=["Attributes"], name="attributes", parser=key_value_list),
-        CommandField(allowed_names=[attributeRegex], name="attributes", many_appearances=True, parser=value)
+        CommandField(allowed_names=[attributeRegex], name="attributes", many_appearances=True, parser=value),
+        CommandField(allowed_names=["Attributes"], name="attributes", parser=key_value_list)
     ],
 
     "parameters": [
@@ -102,8 +105,8 @@ command_fields: Dict[str, List[CommandField]] = {
         CommandField(allowed_names=["Value"], name="value", parser=expression_with_parameters),
         CommandField(allowed_names=["Group"], name="group", parser=simple_ident),
         CommandField(allowed_names=["Description"], name="description", parser=unquoted_string),
-        CommandField(allowed_names=["Attributes"], name="attributes", parser=key_value_list),
-        CommandField(allowed_names=[attributeRegex], name="attributes", many_appearances=True, parser=value)
+        CommandField(allowed_names=[attributeRegex], name="attributes", many_appearances=True, parser=value),
+        CommandField(allowed_names=["Attributes"], name="attributes", parser=key_value_list)
     ],
 
     "interface_types": [
@@ -119,8 +122,8 @@ command_fields: Dict[str, List[CommandField]] = {
         CommandField(allowed_names=["Unit"], name="unit", parser=unit_name),
         CommandField(allowed_names=["OppositeProcessorType"], name="opposite_processor_type",
                      allowed_values=processor_types, parser=simple_ident),
-        CommandField(allowed_names=["Attributes"], name="attributes", parser=key_value_list),
-        CommandField(allowed_names=[attributeRegex], name="attributes", many_appearances=True, parser=value)
+        CommandField(allowed_names=[attributeRegex], name="attributes", many_appearances=True, parser=value),
+        CommandField(allowed_names=["Attributes"], name="attributes", parser=key_value_list)
     ],
 
     "processors": [
@@ -166,9 +169,9 @@ command_fields: Dict[str, List[CommandField]] = {
         CommandField(allowed_names=["GeolocationRef"], name="geolocation_ref", parser=reference),
         CommandField(allowed_names=["GeolocationCode"], name="geolocation_code", parser=code_string),
         CommandField(allowed_names=["Alias", "SpecificName"], name="alias", parser=simple_ident),
-        CommandField(allowed_names=["InterfaceAttributes"], name="interface_attributes", parser=key_value_list),
         CommandField(allowed_names=["I"+attributeRegex], name="interface_attributes", many_appearances=True,
                      parser=value),
+        CommandField(allowed_names=["InterfaceAttributes"], name="interface_attributes", parser=key_value_list),
         # Qualified Quantification
         CommandField(allowed_names=["Value"], name="value", parser=expression_with_parameters),
         CommandField(allowed_names=["Unit"], name="unit", parser=unit_name),
@@ -183,9 +186,9 @@ command_fields: Dict[str, List[CommandField]] = {
         CommandField(allowed_names=["RelativeTo"], name="relative_to", parser=unquoted_string),
         CommandField(allowed_names=["Time"], name="time", parser=time_expression),
         CommandField(allowed_names=["Source"], name="qq_source", parser=reference),
-        CommandField(allowed_names=["NumberAttributes"], name="number_attributes", parser=key_value_list),
         CommandField(allowed_names=["N"+attributeRegex], name="number_attributes", many_appearances=True,
                      parser=key_value),
+        CommandField(allowed_names=["NumberAttributes"], name="number_attributes", parser=key_value_list),
         CommandField(allowed_names=["Comments"], name="comments", parser=unquoted_string)
     ],
 
@@ -302,7 +305,11 @@ command_fields: Dict[str, List[CommandField]] = {
 
     "matrix_indicators": [
         CommandField(allowed_names=["Indicator"], name="indicator_name", mandatory=True, parser=simple_ident),
-        CommandField(allowed_names=["Formula", "Expression"], name="expression", mandatory=True, parser=indicator_expression),
+        CommandField(allowed_names=["Context"], name="context", allowed_values=context_types, parser=simple_ident),
+        CommandField(allowed_names=["Processors"], name="processors_selector", parser=processors_selector_expression),
+        CommandField(allowed_names=["Interfaces"], name="interfaces_selector", parser=interfaces_list_expression),
+        CommandField(allowed_names=["Indicators"], name="indicators_selector", parser=indicators_list_expression),
+        CommandField(allowed_names=["Attributes"], name="attributes_selector", parser=attributes_list_expression),
         CommandField(allowed_names=["Description"], name="description", parser=unquoted_string)
     ],
 
