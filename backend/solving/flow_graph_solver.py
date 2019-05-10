@@ -30,23 +30,27 @@ from enum import Enum
 from functools import reduce
 from itertools import chain
 
+import lxml
 import pandas as pd
 import networkx as nx
 import matplotlib.pyplot as plt
 from typing import Dict, List, Set, Any, Tuple, Union, Optional, NamedTuple, NoReturn, Generator, Type
 
+from backend import case_sensitive
 from backend.command_generators.parser_ast_evaluators import ast_evaluator
 from backend.command_generators.parser_field_parsers import string_to_ast, expression_with_parameters, is_year, is_month
 from backend.common.helper import create_dictionary, PartialRetrievalDictionary, ifnull, Memoize, istr
+from backend.ie_exports.xml import export_model_to_xml
 from backend.models.musiasem_concepts import ProblemStatement, Parameter, FactorsRelationDirectedFlowObservation, \
     FactorsRelationScaleObservation, Processor, FactorQuantitativeObservation, Factor, \
-    ProcessorsRelationPartOfObservation, FactorType, Indicator
+    ProcessorsRelationPartOfObservation, FactorType, Indicator, MatrixIndicator
 from backend.model_services import get_case_study_registry_objects, State
 from backend.models.musiasem_concepts_helper import find_quantitative_observations
 from backend.solving.graph.computation_graph import ComputationGraph
 from backend.solving.graph.flow_graph import FlowGraph, IType
 from backend.models.statistical_datasets import Dataset, Dimension
 from backend.command_generators import Issue
+from lxml import etree
 
 
 class SolvingException(Exception):
@@ -839,13 +843,14 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
     for key, value in agg_results.items():
         results[key].update(value)
 
-    data = {k + node.key: {"Value": value,
+    data = {k + node.key: {"RoegenType": node.roegen_type if node else "-",
+                           "Value": value,
                            "Unit": node.unit if node else "-",
                            "Level": node.processor.attributes.get('level', '') if node else "-",
                            "System": node.system if node else "-",
                            "Subsystem": node.subsystem if node else "-",
-                           "Sphere": node.sphere if node else "-",
-                           "RoegenType": node.roegen_type if node else "-"}
+                           "Sphere": node.sphere if node else "-"
+                           }
             for k, v in results.items()
             for node, value in v.items()}
 
@@ -855,7 +860,7 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
     df = df.round(3)
 
     # Give a name to the dataframe indexes
-    index_names = ["Scenario", "Period", "Scope"] + InterfaceNode.key_labels()
+    index_names = ["Scenario", "Period", "Scope"] + InterfaceNode.key_labels()  # "Processor", "Interface", "Orientation"
     df.index.names = index_names
 
     # Sort the dataframe based on indexes. Not necessary, only done for debugging purposes.
@@ -863,20 +868,139 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
 
     print(df)
 
-    # TODO Calculate ScalarIndicators
-    # indicators = glb_idx.get(Indicator.partial_key())
-    # calculate_scalar_indicators(indicators, glb_idx, df)
+    # Calculate ScalarIndicators
+    indicators = glb_idx.get(Indicator.partial_key())
+    calculate_scalar_indicators(indicators, glb_idx, df)
 
     # Create dataset and store in State
     datasets["flow_graph_solution"] = get_dataset(df)
 
-    # TODO Calculate and publish MatrixIndicators
-    # calculate_matrix_indicators(indicator.partial_key(), glb_idx, df)
-    #
-    # Create dataset and store in State
+    # Calculate and publish MatrixIndicators
+    indicators = glb_idx.get(MatrixIndicator.partial_key())
+    matrices = prepare_matrix_indicators(indicators, glb_idx, df)
+    for n, ds in matrices.items():
+        datasets[n] = ds
+
+    # Create dataset and store in State (specific of "Biofuel case study")
     datasets["end_use_matrix"] = get_eum_dataset(df)
 
     return []
+
+
+def prepare_matrix_indicators(indicators: List[MatrixIndicator], registry: PartialRetrievalDictionary, results: pd.DataFrame) -> Dict[str, Dataset]:
+    """
+    Compute Matrix Indicators
+
+    :param indicators:
+    :param registry:
+    :param results:
+    :return:
+    """
+    def prepare_matrix_indicator(indicator: MatrixIndicator, serialized_model: lxml.etree._ElementTree, results: pd.DataFrame) -> pd.DataFrame:
+        """
+        Compute a Matrix Indicator
+
+        :param indicator: the MatrixIndicator to consider
+        :param serialized_model: model as result of parsing XML serialization of model (Processors and Interfaces; no relationships nor observations)
+        :param results: result of graph solver
+        :return: a pd.DataFrame containing the desired matrix indicator
+        """
+        # Filter "Scope", if defined
+        if indicator.scope:
+            df = results.query('Scope = "'+indicator.scope+'"')
+        else:
+            df = results
+
+        # Apply XPath to obtain the set of processors
+        # TODO Processor names are accompanied by: Level, System, Subsystem, Sphere
+        processors = set()
+        if indicator.processors_selector:
+            try:
+                r = serialized_model.xpath(indicator.processors_selector if case_sensitive else indicator.processors_selector.lower())
+                for e in r:
+                    fname = e.get("fullname")
+                    if fname:
+                        processors.add(p_map[fname])
+                    else:
+                        pass  # Interfaces...
+            except lxml.etree.XPathEvalError:
+                # TODO Try CSSSelector syntax
+                # TODO Generate Issue
+                pass
+        else:
+            # If empty, ALL processors (do not filter)
+            pass
+
+        # Filter Processors
+        if len(processors) > 0:
+            # Obtain names of processor to KEEP
+            processor_names = set([p.full_hierarchy_names(registry)[0] for p in processors])
+            if not case_sensitive:
+                processor_names = set([p.lower() for p in processor_names])
+
+            p_names = results.index.unique(level="Processor").values
+            p_names_case = [r.lower() if case_sensitive else r for r in p_names]
+            p_names_corr = dict(zip(p_names_case, p_names))
+            p_names = [p_names_corr[_] for _ in processor_names]  # https://stackoverflow.com/questions/18453566/python-dictionary-get-list-of-values-for-list-of-keys
+            # Filter dataframe to only the desired rows.
+            df = df.query('Processor in ['+', '.join(['"'+p+'"' for p in p_names]) + ']')
+
+        # Filter Interfaces
+        if indicator.interfaces_selector:
+            ifaces = [_.strip() for _ in indicator.interfaces_selector.split(",")]
+
+            i_names = results.index.unique(level="Interface").values
+            i_names_case = [r.lower() if case_sensitive else r for r in i_names]
+            i_names_corr = dict(zip(i_names_case, i_names))
+            i_names = [i_names_corr[_] for _ in ifaces]  # https://stackoverflow.com/questions/18453566/python-dictionary-get-list-of-values-for-list-of-keys
+            # Filter dataframe to only the desired rows.
+            df = df.query('Interface in [' + ', '.join(['"' + _ + '"' for _ in i_names]) + ']')
+
+        # Pivot Table: Dimensions (rows) are (Scenario, Period, Processor)
+        #              Dimensions (columns) are (Interface)
+        #              Measures (cells) are (Value)
+        df = df.pivot_table(values="Value", index=["Scenario", "Period", "Processor"], columns="Interface")
+
+        # TODO Interface names are accompanied by: Orientation, RoegenType, Unit
+        # TODO Indicator (scalar) names are accompanied by: Unit
+
+        # TODO Output columns (MultiIndex?): external/internal/total, <scenarios>, <times>, <interfaces>, <scalar_indicators>
+
+        return df
+
+    def obtain_dataset_from_matrix_indicator(indicator: MatrixIndicator, df: pd.DataFrame) -> Dataset:
+        """
+        TODO Prepare a dataset describing the MatrixIndicator. See get_dataset and other instances "Dataset()"
+        :param indicator:
+        :param df:
+        :return:
+        """
+        # TODO Prepare a dataset describing the MatrixIndicator. See get_dataset and other instances "Dataset()"
+        pass
+
+    # Convert model to XML and to DOM tree
+    xml, p_map = export_model_to_xml(registry)
+    dom_tree = etree.fromstring(xml).getroottree()
+    # For each MatrixIndicator...
+    result = {}
+    for mi in indicators:
+        df = prepare_matrix_indicator(mi, dom_tree, results)
+        ds = obtain_dataset_from_matrix_indicator(mi, df)
+        result[mi.name] = ds
+
+    return result
+
+
+def calculate_scalar_indicators(indicators: List[Indicator], registry: PartialRetrievalDictionary, results: pd.DataFrame) -> NoReturn:
+    """
+    Compute scalar indicators and modify the results pd.DataFrame with additional columns for them
+
+    :param indicators: List of indicators to compute
+    :param registry: Registry of all model elements
+    :param results: Result of the graph solving process
+    :return:
+    """
+    pass
 
 
 def compute_aggregate_results(tree: nx.DiGraph, params: NodeFloatDict) -> Tuple[NodeFloatDict, Optional[str]]:

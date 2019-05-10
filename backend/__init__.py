@@ -1,6 +1,7 @@
+import configparser
 import importlib
 from enum import Enum
-
+import os
 import regex as re
 from typing import Optional, Any, List, Tuple, Callable, Dict, Union, Type
 
@@ -87,6 +88,37 @@ regex_optional_alphanumeric = "([ a-zA-Z0-9_-]*)?"  # Whitespace also allowed
 # Regular expression for "worksheet name" in version 2
 def simple_regex(names: List[str]):
     return r"(" + "|".join(names) + ")" + regex_optional_alphanumeric
+
+
+# Global configuration variables
+global_configuration = None
+
+
+def get_global_configuration_variable(key: str) -> str:
+    def read_configuration() -> Dict[str, str]:
+        """
+        If environment variable "MAGIC_NIS_SERVICE_CONFIG_FILE" is defined, and the contents is the name of an existing file,
+        read it as a configuration file and return the result
+
+        :return:
+        """
+        if os.environ.get("MAGIC_NIS_SERVICE_CONFIG_FILE"):
+            fname = os.environ["MAGIC_NIS_SERVICE_CONFIG_FILE"]
+            if os.path.exists(fname):
+                with open(fname, 'r') as f:
+                    config_string = '[asection]\n' + f.read()
+                config = configparser.ConfigParser()
+                config.read_string(config_string)
+                return {t[0]: t[1] for t in config.items("asection")}
+            else:
+                return {}
+        else:
+            return {}
+
+    global global_configuration
+    if global_configuration is None:
+        global_configuration = read_configuration()
+    return global_configuration.get(key)
 
 # ##################################
 # Commands

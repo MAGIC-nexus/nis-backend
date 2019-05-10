@@ -26,7 +26,7 @@ from multidict import MultiDict, CIMultiDict
 from pandas import DataFrame
 
 import backend
-from backend import case_sensitive, SDMXConcept
+from backend import case_sensitive, SDMXConcept, get_global_configuration_variable
 from backend.command_generators import Issue
 from backend.models import ureg
 import webdav.client as wc
@@ -1068,7 +1068,7 @@ def to_str(v):
 # #####################################################################################################################
 
 
-def load_dataset(location:str=None):
+def load_dataset(location: str=None):
     """
     Loads a dataset into a DataFrame
     If the dataset is present, it decompresses it in memory to obtain one of the four datasets per file
@@ -1094,8 +1094,8 @@ def load_dataset(location:str=None):
 
                 options = {
                     "webdav_hostname": url,
-                    "webdav_login": user,
-                    "webdav_password": password
+                    "webdav_login": get_global_configuration_variable("FS_USER"),
+                    "webdav_password": get_global_configuration_variable("FS_PASSWORD")
                 }
                 client = wc.Client(options)
                 with tempfile.NamedTemporaryFile(delete=True) as temp:
@@ -1138,65 +1138,6 @@ def prepare_dataframe_after_external_read(ds, df):
         df.set_index(list(dims), inplace=True)
 
     return issues
-
-
-if __name__ == '__main__':
-    import random
-    import string
-    from timeit import default_timer as timer
-
-    class Dummy:
-        def __init__(self, a):
-            self._a = a
-
-    def rndstr(n):
-        return random.choices(string.ascii_uppercase + string.digits, k=n)
-
-    prd = PartialRetrievalDictionary2()
-    ktypes = [("a", "b", "c"), ("a", "b"), ("a", "d"), ("a", "f", "g")]
-    # Generate a set of keys and empty objects
-    vals = []
-    print("Generating sample")
-    for i in range(30000):
-        # Choose random key
-        ktype = ktypes[random.randrange(len(ktypes))]
-        # Generate the element
-        vals.append(({k: ''.join(rndstr(6)) for k in ktype}, Dummy(rndstr(12))))
-
-    print("Insertion started")
-    df = pd.DataFrame()
-    start = timer()
-    # Insert each element
-    for v in vals:
-        prd.put(v[0], v[1])
-    stop = timer()
-    print(stop-start)
-
-    print("Reading started")
-
-    # Select all elements
-    start = timer()
-    # Insert each element
-    for v in vals:
-        r = prd.get(v[0], False)
-        if len(r) == 0:
-            raise Exception("Unexpected!")
-    stop = timer()
-    print(stop-start)
-
-    print("Deleting started")
-
-    # Select all elements
-    start = timer()
-    # Insert each element
-    for v in vals:
-        r = prd.delete(v[0])
-        if r == 0:
-            raise Exception("Unexpected!")
-    stop = timer()
-    print(stop-start)
-
-    print("Finished!!")
 
 
 # #####################################################################################################################
@@ -1432,3 +1373,62 @@ def add_label_columns_to_dataframe(ds_name, df, prd):
                 del df[col]
 
     return df
+
+
+if __name__ == '__main__':
+    import random
+    import string
+    from timeit import default_timer as timer
+
+    class Dummy:
+        def __init__(self, a):
+            self._a = a
+
+    def rndstr(n):
+        return random.choices(string.ascii_uppercase + string.digits, k=n)
+
+    prd = PartialRetrievalDictionary2()
+    ktypes = [("a", "b", "c"), ("a", "b"), ("a", "d"), ("a", "f", "g")]
+    # Generate a set of keys and empty objects
+    vals = []
+    print("Generating sample")
+    for i in range(30000):
+        # Choose random key
+        ktype = ktypes[random.randrange(len(ktypes))]
+        # Generate the element
+        vals.append(({k: ''.join(rndstr(6)) for k in ktype}, Dummy(rndstr(12))))
+
+    print("Insertion started")
+    df = pd.DataFrame()
+    start = timer()
+    # Insert each element
+    for v in vals:
+        prd.put(v[0], v[1])
+    stop = timer()
+    print(stop-start)
+
+    print("Reading started")
+
+    # Select all elements
+    start = timer()
+    # Insert each element
+    for v in vals:
+        r = prd.get(v[0], False)
+        if len(r) == 0:
+            raise Exception("Unexpected!")
+    stop = timer()
+    print(stop-start)
+
+    print("Deleting started")
+
+    # Select all elements
+    start = timer()
+    # Insert each element
+    for v in vals:
+        r = prd.delete(v[0])
+        if r == 0:
+            raise Exception("Unexpected!")
+    stop = timer()
+    print(stop-start)
+
+    print("Finished!!")

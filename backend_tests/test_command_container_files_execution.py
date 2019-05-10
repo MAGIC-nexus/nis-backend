@@ -538,6 +538,7 @@ class TestCommandFiles(unittest.TestCase):
         file_path = os.path.dirname(
             os.path.abspath(__file__)) + "/../../nis-internal-tests/Biofuel_NIS.xlsx"
         isess, issues = execute_file_return_issues(file_path, generator_type="spreadsheet")
+        issues2 = prepare_and_solve_model(isess.state)
         # Check State of things
         self.assertEqual(len(issues), 6)  # One issue
         glb_idx, p_sets, hh, datasets, mappings = get_case_study_registry_objects(isess.state)
