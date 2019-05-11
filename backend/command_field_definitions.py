@@ -37,7 +37,7 @@ geographic_topic_categories = ["Farming", "Biota", "Boundaries", "Climatology", 
 bib_entry_types = ["article", "book", "booklet", "conference", "inbook", "incollection", "inproceedings",
                    "manual", "mastersthesis", "misc", "phdtesis", "proceedings", "techreport", "unpublished"]
 bib_months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
-context_types = ["Total", "Internal", "External"]
+scope_types = ["Total", "Internal", "External"]
 
 attributeRegex = "@.+"
 
@@ -305,7 +305,7 @@ command_fields: Dict[str, List[CommandField]] = {
 
     "matrix_indicators": [
         CommandField(allowed_names=["Indicator"], name="indicator_name", mandatory=True, parser=simple_ident),
-        CommandField(allowed_names=["Context"], name="context", allowed_values=context_types, parser=simple_ident),
+        CommandField(allowed_names=["Scope"], name="scope", allowed_values=scope_types, parser=simple_ident),
         CommandField(allowed_names=["Processors"], name="processors_selector", parser=processors_selector_expression),
         CommandField(allowed_names=["Interfaces"], name="interfaces_selector", parser=interfaces_list_expression),
         CommandField(allowed_names=["Indicators"], name="indicators_selector", parser=indicators_list_expression),

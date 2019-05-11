@@ -7,6 +7,7 @@ https://gist.github.com/cynici/5865326
 """
 from functools import partial
 
+import lxml
 import pyparsing
 from pyparsing import (ParserElement, Regex,
                        oneOf, srange, operatorPrecedence, opAssoc,
@@ -41,12 +42,6 @@ context_query = Forward()  # TODO A way to find a match between pairs of process
 domain_definition = Forward()  # TODO Domain definition. Either a Category Hierarchy name or a numeric interval (with open closed)
 parameter_value = Forward()  # TODO Parameter Value. Could be "expression_with_parameters"
 indicator_expression = Forward()
-
-# Expressions for "MatrixIndicators" command
-processors_selector_expression = Forward()  # Expression recognized by "lxml"
-interfaces_list_expression = Forward()  # A list of simple_idents
-indicators_list_expression = Forward()  # A list of simple_idents
-attributes_list_expression = Forward()  # A list of simple_idents
 
 # TOKENS
 
@@ -239,6 +234,26 @@ bracketed_reference = (lbracket + simple_ident.setResultsName("ident") + rbracke
                                                 }
                               )
 
+
+# RULES - Processors selector
+def processor_selector_validation(s, l, tt):
+    """
+    Function to elaborate a node for evaluation of processor name (definition of processor name) or
+    selection of processors, with variable names and wildcard (..)
+    :param s:
+    :param l:
+    :param tt:
+    :return:
+    """
+    try:
+        lxml.etree.XPath(s)
+        return s
+    except lxml.etree.XPathSyntaxError:
+        # TODO Check if it is CSS syntax
+        raise Exception("Syntax error validating XPath expression")
+
+
+processors_selector_expression = Regex(r".*").setParseAction(processor_selector_validation)
 
 # RULES - namespace, parameter list, named parameters list, function call
 namespace = simple_ident + Literal("::").suppress()

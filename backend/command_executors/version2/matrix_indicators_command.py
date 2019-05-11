@@ -17,7 +17,7 @@ class MatrixIndicatorsCommand(BasicCommand):
         """
         indicator = MatrixIndicator(
                 fields["indicator_name"],
-                fields.get("context_type"),
+                fields.get("scope"),
                 fields.get("processors_selector"),
                 fields.get("interfaces_selector"),
                 fields.get("indicators_selector"),

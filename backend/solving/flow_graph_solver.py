@@ -41,6 +41,7 @@ from backend.command_generators.parser_ast_evaluators import ast_evaluator
 from backend.command_generators.parser_field_parsers import string_to_ast, expression_with_parameters, is_year, is_month
 from backend.common.helper import create_dictionary, PartialRetrievalDictionary, ifnull, Memoize, istr
 from backend.ie_exports.xml import export_model_to_xml
+from backend.models import CodeImmutable
 from backend.models.musiasem_concepts import ProblemStatement, Parameter, FactorsRelationDirectedFlowObservation, \
     FactorsRelationScaleObservation, Processor, FactorQuantitativeObservation, Factor, \
     ProcessorsRelationPartOfObservation, FactorType, Indicator, MatrixIndicator
@@ -48,7 +49,7 @@ from backend.model_services import get_case_study_registry_objects, State
 from backend.models.musiasem_concepts_helper import find_quantitative_observations
 from backend.solving.graph.computation_graph import ComputationGraph
 from backend.solving.graph.flow_graph import FlowGraph, IType
-from backend.models.statistical_datasets import Dataset, Dimension
+from backend.models.statistical_datasets import Dataset, Dimension, CodeList
 from backend.command_generators import Issue
 from lxml import etree
 
@@ -873,7 +874,7 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
     calculate_scalar_indicators(indicators, glb_idx, df)
 
     # Create dataset and store in State
-    datasets["flow_graph_solution"] = get_dataset(df)
+    datasets["flow_graph_solution"] = get_dataset(df, "flow_graph_solution", "Solution given by the Flow Graph Solver")
 
     # Calculate and publish MatrixIndicators
     indicators = glb_idx.get(MatrixIndicator.partial_key())
@@ -907,12 +908,13 @@ def prepare_matrix_indicators(indicators: List[MatrixIndicator], registry: Parti
         """
         # Filter "Scope", if defined
         if indicator.scope:
-            df = results.query('Scope = "'+indicator.scope+'"')
+            # TODO Consider case sensitiveness of "indicator.scope" (it is entered by the user)
+            df = results.query('Scope in ("'+indicator.scope+'")')
         else:
             df = results
 
         # Apply XPath to obtain the set of processors
-        # TODO Processor names are accompanied by: Level, System, Subsystem, Sphere
+        # TODO Processor names can be accompanied by: Level, System, Subsystem, Sphere
         processors = set()
         if indicator.processors_selector:
             try:
@@ -934,26 +936,28 @@ def prepare_matrix_indicators(indicators: List[MatrixIndicator], registry: Parti
         # Filter Processors
         if len(processors) > 0:
             # Obtain names of processor to KEEP
-            processor_names = set([p.full_hierarchy_names(registry)[0] for p in processors])
+            processor_names = set([_.full_hierarchy_names(registry)[0] for _ in processors])
             if not case_sensitive:
-                processor_names = set([p.lower() for p in processor_names])
+                processor_names = set([_.lower() for _ in processor_names])
 
             p_names = results.index.unique(level="Processor").values
-            p_names_case = [r.lower() if case_sensitive else r for r in p_names]
+            p_names_case = [_ if case_sensitive else _.lower() for _ in p_names]
             p_names_corr = dict(zip(p_names_case, p_names))
             p_names = [p_names_corr[_] for _ in processor_names]  # https://stackoverflow.com/questions/18453566/python-dictionary-get-list-of-values-for-list-of-keys
-            # Filter dataframe to only the desired rows.
+            # Filter dataframe to only the desired Processors
             df = df.query('Processor in ['+', '.join(['"'+p+'"' for p in p_names]) + ']')
 
         # Filter Interfaces
         if indicator.interfaces_selector:
-            ifaces = [_.strip() for _ in indicator.interfaces_selector.split(",")]
+            ifaces = set([_.strip() for _ in indicator.interfaces_selector.split(",")])
+            if not case_sensitive:
+                ifaces = set([_.lower() for _ in ifaces])
 
             i_names = results.index.unique(level="Interface").values
-            i_names_case = [r.lower() if case_sensitive else r for r in i_names]
+            i_names_case = [_ if case_sensitive else _.lower() for _ in i_names]
             i_names_corr = dict(zip(i_names_case, i_names))
             i_names = [i_names_corr[_] for _ in ifaces]  # https://stackoverflow.com/questions/18453566/python-dictionary-get-list-of-values-for-list-of-keys
-            # Filter dataframe to only the desired rows.
+            # Filter dataframe to only the desired Interfaces.
             df = df.query('Interface in [' + ', '.join(['"' + _ + '"' for _ in i_names]) + ']')
 
         # Pivot Table: Dimensions (rows) are (Scenario, Period, Processor)
@@ -963,20 +967,20 @@ def prepare_matrix_indicators(indicators: List[MatrixIndicator], registry: Parti
 
         # TODO Interface names are accompanied by: Orientation, RoegenType, Unit
         # TODO Indicator (scalar) names are accompanied by: Unit
-
-        # TODO Output columns (MultiIndex?): external/internal/total, <scenarios>, <times>, <interfaces>, <scalar_indicators>
+        # TODO Output columns (MultiIndex?): external/internal/total,
+        #  <scenarios>, <times>, <interfaces>, <scalar_indicators>
 
         return df
 
     def obtain_dataset_from_matrix_indicator(indicator: MatrixIndicator, df: pd.DataFrame) -> Dataset:
         """
-        TODO Prepare a dataset describing the MatrixIndicator. See get_dataset and other instances "Dataset()"
-        :param indicator:
-        :param df:
-        :return:
+        Prepare a dataset describing the MatrixIndicator. See get_dataset and other instances "Dataset()"
+
+        :param indicator: MatrixIndicator to use as reference for metadata
+        :param df: Dataframe with the matrix of dimensions and information, to prepare as Dataset
+        :return: Dataset instance
         """
-        # TODO Prepare a dataset describing the MatrixIndicator. See get_dataset and other instances "Dataset()"
-        pass
+        return get_dataset(df, indicator.name, indicator.description)
 
     # Convert model to XML and to DOM tree
     xml, p_map = export_model_to_xml(registry)
@@ -1065,14 +1069,14 @@ def get_eum_dataset(dataframe: pd.DataFrame) -> "Dataset":
 
     print(df)
 
-    return get_dataset(df)
+    return get_dataset(df, "end_use_matrix", "End use matrix")
 
 
-def get_dataset(dataframe: pd.DataFrame) -> "Dataset":
+def get_dataset(dataframe: pd.DataFrame, code: str, description: str) -> "Dataset":
     ds = Dataset()
     ds.data = dataframe.reset_index()
-    ds.code = "flow_graph_solution"
-    ds.description = "Solution given by the Flow Graph Solver"
+    ds.code = code
+    ds.description = description
     ds.attributes = {}
     ds.metadata = None
     ds.database = None
@@ -1084,6 +1088,11 @@ def get_dataset(dataframe: pd.DataFrame) -> "Dataset":
         d.attributes = None
         d.is_time = (dimension.lower() == "period")
         d.is_measure = False
+        cl = dataframe.index.unique(level=dimension).values
+        d.code_list = CodeList.construct(
+            dimension, dimension, [""],
+            codes=[CodeImmutable(c, c, "", []) for c in cl]
+        )
         d.dataset = ds
 
     for measure in dataframe.columns.values:  # type: str

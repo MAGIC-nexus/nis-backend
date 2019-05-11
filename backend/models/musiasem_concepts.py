@@ -2786,6 +2786,10 @@ class MatrixIndicator(Nameable, Identifiable, Encodable):
     def interfaces_selector(self):
         return self._interfaces_selector
 
+    @property
+    def description(self):
+        return self._description
+
     @staticmethod
     def partial_key(name: str=None):
         d = dict(_t="mi")
