@@ -109,7 +109,7 @@ def get_global_configuration_variable(key: str) -> str:
                     config_string = '[asection]\n' + f.read()
                 config = configparser.ConfigParser()
                 config.read_string(config_string)
-                return {t[0]: t[1] for t in config.items("asection")}
+                return {t[0]: t[1].lstrip('\'"').rstrip('\'"') for t in config.items("asection")}
             else:
                 return {}
         else:
@@ -118,7 +118,7 @@ def get_global_configuration_variable(key: str) -> str:
     global global_configuration
     if global_configuration is None:
         global_configuration = read_configuration()
-    return global_configuration.get(key)
+    return global_configuration.get(key.lower())
 
 # ##################################
 # Commands

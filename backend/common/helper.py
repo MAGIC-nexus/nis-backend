@@ -1083,12 +1083,17 @@ def load_dataset(location: str=None):
         pr = urlparse(location)
         if pr.scheme != "":
             # Load from remote site
+            fragment = ""
+            if "#" in location:
+                pos = location.find("#")
+                fragment = location[pos + 1:]
+                location = location[:pos]
             if pr.netloc.lower() == "nextcloud.data.magic-nexus.eu":
                 # WebDAV
                 parts = location.split("/")
                 for i, p in enumerate(parts):
                     if p == "nextcloud.data.magic-nexus.eu":
-                        url = "/".join(parts[:i+1]) + "/"
+                        url = "/".join(parts[:i+1])
                         fname = "/" + "/".join(parts[i+1:])
                         break
 
@@ -1115,7 +1120,10 @@ def load_dataset(location: str=None):
         if t[0] == "text/csv":
             df = pd.read_csv(data)
         elif t[0] == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet":
-            df = pd.read_excel(data)
+            if fragment:
+                df = pd.read_excel(data, sheet_name=fragment)
+            else:
+                df = pd.read_excel(data)
 
     return df
 

@@ -37,11 +37,6 @@ def parse_dataset_data_command(sh: Worksheet, area: AreaTupleType, name: str, st
             # Concept name
             col_map[col_name] = c
 
-    if "dataset" not in col_map:
-        issues.append(Issue(itype=IType.ERROR,
-                            description="The column name 'DatasetName' is not defined for command 'DatasetData'",
-                            location=IssueLocation(sheet_name=name, row=1, column=c)))
-
     if any([i.itype == IType.ERROR for i in issues]):
         return issues, None, None
 
@@ -59,19 +54,25 @@ def parse_dataset_data_command(sh: Worksheet, area: AreaTupleType, name: str, st
     # pd.DataFrame
     df = pd.DataFrame(columns=[col_name for col_name in col_map], data=lines)
 
-    # Find the different datasets
-    datasets = df["dataset"].unique()
-    datasets = set([d.lower() for d in datasets])
-
     content = []  # The output JSON
-    for dataset in datasets:
-        # Obtain filtered
-        df2 = df.loc[df['dataset'].str.lower() == dataset]
-        # Convert to JSON and store in content
-        del df2["dataset"]
+
+    if "dataset" in df:
+        # Find the different datasets
+        datasets = df["dataset"].unique()
+        datasets = set([d.lower() for d in datasets])
+
+        for dataset in datasets:
+            # Obtain filtered
+            df2 = df.loc[df['dataset'].str.lower() == dataset]
+            # Convert to JSON and store in content
+            del df2["dataset"]
+            s = StringIO()
+            df2.to_json(s, orient="split")
+            content.append(dict(name=dataset, values=s.getvalue()))
+    else:
         s = StringIO()
-        df2.to_json(s, orient="split")
-        content.append(dict(name=dataset, values=s.getvalue()))
+        df.to_json(s, orient="split")
+        content.append(dict(name="", values=s.getvalue()))
 
     return issues, None, dict(items=content, command_name=name)
 

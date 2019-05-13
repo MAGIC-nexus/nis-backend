@@ -535,7 +535,8 @@ factor_unit = (simple_h_name.setResultsName("factor") + Optional(Regex(".*").set
 # #### URL Parser ################################################################
 
 url_chars = alphanums + '-_.~%+'
-fragment = Combine((Suppress('#') + Word(url_chars)))('fragment')
+# "fragment" departs from standard URLs to allow WHITESPACEs (more convenient for users)
+fragment = Combine((Suppress('#') + Word(url_chars+" ")))('fragment')
 scheme = oneOf('http https ftp file data')('scheme')
 host = Combine(delimitedList(Word(url_chars), '.'))('host')
 port = Suppress(':') + Word(nums)('port')

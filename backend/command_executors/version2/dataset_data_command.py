@@ -4,7 +4,7 @@ import pandas as pd
 
 from backend.command_generators import Issue, IssueLocation, IType
 from backend.model_services import IExecutableCommand, get_case_study_registry_objects
-from backend.common.helper import strcmp, prepare_dataframe_after_external_read
+from backend.common.helper import strcmp, prepare_dataframe_after_external_read, create_dictionary
 
 
 class DatasetDataCommand(IExecutableCommand):
@@ -21,10 +21,26 @@ class DatasetDataCommand(IExecutableCommand):
         # List of available dataset names. The newly defined datasets must not be in this list
         ds_names = [ds.code for ds in datasets.values()]
 
+        # List of datasets with local worksheet name
+        external_dataset_name = None
+        for ds in datasets.values():
+            if ds.attributes["_location"].lower().startswith("data://#"):
+                worksheet = ds.attributes["_location"][len("data://#"):]
+                if strcmp(worksheet, name):
+                    external_dataset_name = ds.code
+
         # Process parsed information
         for r, line in enumerate(self._content["items"]):
             # A dataset
             dataset_name = line["name"]
+            if dataset_name == "":
+                if external_dataset_name:
+                    dataset_name = external_dataset_name
+                else:
+                    issues.append(Issue(itype=IType.ERROR,
+                                        description="The column name 'DatasetName' was not defined for command 'DatasetData' and there is no 'location' in a DatasetDef command pointing to it",
+                                        location=IssueLocation(sheet_name=name, row=1, column=c)))
+
             # Find it in the already available datasets. MUST EXIST
             for n in ds_names:
                 if strcmp(dataset_name, n):

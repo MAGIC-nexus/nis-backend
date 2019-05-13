@@ -108,7 +108,7 @@ class DatasetDefCommand(IExecutableCommand):
             hierarchies[h.name] = hh
 
         # Datasets being defined in this Worksheet
-        current_ds = create_dictionary()
+        current_ds = create_dictionary()  # type: Dict[str, Dataset]
 
         # Process parsed information
         for line in self._content["items"]:
