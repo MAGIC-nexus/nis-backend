@@ -298,7 +298,9 @@ command_fields: Dict[str, List[CommandField]] = {
     "scalar_indicators": [
         CommandField(allowed_names=["Indicator"], name="indicator_name", mandatory=True, parser=simple_ident),
         CommandField(allowed_names=["Local"], name="local", mandatory=True, allowed_values=yes_no, parser=simple_ident),
-        CommandField(allowed_names=["Formula", "Expression"], name="expression", mandatory=True, parser=indicator_expression),
+        CommandField(allowed_names=["Formula", "Expression"], name="formula", mandatory=True, parser=indicator_expression),
+        # TODO Disabled: apply the formula to ALL processors (and ignore those where it cannot be evaluated)
+        #  CommandField(allowed_names=["Processors"], name="processors_selector", parser=processors_selector_expression),
         CommandField(allowed_names=["Benchmark"], name="benchmark", parser=simple_ident),
         CommandField(allowed_names=["Description"], name="description", parser=unquoted_string)
     ],

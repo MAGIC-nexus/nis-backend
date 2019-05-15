@@ -19,28 +19,9 @@ class ScalarIndicatorsCommand(BasicCommand):
         indicator = Indicator(fields["indicator_name"],
                               fields["formula"],
                               None,
+                              fields.get("processors_selector"),
                               None,
                               IndicatorCategories.factors_expression if strcmp(fields.get("local"), "Yes")
                               else IndicatorCategories.case_study,
                               fields.get("description"))
         self._glb_idx.put(indicator.key(), indicator)
-"""
-
-* Se aplica a un subconjunto de todos los procesadores
-  - supermatriz
-  - registro
-  - modelo objetos
-  
-* Formula con escalares, que pueden ser parámetros o valores de los procesadores
-  - Analizar fórmula, ver qué variables requiere
-  - Crear nueva columna en supermatriz
-  - Para cada escenario
-    - Cargar parámetros
-    - Para cada tiempo
-      - Para cada procesador del subconjunto
-        - Obtener variables requeridas por la fórmula
-          - Si las tiene todas
-            - Evaluar fórmula
-            - Almacenar resultado en supermatriz. Fila: procesador, tiempo, escenario. Columna: indicador
-    
-"""

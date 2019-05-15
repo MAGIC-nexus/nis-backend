@@ -539,6 +539,7 @@ class TestCommandFiles(unittest.TestCase):
             os.path.abspath(__file__)) + "/../../nis-internal-tests/Biofuel_NIS.xlsx"
         isess, issues = execute_file_return_issues(file_path, generator_type="spreadsheet")
         issues2 = prepare_and_solve_model(isess.state)
+        serialize_state(isess.state)
         # Check State of things
         self.assertEqual(len(issues), 6)  # One issue
         glb_idx, p_sets, hh, datasets, mappings = get_case_study_registry_objects(isess.state)
@@ -630,7 +631,7 @@ if __name__ == '__main__':
         #i.test_009_execute_file_v2_three()  # Soslaires. v2 syntax
         #i.test_011_execute_file_v2_five()  # Dataset
         #i.test_012_execute_file_v2_six()  # Almeria using v2 commands and v1 upscale
-        i.test_013_execute_file_v2_seven()  # Custom datasets
+        #i.test_013_execute_file_v2_seven()  # Custom datasets
         #i.test_014_execute_file_v2_eight()
         #i.test_018_many_to_many_mappings()
         #i.test_019_import_commands()
@@ -639,7 +640,7 @@ if __name__ == '__main__':
         #i.test_022_processor_scalings()
         #i.test_023_solving()
         #i.test_024_maddalena_dataset()
-        #i.test_025_biofuel()
+        i.test_025_biofuel()
         #i.test_026_NL_ES()
         #i.test_027_solving_it2it()
         #i.test_028_dataset_expansion_and_integration()

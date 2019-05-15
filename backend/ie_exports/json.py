@@ -105,6 +105,15 @@ def create_json_string_from_objects(objects: Dict[type, List[object]], json_stru
 
 
 # ------ MAIN FUNCTION ------
+
+def model_to_json(state: State, structure: Dict):
+    # Get objects from state
+    query = BasicQuery(state)
+    objects = query.execute(values_of_nested_dictionary(structure), filt="")
+
+    return create_json_string_from_objects(objects, structure)
+
+
 def export_model_to_json(state: State) -> str:
 
     # Get Metadata dictionary
@@ -114,8 +123,6 @@ def export_model_to_json(state: State) -> str:
         # Change lists of 1 element to a simple value
         metadata = {k: v[0] if len(v) == 1 else v for k, v in metadata.items()}
         metadata_string = '"Metadata": ' + json.dumps(metadata, cls=CustomEncoder)
-
-    print(metadata_string)
 
     json_structure: JsonStructureType = OrderedDict(
         {"Parameters": Parameter,
@@ -134,13 +141,7 @@ def export_model_to_json(state: State) -> str:
          }
     )
 
-    # Get objects from state
-    query = BasicQuery(state)
-    objects = query.execute(values_of_nested_dictionary(json_structure), filt="")
-
-    json_string = create_json_string_from_objects(objects, json_structure)
-
-    print(json_string)
+    json_string = model_to_json(state, json_structure)
 
     if metadata_string:
         json_string = f'{metadata_string}, {json_string}'

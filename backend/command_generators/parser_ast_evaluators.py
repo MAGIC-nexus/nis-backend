@@ -6,7 +6,7 @@ https://gist.github.com/cynici/5865326
 
 """
 import importlib
-from typing import Dict
+from typing import Dict, Tuple, Union, List
 from pyparsing import quotedString
 
 from backend.model_services import State
@@ -39,7 +39,7 @@ opMap = {
         }
 
 
-def ast_evaluator(exp: Dict, state: State, obj, issue_lst, evaluation_type="numeric"):
+def ast_evaluator(exp: Dict, state: State, obj, issue_lst, evaluation_type="numeric") -> Union[Tuple[float, List[str]], Tuple[str, float, List[str]]]:
     """
     Numerically evaluate the result of the parse of "expression" rule (not valid for the other "expression" rules)
 

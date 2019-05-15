@@ -32,13 +32,15 @@ from itertools import chain
 
 import lxml
 import pandas as pd
+import numpy as np
 import networkx as nx
 import matplotlib.pyplot as plt
 from typing import Dict, List, Set, Any, Tuple, Union, Optional, NamedTuple, NoReturn, Generator, Type
 
 from backend import case_sensitive
 from backend.command_generators.parser_ast_evaluators import ast_evaluator
-from backend.command_generators.parser_field_parsers import string_to_ast, expression_with_parameters, is_year, is_month
+from backend.command_generators.parser_field_parsers import string_to_ast, expression_with_parameters, is_year, \
+    is_month, indicator_expression
 from backend.common.helper import create_dictionary, PartialRetrievalDictionary, ifnull, Memoize, istr
 from backend.ie_exports.xml import export_model_to_xml
 from backend.models import CodeImmutable
@@ -812,15 +814,17 @@ def compute_partof_aggregates(glb_idx: PartialRetrievalDictionary,
 
 
 def flow_graph_solver(global_parameters: List[Parameter], problem_statement: ProblemStatement,
-                      input_systems: Dict[str, Set[Processor]], state: State) -> List[Issue]:
+                      input_systems: Dict[str, Set[Processor]], state: State, dynamic_scenario: bool) -> List[Issue]:
     """
-    A solver
+    A solver using the graph composed by the interfaces and the relationships (flows, part-of, scale, change-of-scale and relative-to)
 
     :param global_parameters: Parameters including the default value (if defined)
     :param problem_statement: ProblemStatement object, with scenarios (parameters changing the default)
                               and parameters for the solver
-    :param state: State with everything
-    :param input_systems: A dictionary of the different systems to be solved
+    :param state:             All variables available: object model, registry, datasets (inputs and outputs), ...
+    :param input_systems:     A dictionary of the different systems to be solved
+    :param dynamic_scenario:  If "True" store results in datasets separated from "fixed" scenarios.
+                              Also "problem_statement" MUST have only one scenario with the parameters.
     :return: List of Issues
     """
     glb_idx, _, _, datasets, _ = get_case_study_registry_objects(state)
@@ -869,35 +873,98 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
 
     print(df)
 
+    # Convert model to XML and to DOM tree
+    xml, p_map = export_model_to_xml(glb_idx)
+    dom_tree = etree.fromstring(xml).getroottree()
+
     # Calculate ScalarIndicators
     indicators = glb_idx.get(Indicator.partial_key())
-    calculate_scalar_indicators(indicators, glb_idx, df)
+    df_indicators = calculate_local_scalar_indicators(indicators, dom_tree, p_map, df, global_parameters, problem_statement)
 
-    # Create dataset and store in State
-    datasets["flow_graph_solution"] = get_dataset(df, "flow_graph_solution", "Solution given by the Flow Graph Solver")
+    # Create datasets and store in State
+    if not dynamic_scenario:
+        ds_name = "flow_graph_solution"
+        ds_indicators_name = "flow_graph_solution_indicators"
+    else:
+        ds_name = "dyn_flow_graph_solution"
+        ds_indicators_name = "dyn_flow_graph_solution_indicators"
+    datasets[ds_name] = get_dataset(df, ds_name, "Flow Graph Solver - Interfaces")
+    if not df_indicators.empty:
+        # Register dataset
+        datasets[ds_indicators_name] = get_dataset(df_indicators, ds_indicators_name, "Flow Graph Solver - Indicators")
 
     # Calculate and publish MatrixIndicators
     indicators = glb_idx.get(MatrixIndicator.partial_key())
-    matrices = prepare_matrix_indicators(indicators, glb_idx, df)
+    matrices = prepare_matrix_indicators(indicators, glb_idx, dom_tree, p_map, df, df_indicators, dynamic_scenario)
     for n, ds in matrices.items():
         datasets[n] = ds
 
     # Create dataset and store in State (specific of "Biofuel case study")
-    datasets["end_use_matrix"] = get_eum_dataset(df)
+    # datasets["end_use_matrix"] = get_eum_dataset(df)
 
     return []
 
 
-def prepare_matrix_indicators(indicators: List[MatrixIndicator], registry: PartialRetrievalDictionary, results: pd.DataFrame) -> Dict[str, Dataset]:
+def obtain_subset_processors(processors_selector: str, serialized_model: lxml.etree._ElementTree,
+                             registry: PartialRetrievalDictionary,
+                             p_map: Dict[str, Processor], df: pd.DataFrame) -> pd.DataFrame:
+    # TODO Processor names can be accompanied by: Level, System, Subsystem, Sphere
+    processors = set()
+    if processors_selector:
+        try:
+            r = serialized_model.xpath(processors_selector if case_sensitive else processors_selector.lower())
+            for e in r:
+                fname = e.get("fullname")
+                if fname:
+                    processors.add(p_map[fname])
+                else:
+                    pass  # Interfaces...
+        except lxml.etree.XPathEvalError:
+            # TODO Try CSSSelector syntax
+            # TODO Generate Issue
+            pass
+    else:
+        # If empty, ALL processors (do not filter)
+        pass
+
+    # Filter Processors
+    if len(processors) > 0:
+        # Obtain names of processor to KEEP
+        processor_names = set([_.full_hierarchy_names(registry)[0] for _ in processors])
+        if not case_sensitive:
+            processor_names = set([_.lower() for _ in processor_names])
+
+        p_names = df.index.unique(level="Processor").values
+        p_names_case = [_ if case_sensitive else _.lower() for _ in p_names]
+        p_names_corr = dict(zip(p_names_case, p_names))
+        # https://stackoverflow.com/questions/18453566/python-dictionary-get-list-of-values-for-list-of-keys
+        p_names = [p_names_corr[_] for _ in processor_names.intersection(p_names_case)]
+        # Filter dataframe to only the desired Processors
+        df2 = df.query('Processor in [' + ', '.join(['"' + p + '"' for p in p_names]) + ']')
+    else:
+        df2 = df
+
+    return df2  # , processors
+
+
+def prepare_matrix_indicators(indicators: List[MatrixIndicator],
+                              registry: PartialRetrievalDictionary,
+                              serialized_model: lxml.etree._ElementTree, p_map: Dict,
+                              results: pd.DataFrame, indicator_results: pd.DataFrame,
+                              dynamic_scenario: bool) -> Dict[str, Dataset]:
     """
     Compute Matrix Indicators
 
     :param indicators:
     :param registry:
-    :param results:
-    :return:
+    :param serialized_model:
+    :param p_map:
+    :param results: The matrix with all the input results
+    :param indicator_results: Matrix with local scalar indicators
+    :param dynamic_scenario: True if the matrices have to be prepared for a dynamic scenario
+    :return: A dictionary <dataset_name> -> <dataset>
     """
-    def prepare_matrix_indicator(indicator: MatrixIndicator, serialized_model: lxml.etree._ElementTree, results: pd.DataFrame) -> pd.DataFrame:
+    def prepare_matrix_indicator(indicator: MatrixIndicator) -> pd.DataFrame:
         """
         Compute a Matrix Indicator
 
@@ -913,39 +980,8 @@ def prepare_matrix_indicators(indicators: List[MatrixIndicator], registry: Parti
         else:
             df = results
 
-        # Apply XPath to obtain the set of processors
-        # TODO Processor names can be accompanied by: Level, System, Subsystem, Sphere
-        processors = set()
-        if indicator.processors_selector:
-            try:
-                r = serialized_model.xpath(indicator.processors_selector if case_sensitive else indicator.processors_selector.lower())
-                for e in r:
-                    fname = e.get("fullname")
-                    if fname:
-                        processors.add(p_map[fname])
-                    else:
-                        pass  # Interfaces...
-            except lxml.etree.XPathEvalError:
-                # TODO Try CSSSelector syntax
-                # TODO Generate Issue
-                pass
-        else:
-            # If empty, ALL processors (do not filter)
-            pass
-
-        # Filter Processors
-        if len(processors) > 0:
-            # Obtain names of processor to KEEP
-            processor_names = set([_.full_hierarchy_names(registry)[0] for _ in processors])
-            if not case_sensitive:
-                processor_names = set([_.lower() for _ in processor_names])
-
-            p_names = results.index.unique(level="Processor").values
-            p_names_case = [_ if case_sensitive else _.lower() for _ in p_names]
-            p_names_corr = dict(zip(p_names_case, p_names))
-            p_names = [p_names_corr[_] for _ in processor_names]  # https://stackoverflow.com/questions/18453566/python-dictionary-get-list-of-values-for-list-of-keys
-            # Filter dataframe to only the desired Processors
-            df = df.query('Processor in ['+', '.join(['"'+p+'"' for p in p_names]) + ']')
+        # Apply XPath to obtain the dataframe filtered by the desired set of processors
+        df = obtain_subset_processors(indicator.processors_selector, serialized_model, registry, p_map, df)
 
         # Filter Interfaces
         if indicator.interfaces_selector:
@@ -956,55 +992,122 @@ def prepare_matrix_indicators(indicators: List[MatrixIndicator], registry: Parti
             i_names = results.index.unique(level="Interface").values
             i_names_case = [_ if case_sensitive else _.lower() for _ in i_names]
             i_names_corr = dict(zip(i_names_case, i_names))
-            i_names = [i_names_corr[_] for _ in ifaces]  # https://stackoverflow.com/questions/18453566/python-dictionary-get-list-of-values-for-list-of-keys
+            i_names = [i_names_corr[_] for _ in ifaces]
             # Filter dataframe to only the desired Interfaces.
             df = df.query('Interface in [' + ', '.join(['"' + _ + '"' for _ in i_names]) + ']')
 
-        # Pivot Table: Dimensions (rows) are (Scenario, Period, Processor)
-        #              Dimensions (columns) are (Interface)
+        # TODO Filter ScalarIndicators
+        # TODO Indicator (scalar) names are accompanied by: Unit
+
+        # Pivot Table: Dimensions (rows) are (Scenario, Period, Processor[, Scope])
+        #              Dimensions (columns) are (Interface, Orientation -of Interface-)
         #              Measures (cells) are (Value)
-        df = df.pivot_table(values="Value", index=["Scenario", "Period", "Processor"], columns="Interface")
+        idx_columns = ["Scenario", "Period", "Processor"]
+        if indicator.scope:
+            idx_columns.append("Scope")
+        df = df.pivot_table(values="Value", index=idx_columns, columns=["Interface", "Orientation"])
+        # Flatten columns, concatenating levels
+        df.columns = [f"{x} {y}" for x, y in zip(df.columns.get_level_values(0), df.columns.get_level_values(1))]
 
         # TODO Interface names are accompanied by: Orientation, RoegenType, Unit
-        # TODO Indicator (scalar) names are accompanied by: Unit
         # TODO Output columns (MultiIndex?): external/internal/total,
         #  <scenarios>, <times>, <interfaces>, <scalar_indicators>
 
         return df
 
-    def obtain_dataset_from_matrix_indicator(indicator: MatrixIndicator, df: pd.DataFrame) -> Dataset:
-        """
-        Prepare a dataset describing the MatrixIndicator. See get_dataset and other instances "Dataset()"
-
-        :param indicator: MatrixIndicator to use as reference for metadata
-        :param df: Dataframe with the matrix of dimensions and information, to prepare as Dataset
-        :return: Dataset instance
-        """
-        return get_dataset(df, indicator.name, indicator.description)
-
-    # Convert model to XML and to DOM tree
-    xml, p_map = export_model_to_xml(registry)
-    dom_tree = etree.fromstring(xml).getroottree()
     # For each MatrixIndicator...
     result = {}
     for mi in indicators:
-        df = prepare_matrix_indicator(mi, dom_tree, results)
-        ds = obtain_dataset_from_matrix_indicator(mi, df)
-        result[mi.name] = ds
+        df = prepare_matrix_indicator(mi)
+        ds_name = mi.name
+        if dynamic_scenario:
+            ds_name = "dyn_"+ds_name
+        ds = get_dataset(df, ds_name, mi.description)
+        result[ds_name] = ds
 
     return result
 
 
-def calculate_scalar_indicators(indicators: List[Indicator], registry: PartialRetrievalDictionary, results: pd.DataFrame) -> NoReturn:
+def calculate_local_scalar_indicators(indicators: List[Indicator],
+                                      serialized_model: lxml.etree._ElementTree, p_map: Dict[str, Processor],
+                                      results: pd.DataFrame,
+                                      global_parameters: List[Parameter], problem_statement: ProblemStatement) -> pd.DataFrame:
     """
-    Compute scalar indicators and modify the results pd.DataFrame with additional columns for them
+    Compute local scalar indicators using data from "results", and return a pd.DataFrame
 
     :param indicators: List of indicators to compute
-    :param registry: Registry of all model elements
+    :param serialized_model:
+    :param p_map:
     :param results: Result of the graph solving process
-    :return:
+    :param global_parameters: List of parameter definitions
+    :param problem_statement: Object with a list of scenarios (defining Parameter sets)
+    :return: pd.DataFrame with all the local indicators
     """
-    pass
+
+    def prepare_scalar_indicator(indicator: Indicator) -> pd.DataFrame:
+        """
+
+        :param indicator:
+        :return:
+        """
+
+        # TODO Ignore "processors_selector". Considering it complicates the algorithm to
+        #  append a new column (a Join is required)
+        #  df = obtain_subset_processors(indicator.processors_selector, serialized_model, registry, p_map, results)
+        df = results
+
+        # Parse the expression
+        ast = string_to_ast(indicator_expression, indicator.formula if case_sensitive else indicator.formula.lower())
+
+        # Scenario parameters
+        scenario_params = create_dictionary()
+        for scenario_name, scenario_exp_params in problem_statement.scenarios.items():  # type: str, dict
+            scenario_params[scenario_name] = evaluate_parameters_for_scenario(global_parameters, scenario_exp_params)
+
+        issues = []
+        new_df_rows_idx = []
+        new_df_rows_data = []
+        for t, g in df.groupby(idx_names):
+            params = scenario_params[t[0]]
+            # Elaborate a dictionary with dictionary values
+            d = {}
+            for row, sdf in g.iterrows():
+                iface = sdf["Interface"]
+                d[iface+"_"+sdf["Orientation"]] = sdf["Value"]
+                if iface in d:
+                    del d[iface]  # If exists, delete (only one appearance permitted, to avoid ambiguity)
+                else:
+                    d[iface] = sdf["Value"]  # First appearance allowed, insert
+            d.update(params)
+            if not case_sensitive:
+                d = {k.lower(): v for k, v in d.items()}
+
+            state = State(d)
+            val, variables = ast_evaluator(ast, state, None, issues)
+            if val:
+                new_df_rows_idx.append(t)
+                new_df_rows_data.append((indicator.name, val, None))
+        df2 = pd.DataFrame(data=new_df_rows_data,
+                           index=pd.MultiIndex.from_tuples(new_df_rows_idx, names=idx_names),
+                           columns=["Indicator", "Value", "Unit"])
+        return df2
+
+    idx_names = ["Scenario", "Period", "Scope", "Processor"]
+    idx_to_change = ["Interface", "Orientation"]
+    results.reset_index(idx_to_change, inplace=True)
+    # For each ScalarIndicator...
+    dfs = []
+    for si in indicators:
+        dfi = prepare_scalar_indicator(si)
+        if not dfi.empty:
+            dfs.append(dfi)
+    # Restore index
+    results.set_index(idx_to_change, append=True, inplace=True)
+
+    if dfs:
+        return pd.concat(dfs)
+    else:
+        return pd.DataFrame()
 
 
 def compute_aggregate_results(tree: nx.DiGraph, params: NodeFloatDict) -> Tuple[NodeFloatDict, Optional[str]]:

@@ -2,6 +2,8 @@ import io
 import os
 import binascii
 import urllib
+from collections import OrderedDict
+
 import openpyxl
 import redis
 import logging
@@ -29,7 +31,8 @@ from backend.command_field_definitions import command_fields
 from backend.command_generators import Issue, IType
 from backend.command_generators.parser_field_parsers import string_to_ast
 from backend.command_generators.parser_spreadsheet_utils import rewrite_xlsx_file
-from backend.ie_exports.json import export_model_to_json
+from backend.ie_exports.json import export_model_to_json, model_to_json
+from backend.models.musiasem_concepts import Parameter
 
 if __name__ == '__main__':
     print("Executing locally!")
@@ -1055,6 +1058,45 @@ def reproducible_session_query_state_list_results():  # Query list of datasets I
         r = build_json_response({"error": "Cannot return list of results, no reproducible session open"}, 401)
 
     return r
+
+
+# -- DYNAMIC PARAMETERS --
+@app.route(nis_api_base + "/isession/rsession/state_query/parameters", methods=["GET"])
+def get_parameter_definitions():
+    """
+    Obtain a JSON enumerating the definition of all the parameters for the case study
+
+    :param format:
+    :return:
+    """
+    # Recover InteractiveSession
+    isess = deserialize_isession_and_prepare_db_session()
+    if isess and isinstance(isess, Response):
+        return isess
+
+    j = model_to_json(isess.state, structure=OrderedDict({"Parameters": Parameter}))
+
+    return Response(j, mimetype="text/json", status=200)
+
+
+@app.route(nis_api_base + "/isession/rsession/state_query/parameters", methods=["PUT"])
+def set_parameters_and_solve():
+    """
+    Create an "interactive" scenario, composed by a dictionary of parameter values,
+    passed through a JSON in the request, and SOLVE this single scenario.
+
+    As results, create a supermatrix containing only this scenario, and the MatrixIndicators
+
+    :return:
+    """
+    isess = deserialize_isession_and_prepare_db_session()
+    if isess and isinstance(isess, Response):
+        return isess
+
+    parameters = request.get_json()
+    issues2 = prepare_and_solve_model(isess.state, parameters)
+    # TODO Return "issues2", issues found during the solving
+    return Response("", mimetype="text/json", status=200)
 
 
 @app.route(nis_api_base + "/isession/rsession/state_query/geolayer.<format>", methods=["GET"])

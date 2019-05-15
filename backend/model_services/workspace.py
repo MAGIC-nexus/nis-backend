@@ -293,7 +293,7 @@ def convert_generator_to_native(generator_type, file_type: str, file):
 # SOLVING (PREPARATION AND CALL SOLVER)
 # ######################################################################################################################
 
-def prepare_and_solve_model(state: State) -> List[Issue]:
+def prepare_and_solve_model(state: State, dynamic_scenario_parameters: Dict = None) -> List[Issue]:
     """
     Modify the state so that:
     * Implicit references of Interfaces to subcontexts are materialized
@@ -305,47 +305,61 @@ def prepare_and_solve_model(state: State) -> List[Issue]:
     q* State is modified to contain the scalar and matrix indicators
 
     :param state:
+    :param dynamic_scenario_parameters:
     :return:
     """
     systems = prepare_model(state)
-    issues = call_solver(state, systems)
+    issues = call_solver(state, systems, dynamic_scenario_parameters)
 
     return issues
 
 
-def call_solver(state: State, systems: Dict[str, Set[Processor]]) -> List[Issue]:
+def call_solver(state: State, systems: Dict[str, Set[Processor]], dynamic_scenario_parameters: Dict) -> List[Issue]:
     """
     Solve the problem
+
+    :param state: MuSIASEM object model
+    :param systems:
+    :param dynamic_scenario_parameters: A dictionary containing a dynamic scenario, for interactive exploration
     """
 
-    def obtain_problem_statement() -> ProblemStatement:
+    def obtain_problem_statement(dynamic_scenario_parameters: Dict = None) -> ProblemStatement:
         """
         Obtain a ProblemStatement instance
         Obtain the solver parameters plus a list of scenarios
-        :param state:
+        :param dynamic_scenario_parameters:
         :return:
         """
-        ps_list: List[ProblemStatement] = glb_idx.get(ProblemStatement.partial_key())
-        if len(ps_list) == 0:
-            # No scenarios (dummy), and use the default solver
+        if dynamic_scenario_parameters is not None:
             scenarios = create_dictionary()
-            scenarios["default"] = create_dictionary()
+            scenarios["dynamic"] = create_dictionary(dynamic_scenario_parameters)
             return ProblemStatement(scenarios=scenarios)
         else:
-            return ps_list[0]
+            ps_list: List[ProblemStatement] = glb_idx.get(ProblemStatement.partial_key())
+            if len(ps_list) == 0:
+                # No scenarios (dummy), and use the default solver
+                scenarios = create_dictionary()
+                scenarios["default"] = create_dictionary()
+                return ProblemStatement(scenarios=scenarios)
+            else:
+                return ps_list[0]
 
     # Registry and the other objects also
     glb_idx, _, _, _, _ = get_case_study_registry_objects(state)
 
     global_parameters: List[Parameter] = glb_idx.get(Parameter.partial_key())
 
-    problem_statement = obtain_problem_statement()
+    dynamic_scenario = dynamic_scenario_parameters is not None
+    if not dynamic_scenario:
+        problem_statement = obtain_problem_statement()
+    else:
+        problem_statement = obtain_problem_statement(dynamic_scenario_parameters)
 
     solver_type = problem_statement.solving_parameters.get("solver", "flow_graph").lower()
 
     issues: List[Issue] = []
     if solver_type == "flow_graph":
-        issues = flow_graph_solver(global_parameters, problem_statement, systems, state)
+        issues = flow_graph_solver(global_parameters, problem_statement, systems, state, dynamic_scenario)
 
     return issues
 
