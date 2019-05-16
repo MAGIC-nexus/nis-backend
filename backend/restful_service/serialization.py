@@ -2,13 +2,14 @@ from sqlalchemy.orm import class_mapper
 import pandas as pd
 import numpy as np
 import json
+import sys
+import blosc
 
 # Some ideas from function "model_to_dict" (Google it, StackOverflow Q&A)
 from backend.common.helper import PartialRetrievalDictionary, create_dictionary
 from backend.models import MODEL_VERSION
 from backend.models.musiasem_methodology_support import serialize_from_object, deserialize_to_object
 from backend.model_services import State, get_case_study_registry_objects
-import sys
 
 
 def serialize(o_list):
@@ -176,6 +177,8 @@ def serialize_state(state: State):
         state2.set("_datasets", datasets, ns)
     tmp = serialize_from_object(state2)  # <<<<<<<< SLOWEST !!!! (when debugging)
     print("  serialize_state length: "+str(len(tmp))+" OUT")
+    tmp = blosc.compress(bytearray(tmp, "utf-8"), cname="zlib", typesize=8)
+    print("  serialize_state compressed length: "+str(len(tmp))+" OUT")
 
     return tmp
 
@@ -197,6 +200,8 @@ def deserialize_state(st: str, state_version: int = MODEL_VERSION):
         return df
 
     print("  deserialize_state")
+    if isinstance(st, bytes):
+        st = blosc.decompress(st).decode("utf-8")
     if isinstance(st, str):
         # TODO: use state_version to convert a previous version to the latest one
         #  This means transforming the old json to the latest json
