@@ -21,14 +21,14 @@ from uuid import UUID
 import jsonpickle
 import numpy as np
 import pandas as pd
-from flask import after_this_request, request
+from flask import after_this_request, request, logging
 from multidict import MultiDict, CIMultiDict
 from pandas import DataFrame
 
 import backend
 from backend import case_sensitive, SDMXConcept, get_global_configuration_variable
 from backend.command_generators import Issue
-from backend.models import ureg
+from backend.models import ureg, log_level
 import webdav.client as wc
 
 
@@ -1097,6 +1097,8 @@ def load_dataset(location: str=None):
                         fname = "/" + "/".join(parts[i+1:])
                         break
 
+                us = get_global_configuration_variable("FS_USER")
+                print(f"------ Webdav user: {us}")
                 options = {
                     "webdav_hostname": url,
                     "webdav_login": get_global_configuration_variable("FS_USER"),

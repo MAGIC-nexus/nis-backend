@@ -2662,22 +2662,51 @@ class ProblemStatement(Identifiable, Encodable):
         return self._scenarios
 
 
-class Benchmark(Encodable):
-    """ A map from real values to a finite set of categories """
-    def __init__(self, values, categories):
-        self._values = values  # A list of sorted floats. Either ascending or descending
-        self._categories = categories  # A list of tuples (label, color). One element less than the list of "values"
+class BenchmarkGroup(Enum):
+    feasibility = 1
+    viability = 2
+    desirability = 3
+
+
+class Benchmark(Nameable, Identifiable, Encodable):
+    """ Used to frame numbers, either to make comparisons or to check a constraint """
+    def __init__(self, name, benchmark_group):
+        Identifiable.__init__(self)
+        Nameable.__init__(self, name)
+        self._benchmark_group = benchmark_group
+        self._ranges = create_dictionary()
 
     def encode(self):
         d = {
-            'values': self._values,
-            'categories': self._categories
+            'benchmark_group': self._benchmark_group,
+            'ranges': self._ranges
         }
         return d
 
-    def category(self, v):
+    @property
+    def benchmark_group(self):
+        return self._benchmark_group
+
+    @property
+    def ranges(self):
         # TODO Search in which category falls the numeric value "v", and return the corresponding tuple
-        return None
+        return self._ranges
+
+    @staticmethod
+    def partial_key(name: str=None):
+        d = dict(_t="b")
+        if name:
+            d["_n"] = name
+        return d
+
+    def key(self):
+        """
+        Return a Key for the identification of the Benchmark in the registry
+
+        :param registry:
+        :return:
+        """
+        return {"_t": "b", "_n": self.name, "__id": self.ident}
 
 
 class IndicatorCategories(Enum):  # Used in FlowFund
@@ -2696,7 +2725,8 @@ class Indicator(Nameable, Identifiable, Encodable):
     # TODO Expressions should support rich selectors, of the form "factors from processors matching these properties and factor types with those properties (include "all factors in a processor") AND/OR ..." plus set operations (union/intersection).
     # TODO Then, compute an operation over all selected factors.
     # TODO To generate multiple instances of the indicator or a single indicator accumulating many things.
-    def __init__(self, name: str, formula: str, from_indicator: "Indicator", processors_selector: str, benchmark: Benchmark, indicator_category: IndicatorCategories, description=None):
+    def __init__(self, name: str, formula: str, from_indicator: Optional["Indicator"], processors_selector: str,
+                 benchmark: Benchmark, indicator_category: IndicatorCategories, description=None):
         Identifiable.__init__(self)
         Nameable.__init__(self, name)
         self._formula = formula

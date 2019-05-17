@@ -9,7 +9,7 @@ from backend.command_generators.parser_field_parsers import simple_ident, unquot
     hierarchy_expression_v2, key_value_list, key_value, expression_with_parameters, \
     time_expression, indicator_expression, code_string, simple_h_name, domain_definition, unit_name, url_parser, \
     processor_names, value, list_simple_ident, reference, processor_name, processors_selector_expression, \
-    interfaces_list_expression, attributes_list_expression, indicators_list_expression
+    interfaces_list_expression, attributes_list_expression, indicators_list_expression, number_interval
 from backend.models.musiasem_concepts import Processor, Factor, RelationClassType
 from backend.command_definitions import valid_v2_command_names, commands
 from backend.common.helper import first, class_full_name
@@ -38,6 +38,7 @@ bib_entry_types = ["article", "book", "booklet", "conference", "inbook", "incoll
                    "manual", "mastersthesis", "misc", "phdtesis", "proceedings", "techreport", "unpublished"]
 bib_months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
 scope_types = ["Total", "Internal", "External"]
+benchmark_groups = ["Feasibility", "Viability", "Desirability"]
 
 attributeRegex = "@.+"
 
@@ -293,6 +294,16 @@ command_fields: Dict[str, List[CommandField]] = {
         CommandField(allowed_names=["URL"], name="url", parser=url_parser),
         CommandField(allowed_names=["Volume"], name="volume", mandatory="entry_type in ('article')", parser=unquoted_string),
         CommandField(allowed_names=["Year"], name="year", mandatory="entry_type in ('article', 'book', 'inbook', 'incollection', 'inproceedings', 'mastersthesis', 'phdthesis', 'proceedings', 'techreport')", parser=unquoted_string)
+    ],
+
+    "scalar_indicator_benchmarks": [
+        CommandField(allowed_names=["BenchmarkGroup"], name="benchmark_group", mandatory=False, allowed_values=benchmark_groups, parser=simple_ident),
+        CommandField(allowed_names=["Benchmark"], name="benchmark", mandatory=True, parser=simple_ident),
+        CommandField(allowed_names=["Range"], name="range", mandatory=True, parser=number_interval),
+        CommandField(allowed_names=["Unit"], name="unit", mandatory=True, parser=unit_name),
+        CommandField(allowed_names=["Category"], name="category", mandatory=True, parser=simple_ident),
+        CommandField(allowed_names=["Label"], name="label", mandatory=True, parser=unquoted_string),
+        CommandField(allowed_names=["Description"], name="description", parser=unquoted_string)
     ],
 
     "scalar_indicators": [

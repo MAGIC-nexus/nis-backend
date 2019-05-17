@@ -1534,10 +1534,11 @@ def reproducible_session_append_command_generator():  # Receive a command_execut
         out = []
         for i in iss_lst:
             location = dict(sheet_name="", row=None, col=None)
+            i_type = "Error" if i.itype.value == 3 else ("Warning" if i.itype.value == 2 else "Info")
             if isinstance(i, Issue):
                 if i.location is not None:
                     location = dict(sheet_name=i.location.sheet_name, row=str(i.location.row), col=str(i.location.column))
-                out.append(dict(**location, message=i.description, type=i.itype.value))
+                out.append(dict(**location, message=i_type + ": " +i.description, type=i.itype.value))
             else:
                 out.append(dict(**location, message="Issue type unknown", type=3))
         return out

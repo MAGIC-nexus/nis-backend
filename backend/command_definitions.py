@@ -71,17 +71,17 @@ commands: List[Command] = [
             is_v2=True, cmd_type=CommandType.core,
             execution_class_name="backend.command_executors.version2.hierarchy_categories_command.HierarchyCategoriesCommand"),
 
-    Command(name="attribute_types", allowed_names=["AttributeTypes"], is_v2=True,
-            cmd_type=CommandType.misc,
-            execution_class_name="backend.command_executors.version2.attribute_types_command.AttributeTypesCommand"),
+    # Command(name="attribute_types", allowed_names=["AttributeTypes"], is_v2=True,
+    #         cmd_type=CommandType.misc,
+    #         execution_class_name="backend.command_executors.version2.attribute_types_command.AttributeTypesCommand"),
 
     Command(name="datasetdef", allowed_names=["DatasetDef"], is_v2=True,
             cmd_type=CommandType.input,
             execution_class_name="backend.command_executors.version2.dataset_definition_command.DatasetDefCommand"),
 
-    Command(name="attribute_sets", allowed_names=["AttributeSets"], is_v2=True,
-            cmd_type=CommandType.misc,
-            execution_class_name="backend.command_executors.version2.attribute_sets_command.AttributeSetsCommand"),
+    # Command(name="attribute_sets", allowed_names=["AttributeSets"], is_v2=True,
+    #         cmd_type=CommandType.misc,
+    #         execution_class_name="backend.command_executors.version2.attribute_sets_command.AttributeSetsCommand"),
 
     Command(name="parameters", allowed_names=["Parameters", "Params"], is_v2=True,
             cmd_type=CommandType.input,
@@ -111,25 +111,13 @@ commands: List[Command] = [
             cmd_type=CommandType.core,
             execution_class_name="backend.command_executors.version2.scale_conversion_v2_command.ScaleConversionV2Command"),
 
-    Command(name="import_commands", allowed_names=["ImportCommands"], is_v2=True,
-            cmd_type=CommandType.misc,
-            execution_class_name="backend.command_executors.version2.nested_commands_command.NestedCommandsCommand"),
+    Command(name="problem_statement", allowed_names=["ProblemStatement"], is_v2=True,
+            cmd_type=CommandType.analysis,
+            execution_class_name="backend.command_executors.version2.problem_statement_command.ProblemStatementCommand"),
 
-    Command(name="list_of_commands", allowed_names=["ListOfCommands"], is_v2=True,
-            cmd_type=CommandType.misc,
-            execution_class_name=None),
-
-    Command(name="ref_provenance", allowed_names=["RefProvenance"], is_v2=True,
-            cmd_type=CommandType.metadata,
-            execution_class_name="backend.command_executors.version2.references_v2_command.ProvenanceReferencesCommand"),
-
-    Command(name="ref_geographical", allowed_names=["RefGeographic", "RefGeography"], is_v2=True,
-            cmd_type=CommandType.metadata,
-            execution_class_name="backend.command_executors.version2.references_v2_command.GeographicReferencesCommand"),
-
-    Command(name="ref_bibliographic", allowed_names=["RefBibliographic", "RefBibliography"], is_v2=True,
-            cmd_type=CommandType.metadata,
-            execution_class_name="backend.command_executors.version2.references_v2_command.BibliographicReferencesCommand"),
+    Command(name="scalar_indicator_benchmarks", allowed_names=["ScalarBenchmarks"], is_v2=True,
+            cmd_type=CommandType.analysis,
+            execution_class_name="backend.command_executors.version2.scalar_indicator_benchmarks_command.ScalarIndicatorBenchmarksCommand"),
 
     Command(name="scalar_indicators", allowed_names=["ScalarIndicators"], is_v2=True,
             cmd_type=CommandType.analysis,
@@ -138,10 +126,6 @@ commands: List[Command] = [
     Command(name="matrix_indicators", allowed_names=["MatrixIndicators"], is_v2=True,
             cmd_type=CommandType.analysis,
             execution_class_name="backend.command_executors.version2.matrix_indicators_command.MatrixIndicatorsCommand"),
-
-    Command(name="problem_statement", allowed_names=["ProblemStatement"], is_v2=True,
-            cmd_type=CommandType.analysis,
-            execution_class_name="backend.command_executors.version2.problem_statement_command.ProblemStatementCommand"),
 
     Command(name="datasetdata", allowed_names=["DatasetData"], is_v2=True,
             cmd_type=CommandType.input,
@@ -157,9 +141,17 @@ commands: List[Command] = [
             cmd_type=CommandType.metadata,
             execution_class_name="backend.command_executors.version2.pedigree_matrices_command.PedigreeMatricesReferencesCommand"),
 
-    # Command(name="indicators", allowed_names=["Indicators"], is_v2=True,
-    #         execution_class_name="backend.command_executors.version2.indicators_command.IndicatorsCommand",
-    #         alt_regex=r"(Indicators|KPI)([ _]" + regex_var_name + ")?"),
+    Command(name="ref_provenance", allowed_names=["RefProvenance"], is_v2=True,
+            cmd_type=CommandType.metadata,
+            execution_class_name="backend.command_executors.version2.references_v2_command.ProvenanceReferencesCommand"),
+
+    Command(name="ref_geographical", allowed_names=["RefGeographic", "RefGeography"], is_v2=True,
+            cmd_type=CommandType.metadata,
+            execution_class_name="backend.command_executors.version2.references_v2_command.GeographicReferencesCommand"),
+
+    Command(name="ref_bibliographic", allowed_names=["RefBibliographic", "RefBibliography"], is_v2=True,
+            cmd_type=CommandType.metadata,
+            execution_class_name="backend.command_executors.version2.references_v2_command.BibliographicReferencesCommand"),
 
     # Version 1 only
 

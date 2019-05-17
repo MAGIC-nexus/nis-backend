@@ -75,14 +75,15 @@ attributes_list_expression = list_simple_ident
 
 # Basic data types
 positive_int = Word(nums).setParseAction(lambda t: {'type': 'int', 'value': int(t[0])})
-positive_float = (Combine(Word(nums) + Optional("." + Word(nums))
-                          + oneOf("E e") + Optional(oneOf('+ -')) + Word(nums))
-                  | Combine(Word(nums) + "." + Word(nums))
-                  ).setParseAction(lambda _s, l, t: {'type': 'float', 'value': float(t[0])}
+positive_float = (Combine(Word(nums) + Optional("." + Word(nums)) + Optional(oneOf("E e") + Optional(oneOf('+ -')) + Word(nums)))
+                  ).setParseAction(lambda _s, l, t:
+                                   {'type': 'float',
+                                    'value': float(t[0])
+                                    }
                                    )
-signed_float = (Optional(Or([Literal("+"), Literal("-")]))("sign") + positive_float).\
+signed_float = (Optional(Or([Literal("+"), Literal("-")])("sign")) + positive_float).\
     setParseAction(lambda _s, l, t: {'type': 'float',
-                                     'value': float(t[0])
+                                     'value': t[0]['value'] if isinstance(t[0], dict) else (-t[1]['value'] if t[0]=='-' else t[1]['value'])
                                      }
                    )
 boolean = Or([true, false]).setParseAction(lambda t: {'type': 'boolean', 'value': bool(t[0])})
@@ -212,12 +213,13 @@ processor_names = ((processor_names_wildcard_separator + Optional(processor_name
 context_query << processor_names
 
 # RULES - domain_definition
-number_interval = (Or(Literal("["), Literal("("))("left") + signed_float("number") + Literal(", ") + signed_float + Or(Literal("]"), Literal(")"))("right"))\
+number_interval = (Or([Literal("["), Literal("(")])("left") + signed_float("number_left") + Literal(",").suppress() + signed_float("number_right") + Or([Literal("]"), Literal(")")])("right"))\
     .setParseAction(lambda _s, l, t: {'type': 'number_interval',
-                                                'left': t.left,
-                                                'right': t.right,
-                                                'number': t.number
-                                                })
+                                      'left': t[0],
+                                      'right': t[3],
+                                      'number_left': t[1]['value'],
+                                      'number_right': t[2]['value'],
+                                      })
 domain_definition << Or([simple_ident, number_interval])
 
 
@@ -624,6 +626,20 @@ def is_month(s: str) -> bool:
 if __name__ == '__main__':
     from backend.model_services import State
     from dotted.collection import DottedDict
+
+    number_interval_examples = [
+        "(1, 2)",
+        "[0.1, 1.0]",
+        "[-3.14, 1)",
+        "(-1, 3]"
+    ]
+
+    for e in number_interval_examples:
+        try:
+            ast = string_to_ast(number_interval, e)
+            print(ast)
+        except:
+            print("Incorrect")
 
     processor_name_examples = [
         "BFGas_DE_2016",
