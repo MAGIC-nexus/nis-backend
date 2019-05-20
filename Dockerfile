@@ -65,6 +65,7 @@ RUN apt-get update && \
     libpq-dev \
 	libcurl4-openssl-dev \
 	libssl-dev \
+	mime-support \
 	&& apt-get clean
 
 

@@ -18,10 +18,11 @@ from typing import IO, List, Tuple, Dict, Any, Optional, Iterable, Callable, Typ
 from urllib.parse import urlparse
 from uuid import UUID
 
+import logging
 import jsonpickle
 import numpy as np
 import pandas as pd
-from flask import after_this_request, request, logging
+from flask import after_this_request, request
 from multidict import MultiDict, CIMultiDict
 from pandas import DataFrame
 
@@ -30,6 +31,18 @@ from backend import case_sensitive, SDMXConcept, get_global_configuration_variab
 from backend.command_generators import Issue
 from backend.models import ureg, log_level
 import webdav.client as wc
+
+
+logger = logging.getLogger(__name__)
+logger.setLevel(log_level)
+
+
+def append_line(str, file=None):
+    if not file:
+        file = "/app/borrame.txt"
+    f = open(file, "a+")
+    f.write(str+"\n")
+    f.close()
 
 
 # #####################################################################################################################
@@ -1097,8 +1110,6 @@ def load_dataset(location: str=None):
                         fname = "/" + "/".join(parts[i+1:])
                         break
 
-                us = get_global_configuration_variable("FS_USER")
-                print(f"------ Webdav user: {us}")
                 options = {
                     "webdav_hostname": url,
                     "webdav_login": get_global_configuration_variable("FS_USER"),
