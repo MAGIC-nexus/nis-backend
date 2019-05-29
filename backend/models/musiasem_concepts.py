@@ -2670,10 +2670,11 @@ class BenchmarkGroup(Enum):
 
 class Benchmark(Nameable, Identifiable, Encodable):
     """ Used to frame numbers, either to make comparisons or to check a constraint """
-    def __init__(self, name, benchmark_group):
+    def __init__(self, name, benchmark_group, stakeholders: List[str]):
         Identifiable.__init__(self)
         Nameable.__init__(self, name)
         self._benchmark_group = benchmark_group
+        self._stakeholders = stakeholders
         self._ranges = create_dictionary()
 
     def encode(self):
@@ -2686,6 +2687,10 @@ class Benchmark(Nameable, Identifiable, Encodable):
     @property
     def benchmark_group(self):
         return self._benchmark_group
+
+    @property
+    def stakeholders(self):
+        return self._stakeholders
 
     @property
     def ranges(self):
@@ -2722,17 +2727,14 @@ class Indicator(Nameable, Identifiable, Encodable):
     * Attached to Processor
     * Attached to CaseStudy
     """
-    # TODO Expressions should support rich selectors, of the form "factors from processors matching these properties and factor types with those properties (include "all factors in a processor") AND/OR ..." plus set operations (union/intersection).
-    # TODO Then, compute an operation over all selected factors.
-    # TODO To generate multiple instances of the indicator or a single indicator accumulating many things.
     def __init__(self, name: str, formula: str, from_indicator: Optional["Indicator"], processors_selector: str,
-                 benchmark: Benchmark, indicator_category: IndicatorCategories, description=None):
+                 benchmarks: List[Benchmark], indicator_category: IndicatorCategories, description=None):
         Identifiable.__init__(self)
         Nameable.__init__(self, name)
         self._formula = formula
         self._from_indicator = from_indicator
         self._processors_selector = processors_selector
-        self._benchmark = benchmark
+        self._benchmarks = benchmarks
         self._indicator_category = indicator_category
         self._description = description
 
@@ -2743,7 +2745,7 @@ class Indicator(Nameable, Identifiable, Encodable):
             'formula': self._formula,
             'from_indicator': self._from_indicator,
             'processors_selector': self._processors_selector,
-            'benchmark': self._benchmark,
+            'benchmarks': self._benchmarks,
             'indicator_category': getattr(self._indicator_category, "name", None),
             'description': self._description
         })

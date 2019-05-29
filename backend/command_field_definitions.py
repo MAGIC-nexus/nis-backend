@@ -243,8 +243,10 @@ command_fields: Dict[str, List[CommandField]] = {
     ],
 
     "ref_provenance": [
-        # Reduced, from W3C Provenance Recommendation
+        # Reduced, from W3C Provenance Recommendation (https://www.w3.org/TR/prov-overview/)
         CommandField(allowed_names=["RefID", "Reference"], name="ref_id", mandatory=True, parser=simple_ident),
+        # The reference "RefID" should be mentioned
+        CommandField(allowed_names=["ProvenanceFileURL"], name="provenance_file_url", parser=url_parser),
         CommandField(allowed_names=["AgentType"], name="agent_type", mandatory=True, allowed_values=agent_types, parser=simple_ident),
         CommandField(allowed_names=["Agent"], name="agent", mandatory=True, parser=unquoted_string),
         CommandField(allowed_names=["Activities"], name="activities", mandatory=True, parser=unquoted_string),
@@ -255,6 +257,7 @@ command_fields: Dict[str, List[CommandField]] = {
         # A subset of fields from INSPIRE regulation for metadata: https://eur-lex.europa.eu/legal-content/EN/TXT/PDF/?uri=CELEX:32008R1205&from=EN
         # Fields useful to elaborate graphical displays. Augment in the future as demanded
         CommandField(allowed_names=["RefID", "Reference"], name="ref_id", mandatory=True, parser=simple_ident),
+        CommandField(allowed_names=["GeoLayerURL"], name="geo_layer_url", parser=url_parser),
         CommandField(allowed_names=["Title"], name="title", mandatory=True, parser=unquoted_string),
         CommandField(allowed_names=["Abstract"], name="abstract", parser=unquoted_string),  # Syntax??
         CommandField(allowed_names=["Type"], name="type", allowed_values=geographic_resource_types, parser=unquoted_string),  # Part D.1. JUST "Dataset"
@@ -268,6 +271,7 @@ command_fields: Dict[str, List[CommandField]] = {
     "ref_bibliographic": [
         # From BibTex. Mandatory fields depending on EntryType, at "https://en.wikipedia.org/wiki/BibTeX" (or search: "Bibtex entry field types")
         CommandField(allowed_names=["RefID", "Reference"], name="ref_id", mandatory=True, parser=simple_ident),
+        CommandField(allowed_names=["BibFileURL"], name="bib_file_url", parser=url_parser),
         CommandField(allowed_names=["EntryType"], name="entry_type", mandatory=True, allowed_values=bib_entry_types, parser=unquoted_string),
         CommandField(allowed_names=["Address"], name="address", parser=unquoted_string),
         CommandField(allowed_names=["Annote"], name="annote", parser=unquoted_string),
@@ -297,7 +301,8 @@ command_fields: Dict[str, List[CommandField]] = {
     ],
 
     "scalar_indicator_benchmarks": [
-        CommandField(allowed_names=["BenchmarkGroup"], name="benchmark_group", mandatory=False, allowed_values=benchmark_groups, parser=simple_ident),
+        CommandField(allowed_names=["BenchmarkGroup"], name="benchmark_group", allowed_values=benchmark_groups, parser=simple_ident),
+        CommandField(allowed_names=["Stakeholders"], name="stakeholders", parser=list_simple_ident),
         CommandField(allowed_names=["Benchmark"], name="benchmark", mandatory=True, parser=simple_ident),
         CommandField(allowed_names=["Range"], name="range", mandatory=True, parser=number_interval),
         CommandField(allowed_names=["Unit"], name="unit", mandatory=True, parser=unit_name),
@@ -311,8 +316,8 @@ command_fields: Dict[str, List[CommandField]] = {
         CommandField(allowed_names=["Local"], name="local", mandatory=True, allowed_values=yes_no, parser=simple_ident),
         CommandField(allowed_names=["Formula", "Expression"], name="formula", mandatory=True, parser=indicator_expression),
         # TODO Disabled: apply the formula to ALL processors (and ignore those where it cannot be evaluated)
-        #  CommandField(allowed_names=["Processors"], name="processors_selector", parser=processors_selector_expression),
-        CommandField(allowed_names=["Benchmark"], name="benchmark", parser=simple_ident),
+        #  CommandField(allowed_names=["Processors"], name="processors_selector", parser=processors_selector_expression)
+        CommandField(allowed_names=["Benchmarks", "Benchmark"], name="benchmarks", parser=list_simple_ident),
         CommandField(allowed_names=["Description"], name="description", parser=unquoted_string)
     ],
 

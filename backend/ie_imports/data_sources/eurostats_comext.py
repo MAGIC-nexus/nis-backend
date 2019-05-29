@@ -15,7 +15,9 @@ AAAA
 Gracias por su interés en la página web de Eurostat, www.ec.europa.eu/eurostat, y por plantearnos su consulta telefónica.
 
 He encontrado la opción de descarga para PRODCOM. Le adjunto a continuación el enlace a esos archivos y la ruta seguida.
-El único problema es que los datos son de finales de 2017. Hemos preguntado al equipo responsable y, como le acabo de comentar por teléfono, nos han comunicado que están trabajando en las actualizaciones y que esperan subir nuevos datos para finales de la próxima semana, en principio.
+El único problema es que los datos son de finales de 2017. Hemos preguntado al equipo responsable y, como le acabo de
+comentar por teléfono, nos han comunicado que están trabajando en las actualizaciones y que esperan subir nuevos datos
+para finales de la próxima semana, en principio.
 
 Aquí tiene el enlace a los datos de PRODCOM:
 
@@ -55,30 +57,47 @@ Espero que, teniendo la información, pueda manejarla usted mismo para su proyec
 los otros enlaces la semana que viene, por si hubiera una actualización en este sentido.
 
 """
-
+import os
+from io import StringIO
 from abc import abstractmethod
 
 from typing import List
-
+import pandas as pd
 from backend.ie_imports.data_source_manager import IDataSourceManager
 from backend.models.statistical_datasets import DataSource, Database, Dataset
 
+dataset_csv = """
+Code,File,Label
+AE,ASTI_Research_Spending,ASTI-Expenditures
+"""
+
 
 class COMEXT(IDataSourceManager):
-    @abstractmethod
+    def __init__(self):
+        self._bulk_download_url = "http://fenixservices.fao.org/faostat/static/bulkdownloads/"
+        self._datasets = pd.read_csv(StringIO(dataset_csv))
+        self._datasets["idx"] = self._datasets["Code"]
+        self._datasets.set_index("idx", inplace=True)
+        if not os.path.isdir(self._datasets_directory):
+            os.makedirs(self._datasets_directory, mode=0o770)
+
     def get_name(self) -> str:
         """ Source name """
-        pass
+        return self.get_datasource().name
 
-    @abstractmethod
     def get_datasource(self) -> DataSource:
         """ Data source """
-        pass
+        src = DataSource()
+        src.name = "COMEXT"
+        src.description = "Eurostat's COMEXT"
+        return src
 
-    @abstractmethod
     def get_databases(self) -> List[Database]:
         """ List of databases in the data source """
-        pass
+        db = Database()
+        db.code = ""
+        db.description = "Comext"
+        return [db]
 
     @abstractmethod
     def get_datasets(self, database=None) -> list:

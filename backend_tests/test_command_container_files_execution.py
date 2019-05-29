@@ -536,7 +536,7 @@ class TestCommandFiles(unittest.TestCase):
 
     def test_025_biofuel(self):
         file_path = os.path.dirname(
-            os.path.abspath(__file__)) + "/../../nis-internal-tests/Biofuel_NIS.xlsx"
+            os.path.abspath(__file__)) + "/z_input_files/v2/Biofuel_NIS.xlsx"
         isess, issues = execute_file_return_issues(file_path, generator_type="spreadsheet")
         issues2 = prepare_and_solve_model(isess.state)
         serialize_state(isess.state)
@@ -606,6 +606,40 @@ class TestCommandFiles(unittest.TestCase):
 
 
 if __name__ == '__main__':
+    # import pandas as pd
+    # import openpyxl
+    # from openpyxl.utils.dataframe import dataframe_to_rows
+    #
+    # sname = "Hoja1"
+    # sidx = 0
+    # fname = "/home/rnebot/Downloads/dynamic_table.xlsx"
+    # fname = "/home/rnebot/Downloads/dynamic_table - Editable.xlsx"
+    # xl = openpyxl.load_workbook(fname, keep_vba=True)
+    # ws = xl["Hoja2"]
+    # pivot = ws._pivots[0]
+    # # pivot.cache.refreshOnload = True
+    # wsd = xl["Hoja1"]
+    # print(f"{wsd.max_row}:{wsd.max_column} ---------------")
+    # for r_idx in range(wsd.max_row - 1):
+    #     print(f"{r_idx}")
+    #     for c_idx in range(wsd.max_column):
+    #         wsd.cell(row=r_idx + 2, column=c_idx + 1).value = None
+    #
+    # df = pd.read_csv("/home/rnebot/Downloads/flow_graph_solution.csv")
+    # df = df.loc[1500:]
+    #
+    # # xl.remove(xl.get_sheet_by_name(sname))
+    # # ws = xl.create_sheet(sname, sidx)
+    # rows = dataframe_to_rows(df)
+    # for r_idx, row in enumerate(rows):
+    #     if r_idx < 2:
+    #         continue
+    #     for c_idx, value in enumerate(row[1:], 1):
+    #         wsd.cell(row=r_idx, column=c_idx).value = value
+    # xl.save("/home/rnebot/Downloads/dt_new.xlsx")
+    #
+    # a = 1 / 0
+
     from backend.common.helper import add_label_columns_to_dataframe
 
     is_fao_test = False

@@ -83,7 +83,7 @@ class Eurostat(IDataSourceManager):
                 if n["@xml:lang"] == "en":
                     desc = n["#text"]
                     break
-            if k["@id"][:3] != "DS-":
+            if k["@id"][:3] != "DS-":  #or k["@id"] in ("DS-066341", "DS-066342"):
                 # dsd_id = k["str:Structure"]["Ref"]["@id"]
                 lst.append((k["@id"], desc, k["@urn"]))
 
@@ -137,7 +137,7 @@ class Eurostat(IDataSourceManager):
             cl = create_dictionary()
             for m, v in list(zip(metadata.codelist.loc[l].index, metadata.codelist.loc[l]["name"])):
                 if not first:
-                    cl[m] = v
+                    cl[m] = v.replace("\n", ";")
                 else:
                     first = False
             # Attach it to the Dimension or Measure

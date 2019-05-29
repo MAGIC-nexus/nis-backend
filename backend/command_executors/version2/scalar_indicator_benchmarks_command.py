@@ -19,11 +19,12 @@ class ScalarIndicatorBenchmarksCommand(BasicCommand):
         """
         name = fields["benchmark"]
         benchmark_group = fields["benchmark_group"]
+        stakeholders = fields["stakeholders"]
         b = self._glb_idx.get(Benchmark.partial_key(name=name))
         if len(b) == 1:
             b = b[0]
         elif len(b) == 0:
-            b = Benchmark(name, benchmark_group)
+            b = Benchmark(name, benchmark_group, stakeholders.split(",") if stakeholders else [])
             self._glb_idx.put(b.key(), b)
         else:
             self._add_issue(IType.ERROR,
