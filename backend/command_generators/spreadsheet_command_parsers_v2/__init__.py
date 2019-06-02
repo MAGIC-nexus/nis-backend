@@ -7,7 +7,7 @@ from backend.command_generators import Issue, parser_field_parsers, IssueLocatio
 from backend.command_generators.parser_field_parsers import simple_h_name
 
 
-def check_columns(sh, name: str, area: Tuple, cols: List[CommandField], command_name: str, ignore_not_found=False):
+def check_columns(sh, name: str, area: Tuple, cols: List[CommandField], command_name: str, ignore_not_found=True):
     """
     When parsing of a command starts, check columns
     Try to match each column with declared column fields. If a column is not declared, raise an error (or ignore it)
@@ -56,10 +56,9 @@ def check_columns(sh, name: str, area: Tuple, cols: List[CommandField], command_
                     mandatory_not_found.discard(col.name)
                 break
         else:  # No match for the column "col_name"
-            if not ignore_not_found:
-                issues.append(Issue(itype=IType.ERROR,
-                                    description="The column name '" + col_name + "' does not match any of the allowed column names for the command '" + command_name + "'",
-                                    location=IssueLocation(sheet_name=name, row=1, column=c)))
+            issues.append(Issue(itype=IType.ERROR if not ignore_not_found else IType.WARNING,
+                                description="The column name '" + col_name + "' does not match any of the allowed column names for the command '" + command_name + "'",
+                                location=IssueLocation(sheet_name=name, row=1, column=c)))
 
     if len(mandatory_not_found) > 0:
         issues.append(Issue(itype=IType.ERROR,
