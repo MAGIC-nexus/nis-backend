@@ -33,7 +33,6 @@ class InterfacesAndQualifiedQuantitiesCommand(BasicCommand):
         """
 
         # Interface
-        f_alias = field_values.get("alias")
         f_processor_name = field_values.get("processor")
         f_interface_type_name = field_values.get("interface_type")
         f_interface_name = field_values.get("interface")  # A "simple_ident", optional

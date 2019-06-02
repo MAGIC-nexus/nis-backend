@@ -83,7 +83,7 @@ class Eurostat(IDataSourceManager):
                 if n["@xml:lang"] == "en":
                     desc = n["#text"]
                     break
-            if k["@id"][:3] != "DS-":  #or k["@id"] in ("DS-066341", "DS-066342"):
+            if k["@id"][:3] != "DS-":  # or k["@id"] in ("DS-066341", "DS-066342", "DS-043408", "DS-043409"):
                 # dsd_id = k["str:Structure"]["Ref"]["@id"]
                 lst.append((k["@id"], desc, k["@urn"]))
 

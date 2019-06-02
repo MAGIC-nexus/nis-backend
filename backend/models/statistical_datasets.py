@@ -87,6 +87,32 @@ class CodeList(ORMBase):
 
         return cl
 
+    def clone(self) -> "CodeList":
+        cl = CodeList()
+        cl.code = self.code
+        cl.description = self.description
+        old_new_map = {}
+        # Levels
+        for cll1 in self.levels:
+            cll = CodeListLevel()
+            cll.code_list = cl
+            cll.code = cll1.code
+            # Codes in each level
+            for ct1 in cll1.codes:
+                c = Code()
+                c.code = ct1.code
+                c.description = ct1.description
+                c.level = cll
+                old_new_map[ct1] = c
+
+        # Set children & parents
+        for old, new in old_new_map.items():
+            for ch in old.children:
+                new.children.append(old_new_map[ch])
+                old_new_map[ch].append(new)
+
+        return cl
+
 
 class CodeListLevel(ORMBase):
     __tablename__ = "dc_cl_levels"

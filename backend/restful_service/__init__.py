@@ -5,6 +5,7 @@ from flask import Flask
 import backend
 from backend.ie_imports.data_source_manager import DataSourceManager
 from backend.ie_imports.data_sources.eurostat_bulk import Eurostat
+from backend.ie_imports.data_sources.eurostats_comext import COMEXT
 from backend.ie_imports.data_sources.fadn import FADN
 from backend.ie_imports.data_sources.faostat import FAOSTAT
 from backend.ie_imports.data_sources.oecd import OECD
@@ -85,6 +86,9 @@ def register_external_datasources(cfg):
 
     # Eurostat
     dsm2.register_datasource_manager(Eurostat())
+
+    # TODO COMEXT
+    dsm2.register_datasource_manager(COMEXT())
 
     # FAO
     if 'FAO_DATASETS_DIR' in cfg:
