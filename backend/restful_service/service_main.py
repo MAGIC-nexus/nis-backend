@@ -29,6 +29,7 @@ import json
 from backend.command_definitions import commands
 from backend.command_field_definitions import command_fields
 from backend.command_generators import Issue, IType
+from backend.command_generators.parser_field_examples import generic_field_examples, generic_field_syntax
 from backend.command_generators.parser_field_parsers import string_to_ast
 from backend.command_generators.parser_spreadsheet_utils import rewrite_xlsx_file
 from backend.ie_exports.json import export_model_to_json, model_to_json
@@ -3380,6 +3381,89 @@ Society\tEncompassess the human realm\n\
          }
     ]
 """
+
+
+@app.route(nis_api_base + "/command_fields_reference.json", methods=["POST"])
+def command_fields_help():
+    """
+    A function for on-line, field by field help
+
+    The input comes in a JSON field "content":
+    {"command": "<command name",
+     "fields": ["<field name>", "<field_name>"]
+    }
+
+    :return: A dictionary with the same fields passed in the input dictionary, whose values are the help divided in
+        sections: explanation, allowed_values, formal syntax and examples
+    """
+    # Recover InteractiveSession
+    isess = deserialize_isession_and_prepare_db_session()
+    if isess and isinstance(isess, Response):
+        return isess
+
+    # Read request
+    command_content_to_validate = request.get_json()
+    if "command" in command_content_to_validate:
+        command = command_content_to_validate["command"]
+    else:
+        raise Exception("Must specify 'command'")
+
+    if "fields" in command_content_to_validate:
+        fields = command_content_to_validate["fields"]
+    else:
+        raise Exception("Must specify 'fields'")
+
+    alternative_command_names = command_content_to_validate.get("alternative_command_names", {})
+
+    result = {}
+    # Find command from the worksheet name ("command")
+    match = None
+    for cmd in commands:
+        for cmd_name in cmd.allowed_names:
+            if cmd_name.lower() in command.lower():
+                if match:
+                    if match[1] < len(cmd_name):
+                        match = (cmd.name, len(cmd_name))
+                else:
+                    match = (cmd.name, len(cmd_name))
+    if not match:
+        for k, v in alternative_command_names:
+            if k.lower() in command.lower():
+                for cmd in commands:
+                    for cmd_name in cmd.allowed_names:
+                        if cmd_name.lower() in v.lower():
+                            match = (cmd.name, 0)
+                            break
+                    if match:
+                        break
+                if match:
+                    break
+
+    # Fields in the command
+    status = 200
+    if match:
+        for f in fields:  # Validate field by field
+            for f2 in command_fields[match[0]]:  # Find corresponding field in the command
+                if f.lower() in [f3.lower() for f3 in f2.allowed_names]:
+                    fld = f2
+                    break
+            else:
+                fld = None
+            if fld:  # If found, can elaborate help
+                description = f"Text for field {f} in command {match[0]}"
+                examples = "\n  ".join(generic_field_examples.get(fld.parser, "<>"))
+                syntax = ", ".join(fld.allowed_values) if fld.allowed_values else generic_field_syntax.get(fld.parser, "<>")
+                result[f] = f"{description}\nSyntax: {syntax}\nExamples:\n  {examples}"
+            else:
+                result[f] = "Field '"+f+"' not found in command '"+command+"'. Possible field names: "+", ".join([item for f2 in command_fields[command] for item in f2.allowed_names])
+                status = 400
+    else:
+        for f in fields:  # Validate field by field
+            result[f] = "Command '" + command +"' not found in the list of command names: " +", ".join([n for c in commands for n in c.allowed_names])
+        status = 400
+
+    return build_json_response(result, status)
+
 
 # @app.route(nis_api_base + "/sources/<id>/databases/<database_id>/datasets/<dataset_id>", methods=["GET"])
 # def data_source_database_dataset_query(id, database_id, dataset_id):
