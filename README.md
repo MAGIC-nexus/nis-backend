@@ -3,7 +3,7 @@
 ## Technological Features of NIS tool
 
 **DONE**
-* Dockerized: a Dockerfile for Apache2, receiving the name of the configuration file on image creation
+* Dockerized: a Dockerfile for Nginx, receiving the name of the configuration file on image creation
   * One of the configuration is devised to be almost autonomous: it needs only a REDIS instance. It is based on
   using SQLite. And because the Dockerfile exposes "/srv" for volumes, the SQLite databases persist between container restarts.
   * To solve: all configurations ARE inside the image, use a VOLUME to store the configuration and look
