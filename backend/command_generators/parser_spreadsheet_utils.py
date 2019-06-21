@@ -1,7 +1,10 @@
 import numpy as np
+from copy import copy
 import openpyxl
 from openpyxl.comments import Comment
 from openpyxl.styles import PatternFill
+from openpyxl.worksheet import Worksheet
+from openpyxl.worksheet.copier import WorksheetCopy
 
 global_fill = PatternFill("none")
 
@@ -191,17 +194,83 @@ def show_message(sh, r, c, message, type="error", accumulate=True):
     #     sh.title = "!" + sh.title
 
 
+class WorksheetCopy2(object):
+    """
+    Copy the values, styles, dimensions and merged cells from one worksheet
+    to another within the same workbook.
+
+    Adapted from "WorksheetCopy" of OpenPyXL. To cope with issue regarding a badly specified input ColumnDimension
+    """
+
+    def __init__(self, source_worksheet, target_worksheet):
+        self.source = source_worksheet
+        self.target = target_worksheet
+        self._verify_resources()
+
+    def _verify_resources(self):
+        if not isinstance(self.source, Worksheet) and not isinstance(self.target, Worksheet):
+            raise TypeError("Can only copy worksheets")
+
+        if self.source is self.target:
+            raise ValueError("Cannot copy a worksheet to itself")
+
+        if self.source.parent != self.target.parent:
+            raise ValueError('Cannot copy between worksheets from different workbooks')
+
+    def copy_worksheet(self):
+        self._copy_cells()
+        self._copy_dimensions()
+
+        self.target.sheet_format = copy(self.source.sheet_format)
+        self.target.sheet_properties = copy(self.source.sheet_properties)
+        self.target._merged_cells = copy(self.source._merged_cells)
+
+    def _copy_cells(self):
+        for (row, col), source_cell  in self.source._cells.items():
+            target_cell = self.target.cell(column=col, row=row)
+
+            target_cell._value = source_cell._value
+            target_cell.data_type = source_cell.data_type
+
+            if source_cell.has_style:
+                target_cell._style = copy(source_cell._style)
+
+            if source_cell.hyperlink:
+                target_cell._hyperlink = copy(source_cell.hyperlink)
+
+            if source_cell.comment:
+                target_cell.comment = copy(source_cell.comment)
+
+    def _copy_dimensions(self):
+        for attr in ('row_dimensions', 'column_dimensions'):
+            src = getattr(self.source, attr)
+            target = getattr(self.target, attr)
+            for key, dim in src.items():
+                # TODO COPY only if the dimension is correct
+                if attr == 'column_dimensions' and dim.min != 1021:
+                    target[key] = copy(dim)
+                    target[key].worksheet = self.target
+
+
 def rewrite_xlsx_file(xl):
     """
     Regenerates the worksheets of the input file. The aim is to calculate correctly the "dimension@ref" attribute of
     each of the Worksheets, in order to have it correctly processed by the Kendo UI Spreadsheet
 
     :param xl: A Workbook object, constructed with OpenPyXL
-    :return: Nothing, the "xl" object is modified inplace
+    :return: Nothing, the "xl" object is modified *inplace*
     """
+    def copy_worksheet(xl, xf):
+        new_title = u"{0} Copy".format(xf.title)
+        to_worksheet = xl.create_sheet(title=new_title)
+        cp = WorksheetCopy2(source_worksheet=xf, target_worksheet=to_worksheet)
+        cp.copy_worksheet()
+        return to_worksheet
+
     sn = xl.sheetnames
     for c, sh_name in enumerate(sn):
         source = xl.get_sheet_by_name(sh_name)
-        tmp = xl.copy_worksheet(source)
+        tmp = copy_worksheet(xl, source)
+        #tmp = xl.copy_worksheet(source)
         xl.remove_sheet(source)
         tmp.title = sh_name

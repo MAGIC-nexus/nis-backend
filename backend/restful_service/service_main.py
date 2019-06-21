@@ -28,6 +28,7 @@ import json
 # >>>>>>>>>> IMPORTANT <<<<<<<<<
 from backend.command_definitions import commands
 from backend.command_field_definitions import command_fields
+from backend.command_field_descriptions import cf_descriptions
 from backend.command_generators import Issue, IType
 from backend.command_generators.parser_field_examples import generic_field_examples, generic_field_syntax
 from backend.command_generators.parser_field_parsers import string_to_ast
@@ -3396,10 +3397,6 @@ def command_fields_help():
     :return: A dictionary with the same fields passed in the input dictionary, whose values are the help divided in
         sections: explanation, allowed_values, formal syntax and examples
     """
-    # Recover InteractiveSession
-    isess = deserialize_isession_and_prepare_db_session()
-    if isess and isinstance(isess, Response):
-        return isess
 
     # Read request
     command_content_to_validate = request.get_json()
@@ -3450,10 +3447,14 @@ def command_fields_help():
             else:
                 fld = None
             if fld:  # If found, can elaborate help
-                description = f"Text for field {f} in command {match[0]}"
-                examples = "\n  ".join(generic_field_examples.get(fld.parser, "<>"))
+                mandatoriness = "Mandatory" if fld.mandatory else "Optional"
+                description = cf_descriptions.get((match[0], fld.name), f"Text for field {f} in command {match[0]}")
+                examples = ("<br><b>Examples:</b><br>&nbsp;&nbsp;"+"<br>&nbsp;&nbsp;".join(generic_field_examples[fld.parser])) if generic_field_examples.get(fld.parser) else ""
                 syntax = ", ".join(fld.allowed_values) if fld.allowed_values else generic_field_syntax.get(fld.parser, "<>")
-                result[f] = f"{description}\nSyntax: {syntax}\nExamples:\n  {examples}"
+                if fld.allowed_values:
+                    result[f] = f"<small><b>({mandatoriness})</b></small><br>{description}<br><b>Syntax. One of:</b> {syntax}"
+                else:
+                    result[f] = f"<small><b>({mandatoriness})</b></small><br>{description}<br><b>Syntax:</b> {syntax}{examples}"
             else:
                 result[f] = "Field '"+f+"' not found in command '"+command+"'. Possible field names: "+", ".join([item for f2 in command_fields[command] for item in f2.allowed_names])
                 status = 400
@@ -3516,6 +3517,11 @@ def hello():
 
 
 if __name__ == '__main__':
+    # xl = openpyxl.load_workbook("/home/rnebot/Dropbox/nis-internal-tests/issue_report.xlsx", data_only=True)
+    # rewrite_xlsx_file(xl)
+    # xl.save("/home/rnebot/Downloads/borrame.xlsx")
+    # sys.exit(0)
+
     # from tasks import add
     # from celery.task.control import inspect
     # import time

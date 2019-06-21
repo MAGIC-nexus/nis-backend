@@ -212,9 +212,21 @@ command_fields: Dict[str, List[CommandField]] = {
         CommandField(allowed_names=["ScalingType"], name="scaling_type", mandatory=True, allowed_values=processor_scaling_types, parser=simple_ident),
         CommandField(allowed_names=["InvokingInterface"], name="invoking_interface", mandatory=True, parser=simple_ident),
         CommandField(allowed_names=["RequestedInterface"], name="requested_interface", mandatory=True, parser=simple_ident),
+        CommandField(allowed_names=["Scale"], name="scale", mandatory=True, parser=expression_with_parameters),
+        # BareProcessor fields
         CommandField(allowed_names=["NewProcessorName"], name="new_processor_name", allowed_values=None, parser=processor_name),
-        CommandField(allowed_names=["Scale"], name="scale", mandatory=True, parser=expression_with_parameters)
-        # TODO Add other BareProcessor fields
+        CommandField(allowed_names=["NewProcessorGroup"], name="processor_group", parser=simple_ident),
+        CommandField(allowed_names=["NewParentProcessor"], name="parent_processor", parser=processor_name),
+        CommandField(allowed_names=["NewSubsystemType"], name="subsystem_type",
+                     default_value=processor_types[0], allowed_values=processor_types, parser=simple_ident,
+                     attribute_of=Processor),
+        CommandField(allowed_names=["NewSystem"], name="processor_system", default_value="_default_system",
+                     parser=simple_ident, attribute_of=Processor),
+        CommandField(allowed_names=["NewDescription"], name="description", parser=unquoted_string),
+        CommandField(allowed_names=["NewGeolocationRef"], name="geolocation_ref", parser=reference),
+        CommandField(allowed_names=["NewGeolocationCode"], name="geolocation_code", parser=code_string),
+        CommandField(allowed_names=[attributeRegex], name="attributes", many_appearances=True, parser=value),
+        CommandField(allowed_names=["NewAttributes"], name="attributes", parser=key_value_list)
         #CommandField(allowed_names=["UpscaleParentContext"], name="upscale_parent_context", parser=upscale_context),
         #CommandField(allowed_names=["UpscaleChildContext"], name="upscale_child_context", parser=upscale_context)
     ],

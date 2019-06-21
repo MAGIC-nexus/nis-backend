@@ -30,6 +30,7 @@ ureg = pint.UnitRegistry()
 ureg.define("cubic_meter = m^3 = m3")
 ureg.define("euro = [] = EUR = Eur = eur = Euro = Euros = €")
 ureg.define("dollar = [] = USD = Usd = usd = Dollar = Dollars = $")
+ureg.define("capita = []")
 
 # Named tuples
 Issue = namedtuple("Issue",
@@ -204,6 +205,8 @@ class CommandField:
     many_appearances = attrib(default=False)
     # Examples
     examples = attrib(default=None)  # type: List[str]
+    # Description text
+    description = attrib(default=None)  # type: str
     # Compiled regex
     # regex_allowed_names = attrib(default=None)
     # Is it directly an attribute of a Musiasem type? Which one?

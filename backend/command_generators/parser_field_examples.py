@@ -1,14 +1,14 @@
 from backend.command_generators.parser_field_parsers import simple_h_name, simple_ident, alphanums_string, code_string, \
     unquoted_string, time_expression, reference, key_value_list, arith_boolean_expression, \
     value, expression_with_parameters, list_simple_ident, domain_definition, unit_name, key_value, processor_names, \
-    url_parser
+    url_parser, processor_name, number_interval
 
 generic_field_examples = {
     simple_ident: ["p1", "wind_farm", "WF1"],
     simple_h_name: ["p1", "p1.p2", "wind_farm", "WF1.WindTurbine"],
+    processor_name: ["p1", "p1.p2", "wind_farm", "WF1.WindTurbine"],
     alphanums_string: ["abc", "123", "abc123", "123abc"],
     code_string: ["a1", "a-1", "10-011", "a_23"],
-    unquoted_string: ["<any string>"],
     # hierarchy_expression_v2: ["3*(5-2)", ],
     time_expression: ["Year", "2017", "Month", "2017-05 - 2018-01", "5-2017", "5-2017 - 2018-1", "2017-2018"],
     reference: ["[Auth2017]", "Auth2017", "Roeg1971"],
@@ -20,13 +20,16 @@ generic_field_examples = {
     domain_definition: ["p1", "wind_farm", "[-3.2, 4)", "(1, 2.3]"],
     unit_name: ["kg", "m^2", "ha", "hours", "km^2"],
     processor_names: ["{a}b", "{a}b{c}", "aa{b}aa", "{a}", "..", "..Crop", "Farm..Crop", "Farm..", "..Farm.."],
-    url_parser: ["https://www.magic-nexus.eu", "https://nextcloud.data.magic-nexus.eu/", "https://jupyter.data.magic-nexus.eu"]
+    url_parser: ["https://www.magic-nexus.eu", "https://nextcloud.data.magic-nexus.eu/", "https://jupyter.data.magic-nexus.eu"],
+    number_interval: ["[-3.2, 4)", "(1, 2.3]"]
 }
 
 generic_field_syntax = {
     simple_ident: "Simple name. A sequence of letters, numbers and/or '_', starting with a letter",
     simple_h_name: "Hierarchical name. One or more 'simple names' (sequence of letters, numbers and/or '_' starting "
                    "with a letter), separated by '.'",
+    processor_name: "Hierarchical name. One or more 'simple names' (sequence of letters, numbers and/or '_' starting "
+                    "with a letter), separated by '.'",
     alphanums_string: "Alphanumeric string. A sequence of letters and/or numbers",
     code_string: "Code string. A sequence of letters, numbers and/or '_' '-', starting with a letter",
     unquoted_string: "Unquoted string. Any string",
@@ -50,5 +53,6 @@ generic_field_syntax = {
                        "closed and () for open",
     unit_name: "Unit name. The abbreviation of a valid unit name.",
     processor_names: "Processors. An expression allowing the specification of several processors in a row. ",
-    url_parser: "URL. A valid URL (search for URL syntax elsewhere)"
+    url_parser: "URL. A valid URL (search for URL syntax elsewhere)",
+    number_interval: "A numeric range, with left and right limit, using [] for closed and () for open."
 }

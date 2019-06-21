@@ -228,7 +228,7 @@ class ProcessorsCommand(BasicCommand):
         # TODO Improve allowing hierarchical names, and hierarchical names with wildcards
         # TODO Improve allowing CLONE(<processor name>)
         # TODO Pass the attributes:
-        # TODO p_type, p_f_or_s, p_i_or_a, p_alias, p_description, p_copy_interfaces
+        #  p_type, p_f_or_s, p_i_or_a, p_alias, p_description, p_copy_interfaces
         if field_values.get("clone_processor"):
             # TODO Find origin processor
             # TODO Clone it

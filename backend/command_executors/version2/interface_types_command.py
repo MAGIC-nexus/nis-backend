@@ -25,16 +25,17 @@ class InterfaceTypesCommand(IExecutableCommand):
             ft_unit = item.get("unit")
             ft_opposite_processor_type = item.get("opposite_processor_type")
             ft_attributes = item.get("attributes", {})
+            print(str(type(ft_attributes)))
             if ft_attributes:
                 try:
-                    attributes = dictionary_from_key_value_list(ft_attributes, glb_idx)
+                    ft_attributes = dictionary_from_key_value_list(ft_attributes, glb_idx)
                 except Exception as e:
                     issues.append(Issue(itype=IType.ERROR,
                                         description=str(e),
                                         location=IssueLocation(sheet_name=name, row=r, column=None)))
                     return
             else:
-                attributes = {}
+                ft_attributes = {}
 
             # Process
             # Mandatory fields
