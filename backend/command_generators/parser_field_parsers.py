@@ -21,6 +21,7 @@ from backend import ureg
 from backend.common.helper import create_dictionary, PartialRetrievalDictionary
 
 # Enable memoizing
+# See: https://stackoverflow.com/questions/21370697/pyparsing-performance-and-memory-usage/21371472#21371472
 ParserElement.enablePackrat()
 
 # Number

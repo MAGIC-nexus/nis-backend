@@ -1,4 +1,4 @@
-from typing import Dict, Any, NoReturn
+from typing import Dict, Any
 
 from backend.command_executors import BasicCommand
 from backend.command_field_definitions import get_command_fields_from_class
@@ -9,7 +9,7 @@ class MatrixIndicatorsCommand(BasicCommand):
     def __init__(self, name: str):
         BasicCommand.__init__(self, name, get_command_fields_from_class(self.__class__))
 
-    def _process_row(self, fields: Dict[str, Any]) -> NoReturn:
+    def _process_row(self, fields: Dict[str, Any]) -> None:
         """
         Create and register MatrixIndicator object
 

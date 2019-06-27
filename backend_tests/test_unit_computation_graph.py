@@ -1,5 +1,5 @@
 import unittest
-from typing import List, Set, Dict, Tuple, Optional, NoReturn, Callable
+from typing import List, Set, Dict, Tuple, Optional, Callable
 
 from backend.solving.graph.computation_graph import ComputationGraph
 from backend.solving.graph.flow_graph import FlowGraph
@@ -314,7 +314,7 @@ class TestComputationGraph(unittest.TestCase):
         """ Executed BEFORE test methods of the class """
 
         def add_test_case(
-                create_test_data: Callable[[], Tuple[FlowGraph, ComputationGraph, List[SubTestCase]]]) -> NoReturn:
+                create_test_data: Callable[[], Tuple[FlowGraph, ComputationGraph, List[SubTestCase]]]) -> None:
             flow_graph, comp_graph, subtest_cases = create_test_data()
             cls.computation_graphs[flow_graph] = comp_graph
             cls.subtest_cases[comp_graph] = subtest_cases

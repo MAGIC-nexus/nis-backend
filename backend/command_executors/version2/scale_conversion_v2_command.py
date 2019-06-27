@@ -1,5 +1,5 @@
 import json
-from typing import NoReturn, Optional, Dict, Any
+from typing import Optional, Dict, Any
 
 from backend.command_generators import Issue, IssueLocation, IType
 from backend.common.helper import strcmp, first
@@ -15,7 +15,7 @@ class ScaleConversionV2Command(BasicCommand):
     def __init__(self, name: str):
         BasicCommand.__init__(self, name, get_command_fields_from_class(self.__class__))
 
-    def _process_row(self, fields: Dict[str, Any]) -> NoReturn:
+    def _process_row(self, fields: Dict[str, Any]) -> None:
         origin_interface_type = self._get_factor_type_from_field("source_hierarchy", "source_interface_type")
         destination_interface_type = self._get_factor_type_from_field("target_hierarchy", "target_interface_type")
 

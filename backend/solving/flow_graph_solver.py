@@ -35,7 +35,7 @@ import pandas as pd
 import numpy as np
 import networkx as nx
 import matplotlib.pyplot as plt
-from typing import Dict, List, Set, Any, Tuple, Union, Optional, NamedTuple, NoReturn, Generator, Type
+from typing import Dict, List, Set, Any, Tuple, Union, Optional, NamedTuple, Generator, Type
 
 from backend import case_sensitive
 from backend.command_generators.parser_ast_evaluators import ast_evaluator
@@ -430,7 +430,7 @@ def create_interface_edges(edges: List[Tuple[Factor, Factor, Optional[str]]]) \
             yield src_node, dst_node, dict(weight=weight)
 
 
-def resolve_weight_expressions(graph_list: List[nx.DiGraph], state: State, raise_error=False) -> NoReturn:
+def resolve_weight_expressions(graph_list: List[nx.DiGraph], state: State, raise_error=False) -> None:
     for graph in graph_list:
         for u, v, data in graph.edges(data=True):
             expression = data["weight"]

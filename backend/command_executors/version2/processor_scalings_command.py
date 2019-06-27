@@ -1,4 +1,4 @@
-from typing import List, Dict, Union, Any, Tuple, NoReturn
+from typing import List, Dict, Union, Any, Tuple
 
 from backend.command_field_definitions import get_command_fields_from_class
 from backend.command_generators import IType
@@ -14,7 +14,7 @@ class ProcessorScalingsCommand(BasicCommand):
     def __init__(self, name: str):
         BasicCommand.__init__(self, name, get_command_fields_from_class(self.__class__))
 
-    def _process_row(self, fields: Dict[str, Any]) -> NoReturn:
+    def _process_row(self, fields: Dict[str, Any]) -> None:
         scaling_type = fields["scaling_type"]
         scale: str = fields["scale"]
 

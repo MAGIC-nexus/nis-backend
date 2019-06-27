@@ -1,6 +1,6 @@
 import json
 import re
-from typing import Optional, List, Dict, Any, Union, NoReturn, Tuple, Set
+from typing import Optional, List, Dict, Any, Union, Tuple, Set
 
 from backend import ExecutableCommandIssuesPairType, Command, CommandField, IssuesOutputPairType, case_sensitive
 from backend.command_definitions import commands
@@ -36,7 +36,7 @@ class BasicCommand(IExecutableCommand):
         self._current_row_number: Optional[int] = None
         self._fields: Dict[str, Any] = {}
 
-    def _init_execution_state(self, state: Optional["State"] = None) -> NoReturn:
+    def _init_execution_state(self, state: Optional["State"] = None) -> None:
         self._issues = []
         self._current_row_number = None
         self._glb_idx = None
@@ -51,14 +51,14 @@ class BasicCommand(IExecutableCommand):
             self._glb_idx, self._p_sets, self._hierarchies, self._datasets, self._mappings = get_case_study_registry_objects(state)
             self._parameters = [p.name for p in self._glb_idx.get(Parameter.partial_key())]
 
-    def _process_row(self, fields: Dict[str, Any]) -> NoReturn:
+    def _process_row(self, fields: Dict[str, Any]) -> None:
         """This is the only method subclasses need to define. See current subclasses as examples"""
         pass
 
     def _get_command_fields_values(self, row: Dict[str, Any]) -> Dict[str, Any]:
         return {f.name: row.get(f.name, head(f.allowed_values)) for f in self._command_fields}
 
-    def _check_all_mandatory_fields_have_values(self) -> NoReturn:
+    def _check_all_mandatory_fields_have_values(self) -> None:
         empty_fields: List[str] = [f.name
                                    for f in self._command_fields
                                    if f.mandatory and self._fields[f.name] is None]
@@ -66,7 +66,7 @@ class BasicCommand(IExecutableCommand):
         if len(empty_fields) > 0:
             raise CommandExecutionError(f"Mandatory field/s '{', '.join(empty_fields)}' is/are empty.")
 
-    def _add_issue(self, itype: IType, description: str) -> NoReturn:
+    def _add_issue(self, itype: IType, description: str) -> None:
         self._issues.append(
             Issue(itype=itype,
                   description=description,
@@ -75,7 +75,7 @@ class BasicCommand(IExecutableCommand):
         )
         return
 
-    def _init_and_process_row(self, row: Dict[str, Any]) -> NoReturn:
+    def _init_and_process_row(self, row: Dict[str, Any]) -> None:
         def obtain_dictionary_with_not_expandable_fields(d):
             output = {}
             for k, v in d.items():

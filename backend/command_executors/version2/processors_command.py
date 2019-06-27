@@ -1,6 +1,6 @@
 import json
 import re
-from typing import Dict, Any, NoReturn
+from typing import Dict, Any
 
 from backend import CommandField
 from backend.command_executors import BasicCommand, CommandExecutionError
@@ -199,7 +199,7 @@ class ProcessorsCommand(BasicCommand):
     #
     #     return issues, None  # Issues, Output
 
-    def _process_row(self, field_values: Dict[str, Any]) -> NoReturn:
+    def _process_row(self, field_values: Dict[str, Any]) -> None:
 
         # Transform text of "attributes" into a dictionary
         if field_values.get("attributes"):

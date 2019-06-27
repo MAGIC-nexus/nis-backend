@@ -1,7 +1,7 @@
 import math
 from functools import reduce
 from operator import add
-from typing import Dict, List, Tuple, Optional, NoReturn, Generator
+from typing import Dict, List, Tuple, Optional, Generator
 import networkx as nx
 
 from backend.solving.graph import Node, Weight, EdgeType
@@ -26,7 +26,7 @@ class FlowGraph:
             for u, v, data in graph.edges(data=True):
                 self.add_edge(u, v, data["weight"], None)
 
-    def add_edge(self, u: Node, v: Node, weight: Optional[Weight], reverse_weight: Optional[Weight]) -> NoReturn:
+    def add_edge(self, u: Node, v: Node, weight: Optional[Weight], reverse_weight: Optional[Weight]) -> None:
         """ Add an edge with weight attributes to the flow graph """
         self._direct_graph.add_edge(u, v, weight=weight)
         self._reverse_graph.add_edge(v, u, weight=reverse_weight)

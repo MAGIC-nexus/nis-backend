@@ -1,4 +1,4 @@
-from typing import Dict, List, Tuple, Set, Optional, NoReturn
+from typing import Dict, List, Tuple, Set, Optional
 
 import networkx as nx
 
@@ -62,12 +62,12 @@ class ComputationGraph:
         self.init_node_split(u)
         self.init_node_split(v)
 
-    def init_node_split(self, n: Node) -> NoReturn:
+    def init_node_split(self, n: Node) -> None:
         """ Set the default value for attribute 'split' to a node """
         if not self.graph.nodes[n].get("split"):
             self.graph.nodes[n]["split"] = [False, False]
 
-    def mark_node_split(self, n: Node, graph_type: EdgeType, split: bool = True) -> NoReturn:
+    def mark_node_split(self, n: Node, graph_type: EdgeType, split: bool = True) -> None:
         """ Set the attribute 'split' to a node """
         self.graph.nodes[n]["split"][graph_type.value] = split
 

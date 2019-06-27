@@ -2,7 +2,7 @@ import json
 import re
 
 from pint import UndefinedUnitError
-from typing import Dict, Any, NoReturn
+from typing import Dict, Any
 
 from backend import ureg, CommandField
 from backend.command_executors import BasicCommand
@@ -24,7 +24,7 @@ class InterfacesAndQualifiedQuantitiesCommand(BasicCommand):
     def __init__(self, name: str):
         BasicCommand.__init__(self, name, get_command_fields_from_class(self.__class__))
 
-    def _process_row(self, field_values: Dict[str, Any]) -> NoReturn:
+    def _process_row(self, field_values: Dict[str, Any]) -> None:
         """
         Process a dictionary representing a row of the Interfaces command. The dictionary can come directly from
         the worksheet or from a dataset.

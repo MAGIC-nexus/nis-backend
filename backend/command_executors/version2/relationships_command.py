@@ -1,5 +1,5 @@
 import re
-from typing import NoReturn, Dict, Any
+from typing import Dict, Any
 
 from backend import IssuesOutputPairType
 from backend.command_executors import CommandExecutionError, BasicCommand
@@ -39,7 +39,7 @@ class RelationshipsCommand(BasicCommand):
 
         return self._issues, None
 
-    def _process_row(self, fields: Dict[str, Any]) -> NoReturn:
+    def _process_row(self, fields: Dict[str, Any]) -> None:
         # source_cardinality = fields["source_cardinality"]
         # target_cardinality = fields["target_cardinality"]
 
