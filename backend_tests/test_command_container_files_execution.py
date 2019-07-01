@@ -541,7 +541,7 @@ class TestCommandFiles(unittest.TestCase):
         issues2 = prepare_and_solve_model(isess.state)
         serialize_state(isess.state)
         # Check State of things
-        self.assertEqual(len(issues), 8)  # One issue
+        self.assertEqual(len(issues), 6)  # One issue
         glb_idx, p_sets, hh, datasets, mappings = get_case_study_registry_objects(isess.state)
         p = glb_idx.get(Processor.partial_key("Society"))
         self.assertEqual(len(p), 1)

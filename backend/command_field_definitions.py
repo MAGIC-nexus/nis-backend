@@ -220,8 +220,10 @@ command_fields: Dict[str, List[CommandField]] = {
         CommandField(allowed_names=["NewSubsystemType"], name="subsystem_type",
                      default_value=processor_types[0], allowed_values=processor_types, parser=simple_ident,
                      attribute_of=Processor),
-        CommandField(allowed_names=["NewSystem"], name="processor_system", default_value="_default_system",
-                     parser=simple_ident, attribute_of=Processor),
+        # DISABLED because this fields apply to processors Cloned and Scaled, so they will always have a parent,
+        #          and children inherit the system of the parent.
+        # CommandField(allowed_names=["NewSystem"], name="processor_system", default_value="_default_system",
+        #              parser=simple_ident, attribute_of=Processor),
         CommandField(allowed_names=["NewDescription"], name="description", parser=unquoted_string),
         CommandField(allowed_names=["NewGeolocationRef"], name="geolocation_ref", parser=reference),
         CommandField(allowed_names=["NewGeolocationCode"], name="geolocation_code", parser=code_string),
