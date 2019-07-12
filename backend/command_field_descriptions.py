@@ -173,7 +173,7 @@ cf_descriptions = {
     ("relationships", "target_processor"): "An expression resolving to a set of processors that will be in the destination part of the relations (one or more) to be specified. If “Destination” field is not specified, this field is mandatory.",
     ("relationships", "target_interface"): "The name of an Interface present in all the Processors in the set of destination Processors. When connecting Processors it can be empty. Also, when connecting Interfaces, if the origin Interface is specified, an equally named Interface is assumed in the destination Processor.",
     ("relationships", "back_interface"): "The name of an Interface in the origin processor, used if a change of scale is requested, allowing to account back to the origin processor the amount. It is intended for expressing the accounting of money obtained in exchange for some good.",
-    ("relationships", "relation_type"): "Please, refer to MAGIC - ""DMP Annex 3"" (text too long to show here)",
+    ("relationships", "relation_type"): "Please, refer to MAGIC - ""<a href=""https://docs.google.com/document/d/1kGJI7m9fL9eRHEG4CICzOCQM5qOBdFZ3eDR43d1dME8/edit#heading=h.vqpx27xubbp8"" target=""_blank"">DMP Annex 3</a>"" (text too long to show here)",
     ("relationships", "flow_weight"): "Proportion of the magnitude of the Origin Interface that goes into the Destination Interface.",
     ("relationships", "source_cardinality"): "Only for “Associate” relations",
     ("relationships", "target_cardinality"): "Only for “Associate” relations",
@@ -181,7 +181,7 @@ cf_descriptions = {
     # ProcessorScalings
     ("processor_scalings", "invoking_processor"): "Parent processor for hierarchical scales, origin sibling processor for sequential scales.",
     ("processor_scalings", "requested_processor"): "Child processor for hierarchical scales, destination processor for sequential scales. Depending on the ScalingType, this Processor will exist previously or it will be created from a template processor (unit -or intensive- processor).",
-    ("processor_scalings", "scaling_type"): "Please, refer to MAGIC - ""DMP Annex 3"" (text too long to show here)",
+    ("processor_scalings", "scaling_type"): "Please, refer to MAGIC - ""<a href=""https://docs.google.com/document/d/1kGJI7m9fL9eRHEG4CICzOCQM5qOBdFZ3eDR43d1dME8/edit#heading=h.l6gqwwmmahkc"" target=""_blank"">DMP Annex 3</a>"" (text too long to show here)",
     ("processor_scalings", "invoking_interface"): "Interface to be used for the invoking processor.",
     ("processor_scalings", "requested_interface"): "Interface to be used for the requested processor.",
     ("processor_scalings", "scale"): "Factor by which invoking interface is multiplied to define the requested interface.",

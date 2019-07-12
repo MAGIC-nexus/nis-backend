@@ -1097,6 +1097,9 @@ def set_parameters_and_solve():
 
     parameters = request.get_json()
     issues2 = prepare_and_solve_model(isess.state, parameters)
+
+    # TODO Serialize??
+
     # TODO Return "issues2", issues found during the solving
     return Response("", mimetype="text/json", status=200)
 
