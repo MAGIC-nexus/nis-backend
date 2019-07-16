@@ -1,87 +1,5 @@
-
-"""
-    "scale_conversion_v2": [
-        CommandField(allowed_names=["OriginHierarchy"], name="source_hierarchy", parser=simple_ident),
-        CommandField(allowed_names=["OriginInterfaceType"], name="source_interface_type", mandatory=True, parser=simple_ident),
-        CommandField(allowed_names=["DestinationHierarchy"], name="target_hierarchy", parser=simple_ident),
-        CommandField(allowed_names=["DestinationInterfaceType"], name="target_interface_type", mandatory=True, parser=simple_ident),
-        CommandField(allowed_names=["OriginContext"], name="source_context", parser=processor_names),
-        CommandField(allowed_names=["DestinationContext"], name="target_context", parser=processor_names),
-        CommandField(allowed_names=["Scale"], name="scale", mandatory=True, parser=expression_with_parameters),
-        CommandField(allowed_names=["OriginUnit"], name="source_unit", parser=unit_name),
-        CommandField(allowed_names=["DestinationUnit"], name="target_unit", parser=unit_name)
-    ],
-
-    "import_commands": [
-        CommandField(allowed_names=["Workbook", "WorkbookLocation"], name="workbook_name", parser=url_parser),
-        CommandField(allowed_names=["Worksheets"], name="worksheets", parser=unquoted_string)
-    ],
-
-    "list_of_commands": [
-        CommandField(allowed_names=["Worksheet", "WorksheetName"], name="worksheet", mandatory=True, parser=unquoted_string),
-        CommandField(allowed_names=["Command"], name="command", mandatory=True, allowed_values=valid_v2_command_names, parser=simple_ident),
-        CommandField(allowed_names=["Comment", "Description"], name="comment", parser=unquoted_string)
-    ],
-
-    "ref_provenance": [
-        # Reduced, from W3C Provenance Recommendation (https://www.w3.org/TR/prov-overview/)
-        CommandField(allowed_names=["RefID", "Reference"], name="ref_id", mandatory=True, parser=simple_ident),
-        # The reference "RefID" should be mentioned
-        CommandField(allowed_names=["ProvenanceFileURL"], name="provenance_file_url", parser=url_parser),
-        CommandField(allowed_names=["AgentType"], name="agent_type", mandatory=True, allowed_values=agent_types, parser=simple_ident),
-        CommandField(allowed_names=["Agent"], name="agent", mandatory=True, parser=unquoted_string),
-        CommandField(allowed_names=["Activities"], name="activities", mandatory=True, parser=unquoted_string),
-        CommandField(allowed_names=["Entities"], name="entities", parser=unquoted_string)
-    ],
-
-    "ref_geographical": [
-        # A subset of fields from INSPIRE regulation for metadata: https://eur-lex.europa.eu/legal-content/EN/TXT/PDF/?uri=CELEX:32008R1205&from=EN
-        # Fields useful to elaborate graphical displays. Augment in the future as demanded
-        CommandField(allowed_names=["RefID", "Reference"], name="ref_id", mandatory=True, parser=simple_ident),
-        CommandField(allowed_names=["GeoLayerURL"], name="geo_layer_url", parser=url_parser),
-        CommandField(allowed_names=["Title"], name="title", mandatory=True, parser=unquoted_string),
-        CommandField(allowed_names=["Abstract"], name="abstract", parser=unquoted_string),  # Syntax??
-        CommandField(allowed_names=["Type"], name="type", allowed_values=geographic_resource_types, parser=unquoted_string),  # Part D.1. JUST "Dataset"
-        CommandField(allowed_names=["ResourceLocator", "DataLocation"], name="data_location", parser=url_parser),
-        CommandField(allowed_names=["TopicCategory"], name="topic_category", allowed_values=geographic_topic_categories, parser=unquoted_string),  # Part D.2
-        CommandField(allowed_names=["BoundingBox"], name="bounding_box", parser=unquoted_string),  # Syntax??
-        CommandField(allowed_names=["TemporalExtent", "Date"], name="temporal_extent", parser=unquoted_string),  # Syntax??
-        CommandField(allowed_names=["PointOfContact"], name="metadata_point_of_contact", parser=unquoted_string)
-    ],
-
-    "ref_bibliographic": [
-        # From BibTex. Mandatory fields depending on EntryType, at "https://en.wikipedia.org/wiki/BibTeX" (or search: "Bibtex entry field types")
-        CommandField(allowed_names=["RefID", "Reference"], name="ref_id", mandatory=True, parser=simple_ident),
-        CommandField(allowed_names=["BibFileURL"], name="bib_file_url", parser=url_parser),
-        CommandField(allowed_names=["EntryType"], name="entry_type", mandatory=True, allowed_values=bib_entry_types, parser=unquoted_string),
-        CommandField(allowed_names=["Address"], name="address", parser=unquoted_string),
-        CommandField(allowed_names=["Annote"], name="annote", parser=unquoted_string),
-        CommandField(allowed_names=["Author"], name="author", mandatory="entry_type not in ('booklet', 'manual', 'misc', 'proceedings')", parser=unquoted_string),
-        CommandField(allowed_names=["BookTitle"], name="booktitle", mandatory="entry_type in ('incollection', 'inproceedings')", parser=unquoted_string),
-        CommandField(allowed_names=["Chapter"], name="chapter", mandatory="entry_type in ('inbook')", parser=unquoted_string),
-        CommandField(allowed_names=["CrossRef"], name="crossref", parser=unquoted_string),
-        CommandField(allowed_names=["Edition"], name="edition", parser=unquoted_string),
-        CommandField(allowed_names=["Editor"], name="editor", mandatory="entry_type in ('book', 'inbook')", parser=unquoted_string),
-        CommandField(allowed_names=["HowPublished"], name="how_published", parser=unquoted_string),
-        CommandField(allowed_names=["Institution"], name="institution", mandatory="entry_type in ('techreport')", parser=unquoted_string),
-        CommandField(allowed_names=["Journal"], name="journal", mandatory="entry_type in ('article')", parser=unquoted_string),
-        CommandField(allowed_names=["Key"], name="key", parser=unquoted_string),
-        CommandField(allowed_names=["Month"], name="month", allowed_values=bib_months, parser=simple_ident),
-        CommandField(allowed_names=["Note"], name="note", parser=unquoted_string),
-        CommandField(allowed_names=["Number"], name="number", parser=unquoted_string),
-        CommandField(allowed_names=["Organization"], name="organization", parser=unquoted_string),
-        CommandField(allowed_names=["Pages"], name="pages", mandatory="entry_type in ('inbook')", parser=unquoted_string),
-        CommandField(allowed_names=["Publisher"], name="publisher", mandatory="entry_type in ('book', 'inbook', 'incollection')", parser=unquoted_string),
-        CommandField(allowed_names=["School"], name="school", mandatory="entry_type in ('mastersthesis', 'phdtesis')", parser=unquoted_string),
-        CommandField(allowed_names=["Series"], name="series", parser=unquoted_string),
-        CommandField(allowed_names=["Title"], name="title", mandatory="entry_type not in ('misc')", parser=unquoted_string),
-        CommandField(allowed_names=["Type"], name="type", parser=unquoted_string),
-        CommandField(allowed_names=["URL"], name="url", parser=url_parser),
-        CommandField(allowed_names=["Volume"], name="volume", mandatory="entry_type in ('article')", parser=unquoted_string),
-        CommandField(allowed_names=["Year"], name="year", mandatory="entry_type in ('article', 'book', 'inbook', 'incollection', 'inproceedings', 'mastersthesis', 'phdthesis', 'proceedings', 'techreport')", parser=unquoted_string)
-    ],
-
-"""
+# Help strings for fields
+wpd = "<a href=""https://en.wikipedia.org/wiki/BibTeX#Field_types"" target=""_blank"">(Wikipedia)</a>"
 cf_descriptions = {
     # CodeHierarchies
     ("cat_hierarchies", "source"): "Data producing source defining the hierarchy. For instance “Eurostat” or “FAO”.",
@@ -239,4 +157,77 @@ cf_descriptions = {
     ("problem_statement", "parameter"): "Name of the parameter that is being modified.",
     ("problem_statement", "parameter_value"): "",
     ("problem_statement", "description"): "Explanation of the value or the intent of the scenario.",
+    # ScaleChangeMap
+    ("scale_conversion_v2", "source_hierarchy"): "Name of the origin InterfaceTypes Hierarchy. It is optional if the origin InterfaceType name is unique among InterfaceTypes. Otherwise, it must be specified.",
+    ("scale_conversion_v2", "source_interface_type"): "Name of the InterfaceType in the origin InterfaceTypes Hierarchy.",
+    ("scale_conversion_v2", "target_hierarchy"): "Name of the destination InterfaceTypes Hierarchy. It is optional if the destination InterfaceType name is unique among InterfaceTypes. Otherwise, it must be specified.",
+    ("scale_conversion_v2", "target_interface_type"): "Name of a code in the destination InterfaceTypes Hierarchy.",
+    ("scale_conversion_v2", "source_context"): "Specification of which Processors are to be used to match the Origin part of the context.",
+    ("scale_conversion_v2", "target_context"): "Specification of which Processors are to be used to match the Destination part of the context.",
+    ("scale_conversion_v2", "scale"): "Linear scale transform from origin to destination. Both origin and destination can appear multiple times, so the multiplicity potentially can be many to many.",
+    ("scale_conversion_v2", "source_unit"): "Specification of unit for which the scale factor is valid. If quantities for Interfaces are expressed in other physically equivalent unit, automatic unit conversion will be performed before the scaling.",
+    ("scale_conversion_v2", "target_unit"): "Specification of unit (destination) for which the scale factor is valid. If quantities for Interfaces are expressed in other physically equivalent unit, automatic unit conversion will be performed before the scaling.",
+    # ImportCommands
+    ("import_commands", "workbook_name"): "URL of the workbook containing the commands to be reused.",
+    ("import_commands", "worksheets"): "Comma separated list of worksheets in the workbook to import. If not specified, all commands from the specified Workbook will be imported.",
+    # ListOfCommands
+    ("list_of_commands", "worksheet"): "Name of the worksheet.",
+    ("list_of_commands", "command"): "Name of one of the supported commands.",
+    ("list_of_commands", "comment"): "Description of the content of the worksheet.",
+    # RefGeographic
+    ("ref_geographical", "ref_id"): "A unique reference name.",
+    ("ref_geographical", "data_location"): "Location of a vector layer in a supported format (GeoJSON currently).",
+    ("ref_geographical", "title"): "Title",
+    ("ref_geographical", "description"): "Description",
+    ("ref_geographical", "bounding_box"): "Extents of the dataset expressed in: west and east longitudes, south and north latitudes (WGS84), using decimal degrees with at least two decimals.",
+    ("ref_geographical", "topic_category"): 'It is a free string, although one or more of the following should be used: "Farming", "Biota", "Boundaries", "Climatology", "Meteorology", "Atmosphere", "Economy", "Elevation", "Environment", "GeoscientificInformation", "Health", "Imagery", "BaseMaps", "EarthCover", "Intelligence", "Military", "InlandWaters", "Location", "Oceans", "Planning", "Cadastre", "Society", "Structure", "Transportation", "Utilities", "Communication".',
+    ("ref_geographical", "temporal_extent"): "Temporal period covered by the layer.",
+    ("ref_geographical", "point_of_contact"): "Address of responsible organization/person",
+    ("ref_geographical", "type"): "Just 'dataset' allowed",
+    # RefBibliographic
+    ("ref_bibliographic", "ref_id"): "A unique name for the reference.",
+    ("ref_bibliographic", "bib_file_url"): "URL of a BibTeX file containing one or more bibliographic references. The RefID must match one of the references in this file",
+    ("ref_bibliographic", "entry_type"): f"The type of bibliographic reference {wpd}",
+    ("ref_bibliographic", "address"): f"Publisher's address (usually just the city, but can be the full address for lesser-known publishers) {wpd}",
+    ("ref_bibliographic", "annote"): f"An annotation for annotated bibliography styles (not typical) {wpd}",
+    ("ref_bibliographic", "author"): f"The name(s) of the author(s) (in the case of more than one author, separated by and) {wpd}",
+    ("ref_bibliographic", "booktitle"): f"The title of the book, if only part of it is being cited {wpd}",
+    ("ref_bibliographic", "chapter"): f"The chapter number {wpd}",
+    ("ref_bibliographic", "crossref"): f"The key of the cross-referenced entry {wpd}",
+    ("ref_bibliographic", "edition"): f'The edition of a book, long form (such as "First" or "Second") {wpd}',
+    ("ref_bibliographic", "editor"): f"The name(s) of the editor(s) {wpd}",
+    ("ref_bibliographic", "how_published"): f"How it was published, if the publishing method is nonstandard {wpd}",
+    ("ref_bibliographic", "institution"): f"The institution that was involved in the publishing, but not necessarily the publisher {wpd}",
+    ("ref_bibliographic", "journal"): f"The journal or magazine the work was published in {wpd}",
+    ("ref_bibliographic", "key"): f'A hidden field used for specifying or overriding the alphabetical order of entries (when the "author" and "editor" fields are missing). Note that this is very different from the key (mentioned just after this list) that is used to cite or cross-reference the entry. {wpd}',
+    ("ref_bibliographic", "month"): f"The month of publication (or, if unpublished, the month of creation) {wpd}",
+    ("ref_bibliographic", "note"): f"Miscellaneous extra information {wpd}",
+    ("ref_bibliographic", "number"): f'The "(issue) number" of a journal, magazine, or tech-report, if applicable. Note that this is not the "article number" assigned by some journals. {wpd}',
+    ("ref_bibliographic", "organization"): f"The conference sponsor {wpd}",
+    ("ref_bibliographic", "pages"): f"Page numbers, separated either by commas or double-hyphens. {wpd}",
+    ("ref_bibliographic", "publisher"): f"The publisher's name {wpd}",
+    ("ref_bibliographic", "school"): f"The school where the thesis was written {wpd}",
+    ("ref_bibliographic", "series"): f"The series of books the book was published in {wpd}",
+    ("ref_bibliographic", "title"): f"The title of the work {wpd}",
+    ("ref_bibliographic", "type"): f'The field overriding the default type of publication (e.g. "Research Note" for techreport, "{{PhD}} dissertation" for phdthesis, "Section" for inbook/incollection) {wpd}',
+    # ("ref_bibliographic", "url"): f"",
+    ("ref_bibliographic", "volume"): f"The volume of a journal or multi-volume book {wpd}",
+    ("ref_bibliographic", "year"): f"The year of publication (or, if unpublished, the year of creation) {wpd}",
+    # RefProvenance
+    ("ref_provenance", "ref_id"): "A unique name for the reference.",
+    ("ref_provenance", "provenance_file_url"): "URL of a file containing a PROV-XML full description of the provenance.",
+    # ("ref_provenance", "agent_type"): "",
+    ("ref_provenance", "agent"): "A description of which is the main agent (something able to perform activities).",
+    ("ref_provenance", "activities"): "A description of the activities (processes) carried out.",
+    ("ref_provenance", "entities"): "A description of the entities (information objects) used to elaborate the information.",
+    # DatasetQry
+    ("datasetqry", "inputdataset"): "Name of the dataset used as input (only one dataset can be specified, the first in the column, others are ignored).",
+    ("datasetqry", "availableatdatetime"): "Date and time of the version preceding the specified date. (Currently not considered)",
+    ("datasetqry", "starttime"): "Starting year",
+    ("datasetqry", "endtime"): "Ending year",
+    ("datasetqry", "resultdimensions"): "Below this column header, a series of dimension names can be enumerated, which will not appear in the resulting data cube grouping values using the aggregation function.",
+    ("datasetqry", "resultmeasures"): "A list of measures to include in the resulting data cube. Measure names can appear multiple times. If empty, ALL measures are included.",
+    ("datasetqry", "resultmeasuresaggregation"): 'The functions recognized are: "sum", "avg", "count", "sumna" (sum ignoring not available), "countav" (count only defined elements), "avgna", "pctna" (percentage of not available with regard to the total number of elements -available or not-). Measures and aggregation functions form pairs (measure- aggregation function).',
+    ("datasetqry", "resultmeasurename"): "For each measure, an alias with the name of the output column can be specified. If not, the output column is a composition of the measure name and the aggregation function.",
+    ("datasetqry", "outputdataset"): "Name of the dataset variable that will contain the result. This dataset will be available internally (<a href=""https://docs.google.com/document/d/1kGJI7m9fL9eRHEG4CICzOCQM5qOBdFZ3eDR43d1dME8/edit#heading=h.z8oasdu66rh"" target=""_blank"">dataset expansion</a>) and as output dataset (to download it)",
 }

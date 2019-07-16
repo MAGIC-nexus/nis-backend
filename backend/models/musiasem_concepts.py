@@ -926,7 +926,7 @@ class Observer(Identifiable, Nameable, Encodable):
         d.update({
             "description": self._description,
             "observation_process_description": self._observation_process_description,
-            "observables": [{"name": obs.name, "id": obs.uuid} for obs in self.observables]
+            "observables": [{"name": obs.name, "id": obs.uuid} for obs in self.observables if obs]
         })
 
         return d

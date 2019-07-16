@@ -27,6 +27,7 @@ import json
 # For debugging in local mode, prepare an environment variable "MAGIC_NIS_SERVICE_CONFIG_FILE", with value "./nis_local.conf"
 # >>>>>>>>>> IMPORTANT <<<<<<<<<
 from backend.command_definitions import commands
+from backend.command_descriptions import c_descriptions
 from backend.command_field_definitions import command_fields
 from backend.command_field_descriptions import cf_descriptions
 from backend.command_generators import Issue, IType
@@ -3108,7 +3109,7 @@ Language\tEnglish\n\
 Restriction level\tPublic\n\
 Version\tV0.1"]}
     elif cmd_name == "pedigree_matrix":
-        return {"type": "Metadata", "name": "NUSAP.PM", "template":
+        return {"type": "Metadata", "name": "Pedigree", "template":
 "Code\t<Phase name #1>\t<Phase name #2>\t<Phase name #3>\t...",
          "examples": [
 "Code\tTheoreticalStructures\tDataInput\tPeerAcceptance\tColleagueConsensus\n\
@@ -3323,7 +3324,7 @@ Vegetables\tAll kinds of vegetables\n\
 \t\tMoringa"
          ]
          },
-        {"type": "Specification", "name": "NUSAP.PM", "template":
+        {"type": "Specification", "name": "Pedigree", "template":
 "Code\t<Phase name #1>\t<Phase name #2>\t<Phase name #3>\t...",
          "examples": [
 "Code\tTheoreticalStructures\tDataInput\tPeerAcceptance\tColleagueConsensus\n\
@@ -3385,6 +3386,69 @@ Society\tEncompassess the human realm\n\
          }
     ]
 """
+
+
+@app.route(nis_api_base + "/command_reference.json", methods=["POST"])
+def command_help():
+    """
+    A function for on-line help for a command
+
+    The input comes in a JSON field "content":
+    {"command": "<command name"
+    }
+
+    :return: A dictionary with the same fields passed in the input dictionary, whose values are the help divided in
+        sections: explanation, allowed_values, formal syntax and examples
+    """
+
+    # Read request
+    command_content_to_validate = request.get_json()
+    if "command" in command_content_to_validate:
+        command = command_content_to_validate["command"]
+    else:
+        raise Exception("Must specify 'command'")
+
+    alternative_command_names = command_content_to_validate.get("alternative_command_names", {})
+
+    # Find command from the worksheet name ("command")
+    match = None
+    for cmd in commands:
+        for cmd_name in cmd.allowed_names:
+            if cmd_name.lower() in command.lower():
+                if match:
+                    if match[1] < len(cmd_name):
+                        match = (cmd.name, len(cmd_name))
+                else:
+                    match = (cmd.name, len(cmd_name))
+    if not match:
+        for k, v in alternative_command_names:
+            if k.lower() in command.lower():
+                for cmd in commands:
+                    for cmd_name in cmd.allowed_names:
+                        if cmd_name.lower() in v.lower():
+                            match = (cmd.name, 0)
+                            break
+                    if match:
+                        break
+                if match:
+                    break
+
+    # Fields in the command
+    status = 200
+    if match:
+        if (match[0], "title") in c_descriptions:
+            title = c_descriptions[(match[0], "title")]
+            description = c_descriptions[(match[0], "description")]
+            semantics = c_descriptions[(match[0], "semantics")]
+            examples = c_descriptions[(match[0], "examples")]
+            result = dict(title=title, description=description, semantics=semantics, examples=examples)
+        else:
+            result = dict(title=f"Title {command}", description=f"Description {command}", semantics=f"Semantics {command}")
+    else:
+        status = 400
+        result = dict()
+
+    return build_json_response(result, status)
 
 
 @app.route(nis_api_base + "/command_fields_reference.json", methods=["POST"])
@@ -3459,8 +3523,13 @@ def command_fields_help():
                 else:
                     result[f] = f"<small><b>({mandatoriness})</b></small><br>{description}<br><b>Syntax:</b> {syntax}{examples}"
             else:
-                result[f] = "Field '"+f+"' not found in command '"+command+"'. Possible field names: "+", ".join([item for f2 in command_fields[command] for item in f2.allowed_names])
-                status = 400
+                if match[0] == "datasetqry" and f:  # Must be a dimension name
+                    mandatoriness = "Optional"
+                    description = "A dimension name. Use for filtering purposes (leave the values that MUST be at the output)."
+                    result[f] = f"<small><b>({mandatoriness})</b></small><br>{description}"
+                else:
+                    result[f] = "Field '"+f+"' not found in command '"+command+"'. Possible field names: "+", ".join([item for f2 in command_fields[match[0]] for item in f2.allowed_names])
+                    status = 400
     else:
         for f in fields:  # Validate field by field
             result[f] = "Command '" + command +"' not found in the list of command names: " +", ".join([n for c in commands for n in c.allowed_names])

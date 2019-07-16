@@ -153,6 +153,16 @@ commands: List[Command] = [
             cmd_type=CommandType.metadata,
             execution_class_name="backend.command_executors.version2.references_v2_command.BibliographicReferencesCommand"),
 
+    Command(name="list_of_commands",
+            allowed_names=["ListOfCommands"],
+            is_v2=True, cmd_type=CommandType.metadata,
+            execution_class_name=None),
+
+    Command(name="import_commands",
+            allowed_names=["ImportCommands"],
+            is_v2=True, cmd_type=CommandType.convenience,
+            execution_class_name=None),
+
     # Version 1 only
 
     Command(name="data_input", allowed_names=["DataInput"], is_v1=True,

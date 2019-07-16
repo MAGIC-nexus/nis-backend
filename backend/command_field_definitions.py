@@ -39,6 +39,7 @@ bib_entry_types = ["article", "book", "booklet", "conference", "inbook", "incoll
 bib_months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
 scope_types = ["Total", "Internal", "External"]
 benchmark_groups = ["Feasibility", "Viability", "Desirability"]
+aggregators_list = ["Sum", "Avg", "Count", "SumNA", "CountAv", "AvgNA", "PctNA"]
 
 attributeRegex = "@.+"
 
@@ -271,15 +272,14 @@ command_fields: Dict[str, List[CommandField]] = {
         # A subset of fields from INSPIRE regulation for metadata: https://eur-lex.europa.eu/legal-content/EN/TXT/PDF/?uri=CELEX:32008R1205&from=EN
         # Fields useful to elaborate graphical displays. Augment in the future as demanded
         CommandField(allowed_names=["RefID", "Reference"], name="ref_id", mandatory=True, parser=simple_ident),
-        CommandField(allowed_names=["GeoLayerURL"], name="geo_layer_url", parser=url_parser),
+        CommandField(allowed_names=["GeoLayerURL", "DataLocation", "ResourceLocator"], name="data_location", parser=url_parser),
         CommandField(allowed_names=["Title"], name="title", mandatory=True, parser=unquoted_string),
-        CommandField(allowed_names=["Abstract"], name="abstract", parser=unquoted_string),  # Syntax??
-        CommandField(allowed_names=["Type"], name="type", allowed_values=geographic_resource_types, parser=unquoted_string),  # Part D.1. JUST "Dataset"
-        CommandField(allowed_names=["ResourceLocator", "DataLocation"], name="data_location", parser=url_parser),
-        CommandField(allowed_names=["TopicCategory"], name="topic_category", allowed_values=geographic_topic_categories, parser=unquoted_string),  # Part D.2
+        CommandField(allowed_names=["Description", "Abstract"], name="description", parser=unquoted_string),  # Syntax??
         CommandField(allowed_names=["BoundingBox"], name="bounding_box", parser=unquoted_string),  # Syntax??
+        CommandField(allowed_names=["TopicCategory"], name="topic_category", allowed_values=geographic_topic_categories, parser=unquoted_string),  # Part D.2
         CommandField(allowed_names=["TemporalExtent", "Date"], name="temporal_extent", parser=unquoted_string),  # Syntax??
-        CommandField(allowed_names=["PointOfContact"], name="metadata_point_of_contact", parser=unquoted_string)
+        CommandField(allowed_names=["PointOfContact"], name="point_of_contact", parser=unquoted_string),
+        CommandField(allowed_names=["Type"], name="type", allowed_values=geographic_resource_types, parser=unquoted_string)  # Part D.1. JUST "Dataset"
     ],
 
     "ref_bibliographic": [
@@ -350,7 +350,21 @@ command_fields: Dict[str, List[CommandField]] = {
         CommandField(allowed_names=["Parameter"], name="parameter", mandatory=True, parser=simple_ident),
         CommandField(allowed_names=["Value"], name="parameter_value", mandatory=True, parser=expression_with_parameters),
         CommandField(allowed_names=["Description"], name="description", parser=unquoted_string)
-    ]
+    ],
+
+    # Used only for help elaboration
+    "datasetqry": [
+        CommandField(allowed_names=["InputDataset"], name="inputdataset", parser=simple_ident),
+        CommandField(allowed_names=["AvailableAtDateTime"], name="availableatdatetime", parser=unquoted_string),
+        CommandField(allowed_names=["StartTime"], name="starttime", parser=time_expression),
+        CommandField(allowed_names=["EndTime"], name="endtime", parser=time_expression),
+        CommandField(allowed_names=["ResultDimensions"], name="resultdimensions", parser=simple_ident),
+        CommandField(allowed_names=["ResultMeasures"], name="resultmeasures", parser=simple_ident),
+        CommandField(allowed_names=["ResultMeasuresAggregation"], name="resultmeasuresaggregation", allowed_values=aggregators_list, parser=simple_ident),
+        CommandField(allowed_names=["ResultMeasureName"], name="resultmeasurename", parser=simple_ident),
+        CommandField(allowed_names=["OutputDataset"], name="outputdataset", parser=simple_ident),
+    ],
+
 }
 
 
