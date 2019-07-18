@@ -247,7 +247,7 @@ class WorksheetCopy2(object):
             target = getattr(self.target, attr)
             for key, dim in src.items():
                 # TODO COPY only if the dimension is correct
-                if attr == 'column_dimensions' and dim.min != 1021:
+                if attr == 'column_dimensions' and dim.min < 1021:
                     target[key] = copy(dim)
                     target[key].worksheet = self.target
 

@@ -17,13 +17,13 @@ Persistent store, in database
 import datetime
 from sqlalchemy import Column, Boolean, Integer, String, Unicode, DateTime, LargeBinary, ForeignKey
 from copy import deepcopy
-import psycopg2  # Only for automatic detection of dependencies
-from sqlalchemy.dialects import postgresql
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.ext.orderinglist import ordering_list
 from sqlalchemy.orm import relationship, backref, composite, scoped_session, sessionmaker, class_mapper, ColumnProperty, RelationshipProperty
 from sqlalchemy.orm.state import InstanceState
 from sqlalchemy.types import TypeDecorator, CHAR
+# import psycopg2  # Only for automatic detection of dependencies
+from sqlalchemy.dialects import postgresql
 from sqlalchemy.dialects.postgresql import UUID, JSONB
 import uuid
 import jsonpickle

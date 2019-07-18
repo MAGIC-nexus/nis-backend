@@ -75,6 +75,10 @@ commands: List[Command] = [
     #         cmd_type=CommandType.misc,
     #         execution_class_name="backend.command_executors.version2.attribute_types_command.AttributeTypesCommand"),
 
+    Command(name="parameters", allowed_names=["Parameters", "Params"], is_v2=True,
+            cmd_type=CommandType.input,
+            execution_class_name="backend.command_executors.external_data.parameters_command.ParametersCommand"),
+
     Command(name="datasetdef", allowed_names=["DatasetDef"], is_v2=True,
             cmd_type=CommandType.input,
             execution_class_name="backend.command_executors.version2.dataset_definition_command.DatasetDefCommand"),
@@ -82,10 +86,6 @@ commands: List[Command] = [
     # Command(name="attribute_sets", allowed_names=["AttributeSets"], is_v2=True,
     #         cmd_type=CommandType.misc,
     #         execution_class_name="backend.command_executors.version2.attribute_sets_command.AttributeSetsCommand"),
-
-    Command(name="parameters", allowed_names=["Parameters", "Params"], is_v2=True,
-            cmd_type=CommandType.input,
-            execution_class_name="backend.command_executors.external_data.parameters_command.ParametersCommand"),
 
     Command(name="interface_types", allowed_names=["InterfaceTypes"], is_v2=True,
             cmd_type=CommandType.core,
@@ -155,7 +155,7 @@ commands: List[Command] = [
 
     Command(name="list_of_commands",
             allowed_names=["ListOfCommands"],
-            is_v2=True, cmd_type=CommandType.metadata,
+            is_v2=True, cmd_type=CommandType.convenience,
             execution_class_name=None),
 
     Command(name="import_commands",

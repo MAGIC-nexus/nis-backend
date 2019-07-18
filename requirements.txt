@@ -1,8 +1,9 @@
+gunicorn==19.9.0
 Cython==0.29.7
 blosc==1.8.1
 brightway2==2.3
 matplotlib==3.0.3
-psycopg2==2.7.3.2
+#psycopg2==2.7.3.2  # Removed because it requires having PostgreSQL installed. It is explicitly in the Dockerfile
 webdavclient==1.0.8
 owlready2==0.15
 celery==4.3.0
@@ -22,6 +23,7 @@ pymonetdb==1.1.1
 SQLAlchemy==1.3.3
 sqlalchemy_monetdb==0.9.3
 redis==2.10.6
+redislite==5.0.124623
 pyparsing==2.2.0
 numpy==1.16.0
 pandas==0.23.4
@@ -38,7 +40,6 @@ xmltodict==0.11.0
 cubes==1.1
 Pint==0.8.1
 uncertainties==3.0.1
-sympy==1.1.1
 xlrd==1.1.0
 #openpyxl==2.5.0b1
 openpyxl==2.4.8
@@ -47,6 +48,8 @@ xlsxwriter==1.0.4
 lxml==4.3.3
 jsonpickle==0.9.6
 python_magic==0.4.13  # To be removed, it is used only by the Magic Box file type detection
+dotted==0.1.8 # <- Dotted notation: !!Fantastic!!
+sympy==1.1.1
 #cachier==1.2.2
 #tablib <- dictmapper (convert nested dict's to CSV)
 
@@ -58,7 +61,6 @@ python_magic==0.4.13  # To be removed, it is used only by the Magic Box file typ
 
 # Dotted notation
 #j = {"a": [{"b": 5, "c": "hola"},{"b": 2, "c": "adios"}], "g": {"t": "hello", "r": "bye"}}
-dotted==0.1.8 # <- !!Fantastic!!
 #python-box <- INTERESTING, MATURE
 #mo-dots
 #dpath <- ~ Could be, there are some quirks for cases with a bit more complexity
@@ -76,7 +78,6 @@ dotted==0.1.8 # <- !!Fantastic!!
 # Dublin Core XML generation
 #dcxml 0.1.0
 
-# NetworkX
 # RDFLib
 # JSONPath
 # Cubes (https://github.com/DataBrewery/cubes) Warning!: It is not very active

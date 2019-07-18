@@ -80,9 +80,11 @@ RUN pip3 install --no-cache-dir --upgrade pip && \
 
 ENV MAGIC_NIS_SERVICE_CONFIG_FILE=""
 
-# Generate "requirements.txt" with "pipreqs --force ."
+# NOTE: "requirements.txt" can be generated from scratch with "pipreqs --force ."
 COPY requirements.txt /app
-RUN pip3 install --no-cache-dir -r requirements.txt
+
+RUN pip3 install --no-cache-dir psycopg2==2.7.3.2 && \
+    pip3 install --no-cache-dir -r requirements.txt
 
 COPY supervisord.conf /etc/supervisord.conf
 

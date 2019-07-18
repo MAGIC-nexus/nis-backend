@@ -1078,6 +1078,7 @@ def get_parameter_definitions():
         return isess
 
     j = model_to_json(isess.state, structure=OrderedDict({"Parameters": Parameter}))
+    j = model_to_json(isess.state, structure=OrderedDict({"Parameters": Parameter}))
 
     return Response(j, mimetype="text/json", status=200)
 
@@ -3157,13 +3158,20 @@ def obtain_commands_reference():
         return isess
 
     d = []
-    for cmd in commands:
-        if cmd.is_v2:
-            tmp = get_misc_cmd_help(cmd.name)
-            if tmp:
-                d.append(tmp)
-            elif command_fields.get(cmd.name, None):
-                d.append(get_regular_cmd_help(cmd))
+    sequence = [backend.CommandType.core,
+                backend.CommandType.input,
+                backend.CommandType.analysis,
+                backend.CommandType.metadata,
+                backend.CommandType.convenience,
+                backend.CommandType.misc]
+    for ctype in sequence:
+        for cmd in commands:
+            if cmd.is_v2 and cmd.cmd_type == ctype:
+                tmp = get_misc_cmd_help(cmd.name)
+                if tmp:
+                    d.append(tmp)
+                elif command_fields.get(cmd.name, None):
+                    d.append(get_regular_cmd_help(cmd))
 
     return build_json_response([e for e in d if e])
 
