@@ -1,7 +1,7 @@
 from backend.command_generators.parser_field_parsers import simple_h_name, simple_ident, alphanums_string, code_string, \
     unquoted_string, time_expression, reference, key_value_list, arith_boolean_expression, \
     value, expression_with_parameters, list_simple_ident, domain_definition, unit_name, key_value, processor_names, \
-    url_parser, processor_name, number_interval
+    url_parser, processor_name, number_interval, pair_numbers
 
 generic_field_examples = {
     simple_ident: ["p1", "wind_farm", "WF1"],
@@ -21,7 +21,8 @@ generic_field_examples = {
     unit_name: ["kg", "m^2", "ha", "hours", "km^2"],
     processor_names: ["{a}b", "{a}b{c}", "aa{b}aa", "{a}", "..", "..Crop", "Farm..Crop", "Farm..", "..Farm.."],
     url_parser: ["https://www.magic-nexus.eu", "https://nextcloud.data.magic-nexus.eu/", "https://jupyter.data.magic-nexus.eu"],
-    number_interval: ["[-3.2, 4)", "(1, 2.3]"]
+    number_interval: ["[-3.2, 4)", "(1, 2.3]"],
+    pair_numbers: ["28.23, -13.54", "-23.45, 20.45"]
 }
 
 generic_field_syntax = {
@@ -54,5 +55,6 @@ generic_field_syntax = {
     unit_name: "Unit name. The abbreviation of a valid unit name.",
     processor_names: "Processors. An expression allowing the specification of several processors in a row. ",
     url_parser: "URL. A valid URL (search for URL syntax elsewhere)",
-    number_interval: "A numeric range, with left and right limit, using [] for closed and () for open."
+    number_interval: "A numeric range, with left and right limit, using [] for closed and () for open.",
+    pair_numbers: "A pair of decimal numbers, separated by a comma ','"
 }

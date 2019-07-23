@@ -94,6 +94,7 @@ unquoted_string = Regex(r".*")  # Anything
 alphanums_string = Word(alphanums)
 code_string = Word(alphanums+"_"+"-")  # For codes in Categories, Code Lists
 literal_code_string = (tag.suppress()+Optional(simple_ident+dot.suppress())("hierarchy")+code_string("code"))
+pair_numbers = signed_float + Literal(",").suppress() + signed_float
 
 # References
 code_string_reference = hash.suppress() + code_string + hash.suppress()

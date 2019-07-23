@@ -238,6 +238,17 @@ class ProcessorsCommand(BasicCommand):
             attributes = {c.name: field_values[c.name] for c in self._command_fields if c.attribute_of == Processor}
             attributes.update(field_values["attributes"])
 
+            # Needed to support the new name of the field, "Accounted" (previously it was "InstanceOrArchetype")
+            # (internally the values have the same meaning, "Instance" for a processor which has to be accounted,
+            # "Archetype" for a processor which hasn't)
+            v = attributes.get("instance_or_archetype", None)
+            if strcmp(v, "Yes"):
+                v = "Instance"
+            elif strcmp(v, "No"):
+                v = "Archetype"
+            if v:
+                attributes["instance_or_archetype"] = v
+
             p = find_or_create_processor(
                 state=self._glb_idx,
                 name=field_values["processor"],  # TODO: add parent hierarchical name

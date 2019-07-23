@@ -3622,7 +3622,7 @@ if __name__ == '__main__':
     # (start REDIS first at localhost:6379. E.g.: docker run --rm --name redis-local -p 6379:6379 redis:alpine)
     #
     # cd ~/AA_MAGIC/nis-backend
-    # export MAGIC_NIS_SERVICE_CONFIG_FILE=/home/rnebot/GoogleDrive/AA_MAGIC/nis-backend-config/nis_local.conf
+    # export MAGIC_NIS_SERVICE_CONFIG_FILE=/home/rnebot/Dropbox/nis-backend-config/nis_local.conf
     # gunicorn --bind 0.0.0.0:8080 --workers 3 backend.restful_service.service_main:app
 
     # 2) DOCKER. BASIC DEPLOYMENT

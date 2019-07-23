@@ -9,7 +9,7 @@ from backend.command_generators.parser_field_parsers import simple_ident, unquot
     hierarchy_expression_v2, key_value_list, key_value, expression_with_parameters, \
     time_expression, indicator_expression, code_string, simple_h_name, domain_definition, unit_name, url_parser, \
     processor_names, value, list_simple_ident, reference, processor_name, processors_selector_expression, \
-    interfaces_list_expression, attributes_list_expression, indicators_list_expression, number_interval
+    interfaces_list_expression, attributes_list_expression, indicators_list_expression, number_interval, pair_numbers
 from backend.models.musiasem_concepts import Processor, Factor, RelationClassType
 from backend.command_definitions import valid_v2_command_names, commands
 from backend.common.helper import first, class_full_name
@@ -26,7 +26,7 @@ no_yes = ["No", "Yes"]
 yes_no = ["Yes", "No"]
 processor_types = ["Local", "Environment", "External", "ExternalEnvironment"]
 functional_or_structural = ["Functional", "Structural"]
-instance_or_archetype = ["Instance", "Archetype"]
+instance_or_archetype = ["Yes", "No", "Instance", "Archetype"]  # Yes/No -> Instead of "instance/archetype", now the field is "Accounted"
 copy_interfaces_mode = ["No", "FromParent", "FromChildren", "Bidirectional"]
 source_cardinalities = ["One", "Zero", "ZeroOrOne", "ZeroOrMore", "OneOrMore"]
 target_cardinalities = source_cardinalities
@@ -122,7 +122,7 @@ command_fields: Dict[str, List[CommandField]] = {
         CommandField(allowed_names=["Formula", "Expression"], name="formula", parser=unquoted_string),
         CommandField(allowed_names=["Description"], name="description", parser=unquoted_string),
         CommandField(allowed_names=["Unit"], name="unit", parser=unit_name),
-        CommandField(allowed_names=["OppositeProcessorType"], name="opposite_processor_type",
+        CommandField(allowed_names=["OppositeSubsystemType", "OppositeProcessorType"], name="opposite_processor_type",
                      allowed_values=processor_types, parser=simple_ident),
         CommandField(allowed_names=[attributeRegex], name="attributes", many_appearances=True, parser=value),
         CommandField(allowed_names=["Attributes"], name="attributes", parser=key_value_list)
@@ -143,7 +143,7 @@ command_fields: Dict[str, List[CommandField]] = {
         CommandField(allowed_names=["FunctionalOrStructural"], name="functional_or_structural",
                      default_value=functional_or_structural[0], allowed_values=functional_or_structural,
                      parser=simple_ident, attribute_of=Processor),
-        CommandField(allowed_names=["InstanceOrArchetype"], name="instance_or_archetype",
+        CommandField(allowed_names=["Accounted", "InstanceOrArchetype"], name="instance_or_archetype",
                      default_value=instance_or_archetype[0], allowed_values=instance_or_archetype, parser=simple_ident,
                      attribute_of=Processor),
         CommandField(allowed_names=["Stock"], name="stock", default_value=no_yes[0], allowed_values=no_yes,
@@ -152,6 +152,7 @@ command_fields: Dict[str, List[CommandField]] = {
         CommandField(allowed_names=["Description"], name="description", parser=unquoted_string),
         CommandField(allowed_names=["GeolocationRef"], name="geolocation_ref", parser=reference),
         CommandField(allowed_names=["GeolocationCode"], name="geolocation_code", parser=code_string),
+        CommandField(allowed_names=["GeolocationLatLong"], name="geolocation_latlong", parser=pair_numbers),
         CommandField(allowed_names=[attributeRegex], name="attributes", many_appearances=True, parser=value),
         CommandField(allowed_names=["Attributes"], name="attributes", parser=key_value_list)
     ],
@@ -166,7 +167,7 @@ command_fields: Dict[str, List[CommandField]] = {
                      attribute_of=Factor),
         CommandField(allowed_names=["Orientation"], name="orientation", mandatory=True, allowed_values=orientations,
                      parser=simple_ident, attribute_of=Factor),
-        CommandField(allowed_names=["OppositeProcessorType"], name="opposite_processor_type",
+        CommandField(allowed_names=["OppositeSubsystemType", "OppositeProcessorType"], name="opposite_processor_type",
                      allowed_values=processor_types, parser=simple_ident, attribute_of=Factor),
         CommandField(allowed_names=["GeolocationRef"], name="geolocation_ref", parser=reference),
         CommandField(allowed_names=["GeolocationCode"], name="geolocation_code", parser=code_string),
