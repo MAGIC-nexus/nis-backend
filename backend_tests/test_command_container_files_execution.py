@@ -604,6 +604,31 @@ class TestCommandFiles(unittest.TestCase):
         # Close interactive session
         isess.close_db_session()
 
+    def test_029_dataset_expansion2(self):
+        """
+        Test dataset expansion using advanced expansion expression
+        (function calls returning either InterfaceTypes or Processors)
+
+        :return:
+        """
+        file_path = os.path.dirname(
+            os.path.abspath(__file__)) + "/z_input_files/v2/18_dataset_expansion_2.xlsx"
+
+        isess = execute_file(file_path, generator_type="spreadsheet")
+
+        # issues = prepare_and_solve_model(isess.state)
+        # for idx, issue in enumerate(issues):
+        #     print(f"Issue {idx + 1}/{len(issues)} = {issue}")
+
+        # Check State of things
+        glb_idx, p_sets, hh, datasets, mappings = get_case_study_registry_objects(isess.state)
+        p = glb_idx.get(Processor.partial_key())
+        self.assertEqual(len(p), 2)
+        p = p[0]
+
+        # Close interactive session
+        isess.close_db_session()
+
 
 if __name__ == '__main__':
     # import pandas as pd
@@ -674,7 +699,8 @@ if __name__ == '__main__':
         #i.test_022_processor_scalings()
         #i.test_023_solving()
         #i.test_024_maddalena_dataset()
-        i.test_025_biofuel()
+        #i.test_025_biofuel()
         #i.test_026_NL_ES()
         #i.test_027_solving_it2it()
         #i.test_028_dataset_expansion_and_integration()
+        i.test_029_dataset_expansion2()

@@ -116,7 +116,7 @@ def commands_generator_from_ooxml_file(input, state, sublist, stack) -> backend.
         c_type: str = cmd.name if cmd else None
         if not c_type:
             total_issues.append(Issue(sheet_number, sheet_name, None, IType.WARNING,
-                                f"The worksheet name '{sheet_name}' has not a supported command associated. Skipped."))
+                                f"The worksheet name '{sheet_name}' does not have a supported command associated. Skipped."))
 
         elif c_type == "etl_dataset":
             if sheet.cell(row=t[0], column=t[2]).value:

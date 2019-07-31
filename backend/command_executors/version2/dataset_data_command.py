@@ -26,6 +26,9 @@ class DatasetDataCommand(IExecutableCommand):
         for ds in datasets.values():
             if ds.attributes["_location"].lower().startswith("data://#"):
                 worksheet = ds.attributes["_location"][len("data://#"):]
+                if not worksheet.lower().startswith("datasetdata "):
+                    worksheet = "DatasetData " + worksheet
+
                 if strcmp(worksheet, name):
                     external_dataset_name = ds.code
 
@@ -39,7 +42,7 @@ class DatasetDataCommand(IExecutableCommand):
                 else:
                     issues.append(Issue(itype=IType.ERROR,
                                         description="The column name 'DatasetName' was not defined for command 'DatasetData' and there is no 'location' in a DatasetDef command pointing to it",
-                                        location=IssueLocation(sheet_name=name, row=1, column=c)))
+                                        location=IssueLocation(sheet_name=name, row=1, column=None)))
 
             # Find it in the already available datasets. MUST EXIST
             for n in ds_names:

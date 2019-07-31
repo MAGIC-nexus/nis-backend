@@ -4,7 +4,7 @@ from openpyxl.worksheet.worksheet import Worksheet
 
 from backend import CommandField, IssuesLabelContentTripleType, AreaTupleType
 from backend.command_generators import Issue, parser_field_parsers, IssueLocation, IType
-from backend.command_generators.parser_field_parsers import simple_h_name
+from backend.command_generators.parser_field_parsers import simple_h_name, arith_boolean_expression
 
 
 def check_columns(sh, name: str, area: Tuple, cols: List[CommandField], command_name: str, ignore_not_found=True):
@@ -115,7 +115,7 @@ def parse_command_in_worksheet(sh: Worksheet, area: AreaTupleType, name: Optiona
             for m in matches:
                 h_name = m[1:-1]
                 try:
-                    parser_field_parsers.string_to_ast(simple_h_name, h_name)
+                    parser_field_parsers.string_to_ast(arith_boolean_expression, h_name)  # simple_h_name
                     output.add(h_name)
                 except:
                     issues.append(

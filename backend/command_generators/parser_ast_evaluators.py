@@ -12,9 +12,8 @@ from pyparsing import quotedString
 from backend.model_services import State
 from backend.command_generators.parser_field_parsers import string_to_ast, arith_boolean_expression, key_value_list, \
     simple_ident, expression_with_parameters
-from backend.common.helper import create_dictionary, PartialRetrievalDictionary
-from backend.models.musiasem_concepts import ExternalDataset
-
+from backend.common.helper import create_dictionary, PartialRetrievalDictionary, strcmp, is_float
+from backend.models.musiasem_concepts import ExternalDataset, FactorType, Processor
 
 # #################################################################################################################### #
 
@@ -22,9 +21,79 @@ from backend.models.musiasem_concepts import ExternalDataset
 
 global_functions = {i["name"]: i for i in
                     [{"name": "cos", "full_name": "math.cos", "kwargs": None},
-                     {"name": "sin", "full_name": "math.sin", "kwargs": None}
+                     {"name": "sin", "full_name": "math.sin", "kwargs": None},
+                     {"name": "InterfaceType",
+                      "full_name": "backend.command_generators.parser_ast_evaluators.get_interface_type",
+                      "kwargs": None,
+                      "special_kwargs": {"PartialRetrievalDictionary": "prd"}},
+                     {"name": "Processor",
+                      "full_name": "backend.command_generators.parser_ast_evaluators.get_processor",
+                      "kwargs": None,
+                      "special_kwargs": {"PartialRetrievalDictionary": "prd"}}
                      ]
                     }
+
+
+# -- FUNCTIONS
+def get_interface_type(attribute, value, prd: PartialRetrievalDictionary = None):
+    """
+    Obtain the name of an InterfaceType given the value of an attribute
+    (Obtain the registry of objects)
+
+    :param attribute:
+    :param value:
+    :param prd: A PartialRetrievalDictionary, passed in State "_glb_idx" to the AST evaluator by
+    :return:
+    """
+
+    if not prd:
+        raise Exception(f"No Global-Index parameter passed to InterfaceType function")
+    else:
+        # Obtain ALL InterfaceTypes, then ONE having attribute "attribute" with value <value>
+        its = prd.get(FactorType.partial_key())
+        ret = None
+        for it in its:
+            v = vars(it).get(attribute)
+            if not v:
+                v = it.attributes.get(attribute)
+            if v and (strcmp(v, str(value)) or (is_float(value) and float(v) == float(value))):
+                ret = it.name
+                break
+        if ret:
+            return ret
+        else:
+            raise Exception(f"No InterfaceType found having attribute '{attribute}' with value '{value}'")
+
+
+def get_processor(attribute, value, prd: PartialRetrievalDictionary = None):
+    """
+    Obtain the name of a Processor given the value of an attribute
+    (Obtain the registry of objects)
+
+    :param attribute:
+    :param value:
+    :param prd: A PartialRetrievalDictionary, passed in State "_glb_idx" to the AST evaluator by
+    :return:
+    """
+
+    if not prd:
+        raise Exception(f"No Global-Index parameter passed to Processor function")
+    else:
+        # Obtain ALL Processors, then ONE having attribute "attribute" with value <value>
+        procs = prd.get(Processor.partial_key())
+        ret = None
+        for proc in procs:
+            v = vars(proc).get(attribute)
+            if not v:
+                v = proc.attributes.get(attribute)
+            if v and (strcmp(v, str(value)) or (is_float(value) and float(v) == float(value))):
+                ret = proc.name
+                break
+        if ret:
+            return ret
+        else:
+            raise Exception(f"No Processor found having attribute '{attribute}' with value '{value}'")
+
 
 # Comparison operators
 opMap = {
@@ -39,7 +108,7 @@ opMap = {
         }
 
 
-def ast_evaluator(exp: Dict, state: State, obj, issue_lst, evaluation_type="numeric") -> Union[Tuple[float, List[str]], Tuple[str, float, List[str]]]:
+def ast_evaluator(exp: Dict, state: State, obj, issue_lst, evaluation_type="numeric", atomic_h_names=False) -> Union[Tuple[float, List[str]], Tuple[str, float, List[str]]]:
     """
     Numerically evaluate the result of the parse of "expression" rule (not valid for the other "expression" rules)
 
@@ -49,6 +118,7 @@ def ast_evaluator(exp: Dict, state: State, obj, issue_lst, evaluation_type="nume
     :param issue_lst: List in which issues have to be annotated
     :param evaluation_type: "numeric" for full evaluation, "static" to return True if the expression can be evaluated
             (explicitly mentioned variables are defined previously)
+    :param atomic_h_names: If True, treat variable names as atomic (False processes them part by part, from left to right). Used in dataset expansion
     :return: value (scalar EXCEPT for named parameters, which return a tuple "parameter name - parameter value"), list of unresolved variables
     """
     val = None
@@ -62,19 +132,19 @@ def ast_evaluator(exp: Dict, state: State, obj, issue_lst, evaluation_type="nume
                 return unresolved_vars
         elif t == "named_parameter":
             # This one returns a tuple (parameter name, parameter value, unresolved variables)
-            v, tmp = ast_evaluator(exp["value"], state, obj, issue_lst, evaluation_type)
+            v, tmp = ast_evaluator(exp["value"], state, obj, issue_lst, evaluation_type, atomic_h_names)
             unresolved_vars.update(tmp)
             return exp["param"], v, unresolved_vars
         elif t == "key_value_list":
             d = create_dictionary()
             for k, v in exp["parts"].items():
-                d[k], tmp = ast_evaluator(v, state, obj, issue_lst, evaluation_type)
+                d[k], tmp = ast_evaluator(v, state, obj, issue_lst, evaluation_type, atomic_h_names)
                 unresolved_vars.update(tmp)
             return d, unresolved_vars
         elif t == "dataset":
             # Function parameters and Slice parameters
-            func_params = [ast_evaluator(p, state, obj, issue_lst, evaluation_type) for p in exp["func_params"]]
-            slice_params = [ast_evaluator(p, state, obj, issue_lst, evaluation_type) for p in exp["slice_params"]]
+            func_params = [ast_evaluator(p, state, obj, issue_lst, evaluation_type, atomic_h_names) for p in exp["func_params"]]
+            slice_params = [ast_evaluator(p, state, obj, issue_lst, evaluation_type, atomic_h_names) for p in exp["slice_params"]]
 
             if evaluation_type == "numeric":
                 # Find dataset named "exp["name"]"
@@ -114,7 +184,7 @@ def ast_evaluator(exp: Dict, state: State, obj, issue_lst, evaluation_type="nume
             args = []
             kwargs = {}
             can_resolve = True
-            for p in [ast_evaluator(p, state, obj, issue_lst, evaluation_type) for p in exp["params"]]:
+            for p in [ast_evaluator(p, state, obj, issue_lst, evaluation_type, atomic_h_names) for p in exp["params"]]:
                 if len(p) == 3:
                     kwargs[p[0]] = p[1]
                     tmp = p[2]
@@ -136,14 +206,24 @@ def ast_evaluator(exp: Dict, state: State, obj, issue_lst, evaluation_type="nume
                         func = getattr(mod, func_name)
                         if _f["kwargs"]:
                             kwargs.update(_f["kwargs"])
-                        obj = func(*args, *kwargs)
+                        if _f["special_kwargs"]:
+                            for sp_kwarg, name in _f["special_kwargs"].items():
+                                if sp_kwarg == "PartialRetrievalDictionary":
+                                    kwargs[name] = state.get("_glb_idx")
+                        # CALL FUNCTION!!
+                        try:
+                            obj = func(*args, **kwargs)
+                        except Exception as e:
+                            obj = None
+                            issue_lst.append(str(e))
                 else:
-                    # Call local function (a "method")
+                    # CALL FUNCTION LOCAL TO THE OBJECT (a "method")
                     try:
                         obj = getattr(obj, exp["name"])
                         obj = obj(*args, **kwargs)
-                    except:
+                    except Exception as e:
                         obj = None
+                        issue_lst.append(str(e))
                 return obj, unresolved_vars
             elif evaluation_type == "static":
                 if obj is None:
@@ -163,6 +243,10 @@ def ast_evaluator(exp: Dict, state: State, obj, issue_lst, evaluation_type="nume
             # Evaluate in sequence
             obj = None
             _namespace = exp.get("ns", None)
+            if atomic_h_names:
+                h_name = '.'.join(exp["parts"])
+                exp["parts"] = [h_name]
+
             for o in exp["parts"]:
                 if isinstance(o, str):
                     # Simple name
@@ -190,7 +274,7 @@ def ast_evaluator(exp: Dict, state: State, obj, issue_lst, evaluation_type="nume
                     # Dictionary: function call or dataset access
                     if obj is None:
                         o["ns"] = _namespace
-                    obj = ast_evaluator(o, state, obj, issue_lst, evaluation_type)
+                    obj = ast_evaluator(o, state, obj, issue_lst, evaluation_type, atomic_h_names)
             if obj is None or isinstance(obj, (str, int, float, bool)):
                 return obj, unresolved_vars
             # TODO elif isinstance(obj, ...) depending on core object types, invoke a default method, or
@@ -198,11 +282,11 @@ def ast_evaluator(exp: Dict, state: State, obj, issue_lst, evaluation_type="nume
             else:
                 return obj, unresolved_vars
         elif t == "condition":  # Evaluate IF part to a Boolean. If True, return the evaluation of the THEN part; if False, return None
-            if_result, tmp = ast_evaluator(exp["if"], state, obj, issue_lst, evaluation_type)
+            if_result, tmp = ast_evaluator(exp["if"], state, obj, issue_lst, evaluation_type, atomic_h_names)
             unresolved_vars.update(tmp)
             if len(tmp) == 0:
                 if if_result:
-                    then_result, tmp = ast_evaluator(exp["then"], state, obj, issue_lst, evaluation_type)
+                    then_result, tmp = ast_evaluator(exp["then"], state, obj, issue_lst, evaluation_type, atomic_h_names)
                     unresolved_vars.update(tmp)
                     if len(tmp) > 0:
                         then_result = None
@@ -211,7 +295,7 @@ def ast_evaluator(exp: Dict, state: State, obj, issue_lst, evaluation_type="nume
                 return None, unresolved_vars
         elif t == "conditions":
             for c in exp["parts"]:
-                cond_result, tmp = ast_evaluator(c, state, obj, issue_lst, evaluation_type)
+                cond_result, tmp = ast_evaluator(c, state, obj, issue_lst, evaluation_type, atomic_h_names)
                 unresolved_vars.update(tmp)
                 if len(tmp) == 0:
                     if cond_result:
@@ -227,11 +311,11 @@ def ast_evaluator(exp: Dict, state: State, obj, issue_lst, evaluation_type="nume
                 else:
                     current = True
             else:
-                current, tmp1 = ast_evaluator(exp["terms"][0], state, obj, issue_lst, evaluation_type)
+                current, tmp1 = ast_evaluator(exp["terms"][0], state, obj, issue_lst, evaluation_type, atomic_h_names)
                 unresolved_vars.update(tmp1)
 
             for i, e in enumerate(exp["terms"][1:]):
-                following, tmp2 = ast_evaluator(e, state, obj, issue_lst, evaluation_type)
+                following, tmp2 = ast_evaluator(e, state, obj, issue_lst, evaluation_type, atomic_h_names)
                 unresolved_vars.update(tmp2)
 
                 if len(tmp1) == 0 and len(tmp2) == 0:

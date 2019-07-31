@@ -5,10 +5,11 @@ from typing import Optional, List, Dict, Any, Union, Tuple, Set
 from backend import ExecutableCommandIssuesPairType, Command, CommandField, IssuesOutputPairType, case_sensitive
 from backend.command_definitions import commands
 from backend.command_executors.execution_helpers import classify_variables2
-from backend.common.helper import first, PartialRetrievalDictionary, head, strcmp
+from backend.command_generators.parser_field_parsers import arith_boolean_expression
+from backend.common.helper import first, PartialRetrievalDictionary, head, strcmp, create_dictionary
 from backend.command_generators import IType, IssueLocation, Issue, parser_field_parsers
-from backend.command_generators.parser_ast_evaluators import dictionary_from_key_value_list
-from backend.model_services import IExecutableCommand, get_case_study_registry_objects
+from backend.command_generators.parser_ast_evaluators import dictionary_from_key_value_list, ast_evaluator
+from backend.model_services import IExecutableCommand, get_case_study_registry_objects, State
 from backend.models.musiasem_concepts import Processor, Factor, FactorType, Parameter
 from backend.models.musiasem_concepts_helper import find_processor_by_name
 
@@ -29,7 +30,8 @@ class BasicCommand(IExecutableCommand):
         self._hierarchies = None
         self._datasets = None
         self._mappings = None
-        self._parameters = None
+        self._parameters: Optional[List[Parameter]] = None
+        self._state: Optional[State] = None
         # Execution state per command
         self._issues: List[Issue] = []
         # Execution state per row
@@ -46,10 +48,12 @@ class BasicCommand(IExecutableCommand):
         self._mappings = None
         self._parameters = None
         self._fields = {}
+        self._state = None
 
         if state:
             self._glb_idx, self._p_sets, self._hierarchies, self._datasets, self._mappings = get_case_study_registry_objects(state)
             self._parameters = [p.name for p in self._glb_idx.get(Parameter.partial_key())]
+            self._state = state
 
     def _process_row(self, fields: Dict[str, Any]) -> None:
         """This is the only method subclasses need to define. See current subclasses as examples"""
@@ -89,7 +93,20 @@ class BasicCommand(IExecutableCommand):
         # TODO If expandable, do it now
         expandable = row["_expandable"]
         if expandable:
-            res = classify_variables2(expandable, self._datasets, self._hierarchies, self._parameters)
+            # Extract variables
+            state = State()
+            issues = []
+            asts = {}
+            referenced_variables = create_dictionary()
+            for e in expandable:
+                ast = parser_field_parsers.string_to_ast(arith_boolean_expression, e)
+                c_name = f"{{{e}}}"
+                asts[c_name] = ast
+                res, vars = ast_evaluator(ast, state, None, issues, atomic_h_names=True)
+                for v in vars:
+                    referenced_variables[v] = None
+
+            res = classify_variables2(referenced_variables.keys(), self._datasets, self._hierarchies, self._parameters)
             ds_list = res["datasets"]
             ds_concepts = res["ds_concepts"]
             h_list = res["hierarchies"]
@@ -149,6 +166,9 @@ class BasicCommand(IExecutableCommand):
                 else:  # Take the dataset as-is
                     data = ds.data
 
+                # Remove Index, and do it NOT-INPLACE
+                data = data.reset_index()
+
                 const_dict = obtain_dictionary_with_not_expandable_fields(self._fields)  # row?
                 var_dict = set([f for f in self._fields.keys() if f not in const_dict])
 
@@ -162,19 +182,39 @@ class BasicCommand(IExecutableCommand):
 
                 location = IssueLocation(sheet_name=self._command_name, row=self._current_row_number, column=None)
                 already_parsed_fields = set(const_dict.keys())
-                for row2 in data.iterrows():
+                for row2 in data.iterrows():  # Each row in the dataset
+                    # Initialize constant values (those with no "{..}" expressions)
                     row3 = const_dict.copy()
-                    # Concepts change dictionary
-                    concepts = {}
+                    # Prepare state to evaluate functions
+                    state = State()
                     for c in ds_concepts:
-                        concepts[f"{{{ds.code}.{c}}}"] = str(row2[1][c])
+                        state.set(f"{ds.code}.{c}", str(row2[1][c]))
+                    state.set("_glb_idx", self._glb_idx)  # Pass PartialRetrievalDictionary to the evaluator. For functions needing it
+
+                    # Evaluate all functions
+                    expressions = {}
+                    for e, ast in asts.items():
+                        res, vars = ast_evaluator(ast, state, None, issues, atomic_h_names=True)
+                        expressions[e] = res
                     # Expansion into var_dict
                     for f in var_dict:
                         v = self._fields[f]  # Initial value
-                        for item in sorted(concepts.keys(), key=len, reverse=True):
-                            v = re_concepts[item].sub(concepts[item], v)
+                        for item in sorted(expressions.keys(), key=len, reverse=True):
+                            v = v.replace(item, expressions[item])
                         row3[f] = v
-                    # Syntactic verification
+
+                    # # Concepts change dictionary
+                    # concepts = {}
+                    # for c in ds_concepts:
+                    #     concepts[f"{{{ds.code}.{c}}}"] = str(row2[1][c])
+                    # # Expansion into var_dict
+                    # for f in var_dict:
+                    #     v = self._fields[f]  # Initial value
+                    #     for item in sorted(concepts.keys(), key=len, reverse=True):
+                    #         v = re_concepts[item].sub(concepts[item], v)
+                    #     row3[f] = v
+
+                    # Syntactic verification of the resulting expansion
                     processable, tmp_issues = parse_cmd_row_dict(self._serialization_type,
                                                                  row3,
                                                                  already_parsed_fields,
