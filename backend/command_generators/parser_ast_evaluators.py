@@ -10,28 +10,13 @@ from typing import Dict, Tuple, Union, List
 from pyparsing import quotedString
 
 from backend.model_services import State
+from backend.command_generators import global_functions
 from backend.command_generators.parser_field_parsers import string_to_ast, arith_boolean_expression, key_value_list, \
     simple_ident, expression_with_parameters
 from backend.common.helper import create_dictionary, PartialRetrievalDictionary, strcmp, is_float
 from backend.models.musiasem_concepts import ExternalDataset, FactorType, Processor
 
 # #################################################################################################################### #
-
-# List of Global Functions
-
-global_functions = {i["name"]: i for i in
-                    [{"name": "cos", "full_name": "math.cos", "kwargs": None},
-                     {"name": "sin", "full_name": "math.sin", "kwargs": None},
-                     {"name": "InterfaceType",
-                      "full_name": "backend.command_generators.parser_ast_evaluators.get_interface_type",
-                      "kwargs": None,
-                      "special_kwargs": {"PartialRetrievalDictionary": "prd"}},
-                     {"name": "Processor",
-                      "full_name": "backend.command_generators.parser_ast_evaluators.get_processor",
-                      "kwargs": None,
-                      "special_kwargs": {"PartialRetrievalDictionary": "prd"}}
-                     ]
-                    }
 
 
 # -- FUNCTIONS

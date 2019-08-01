@@ -238,6 +238,9 @@ class ProcessorsCommand(BasicCommand):
             attributes = {c.name: field_values[c.name] for c in self._command_fields if c.attribute_of == Processor}
             attributes.update(field_values["attributes"])
 
+            if not attributes.get("processor_system"):
+                attributes["processor_system"] = "default"
+
             # Needed to support the new name of the field, "Accounted" (previously it was "InstanceOrArchetype")
             # (internally the values have the same meaning, "Instance" for a processor which has to be accounted,
             # "Archetype" for a processor which hasn't)

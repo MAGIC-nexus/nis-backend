@@ -18,6 +18,7 @@ from pyparsing import (ParserElement, Regex,
 from typing import Dict
 
 from backend import ureg
+from backend.command_generators import global_functions
 from backend.common.helper import create_dictionary, PartialRetrievalDictionary
 
 # Enable memoizing
@@ -264,12 +265,17 @@ namespace = simple_ident + Literal("::").suppress()
 named_parameter = Group(simple_ident + equals.suppress() + expression).setParseAction(lambda t: {'type': 'named_parameter', 'param': t[0][0], 'value': t[0][1]})
 named_parameters_list = delimitedList(named_parameter, ",")
 parameters_list = delimitedList(Or([expression, named_parameter]), ",")
+
+
+def func_call_action(s, l, t):
+    if t[0][0] in global_functions:
+        return dict(type='function', name=t[0][0], params=t[0][1:])
+    else:
+        raise Exception(f"Function '{t[0][0]}' not defined")
+
+
 func_call = Group(simple_ident + lparen.suppress() + parameters_list + rparen.suppress()
-                  ).setParseAction(lambda t: {'type': 'function',
-                                              'name': t[0][0],
-                                              'params': t[0][1:]
-                                              }
-                                   )
+                  ).setParseAction(func_call_action)
 
 # RULES - key-value list
 # key "=" value. Key is a simple_ident; "Value" can be an expression referring to parameters

@@ -3,6 +3,7 @@ from attr import attrs, attrib, validators
 from openpyxl.utils import get_column_letter
 
 import backend
+from backend.common.helper import create_dictionary
 
 
 class IType(Enum):
@@ -41,3 +42,23 @@ class Issue:
     def check(self, attribute, value):
         if not isinstance(value, backend.command_generators.IType):
             raise ValueError("itype should be an instance of enum IType")
+
+
+# List of Global Functions (used by "parser_field_parsers.py" and "parser_ast_evaluators.py")
+global_functions = create_dictionary(data={i["name"]: i for i in
+                    [{"name": "cos",
+                      "full_name": "math.cos",
+                      "kwargs": None},
+                     {"name": "sin",
+                      "full_name": "math.sin",
+                      "kwargs": None},
+                     {"name": "InterfaceType",
+                      "full_name": "backend.command_generators.parser_ast_evaluators.get_interface_type",
+                      "kwargs": None,
+                      "special_kwargs": {"PartialRetrievalDictionary": "prd"}},
+                     {"name": "Processor",
+                      "full_name": "backend.command_generators.parser_ast_evaluators.get_processor",
+                      "kwargs": None,
+                      "special_kwargs": {"PartialRetrievalDictionary": "prd"}}
+                     ]
+                    })

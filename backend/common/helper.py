@@ -28,7 +28,6 @@ from pandas import DataFrame
 
 import backend
 from backend import case_sensitive, SDMXConcept, get_global_configuration_variable
-from backend.command_generators import Issue
 from backend.models import ureg, log_level
 import webdav.client as wc
 
@@ -52,6 +51,8 @@ def append_line(str, file=None):
 def _json_serial(obj):
     """JSON serializer for objects not serializable by default json code"""
     from datetime import datetime
+    from backend.command_generators import Issue  # Imported here to break circularity of imports
+
     if isinstance(obj, datetime):
         serial = obj.isoformat()
         return serial

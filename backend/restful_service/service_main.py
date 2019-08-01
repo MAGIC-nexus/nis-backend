@@ -32,7 +32,7 @@ from backend.command_field_definitions import command_fields
 from backend.command_field_descriptions import cf_descriptions
 from backend.command_generators import Issue, IType
 from backend.command_generators.parser_field_examples import generic_field_examples, generic_field_syntax
-from backend.command_generators.parser_field_parsers import string_to_ast
+from backend.command_generators.parser_field_parsers import string_to_ast, arith_boolean_expression
 from backend.command_generators.parser_spreadsheet_utils import rewrite_xlsx_file
 from backend.ie_exports.json import export_model_to_json, model_to_json
 from backend.models.musiasem_concepts import Parameter
@@ -2972,6 +2972,43 @@ def obtain_commands_and_their_fields():
     return j
 
 
+def split_expansion_expressions(f, content):
+    # Dataset expansion. Isolate each expression
+    pieces = []
+    offset = 0
+    look_for = "{"
+    open_brace = False
+    s = None
+    while offset < len(content):
+        pos = content[offset:].find(look_for)
+        if pos >= 0:
+            if look_for == "{":
+                if pos > 0:
+                    pieces.append((content[offset:offset + pos], False))  # Literal
+                look_for = "}"
+                open_brace = True
+            else:
+                if pos > 0:
+                    pieces.append((content[offset:offset + pos], True))  # Expansion
+                else:
+                    s = f"Invalid syntax in field '{f}' with value: " + content + ". No expression between curly braces."
+                    valid = False
+                    break
+                look_for = "{"
+                open_brace = False
+            offset += pos + 1
+        else:  # Character not found
+            if open_brace:
+                s = f"Invalid syntax in field '{f}' with value: " + content + ". Curly brace not closed."
+                valid = False
+                break
+            else:  # Add the rest
+                pieces.append((content[offset:], False))
+                offset = len(content)
+
+    return pieces, s
+
+
 @app.route(nis_api_base + "/validate_command_record", methods=["POST"])
 def validate_command_record():
     """
@@ -3043,25 +3080,55 @@ def validate_command_record():
             if fld:  # If found, can validate syntax
                 # Validate Syntax
                 content = fields[f]
+                content_msg = content  # To show in case of error
                 if isinstance(content, (int, float)):
                     content = str(content)
                 if fld.allowed_values:
-                    # TODO Case insensitive comparison
+                    # Case insensitive comparison
                     if content.lower().strip() in [f.lower().strip() for f in fld.allowed_values]:
                         result[f] = None
                     else:
                         result[f] = "'"+content+"' in field '"+f+"' must be one of: "+", ".join(fld.allowed_values)
                         status = 400
                 else:
-                    try:
-                        string_to_ast(fld.parser, content)
-                        result[f] = None
-                    except:
-                        s = "Invalid syntax in field '"+f+"' with value: "+content
-                        if fld.examples:
-                            s += ". Examples: "+", ".join(fld.examples)
+                    valid = True
+                    if "{" in content or "}" in content:
+                        # Is expansion allowed in this command?
+                        expansion_allowed = True
+                        if expansion_allowed:
+                            pieces, s = split_expansion_expressions(f, content)
+                            if s is None:
+                                c = ""
+                                for p in pieces:
+                                    if p[1]:  # Expansion expression
+                                        try:
+                                            string_to_ast(arith_boolean_expression, p[0])
+                                            c += "expand"
+                                        except:
+                                            s = f"Invalid syntax in field '{f}' with value: {content}, expansion expression '{p[0]}' invalid"
+                                            result[f] = s
+                                            valid = False
+                                            break
+                                    else:
+                                        c += p[0]
+                                if valid:
+                                    content = c
+                            else:
+                                valid = False
+
+                    if not valid:
                         result[f] = s
                         status = 400
+                    else:
+                        try:
+                            string_to_ast(fld.parser, content)
+                            result[f] = None
+                        except:
+                            s = f"Invalid syntax in field '{f}' with value: '{content_msg}'"
+                            if fld.examples:
+                                s += ". Examples: "+", ".join(fld.examples)
+                            result[f] = s
+                            status = 400
 
             else:
                 result[f] = "Field '"+f+"' not found in command '"+command+"'. Possible field names: "+", ".join([item for f2 in command_fields[command] for item in f2.allowed_names])
