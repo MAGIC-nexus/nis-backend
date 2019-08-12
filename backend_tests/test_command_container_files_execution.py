@@ -378,6 +378,13 @@ class TestCommandFiles(unittest.TestCase):
         # Close interactive session
         datasets["ds1"].data.to_csv("/tmp/08_caso_energia_eu_new_commands_ds1_results.csv")
         datasets["ds2"].data.to_csv("/tmp/08_caso_energia_eu_new_commands_ds2_results.csv")
+        print(datasets["ds2"].data.head())
+        name = "ds2"
+        ds = datasets[name]  # type: Dataset
+        ds2 = ds.data
+        print("Preparing Dataset labels")
+        ds2 = add_label_columns_to_dataframe(name, ds2, glb_idx)
+        print(ds2.head())
         isess.close_db_session()
 
     def test_015_execute_file_v2_nine(self):
@@ -556,6 +563,32 @@ class TestCommandFiles(unittest.TestCase):
         f = glb_idx.get(Factor.partial_key(p, None, name="Biodiesel"))
         self.assertEqual(len(f), 1)
         self.assertEqual(len(f[0].observations), 2)
+
+        #creating flows matrix for sanskey graph
+        import pandas as pd
+        F_source = []
+        F_target = []
+        F_source_processor = []
+        F_source_processor_level = []
+        F_target_processor = []
+        F_target_processor_level = []
+        for i in glb_idx.get(FactorsRelationDirectedFlowObservation.partial_key()):
+            F_source.append(i._source.full_name)
+            F_target.append(i._target.full_name)
+            F_source_processor.append(i._source._processor._name)
+            if 'level' in i._source._processor._attributes:
+                F_source_processor_level.append(i._source._processor._attributes['level'])
+            else:
+                F_source_processor_level.append(None)
+            F_target_processor.append(i._target._processor._name)
+            if 'level' in i._target._processor._attributes:
+                F_target_processor_level.append(i._target._processor._attributes['level'])
+            else:
+                F_target_processor_level.append(None)
+
+        flows = pd.DataFrame({'source': F_source,'source_processor ': F_source_processor,'source_processor_level': F_source_processor_level, 'target': F_target, 'target_processor': F_target_processor, 'targe_processor_level':F_target_processor_level})
+        print(flows)
+
         # Close interactive session
         isess.close_db_session()
 
@@ -699,8 +732,8 @@ if __name__ == '__main__':
         #i.test_022_processor_scalings()
         #i.test_023_solving()
         #i.test_024_maddalena_dataset()
-        #i.test_025_biofuel()
+        i.test_025_biofuel()
         #i.test_026_NL_ES()
         #i.test_027_solving_it2it()
         #i.test_028_dataset_expansion_and_integration()
-        i.test_029_dataset_expansion2()
+        #i.test_029_dataset_expansion2()

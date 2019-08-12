@@ -3259,7 +3259,7 @@ def obtain_commands_reference():
              3235\tFuel\n\
              3244\tFuel\n\
              3246\tFuel\n\
-             3247\tFuel\n\
+             3247\tFuel\n\“n-2”“n-2”
              3250\tFeedstock\n\
              3260\tFuel\n\
              3270A\tHeat\n\

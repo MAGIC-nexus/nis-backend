@@ -893,6 +893,39 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
         # Register dataset
         datasets[ds_indicators_name] = get_dataset(df_indicators, ds_indicators_name, "Flow Graph Solver - Indicators")
 
+    #Create Matrix to Sanskey graph -doesn't work
+    F_source = []
+    F_target = []
+    F_source_processor = []
+    F_source_processor_level = []
+    F_target_processor = []
+    F_target_processor_level = []
+    for i in glb_idx.get(FactorsRelationDirectedFlowObservation.partial_key()):
+        F_source.append(i._source.full_name)
+        F_target.append(i._target.full_name)
+        F_source_processor.append(i._source._processor._name)
+        if 'level' in i._source._processor._attributes:
+            F_source_processor_level.append(i._source._processor._attributes['level'])
+        else:
+            F_source_processor_level.append(None)
+        F_target_processor.append(i._target._processor._name)
+        if 'level' in i._target._processor._attributes:
+            F_target_processor_level.append(i._target._processor._attributes['level'])
+        else:
+            F_target_processor_level.append(None)
+
+    ds_flows = pd.DataFrame({'source': F_source, 'source_processor ': F_source_processor,
+                          'source_processor_level': F_source_processor_level, 'target': F_target,
+                          'target_processor': F_target_processor, 'targe_processor_level': F_target_processor_level})
+    print(ds_flows)
+
+    ds_flows_name = "flow_graph"
+    #if not ds_flows.empty:
+    # Register flow dataset
+    datasets[ds_flows_name] = get_dataset(ds_flows, ds_flows_name, "Flow Graph - Interfaces")
+
+
+
     # Calculate and publish MatrixIndicators
     indicators = glb_idx.get(MatrixIndicator.partial_key())
     matrices = prepare_matrix_indicators(indicators, glb_idx, dom_tree, p_map, df, df_indicators, dynamic_scenario)
@@ -900,7 +933,7 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
         datasets[n] = ds
 
     # Create dataset and store in State (specific of "Biofuel case study")
-    # datasets["end_use_matrix"] = get_eum_dataset(df)
+    # datasets["end_use_matrix"] = get_ eum_dataset(df)
 
     return []
 
