@@ -993,7 +993,7 @@ def query_state_list_results(isess):
                       ] +
                      [dict(name="FG",
                            type="graph",
-                           description="Graph of Interfaces, Quantities; Scales and Exchanges",
+                           description="Graph of Interfaces, Quantities; Scales and EEExchanges",
                            formats=[dict(format=f,
                                          url=nis_api_base + F"/isession/rsession/state_query/flow_graph.{f.lower()}")
                                     for f in graph_formats]),

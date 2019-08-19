@@ -893,36 +893,26 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
         # Register dataset
         datasets[ds_indicators_name] = get_dataset(df_indicators, ds_indicators_name, "Flow Graph Solver - Indicators")
 
-    #Create Matrix to Sanskey graph -doesn't work
-    F_source = []
-    F_target = []
-    F_source_processor = []
-    F_source_processor_level = []
-    F_target_processor = []
-    F_target_processor_level = []
-    for i in glb_idx.get(FactorsRelationDirectedFlowObservation.partial_key()):
-        F_source.append(i._source.full_name)
-        F_target.append(i._target.full_name)
-        F_source_processor.append(i._source._processor._name)
-        if 'level' in i._source._processor._attributes:
-            F_source_processor_level.append(i._source._processor._attributes['level'])
-        else:
-            F_source_processor_level.append(None)
-        F_target_processor.append(i._target._processor._name)
-        if 'level' in i._target._processor._attributes:
-            F_target_processor_level.append(i._target._processor._attributes['level'])
-        else:
-            F_target_processor_level.append(None)
+    #Create Matrix to Sanskey graph TODO it doesnt appear in mu local NIS
 
-    ds_flows = pd.DataFrame({'source': F_source, 'source_processor ': F_source_processor,
-                          'source_processor_level': F_source_processor_level, 'target': F_target,
-                          'target_processor': F_target_processor, 'targe_processor_level': F_target_processor_level})
-    print(ds_flows)
+    FactorsRelationDirectedFlowObservation_list = glb_idx.get(FactorsRelationDirectedFlowObservation.partial_key())
 
-    ds_flows_name = "flow_graph"
+    #TODO information about flow quantity is missing
+    ds_flows = pd.DataFrame({'source': [i._source.full_name for i in FactorsRelationDirectedFlowObservation_list],
+                              'source_processor ': [i._source._processor._name for i in FactorsRelationDirectedFlowObservation_list],
+                          'source_processor_level':[ i._source._processor._attributes['level']  if ('level' in i._source._processor._attributes) else None  for i in FactorsRelationDirectedFlowObservation_list],
+                              'target': [i._target.full_name for i in FactorsRelationDirectedFlowObservation_list],
+                          'target_processor': [i._target._processor._name for i in FactorsRelationDirectedFlowObservation_list],
+                              'target_processor_level': [i._target._processor._attributes['level'] if 'level' in i._target._processor._attributes else None for i in FactorsRelationDirectedFlowObservation_list ]
+                              }
+                             )
+
+
+
+    ds_flows_name = "flow_graph_matrix"
     #if not ds_flows.empty:
     # Register flow dataset
-    datasets[ds_flows_name] = get_dataset(ds_flows, ds_flows_name, "Flow Graph - Interfaces")
+    datasets[ds_flows_name] = get_dataset(ds_flows, ds_flows_name, "Flow Graph Matrix - Interfaces")
 
 
 
@@ -1217,19 +1207,20 @@ def get_dataset(dataframe: pd.DataFrame, code: str, description: str) -> "Datase
     ds.metadata = None
     ds.database = None
 
-    for dimension in dataframe.index.names:  # type: str
-        d = Dimension()
-        d.code = dimension
-        d.description = None
-        d.attributes = None
-        d.is_time = (dimension.lower() == "period")
-        d.is_measure = False
-        cl = dataframe.index.unique(level=dimension).values
-        d.code_list = CodeList.construct(
-            dimension, dimension, [""],
-            codes=[CodeImmutable(c, c, "", []) for c in cl]
-        )
-        d.dataset = ds
+    if dataframe.index.names[0] != None:
+        for dimension in dataframe.index.names:  # type: str
+            d = Dimension()
+            d.code = dimension
+            d.description = None
+            d.attributes = None
+            d.is_time = (dimension.lower() == "period")
+            d.is_measure = False
+            cl = dataframe.index.unique(level=dimension).values
+            d.code_list = CodeList.construct(
+                dimension, dimension, [""],
+                codes=[CodeImmutable(c, c, "", []) for c in cl]
+            )
+            d.dataset = ds
 
     for measure in dataframe.columns.values:  # type: str
         d = Dimension()
