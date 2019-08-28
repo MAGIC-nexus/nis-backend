@@ -893,26 +893,42 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
         # Register dataset
         datasets[ds_indicators_name] = get_dataset(df_indicators, ds_indicators_name, "Flow Graph Solver - Indicators")
 
-    #Create Matrix to Sanskey graph TODO it doesnt appear in mu local NIS
+    #Create Matrix to Sanskey graph
 
     FactorsRelationDirectedFlowObservation_list = glb_idx.get(FactorsRelationDirectedFlowObservation.partial_key())
 
-    #TODO information about flow quantity is missing
+
     ds_flows = pd.DataFrame({'source': [i._source.full_name for i in FactorsRelationDirectedFlowObservation_list],
-                              'source_processor ': [i._source._processor._name for i in FactorsRelationDirectedFlowObservation_list],
-                          'source_processor_level':[ i._source._processor._attributes['level']  if ('level' in i._source._processor._attributes) else None  for i in FactorsRelationDirectedFlowObservation_list],
+                              'source_processor': [i._source._processor._name for i in FactorsRelationDirectedFlowObservation_list],
+                          'source_level':[ i._source._processor._attributes['level']  if ('level' in i._source._processor._attributes) else None  for i in FactorsRelationDirectedFlowObservation_list],
                               'target': [i._target.full_name for i in FactorsRelationDirectedFlowObservation_list],
                           'target_processor': [i._target._processor._name for i in FactorsRelationDirectedFlowObservation_list],
-                              'target_processor_level': [i._target._processor._attributes['level'] if 'level' in i._target._processor._attributes else None for i in FactorsRelationDirectedFlowObservation_list ]
+                              'target_level': [i._target._processor._attributes['level'] if 'level' in i._target._processor._attributes else None for i in FactorsRelationDirectedFlowObservation_list ],
+                             # 'RoegenType_target': [i.target_factor._attributes['roegen_type']for i in FactorsRelationDirectedFlowObservation_list],
+                             'Sphere_target': [i.target_factor._attributes['sphere'] for i in
+                                                   FactorsRelationDirectedFlowObservation_list],
+                             'Subsystem_target': [i._target._processor._attributes['subsystem_type'] for i in
+                                               FactorsRelationDirectedFlowObservation_list],
+                             'System_target': [i._target._processor._attributes['processor_system'] for i in
+                                                  FactorsRelationDirectedFlowObservation_list]
                               }
                              )
 
 
-
+    # I suppose that relations between processors (source-target) doesn't change between different scenarios.
+    df2 = df.reset_index()
+    processor = df2["Processor"].apply(lambda x: x.split("."))
+    df2["lastprocessor"] = [i[-1] for i in processor]
+    df2["source"] = df2["lastprocessor"] + ":" + df2["Interface"]
+   # df2 = df2[df2["Orientation"]=="Output"] It is not necessary?
+    ds_flow_values = pd.merge(df2,ds_flows, on="source")
+    ds_flow_values = ds_flow_values.drop(columns = ["Orientation","lastprocessor","Processor", "Interface", 'RoegenType'], axis = 1)
+    ds_flow_values = ds_flow_values.rename(columns = {'Sphere':'Sphere_source', 'System' : 'System_source', 'Subsystem': 'Subsystem_source' })
+    # ds_flow_values.reset_index()
     ds_flows_name = "flow_graph_matrix"
-    #if not ds_flows.empty:
+    # if not ds_flows.empty:
     # Register flow dataset
-    datasets[ds_flows_name] = get_dataset(ds_flows, ds_flows_name, "Flow Graph Matrix - Interfaces")
+    datasets[ds_flows_name] = get_dataset(ds_flow_values, ds_flows_name, "Flow Graph Matrix - Interfaces")
 
 
 

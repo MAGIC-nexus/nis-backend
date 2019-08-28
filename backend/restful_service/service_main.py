@@ -993,7 +993,7 @@ def query_state_list_results(isess):
                       ] +
                      [dict(name="FG",
                            type="graph",
-                           description="Graph of Interfaces, Quantities; Scales and EEExchanges",
+                           description="Graph of Interfaces, Quantities; Scales and Exchanges",
                            formats=[dict(format=f,
                                          url=nis_api_base + F"/isession/rsession/state_query/flow_graph.{f.lower()}")
                                     for f in graph_formats]),
@@ -1003,6 +1003,13 @@ def query_state_list_results(isess):
                            formats=[dict(format=f,
                                          url=nis_api_base + F"/isession/rsession/state_query/processors_graph.{f.lower()}")
                                     for f in graph_formats]),
+                      ] +
+                     [dict(name="Sankey_Graph",
+                           type="Graph",
+                           description="Dictionary of sanskey Graph for every scenario for implementation in JupyterLab using plotly",
+                           formats=[
+                               dict(format=f, url=nis_api_base + F"/isession/rsession/query/sankey_graph.{f.lower()}")
+                               for f in ["JSON"]]),
                       ] +
                      [dict(name="P_GIS",
                            type="geolayer",
@@ -1310,6 +1317,65 @@ def obtain_processors_graph_visjs_format():
         query = BasicQuery(isess.state)
         json = construct_processors_graph_2(isess.state, query, None, True, True, False)
         r = build_json_response(json, 200)
+    else:
+        r = build_json_response({}, 200)
+
+    return r
+
+
+@app.route(nis_api_base + '/isession/rsession/query/sankey_graph.json', methods=["GET"])
+def obtain_processors_graph_visjs_format():
+    # Recover InteractiveSession
+    isess = deserialize_isession_and_prepare_db_session()
+    if isess and isinstance(isess, Response):
+        return isess
+
+    # Generate sanskey dictionary ready for plotly from State
+    if isess.state:
+        _, _, _, datasets, _ = get_case_study_registry_objects(isess.state)
+        if datasets["flow_graph_matrix"]:
+            df = datasets.get("flow_graph_matrix").data
+
+            sanskey = {}
+            for s in list(set(df['Scenario'])):
+                ds_scenario = df[df['Scenario'] == s]
+                processors = list(set(ds_scenario['source_processor'].append(ds_scenario['target_processor'])))
+                source = [processors.index(i) for i in list(ds_scenario['source_processor'])]
+                target = [processors.index(i) for i in list(ds_scenario['target_processor'])]
+                label = list(ds_scenario['source'] + ' to ' + ds_scenario['target'])
+                data = dict(
+                    type='sankey',
+                    node=dict(
+                        pad=50,
+                        thickness=100,
+                        line=dict(
+                            color="black",
+                            width=0.5
+                        ),
+                        label=processors,
+
+                    ),
+                    link=dict(
+                        source=source,
+                        target=target,
+                        value=list(ds_scenario['Value']),
+                        label=label
+                    ))
+
+                layout = dict(
+                    title=s,
+                    font=dict(
+                        size=10
+                    )
+                )
+
+                sanskey[s] = data
+
+            r = build_json_response(sanskey, 200)
+
+        else:
+            r = build_json_response({}, 200)
+
     else:
         r = build_json_response({}, 200)
 
