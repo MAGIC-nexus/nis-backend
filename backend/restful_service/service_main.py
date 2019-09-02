@@ -3080,45 +3080,50 @@ def validate_command_record():
             if fld:  # If found, can validate syntax
                 # Validate Syntax
                 content = fields[f]
-                content_msg = content  # To show in case of error
+                content_msg = content  # Original "content", to show in case of error
                 if isinstance(content, (int, float)):
                     content = str(content)
-                if fld.allowed_values:
-                    # Case insensitive comparison
-                    if content.lower().strip() in [f.lower().strip() for f in fld.allowed_values]:
-                        result[f] = None
-                    else:
-                        result[f] = "'"+content+"' in field '"+f+"' must be one of: "+", ".join(fld.allowed_values)
-                        status = 400
-                else:
-                    valid = True
-                    if "{" in content or "}" in content:
-                        # Is expansion allowed in this command?
-                        expansion_allowed = True
-                        if expansion_allowed:
-                            pieces, s = split_expansion_expressions(f, content)
-                            if s is None:
-                                c = ""
-                                for p in pieces:
-                                    if p[1]:  # Expansion expression
-                                        try:
-                                            string_to_ast(arith_boolean_expression, p[0])
-                                            c += "expand"
-                                        except:
-                                            s = f"Invalid syntax in field '{f}' with value: {content}, expansion expression '{p[0]}' invalid"
-                                            result[f] = s
-                                            valid = False
-                                            break
-                                    else:
-                                        c += p[0]
-                                if valid:
-                                    content = c
-                            else:
-                                valid = False
 
-                    if not valid:
-                        result[f] = s
-                        status = 400
+                # Check if it is an expansion expression
+                valid = True
+                if "{" in content or "}" in content:
+                    # Is expansion allowed in this command?
+                    expansion_allowed = True
+                    if expansion_allowed:
+                        pieces, s = split_expansion_expressions(f, content)
+                        if s is None:
+                            c = ""
+                            for p in pieces:
+                                if p[1]:  # Expansion expression
+                                    try:
+                                        string_to_ast(arith_boolean_expression, p[0])
+                                        c += "expand"
+                                    except:
+                                        s = f"Invalid syntax in field '{f}' with value: {content}, expansion expression '{p[0]}' invalid"
+                                        result[f] = s
+                                        valid = False
+                                        break
+                                else:
+                                    c += p[0]
+                            if valid:
+                                content = c
+                        else:
+                            valid = False
+
+                if not valid:
+                    result[f] = s
+                    status = 400
+                else:
+                    if fld.allowed_values:
+                        if content != content_msg:  # It was an expansion expression, cannot check it now, assume it is good
+                            result[f] = None
+                        else:
+                            # Case insensitive comparison
+                            if content.lower().strip() in [f.lower().strip() for f in fld.allowed_values]:
+                                result[f] = None
+                            else:
+                                result[f] = "'"+content+"' in field '"+f+"' must be one of: "+", ".join(fld.allowed_values)
+                                status = 400
                     else:
                         try:
                             string_to_ast(fld.parser, content)
