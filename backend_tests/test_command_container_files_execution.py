@@ -376,9 +376,6 @@ class TestCommandFiles(unittest.TestCase):
         # TODO Check things!!!
         # self.assertEqual(len(p_sets), 3)
         # Close interactive session
-        datasets["ds1"].data.to_csv(os.path.dirname(os.path.abspath(__file__)) + "/tmp/08_caso_energia_eu_new_commands_ds1_results.csv")
-        datasets["ds2"].data.to_csv(os.path.dirname(os.path.abspath(__file__)) + "/tmp/08_caso_energia_eu_new_commands_ds2_results.csv")
-        print(datasets["ds2"].data.head())
         name = "ds2"
         ds = datasets[name]  # type: Dataset
         ds2 = ds.data

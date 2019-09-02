@@ -1008,7 +1008,7 @@ def query_state_list_results(isess):
                            type="Graph",
                            description="Dictionary of sanskey Graph for every scenario for implementation in JupyterLab using plotly",
                            formats=[
-                               dict(format=f, url=nis_api_base + F"/isession/rsession/query/sankey_graph.{f.lower()}")
+                               dict(format=f, url=nis_api_base + F"/isession/rsession/state_query/sankey_graph.{f.lower()}")
                                for f in ["JSON"]]),
                       ] +
                      [dict(name="P_GIS",
@@ -1322,9 +1322,9 @@ def obtain_processors_graph_visjs_format():
 
     return r
 
-
+@app.route(nis_api_base + '/isession/rsession/state_query/sankey_graph.json', methods=["GET"])
 @app.route(nis_api_base + '/isession/rsession/query/sankey_graph.json', methods=["GET"])
-def obtain_processors_graph_visjs_format():
+def obtain_sankey_graph():
     # Recover InteractiveSession
     isess = deserialize_isession_and_prepare_db_session()
     if isess and isinstance(isess, Response):
@@ -1336,7 +1336,7 @@ def obtain_processors_graph_visjs_format():
         if datasets["flow_graph_matrix"]:
             df = datasets.get("flow_graph_matrix").data
 
-            sanskey = {}
+            sankey = {}
             for s in list(set(df['Scenario'])):
                 ds_scenario = df[df['Scenario'] == s]
                 processors = list(set(ds_scenario['source_processor'].append(ds_scenario['target_processor'])))
@@ -1369,9 +1369,9 @@ def obtain_processors_graph_visjs_format():
                     )
                 )
 
-                sanskey[s] = data
+                sankey[s] = data
 
-            r = build_json_response(sanskey, 200)
+            r = build_json_response(sankey, 200)
 
         else:
             r = build_json_response({}, 200)
