@@ -647,43 +647,40 @@ class TestCommandFiles(unittest.TestCase):
         # Check State of things
         glb_idx, p_sets, hh, datasets, mappings = get_case_study_registry_objects(isess.state)
         datasets.get("flow_graph_matrix").data.to_csv(output_path, index = False)
-        ds_flow_values = datasets.get("flow_graph_matrix").data
+        df = datasets.get("flow_graph_matrix").data
 
-        sanskey = {}
-        for s in list(set(ds_flow_values['Scenario'])):
-            ds_scenario = ds_flow_values[ds_flow_values['Scenario'] == s]
-            processors = list(set(ds_scenario['source_processor'].append(ds_scenario['target_processor'])))
-            source = [processors.index(i) for i in list(ds_scenario['source_processor'])]
-            target = [processors.index(i) for i in list(ds_scenario['target_processor'])]
-            label = list(ds_scenario['source'] + ' to ' + ds_scenario['target'])
-            data = dict(
-                type='sankey',
-                node=dict(
-                    pad=50,
-                    thickness=100,
-                    line=dict(
-                        color="black",
-                        width=0.5
+        sankey = {}
+        for p in list(set(df['Period'])):
+            df_period = df[df['Period'] == p]
+            tmp = {}
+            for s in list(set(df_period['Scenario'])):
+                ds_scenario = df_period[df_period['Scenario'] == s]
+                processors = list(set(ds_scenario['source_processor'].append(ds_scenario['target_processor'])))
+                source = [processors.index(i) for i in list(ds_scenario['source_processor'])]
+                target = [processors.index(i) for i in list(ds_scenario['target_processor'])]
+                label = list(ds_scenario['source'] + ' to ' + ds_scenario['target'])
+                data = dict(
+                    type='sankey',
+                    node=dict(
+                        pad=50,
+                        thickness=100,
+                        line=dict(
+                            color="black",
+                            width=0.5
+                        ),
+                        label=processors,
+
                     ),
-                    label=processors,
+                    link=dict(
+                        source=source,
+                        target=target,
+                        value=list(ds_scenario['Value']),
+                        label=label
+                    ))
 
-                ),
-                link=dict(
-                    source=source,
-                    target=target,
-                    value=list(ds_scenario['Value']),
-                    label=label
-                ))
-
-            layout = dict(
-                title=s,
-                font=dict(
-                    size=10
-                )
-            )
-
-            sanskey[s] = data
-        print(sanskey['Scenario1'])
+                tmp[s] = data
+            sankey[p] = tmp
+        print(sankey['2011']['Scenario1'])
         # Close interactive session
         isess.close_db_session()
 

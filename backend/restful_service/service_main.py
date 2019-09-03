@@ -1337,39 +1337,36 @@ def obtain_sankey_graph():
             df = datasets.get("flow_graph_matrix").data
 
             sankey = {}
-            for s in list(set(df['Scenario'])):
-                ds_scenario = df[df['Scenario'] == s]
-                processors = list(set(ds_scenario['source_processor'].append(ds_scenario['target_processor'])))
-                source = [processors.index(i) for i in list(ds_scenario['source_processor'])]
-                target = [processors.index(i) for i in list(ds_scenario['target_processor'])]
-                label = list(ds_scenario['source'] + ' to ' + ds_scenario['target'])
-                data = dict(
-                    type='sankey',
-                    node=dict(
-                        pad=50,
-                        thickness=100,
-                        line=dict(
-                            color="black",
-                            width=0.5
+            for p in list(set(df['Period'])):
+                df_period = df[df['Period'] == p]
+                tmp = {}
+                for s in list(set(df_period['Scenario'])):
+                    ds_scenario = df_period[df_period['Scenario'] == s]
+                    processors = list(set(ds_scenario['source_processor'].append(ds_scenario['target_processor'])))
+                    source = [processors.index(i) for i in list(ds_scenario['source_processor'])]
+                    target = [processors.index(i) for i in list(ds_scenario['target_processor'])]
+                    label = list(ds_scenario['source'] + ' to ' + ds_scenario['target'])
+                    data = dict(
+                        type='sankey',
+                        node=dict(
+                            pad=50,
+                            thickness=100,
+                            line=dict(
+                                color="black",
+                                width=0.5
+                            ),
+                            label=processors,
+
                         ),
-                        label=processors,
+                        link=dict(
+                            source=source,
+                            target=target,
+                            value=list(ds_scenario['Value']),
+                            label=label
+                        ))
 
-                    ),
-                    link=dict(
-                        source=source,
-                        target=target,
-                        value=list(ds_scenario['Value']),
-                        label=label
-                    ))
-
-                layout = dict(
-                    title=s,
-                    font=dict(
-                        size=10
-                    )
-                )
-
-                sankey[s] = data
+                    tmp[s] = data
+                sankey[p] = tmp
 
             r = build_json_response(sankey, 200)
 
