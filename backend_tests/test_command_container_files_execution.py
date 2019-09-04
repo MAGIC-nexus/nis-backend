@@ -812,7 +812,7 @@ if __name__ == '__main__':
         #i.test_011_execute_file_v2_five()  # Dataset
         #i.test_012_execute_file_v2_six()  # Almeria using v2 commands and v1 upscale
         #i.test_013_execute_file_v2_seven()  # Custom datasets
-        #i.test_014_execute_file_v2_eight()
+        i.test_014_execute_file_v2_eight()
         #i.test_018_many_to_many_mappings()
         #i.test_019_import_commands()
         #i.test_020_list_of_commands()
@@ -825,5 +825,5 @@ if __name__ == '__main__':
         #i.test_027_solving_it2it()
         #i.test_028_dataset_expansion_and_integration()
         #i.test_029_dataset_expansion2()
-        i.test_023_solving_flow_graph_matrix()
+        #i.test_023_solving_flow_graph_matrix()
         #i.test_024_export_JupyterNotebook()

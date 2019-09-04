@@ -755,7 +755,10 @@ class Hierarchy(Nameable, Identifiable, Encodable):
         """
         def recurse_node(n):
                 if n.ident not in d:
-                    d[n.ident] = (n.name, n._description)
+                    if n._label:
+                        d[n.ident] = (n.name, n._label)
+                    else:
+                        d[n.ident] = (n.name, n._description)
                     for c in n.get_children():
                         recurse_node(c)
 
