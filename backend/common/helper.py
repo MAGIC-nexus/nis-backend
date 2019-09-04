@@ -1377,8 +1377,12 @@ def add_label_columns_to_dataframe(ds_name, df, prd):
     # Merge with Taxonomy LABELS, IF available
     for col in df.columns:
         hs = prd.get(Hierarchy.partial_key(ds_name + "_" + col))
-        if len(hs) == 1:
-            h = hs[0]
+        hs2 = prd.get(Hierarchy.partial_key(col))
+        if len(hs) == 1 or len(hs2) == 1:
+            if len(hs) == 1:
+                h = hs[0]
+            else:
+                h = hs2[0]
             nodes = h.get_all_nodes()
             tmp = []
             for nn in nodes:
@@ -1388,12 +1392,12 @@ def add_label_columns_to_dataframe(ds_name, df, prd):
                 df[col + "_l"] = df[col].str.lower()
                 col = col + "_l"
 
-            # Dataframe of codes and descriptions
-            df_dst = pd.DataFrame(tmp, columns=['sou_rce', col + "_desc"])
-            df = pd.merge(df, df_dst, how='left', left_on=col, right_on='sou_rce')
-            del df['sou_rce']
-            if not backend.case_sensitive:
-                del df[col]
+                # Dataframe of codes and descriptions
+                df_dst = pd.DataFrame(tmp, columns=['sou_rce', col + "_desc"])
+                df = pd.merge(df, df_dst, how='left', left_on=col, right_on='sou_rce')
+                del df['sou_rce']
+                if not backend.case_sensitive:
+                    del df[col]
 
     return df
 

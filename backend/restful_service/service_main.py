@@ -1004,6 +1004,13 @@ def query_state_list_results(isess):
                                          url=nis_api_base + F"/isession/rsession/state_query/processors_graph.{f.lower()}")
                                     for f in graph_formats]),
                       ] +
+                     [dict(name="Sankey_Graph",
+                           type="Graph",
+                           description="Dictionary of sanskey Graph for every scenario for implementation in JupyterLab using plotly",
+                           formats=[
+                               dict(format=f, url=nis_api_base + F"/isession/rsession/state_query/sankey_graph.{f.lower()}")
+                               for f in ["JSON"]]),
+                      ] +
                      [dict(name="P_GIS",
                            type="geolayer",
                            description="Processors",
@@ -1310,6 +1317,62 @@ def obtain_processors_graph_visjs_format():
         query = BasicQuery(isess.state)
         json = construct_processors_graph_2(isess.state, query, None, True, True, False)
         r = build_json_response(json, 200)
+    else:
+        r = build_json_response({}, 200)
+
+    return r
+
+@app.route(nis_api_base + '/isession/rsession/state_query/sankey_graph.json', methods=["GET"])
+@app.route(nis_api_base + '/isession/rsession/query/sankey_graph.json', methods=["GET"])
+def obtain_sankey_graph():
+    # Recover InteractiveSession
+    isess = deserialize_isession_and_prepare_db_session()
+    if isess and isinstance(isess, Response):
+        return isess
+
+    # Generate sanskey dictionary ready for plotly from State
+    if isess.state:
+        _, _, _, datasets, _ = get_case_study_registry_objects(isess.state)
+        if datasets["flow_graph_matrix"]:
+            df = datasets.get("flow_graph_matrix").data
+
+            sankey = {}
+            for p in list(set(df['Period'])):
+                df_period = df[df['Period'] == p]
+                tmp = {}
+                for s in list(set(df_period['Scenario'])):
+                    ds_scenario = df_period[df_period['Scenario'] == s]
+                    processors = list(set(ds_scenario['source_processor'].append(ds_scenario['target_processor'])))
+                    source = [processors.index(i) for i in list(ds_scenario['source_processor'])]
+                    target = [processors.index(i) for i in list(ds_scenario['target_processor'])]
+                    label = list(ds_scenario['source'] + ' to ' + ds_scenario['target'])
+                    data = dict(
+                        type='sankey',
+                        node=dict(
+                            pad=50,
+                            thickness=100,
+                            line=dict(
+                                color="black",
+                                width=0.5
+                            ),
+                            label=processors,
+
+                        ),
+                        link=dict(
+                            source=source,
+                            target=target,
+                            value=list(ds_scenario['Value']),
+                            label=label
+                        ))
+
+                    tmp[s] = data
+                sankey[p] = tmp
+
+            r = build_json_response(sankey, 200)
+
+        else:
+            r = build_json_response({}, 200)
+
     else:
         r = build_json_response({}, 200)
 
@@ -3264,7 +3327,7 @@ def obtain_commands_reference():
              3235\tFuel\n\
              3244\tFuel\n\
              3246\tFuel\n\
-             3247\tFuel\n\
+             3247\tFuel\n\“n-2”“n-2”
              3250\tFeedstock\n\
              3260\tFuel\n\
              3270A\tHeat\n\

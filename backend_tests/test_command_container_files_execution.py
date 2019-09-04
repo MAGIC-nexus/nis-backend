@@ -376,8 +376,12 @@ class TestCommandFiles(unittest.TestCase):
         # TODO Check things!!!
         # self.assertEqual(len(p_sets), 3)
         # Close interactive session
-        datasets["ds1"].data.to_csv("/tmp/08_caso_energia_eu_new_commands_ds1_results.csv")
-        datasets["ds2"].data.to_csv("/tmp/08_caso_energia_eu_new_commands_ds2_results.csv")
+        name = "ds2"
+        ds = datasets[name]  # type: Dataset
+        ds2 = ds.data
+        print("Preparing Dataset labels")
+        ds2 = add_label_columns_to_dataframe(name, ds2, glb_idx)
+        print(ds2.head())
         isess.close_db_session()
 
     def test_015_execute_file_v2_nine(self):
@@ -519,7 +523,6 @@ class TestCommandFiles(unittest.TestCase):
 
         # Check State of things
         glb_idx, p_sets, hh, datasets, mappings = get_case_study_registry_objects(isess.state)
-
         # Close interactive session
         isess.close_db_session()
 
@@ -629,6 +632,124 @@ class TestCommandFiles(unittest.TestCase):
         # Close interactive session
         isess.close_db_session()
 
+    def test_023_solving_flow_graph_matrix(self):
+        file_path = os.path.dirname(
+            os.path.abspath(__file__)) + "/z_input_files/v2/15_graph_solver_example.xlsx"
+        output_path =  os.path.dirname(
+            os.path.abspath(__file__)) + "/tmp/flow_graph_matrix.csv"
+
+        isess = execute_file(file_path, generator_type="spreadsheet")
+
+        issues = prepare_and_solve_model(isess.state)
+        for idx, issue in enumerate(issues):
+            print(f"Issue {idx + 1}/{len(issues)} = {issue}")
+
+        # Check State of things
+        glb_idx, p_sets, hh, datasets, mappings = get_case_study_registry_objects(isess.state)
+        datasets.get("flow_graph_matrix").data.to_csv(output_path, index = False)
+        df = datasets.get("flow_graph_matrix").data
+
+        sankey = {}
+        for p in list(set(df['Period'])):
+            df_period = df[df['Period'] == p]
+            tmp = {}
+            for s in list(set(df_period['Scenario'])):
+                ds_scenario = df_period[df_period['Scenario'] == s]
+                processors = list(set(ds_scenario['source_processor'].append(ds_scenario['target_processor'])))
+                source = [processors.index(i) for i in list(ds_scenario['source_processor'])]
+                target = [processors.index(i) for i in list(ds_scenario['target_processor'])]
+                label = list(ds_scenario['source'] + ' to ' + ds_scenario['target'])
+                data = dict(
+                    type='sankey',
+                    node=dict(
+                        pad=50,
+                        thickness=100,
+                        line=dict(
+                            color="black",
+                            width=0.5
+                        ),
+                        label=processors,
+
+                    ),
+                    link=dict(
+                        source=source,
+                        target=target,
+                        value=list(ds_scenario['Value']),
+                        label=label
+                    ))
+
+                tmp[s] = data
+            sankey[p] = tmp
+        print(sankey['2011']['Scenario1'])
+        # Close interactive session
+        isess.close_db_session()
+
+    def test_024_export_JupyterNotebook(self):
+        from nbformat import write, v4
+        text = []
+        code = []
+        nb = v4.new_notebook()
+        text.append( """\
+        # My first automatic Jupyter Notebook
+        This is an auto-generated notebook.""")
+
+        code.append( """\
+        fname = "Biofuel_NIS.xlsx";""")
+
+        code.append( """\
+        from nexinfosys import NISClient, display_visjs_jupyterlab
+        import io
+        import pandas as pd
+        import networkx as nx
+        
+        c = NISClient("https://one.nis.magic-nexus.eu/nis_api")
+        #c = NISClient("http://localhost:5000/nis_api")
+        # Login, open session, load a workbook (which is in Nextcloud), submit (execute!)
+        c.login("test_user")
+        #print("Logged in")
+        c.open_session()
+        #print("Session opened")
+        n = c.load_workbook(fname)
+        #print("N worksheets: "+str(n))
+        r = c.submit()
+        #print("Returned from submit")
+        # Check if submission was successful (it should be with the provided workbook), then query 
+        # available datasets, and get one of them, converting it into a pd.DataFrame
+        any_error = False
+        if len(r) > 0:
+            for i in r:
+                if i["type"] == 3:
+                    any_error = True
+                    print(str(i))
+        
+        if not any_error:
+            # Obtain available datasets
+            r = c.query_available_datasets()
+            if len(r) > 0:
+                results = {}
+                for ds in r:
+                    results[ds["name"]] = {d["format"].lower(): d["url"] for d in ds["formats"]}
+                    #print(str(ds))
+                #r = c.download_results([(results["FG"]["visjs"])])
+                #visjs_data = r[0].decode("utf-8")
+                #unique_name = None
+                r = c.download_results([(results["PG"]["visjs"])])
+                visjs_data2 = r[0].decode("utf-8")
+                un2 = None
+        
+                #unique_name = display_visjs_jupyterlab(visjs_data, 800, unique_name)
+                un2 = display_visjs_jupyterlab(visjs_data2, 1200, un2)
+              
+        c.close_session()
+        c.logout()""")
+
+
+        nb['cells'] = [v4.new_markdown_cell(text),
+                       v4.new_code_cell(code[0]),v4.new_code_cell(code[1])]
+        fname = 'test.ipynb'
+
+        with open(fname, 'w') as f:
+            write(nb, f)
 
 if __name__ == '__main__':
     # import pandas as pd
@@ -691,7 +812,7 @@ if __name__ == '__main__':
         #i.test_011_execute_file_v2_five()  # Dataset
         #i.test_012_execute_file_v2_six()  # Almeria using v2 commands and v1 upscale
         #i.test_013_execute_file_v2_seven()  # Custom datasets
-        #i.test_014_execute_file_v2_eight()
+        i.test_014_execute_file_v2_eight()
         #i.test_018_many_to_many_mappings()
         #i.test_019_import_commands()
         #i.test_020_list_of_commands()
@@ -703,4 +824,6 @@ if __name__ == '__main__':
         #i.test_026_NL_ES()
         #i.test_027_solving_it2it()
         #i.test_028_dataset_expansion_and_integration()
-        i.test_029_dataset_expansion2()
+        #i.test_029_dataset_expansion2()
+        #i.test_023_solving_flow_graph_matrix()
+        #i.test_024_export_JupyterNotebook()
