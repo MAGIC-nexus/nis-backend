@@ -43,7 +43,7 @@ if __name__ == '__main__':
         os.environ["MAGIC_NIS_SERVICE_CONFIG_FILE"] = "../../../nis-backend-config/nis_local.conf"
 
 from backend.common.helper import generate_json, obtain_dataset_source, gzipped, str2bool, \
-    add_label_columns_to_dataframe
+    add_label_columns_to_dataframe, download_file
 from backend.models.musiasem_methodology_support import *
 from backend.common.create_database import create_pg_database_engine, create_monet_database_engine
 from backend.restful_service import app, register_external_datasources
@@ -882,6 +882,66 @@ def reproducible_session_get_command_generator(order):  # Return one of the comm
     return r
 
 
+@app.route(nis_api_base + "/isession/rsession/save_state", methods=["PUT"])
+def reproducible_session_save_state():  # Save state
+    def ensure_dir(file_path):
+        directory = os.path.dirname(file_path)
+        if not os.path.exists(directory):
+            os.makedirs(directory)
+
+    # Recover InteractiveSession
+    isess = deserialize_isession_and_prepare_db_session()
+    if isess and isinstance(isess, Response):
+        return isess
+
+    # A reproducible session must be open, signal about it if not
+    if isess.reproducible_session_opened():
+        if isess.state:
+            code = request.args.get("code", None)
+            if code is None:
+                r = build_json_response({"error": "Query parameter 'code' is mandatory"}, 401)
+            else:
+                cs_path = backend.get_global_configuration_variable("CASE_STUDIES_DIR")
+                ensure_dir(cs_path)
+                # Save state
+                s = serialize_state(isess.state)
+                with open(cs_path+os.sep+code+".state_serialized", "wt") as f:
+                    f.write(s)
+
+                r = build_json_response({}, 204)
+        else:
+            r = build_json_response({}, 204)
+    else:
+        r = build_json_response({"error": "Cannot save state, no open reproducible session"}, 401)
+
+    return r
+
+
+@app.route(nis_api_base + "/isession/rsession/load_state", methods=["GET"])
+def reproducible_session_load_state():  # Load saved state
+    # Recover InteractiveSession
+    isess = deserialize_isession_and_prepare_db_session()
+    if isess and isinstance(isess, Response):
+        return isess
+
+    # A reproducible session must be open, signal about it if not
+    if isess.reproducible_session_opened():
+        code = request.args.get("code", None)
+        if code is None:
+            r = build_json_response({"error": "Query parameter 'code' is mandatory"}, 401)
+        else:
+            cs_path = backend.get_global_configuration_variable("CASE_STUDIES_DIR")
+            with open(cs_path + os.sep + code + ".state_serialized", "wt") as f:
+                s = f.read()
+                isess.state = deserialize_state(s)
+
+            r = build_json_response({}, 204)
+    else:
+        r = build_json_response({"error": "Cannot load state, no open reproducible session"}, 401)
+
+    return r
+
+
 @app.route(nis_api_base + "/isession/rsession/pyckled_state", methods=["GET"])
 def reproducible_session_get_state():  # Return current status of ReproducibleSession
     # Recover InteractiveSession
@@ -1537,11 +1597,19 @@ def receive_file_submission(req):
             break
     else:
         buffer = bytes(io.BytesIO(req.get_data()).getbuffer())
-        # It may be a DATA URL
-        try:
-            buffer, content_type = parse_data_url(buffer.decode("utf-8"))
-        except:
-            content_type = req.headers["Content-Type"]
+        url = buffer.decode("utf-8")
+        if not url.startswith("data"):
+            # Try a download from the URL
+            # Check if it is a Google Drive file, a Nextcloud file or a freely downloadable file
+            data = download_file(url)
+            buffer = data.getvalue()
+            content_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        else:
+            # It may be a DATA URL
+            try:
+                buffer, content_type = parse_data_url()
+            except:
+                content_type = req.headers["Content-Type"]
 
     # Infer "generator_type" from content type
     if content_type.lower() in ["application/json", "text/csv"]:
@@ -2997,6 +3065,24 @@ def data_source_database_dataset_detail(source_id, database_id, dataset_id):
              dimensions=dims)
 
     return build_json_response(d)
+
+
+@app.route(nis_api_base + "/isession/external_xslx", methods=["PUT"])
+def download_external_xlsx():  # From the URL of an external XLSX, obtain it and return it
+    # Recover InteractiveSession
+    isess = deserialize_isession_and_prepare_db_session()
+    if isess and isinstance(isess, Response):
+        return isess
+
+    buffer = bytes(io.BytesIO(request.get_data()).getbuffer())
+    url = buffer.decode("utf-8")
+    data = download_file(url)
+
+    r = Response(data.getvalue(),
+                 mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                 status=200)
+
+    return r
 
 
 @app.route(nis_api_base + "/isession/regenerate_xlsx", methods=["POST"])

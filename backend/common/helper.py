@@ -28,6 +28,7 @@ from pandas import DataFrame
 
 import backend
 from backend import case_sensitive, SDMXConcept, get_global_configuration_variable
+from backend.ie_imports.google_drive import download_xlsx_file_id
 from backend.models import ureg, log_level
 import webdav.client as wc
 
@@ -1082,6 +1083,63 @@ def to_str(v):
 # #####################################################################################################################
 
 
+def download_file(location):
+    """
+    Download a file from the specified URL location.
+
+    It recognizes MAGIC's Nextcloud instance AND Google Drive URL's
+    Google Drive URL's are assumed to be Spreadsheets (both XLSX and Google Calc are considered)
+
+    :param location:
+    :return: A BytesIO object with the contents of the file
+    """
+    pr = urlparse(location)
+    if pr.scheme != "":
+        # Load from remote site
+        fragment = ""
+        if "#" in location:
+            pos = location.find("#")
+            fragment = location[pos + 1:]
+            location = location[:pos]
+        if pr.netloc.lower() == "nextcloud.data.magic-nexus.eu":
+            # WebDAV
+            parts = location.split("/")
+            for i, p in enumerate(parts):
+                if p == "nextcloud.data.magic-nexus.eu":
+                    url = "/".join(parts[:i + 1])
+                    fname = "/" + "/".join(parts[i + 1:])
+                    break
+
+            options = {
+                "webdav_hostname": url,
+                "webdav_login": get_global_configuration_variable("FS_USER"),
+                "webdav_password": get_global_configuration_variable("FS_PASSWORD")
+            }
+            client = wc.Client(options)
+            with tempfile.NamedTemporaryFile(delete=True) as temp:
+                client.download_sync(remote_path=fname, local_path=temp.name)
+                f = open(temp.name, "rb")
+                data = io.BytesIO(f.read())
+                f.close()
+        elif pr.netloc.lower() == "docs.google.com" or pr.netloc.lower() == "drive.google.com":
+            # Google Drive. Only XLSX files supported (if Google Calc, an Export to XLSX is done)
+            # Extract file id from the URL
+            import re
+            m = re.match(r".*[^-\w]([-\w]{33,})[^-\w]?.*", location)
+            file_id = m.groups()[0]
+            credentials_file = get_global_configuration_variable("GAPI_CREDENTIALS_FILE")
+            token_file = get_global_configuration_variable("GAPI_TOKEN_FILE")
+            data = download_xlsx_file_id(credentials_file, token_file, file_id)
+        else:
+            data = urllib.request.urlopen(location).read()
+            data = io.BytesIO(data)
+    else:
+        data = urllib.request.urlopen(location).read()
+        data = io.BytesIO(data)
+
+    return data
+
+
 def load_dataset(location: str=None):
     """
     Loads a dataset into a DataFrame
@@ -1094,41 +1152,11 @@ def load_dataset(location: str=None):
     if not location:
         df = None
     else:
-        pr = urlparse(location)
-        if pr.scheme != "":
-            # Load from remote site
-            fragment = ""
-            if "#" in location:
-                pos = location.find("#")
-                fragment = location[pos + 1:]
-                location = location[:pos]
-            if pr.netloc.lower() == "nextcloud.data.magic-nexus.eu":
-                # WebDAV
-                parts = location.split("/")
-                for i, p in enumerate(parts):
-                    if p == "nextcloud.data.magic-nexus.eu":
-                        url = "/".join(parts[:i+1])
-                        fname = "/" + "/".join(parts[i+1:])
-                        break
-
-                options = {
-                    "webdav_hostname": url,
-                    "webdav_login": get_global_configuration_variable("FS_USER"),
-                    "webdav_password": get_global_configuration_variable("FS_PASSWORD")
-                }
-                client = wc.Client(options)
-                with tempfile.NamedTemporaryFile(delete=True) as temp:
-                    client.download_sync(remote_path=fname, local_path=temp.name)
-                    f = open(temp.name, "rb")
-                    data = io.BytesIO(f.read())
-                    f.close()
-            else:
-                data = urllib.request.urlopen(location).read()
-                data = io.BytesIO(data)
-        else:
-            data = urllib.request.urlopen(location).read()
-            data = io.BytesIO(data)
-
+        data = download_file(location)
+        fragment = ""
+        if "#" in location:
+            pos = location.find("#")
+            fragment = location[pos + 1:]
         # Then, try to read it
         t = mimetypes.guess_type(location, strict=True)
         if t[0] == "text/csv":
