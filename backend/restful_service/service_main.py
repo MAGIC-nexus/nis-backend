@@ -1594,9 +1594,14 @@ def receive_file_submission(req):
         for k in req.files:
             buffer = bytes(req.files[k].stream.getbuffer())
             content_type = req.files[k].content_type
+            it_is_url = False
             break
     else:
         buffer = bytes(io.BytesIO(req.get_data()).getbuffer())
+        content_type = req.content_type
+        it_is_url = buffer.startswith(b"data") or buffer.startswith(b"http")
+
+    if it_is_url:
         url = buffer.decode("utf-8")
         if not url.startswith("data"):
             # Try a download from the URL
@@ -1606,10 +1611,9 @@ def receive_file_submission(req):
             content_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         else:
             # It may be a DATA URL
-            try:
-                buffer, content_type = parse_data_url()
-            except:
-                content_type = req.headers["Content-Type"]
+            buffer, content_type = parse_data_url(url)
+            # except:
+            #     content_type = req.headers["Content-Type"]
 
     # Infer "generator_type" from content type
     if content_type.lower() in ["application/json", "text/csv"]:

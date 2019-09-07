@@ -16,3 +16,5 @@ backend/ie_imports/experimental/country_alternative_names.csv
 backend/ie_imports/experimental/saved_queries.csv
 backend/ie_imports/experimental/0.csv
 magic_box/
+/backend/restful_service/credentials.json
+/backend/restful_service/token.pickle
