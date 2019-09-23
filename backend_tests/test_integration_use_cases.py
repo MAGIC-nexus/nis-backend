@@ -2,33 +2,33 @@ import unittest
 import sqlalchemy
 
 # Memory
-from backend.model_services.workspace import InteractiveSession, CreateNew, prepare_and_reset_database_for_tests
-from backend.command_executors import create_command
-from backend.restful_service import tm_default_users, \
+from nexinfosys.model_services.workspace import InteractiveSession, CreateNew, prepare_and_reset_database_for_tests
+from nexinfosys.command_executors import create_command
+from nexinfosys.restful_service import tm_default_users, \
     tm_authenticators, \
     tm_object_types, \
     tm_permissions, \
     tm_case_study_version_statuses
 
 # Database (ORM)
-from backend.models.musiasem_methodology_support import *
-import backend
+from nexinfosys.models.musiasem_methodology_support import *
+import nexinfosys
 
 
 def setUpModule():
     print('In setUpModule()')
     # Setup SQLAlchemy engines as SQLite IN-MEMORY
-    backend.engine = sqlalchemy.create_engine("sqlite://", echo=True)
-    backend.data_engine = sqlalchemy.create_engine("sqlite://", echo=True)
+    nexinfosys.engine = sqlalchemy.create_engine("sqlite://", echo=True)
+    nexinfosys.data_engine = sqlalchemy.create_engine("sqlite://", echo=True)
 
     # global DBSession # global DBSession registry to get the scoped_session
-    DBSession.configure(bind=backend.engine)  # reconfigure the sessionmaker used by this scoped_session
+    DBSession.configure(bind=nexinfosys.engine)  # reconfigure the sessionmaker used by this scoped_session
     tables = ORMBase.metadata.tables
-    connection = backend.engine.connect()
-    table_existence = [backend.engine.dialect.has_table(connection, tables[t].name) for t in tables]
+    connection = nexinfosys.engine.connect()
+    table_existence = [nexinfosys.engine.dialect.has_table(connection, tables[t].name) for t in tables]
     connection.close()
     if False in table_existence:
-        ORMBase.metadata.bind = backend.engine
+        ORMBase.metadata.bind = nexinfosys.engine
         ORMBase.metadata.create_all()
 
     # Load base tables
@@ -52,8 +52,8 @@ def setUpModule():
 
 def tearDownModule():
     print('In tearDownModule()')
-    backend.data_engine.dispose()
-    backend.engine.dispose()
+    nexinfosys.data_engine.dispose()
+    nexinfosys.engine.dispose()
     print(str(len(tm_authenticators)))
     print("a")
 

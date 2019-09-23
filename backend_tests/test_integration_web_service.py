@@ -25,13 +25,13 @@ import importlib
  
 """
 
-import backend.restful_service  # Just to remove error in the "importlib.reload" sentence below
+import nexinfosys.restful_service  # Just to remove error in the "importlib.reload" sentence below
 os.environ["MAGIC_NIS_SERVICE_CONFIG_FILE"] = "../../../nis-backend-config/nis_unittests.conf"
-if "backend.restful_service" in sys.modules:
-    importlib.reload(backend.restful_service)
-backend.restful_service.app.config["TESTING"] = "True"
-import backend.restful_service.service_main
-from backend.restful_service import app, nis_api_base
+if "nexinfosys.restful_service" in sys.modules:
+    importlib.reload(nexinfosys.restful_service)
+nexinfosys.restful_service.app.config["TESTING"] = "True"
+import nexinfosys.restful_service.service_main
+from nexinfosys.restful_service import app, nis_api_base
 
 
 def to_str(resp_data):

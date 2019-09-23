@@ -1,12 +1,12 @@
 import unittest
 
 
-import backend.common.helper
-from backend.models.experiments.expressions import ExpressionsEngine
-from backend.models.musiasem_concepts import *
-from backend.models.musiasem_concepts_helper import *
-from backend.models.musiasem_concepts_helper import _get_observer, _find_or_create_relation
-from backend.restful_service.serialization import serialize_state, deserialize_state
+import nexinfosys.common.helper
+from nexinfosys.models.experiments.expressions import ExpressionsEngine
+from nexinfosys.models.musiasem_concepts import *
+from nexinfosys.models.musiasem_concepts_helper import *
+from nexinfosys.models.musiasem_concepts_helper import _get_observer, _find_or_create_relation
+from nexinfosys.restful_service.serialization import serialize_state, deserialize_state
 
 """ Integration tests for in memory model structures """
 
@@ -269,7 +269,7 @@ class ModelBuildingRelationObservations(unittest.TestCase):
         super().tearDown()
 
     def test_001_build_soslaires_relations(self):
-        backend.common.helper.case_sensitive = False
+        nexinfosys.common.helper.case_sensitive = False
         state = State()
         create_relation_observations(state, "WindFarm:WindElectricity", ["DesalinationPlant", ("ElectricGrid")])
         create_relation_observations(state, "ElectricGrid", "DesalinationPlant:GridElectricity")

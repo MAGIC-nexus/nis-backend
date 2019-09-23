@@ -2,19 +2,24 @@
 .idea
 .mypy_cache
 
+build/
+dist/
+nexinfosys_backend.egg-info/
 dump\.rdb
-backend/restful_service/nis_local.conf
-backend/restful_service/nis_docker_protagoras.conf
-backend/restful_service/nis_local_sqlite.conf
-backend/restful_service/nis_docker_local.conf
-backend/restful_service/nis_docker_naples.conf
+nexinfosys/restful_service/nis_local.conf
+nexinfosys/restful_service/nis_docker_protagoras.conf
+nexinfosys/restful_service/nis_local_sqlite.conf
+nexinfosys/restful_service/nis_docker_local.conf
+nexinfosys/restful_service/nis_docker_naples.conf
 install.sh
 Input Output entites of each command.gdsheet
 strategy.ini
-backend/ie_imports/experimental/UN Comtrade Country List.csv
-backend/ie_imports/experimental/country_alternative_names.csv
-backend/ie_imports/experimental/saved_queries.csv
-backend/ie_imports/experimental/0.csv
+nexinfosys/ie_imports/experimental/UN Comtrade Country List.csv
+nexinfosys/ie_imports/experimental/country_alternative_names.csv
+nexinfosys/ie_imports/experimental/saved_queries.csv
+nexinfosys/ie_imports/experimental/0.csv
 magic_box/
-/backend/restful_service/credentials.json
-/backend/restful_service/token.pickle
+/nexinfosys/restful_service/credentials.json
+/nexinfosys/restful_service/token.pickle
+
+~/nis_data/fadn/measures.csv

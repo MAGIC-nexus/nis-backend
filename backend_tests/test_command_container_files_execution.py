@@ -1,21 +1,21 @@
 import os
 import unittest
 
-import backend
-from backend.ie_exports.json import export_model_to_json
-from backend.model_services import get_case_study_registry_objects
-from backend.model_services.workspace import execute_file, prepare_and_reset_database_for_tests, \
+import nexinfosys
+from nexinfosys.ie_exports.json import export_model_to_json
+from nexinfosys.model_services import get_case_study_registry_objects
+from nexinfosys.model_services.workspace import execute_file, prepare_and_reset_database_for_tests, \
     prepare_and_solve_model, execute_file_return_issues
-from backend.models.musiasem_concepts import Observer, \
+from nexinfosys.models.musiasem_concepts import Observer, \
     Processor, FactorType, Factor, \
     Hierarchy, \
     FactorQuantitativeObservation, ProcessorsRelationPartOfObservation, \
     ProcessorsRelationUndirectedFlowObservation, ProcessorsRelationUpscaleObservation, \
     FactorsRelationDirectedFlowObservation
 # Database (ORM)
-from backend.restful_service import register_external_datasources
-from backend.restful_service.serialization import serialize_state, deserialize_state
-from backend.solving import get_processor_names_to_processors_dictionary
+from nexinfosys.restful_service import register_external_datasources
+from nexinfosys.restful_service.serialization import serialize_state, deserialize_state
+from nexinfosys.solving import get_processor_names_to_processors_dictionary
 
 
 class TestFAOCommandFiles(unittest.TestCase):
@@ -26,7 +26,7 @@ class TestFAOCommandFiles(unittest.TestCase):
             prepare=True,
             metadata_string="sqlite:////home/rnebot/GoogleDrive/AA_MAGIC/nis_metadata.db",
             data_string="sqlite:////home/rnebot/GoogleDrive/AA_MAGIC/nis_cached_datasets.db")
-        backend.data_source_manager = register_external_datasources(
+        nexinfosys.data_source_manager = register_external_datasources(
             {"FAO_DATASETS_DIR": "/home/marco/temp/Data/FAOSTAT/"})
 
     @classmethod
@@ -60,7 +60,7 @@ class TestCommandFiles(unittest.TestCase):
     def setUpClass(cls):
         # Executed BEFORE test methods of the class
         prepare_and_reset_database_for_tests(prepare=True)
-        backend.data_source_manager = register_external_datasources(
+        nexinfosys.data_source_manager = register_external_datasources(
             {"FAO_DATASETS_DIR": "/home/marco/temp/Data/FAOSTAT/"})
 
     @classmethod
@@ -786,7 +786,7 @@ if __name__ == '__main__':
     #
     # a = 1 / 0
 
-    from backend.common.helper import add_label_columns_to_dataframe
+    from nexinfosys.common.helper import add_label_columns_to_dataframe
 
     is_fao_test = False
     fao_dir = "/home/marco/temp/Data/FAOSTAT/"
@@ -796,13 +796,13 @@ if __name__ == '__main__':
             prepare=True,
             metadata_string="sqlite:////home/rnebot/GoogleDrive/AA_MAGIC/nis_metadata.db",
             data_string="sqlite:////home/rnebot/GoogleDrive/AA_MAGIC/nis_cached_datasets.db")
-        backend.data_source_manager = register_external_datasources(
+        nexinfosys.data_source_manager = register_external_datasources(
             {"FAO_DATASETS_DIR": fao_dir})
         i.test_001_fao()
     else:
         i = TestCommandFiles()
         prepare_and_reset_database_for_tests(prepare=True)
-        backend.data_source_manager = register_external_datasources(
+        nexinfosys.data_source_manager = register_external_datasources(
             {"FAO_DATASETS_DIR": fao_dir})
 
         #i.test_002_execute_file_two()

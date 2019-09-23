@@ -13,7 +13,7 @@ FROM python:3.7.3-slim-stretch
 #
 # docker start nis-local && docker logs nis-local -f
 #
-# LOCAL SERVER: (remember to start a REDIS instance) the image would be:
+# LOCAL SERVER: (the configuration uses REDISLITE, so no need to have a REDIS instance) the image would be:
 #
 # docker create --name nis-local -p 8080:80
 #               -v /home/rnebot/DATOS/docker/nis-local:/srv
@@ -88,8 +88,7 @@ RUN pip3 install --no-cache-dir psycopg2==2.7.3.2 && \
 
 COPY supervisord.conf /etc/supervisord.conf
 
-COPY backend /app/backend
-COPY frontend /app/frontend
+COPY nexinfosys /app/nexinfosys
 RUN mkdir -p /srv
 
 EXPOSE 80
@@ -99,5 +98,5 @@ VOLUME /srv
 ENV C_FORCE_ROOT=1
 
 # run supervisord
-CMD ["/usr/local/bin/gunicorn", "--workers=3", "--log-level=debug", "--timeout=2000", "--bind", "0.0.0.0:80", "backend.restful_service.service_main:app"]
+CMD ["/usr/local/bin/gunicorn", "--workers=1", "--log-level=debug", "--timeout=2000", "--bind", "0.0.0.0:80", "nexinfosys.restful_service.service_main:app"]
 #CMD ["supervisord", "-c", "/etc/supervisord.conf"]

@@ -1,1 +1,5 @@
-recursive-include frontend *
+recursive-include nexinfosys/frontend *
+exclude MANIFEST.in
+include requirements.txt
+include nexinfosys/restful_service/nis_local_dist.conf
+exclude nexinfosys/restful_service/nis_docker_naples.conf

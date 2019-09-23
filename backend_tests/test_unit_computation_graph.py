@@ -1,9 +1,9 @@
 import unittest
 from typing import List, Set, Dict, Tuple, Optional, Callable
 
-from backend.solving.graph.computation_graph import ComputationGraph
-from backend.solving.graph.flow_graph import FlowGraph
-from backend.solving.graph import EdgeType
+from nexinfosys.solving.graph.computation_graph import ComputationGraph
+from nexinfosys.solving.graph.flow_graph import FlowGraph
+from nexinfosys.solving.graph import EdgeType
 
 
 class SubTestCase:

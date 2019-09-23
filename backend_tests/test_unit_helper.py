@@ -4,11 +4,11 @@ import pyximport
 
 pyximport.install(reload_support=True, language_level=3)
 
-from backend.common.helper_accel import augment_dataframe_with_mapped_columns2
-import backend.common.helper
-from backend.common.helper import PartialRetrievalDictionary, augment_dataframe_with_mapped_columns, create_dictionary
-from backend.models.musiasem_concepts import Processor, ProcessorsRelationPartOfObservation, Observer
-from backend.models.musiasem_methodology_support import (
+from nexinfosys.common.helper_accel import augment_dataframe_with_mapped_columns2
+import nexinfosys.common.helper
+from nexinfosys.common.helper import PartialRetrievalDictionary, augment_dataframe_with_mapped_columns, create_dictionary
+from nexinfosys.models.musiasem_concepts import Processor, ProcessorsRelationPartOfObservation, Observer
+from nexinfosys.models.musiasem_methodology_support import (
                                                       serialize_from_object,
                                                       deserialize_to_object
                                                       )
@@ -16,7 +16,7 @@ from backend.models.musiasem_methodology_support import (
 
 def setUpModule():
     print('In setUpModule()')
-    backend.common.helper.case_sensitive = True
+    nexinfosys.common.helper.case_sensitive = True
 
 
 def tearDownModule():
@@ -253,7 +253,7 @@ class TestPartialKeyDictionary(unittest.TestCase):
         self.assertEqual(len(res), 0)
 
     def test_004_case_insensitive(self):
-        backend.common.helper.case_sensitive = False
+        nexinfosys.common.helper.case_sensitive = False
         prd = prepare_partial_key_dictionary()
         # Tests
         res = prd.get({"_type": "partOf"})

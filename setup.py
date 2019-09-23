@@ -1,5 +1,37 @@
+# ONE TIME  -----------------------------------------------------------------------------
+#
+# pip install --upgrade setuptools wheel twine
+#
+# Create account:
+# PyPI test: https://test.pypi.org/account/register/
+# or PyPI  : https://pypi.org/account/register/
+#
+# EACH TIME -----------------------------------------------------------------------------
+#
+# Modify version code in "setup.py" (this file)
+#
+# Build (cd to directory where "setup.py" is)
+# python3 setup.py sdist bdist_wheel
+#
+# Upload:
+# PyPI test: twine upload --skip-existing --repository-url https://test.pypi.org/legacy/ dist/*
+# or PyPI  : twine upload --skip-existing dist/*
+#
+# INSTALL   ------------------------------------------------------------------------------
+#
+# PyPI test: pip install --index-url https://test.pypi.org/simple/ --upgrade nexinfosys-backend
+# PyPI     : pip install --upgrade nexinfosys-backend
+# No PyPI  : pip install -e <local path where "setup.py" (this file) is located>
+#
+# EXECUTE (example. "gunicorn" must be installed: "pip install gunicorn")
+# (IT WORKS WITH ONLY 1 WORKER!!!)
+# gunicorn --workers=1 --log-level=debug --timeout=2000 --bind 0.0.0.0:8081 nexinfosys.restful_service.service_main:app
+#
+
 from pkg_resources import yield_lines
 from setuptools import setup
+package_name = 'nexinfosys-backend'
+version = '0.33'
 
 
 def parse_requirements(strs):
@@ -34,22 +66,22 @@ install_reqs = parse_requirements(required)
 print(install_reqs)
 
 setup(
-    name='nexinfosys-backend',
-    version='1.0',
+    name=package_name,
+    version=version,
     install_requires=install_reqs,
-    packages=['backend', 'backend.common', 'backend.models', 'backend.models.experiments', 'backend.solving',
-              'backend.solving.graph', 'backend.ie_exports', 'backend.ie_imports', 'backend.ie_imports.data_sources',
-              'backend.ie_imports.experimental', 'backend.authentication', 'backend.model_services',
-              'backend.restful_service', 'backend.restful_service.gunicorn', 'backend.restful_service.mod_wsgi',
-              'backend.command_executors', 'backend.command_executors.misc', 'backend.command_executors.solving',
-              'backend.command_executors.analysis', 'backend.command_executors.version2',
-              'backend.command_executors.read_query', 'backend.command_executors.external_data',
-              'backend.command_executors.specification', 'backend.command_generators',
-              'backend.command_generators.spreadsheet_command_parsers',
-              'backend.command_generators.spreadsheet_command_parsers.analysis',
-              'backend.command_generators.spreadsheet_command_parsers.external_data',
-              'backend.command_generators.spreadsheet_command_parsers.specification',
-              'backend.command_generators.spreadsheet_command_parsers_v2', 'backend.magic_specific_integrations'],
+    packages=['nexinfosys', 'nexinfosys.common', 'nexinfosys.models', 'nexinfosys.models.experiments', 'nexinfosys.solving',
+              'nexinfosys.solving.graph', 'nexinfosys.ie_exports', 'nexinfosys.ie_imports', 'nexinfosys.ie_imports.data_sources',
+              'nexinfosys.ie_imports.experimental', 'nexinfosys.authentication', 'nexinfosys.model_services',
+              'nexinfosys.restful_service', 'nexinfosys.restful_service.gunicorn', 'nexinfosys.restful_service.mod_wsgi',
+              'nexinfosys.command_executors', 'nexinfosys.command_executors.misc', 'nexinfosys.command_executors.solving',
+              'nexinfosys.command_executors.analysis', 'nexinfosys.command_executors.version2',
+              'nexinfosys.command_executors.read_query', 'nexinfosys.command_executors.external_data',
+              'nexinfosys.command_executors.specification', 'nexinfosys.command_generators',
+              'nexinfosys.command_generators.spreadsheet_command_parsers',
+              'nexinfosys.command_generators.spreadsheet_command_parsers.analysis',
+              'nexinfosys.command_generators.spreadsheet_command_parsers.external_data',
+              'nexinfosys.command_generators.spreadsheet_command_parsers.specification',
+              'nexinfosys.command_generators.spreadsheet_command_parsers_v2', 'nexinfosys.magic_specific_integrations'],
     include_package_data=True,
     url='https://github.com/MAGIC-nexus/nis-backend',
     license='BSD-3',
