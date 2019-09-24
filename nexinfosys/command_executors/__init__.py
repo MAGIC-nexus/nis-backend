@@ -90,7 +90,7 @@ class BasicCommand(IExecutableCommand):
         self._current_row_number = row["_row"]
         self._fields = self._get_command_fields_values(row)
         self._check_all_mandatory_fields_have_values()
-        # TODO If expandable, do it now
+        # If expandable, do it now
         expandable = row["_expandable"]
         if expandable:
             # Extract variables

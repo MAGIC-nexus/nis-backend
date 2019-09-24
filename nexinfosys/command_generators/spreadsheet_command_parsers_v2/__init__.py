@@ -165,7 +165,7 @@ def parse_command_in_worksheet(sh: Worksheet, area: AreaTupleType, name: Optiona
                 else:
                     continue
 
-                # TODO Check if value contains "{", expansion
+                # Check if value contains "{", expansion
                 if "{" in value:
                     # Expandable. Do not parse now. Check: curly pairs, and that what is between is a
                     #  simple_h_name and that it exists: as dataset
