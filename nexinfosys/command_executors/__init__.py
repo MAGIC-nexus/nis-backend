@@ -162,7 +162,7 @@ class BasicCommand(IExecutableCommand):
                 elif not measure_requested and not all_dimensions_requested:
                     # Reduce the Dataframe to unique tuples of the specified dimensions
                     # TODO Consider the current case -sensitive or not-sensitive-
-                    data = ds.data[requested_dimensions].drop_duplicates()
+                    data = ds.data[list(requested_dimensions)].drop_duplicates()
                 else:  # Take the dataset as-is
                     data = ds.data
 

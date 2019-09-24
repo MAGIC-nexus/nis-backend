@@ -1739,8 +1739,13 @@ def reproducible_session_append_command_generator():  # Receive a command_execut
         except Exception as e:
             traceback.print_exc()  # Print the Exception to std output
             # Obtain trace as string; split lines in string; take the last three lines
-            tmp = traceback.format_exc().splitlines()[-3:]
-            tmp = [tmp[2], tmp[0], tmp[1]]
+            tmp = traceback.format_exc().splitlines()
+            for i in range(len(tmp)-3, 0, -2):
+                if tmp[i].find("nexinfosys") != -1:
+                    tmp = [tmp[-1], tmp[i], tmp[i+1]]
+                    break
+            else:
+                tmp = [tmp[-1], "Nexinfosys module not found", "Line not found"]
             exc_info = ' :: '.join([s.strip() for s in tmp])
             # Error Issue with the extracted Exception text
             issues = [Issue(itype=IType.ERROR,
