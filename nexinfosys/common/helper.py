@@ -1200,6 +1200,7 @@ def prepare_dataframe_after_external_read(ds, df, cmd_name):
                           location=IssueLocation(sheet_name=cmd_name,
                                                  row=i+2, column=None))
             issues.append(issue)
+    df.reset_index(inplace=True)  # If not, information stored in the index is lost (maybe after serialization/deserialization)
 
     return issues
 

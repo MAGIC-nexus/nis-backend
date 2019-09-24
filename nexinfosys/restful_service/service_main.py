@@ -4,7 +4,7 @@ import binascii
 import urllib
 from collections import OrderedDict
 import traceback
-
+import pandas as pd
 import openpyxl
 import redis
 import logging
@@ -1465,6 +1465,11 @@ def reproducible_session_query_state_get_dataset(name, format):  # Query list of
                     print("Preparing Dataset labels")
                     ds2 = add_label_columns_to_dataframe(name, ds2, glb_idx)
 
+                if isinstance(ds2.index, pd.core.indexes.range.RangeIndex):
+                    export_index = False
+                else:
+                    export_index = True
+
                 # TODO Elaborate "meta-workbook" (workbook capable of reproducing dataset)
                 if format == "json":
                     tmp = json.loads('{"data": '+ds2.to_json(orient='split', date_format='iso', date_unit='s')+', "metadata": {}}')
@@ -1474,7 +1479,7 @@ def reproducible_session_query_state_get_dataset(name, format):  # Query list of
                     tmp = ds2.to_json(orient='records', date_format='iso', date_unit='s')
                     r = Response(tmp, mimetype="text/json", status=200)
                 elif format == "csv":
-                    tmp = ds2.to_csv(date_format="%Y-%m-%d %H:%M:%S", index=False, na_rep="")
+                    tmp = ds2.to_csv(date_format="%Y-%m-%d %H:%M:%S", index=export_index, na_rep="")
                     r = Response(io.StringIO(tmp), mimetype="text/csv", status=200)
                 elif format == "kendopivotgrid":
                     # Prepare Data and Schema in Kendo PivotGrid format
