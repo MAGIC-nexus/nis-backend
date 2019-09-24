@@ -1732,10 +1732,12 @@ def reproducible_session_append_command_generator():  # Receive a command_execut
                 issues2 = prepare_and_solve_model(isess.state)
                 issues.extend(issues2)
         except Exception as e:
+            traceback.print_exc()  # Print the Exception to std output
             # Obtain trace as string; split lines in string; take the last three lines
             tmp = traceback.format_exc().splitlines()[-3:]
             tmp = [tmp[2], tmp[0], tmp[1]]
             exc_info = ' :: '.join([s.strip() for s in tmp])
+            # Error Issue with the extracted Exception text
             issues = [Issue(itype=IType.ERROR,
                             description=f"UNCONTROLLED CONDITION: {exc_info}. Please, contact the developers.",
                             location=None)]

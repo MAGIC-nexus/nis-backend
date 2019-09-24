@@ -147,12 +147,8 @@ class DatasetDefCommand(IExecutableCommand):
                                             description="Could not obtain data for dataset '" + ds.code + "'",
                                             location=IssueLocation(sheet_name=name, row=r, column=None)))
                     else:
-                        iss = prepare_dataframe_after_external_read(ds, df)
-                        for issue in iss:
-                            issues.append(
-                                Issue(itype=IType.ERROR,
-                                      description=issue,
-                                      location=IssueLocation(sheet_name=name, row=-1, column=-1)))
+                        iss = prepare_dataframe_after_external_read(ds, df, name)
+                        issues.extend(iss)
                         # Everything ok? Store the dataframe!
                         if len(iss) == 0:
                             ds.data = df

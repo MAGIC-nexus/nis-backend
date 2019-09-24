@@ -23,3 +23,7 @@ magic_box/
 /nexinfosys/restful_service/token.pickle
 
 ~/nis_data/fadn/measures.csv
+
+nexinfosys/restful_service/tmp_nis_backend_redislite.db
+
+nexinfosys/restful_service/tmp_nis_backend_redislite.db.settings

@@ -1170,7 +1170,8 @@ def load_dataset(location: str=None):
     return df
 
 
-def prepare_dataframe_after_external_read(ds, df):
+def prepare_dataframe_after_external_read(ds, df, cmd_name):
+    from nexinfosys.command_generators import IType, Issue, IssueLocation  # Declared here to avoid circular "import"
     issues = []
     dims = set()  # Set of dimensions, to index Dataframe on them
     cols = []  # Same columns, with exact case (matching Dataset object)
@@ -1182,10 +1183,23 @@ def prepare_dataframe_after_external_read(ds, df):
                     dims.add(d.code)
                 break
         else:
-            issues.append("Column '" + c + "' not found in the definition of Dataset '" + ds.code + "'")
-    if len(issues) == 0:
-        df.columns = cols
-        df.set_index(list(dims), inplace=True)
+            del df[c]
+            issue = Issue(itype=IType.WARNING,
+                          description=f"Column '{c}' not found in the definition of Dataset '{ds.code}'. Skipping it.",
+                          location=IssueLocation(sheet_name=cmd_name,
+                                                 row=None, column=None))
+            issues.append(issue)
+    df.columns = cols
+    df.set_index(list(dims), inplace=True)
+    # Check Index: unique
+    tmp = np.where(df.index.duplicated(keep=False))
+    if len(tmp[0]) > 0:
+        for i in np.nditer(tmp):
+            issue = Issue(itype=IType.ERROR,
+                          description=f"Duplicated row '{i+2}' in the data of dataset '{ds.code}'.",
+                          location=IssueLocation(sheet_name=cmd_name,
+                                                 row=i+2, column=None))
+            issues.append(issue)
 
     return issues
 
