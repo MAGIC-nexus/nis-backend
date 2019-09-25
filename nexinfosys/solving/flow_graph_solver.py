@@ -208,6 +208,7 @@ def evaluate_parameters_for_scenario(base_params: List[Parameter], scenario_para
     # Initialize state with known parameters
     state.update(known_params)
 
+    known_params_set = set([istr(p) for p in known_params.keys()])
     # Loop until no new parameters can be evaluated
     previous_len_unknown_params = len(unknown_params) + 1
     while len(unknown_params) < previous_len_unknown_params:
@@ -215,7 +216,8 @@ def evaluate_parameters_for_scenario(base_params: List[Parameter], scenario_para
 
         for param in list(unknown_params):  # A list(...) is used because the dictionary can be modified inside
             ast, params = unknown_params[param]
-            if params.issubset(known_params):
+
+            if params.issubset(known_params_set):
                 value, _, _, issues = evaluate_numeric_expression_with_parameters(ast, state)
                 if value is None:
                     raise SolvingException(
@@ -224,6 +226,8 @@ def evaluate_parameters_for_scenario(base_params: List[Parameter], scenario_para
                 else:
                     del unknown_params[param]
                     result_params[param] = value
+                    # known_params[param] = value  # Not necessary
+                    known_params_set.add(istr(param))
                     state.set(param, value)
 
     if len(unknown_params) > 0:
@@ -586,7 +590,11 @@ def compute_flow_and_scale_results(state: State, glb_idx, global_parameters, pro
 
                     known_observations[obs_node] = value
 
-            assert(len(known_observations) > 0)
+            if len(known_observations) == 0:
+                raise SolvingException(IType.ERROR,
+                                       f"Scenario '{scenario_name}' - period '{time_period}'. No observations available."
+                                       )
+            # assert(len(known_observations) > 0)
 
             # Add Processors internal -RelativeTo- relations (time dependent)
             # Transform relative observations into graph edges
