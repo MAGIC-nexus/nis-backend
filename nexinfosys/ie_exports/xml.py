@@ -4,7 +4,7 @@ Inputs are both the registry and the output dataframe
 The registry serves to prepare the structure of the file
 
 """
-from typing import Dict
+from typing import Dict, Tuple
 
 from nexinfosys import case_sensitive
 from nexinfosys.common.helper import strcmp, PartialRetrievalDictionary
@@ -56,7 +56,7 @@ def xml_processor(p: Processor, registry: PartialRetrievalDictionary, p_map: Dic
         return s.lower()
 
 
-def export_model_to_xml(registry: PartialRetrievalDictionary) -> str:
+def export_model_to_xml(registry: PartialRetrievalDictionary) -> Tuple[str, Dict[str, Processor]]:
     """
     Elaborate an XML string containing the nested processors and their attributes.
     Also the interfaces inside processors

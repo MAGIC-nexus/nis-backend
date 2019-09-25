@@ -47,7 +47,7 @@ if __name__ == '__main__':
                 break
 
 from nexinfosys.common.helper import generate_json, obtain_dataset_source, gzipped, str2bool, \
-    add_label_columns_to_dataframe, download_file
+    add_label_columns_to_dataframe, download_file, create_dictionary
 from nexinfosys.models.musiasem_methodology_support import *
 from nexinfosys.common.create_database import create_pg_database_engine, create_monet_database_engine
 from nexinfosys.restful_service import app, register_external_datasources

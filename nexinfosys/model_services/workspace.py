@@ -9,14 +9,18 @@ import json
 import logging
 import uuid
 from enum import Enum
-from typing import List, Union, Dict, Set
+from typing import List, Union, Dict, Set, Tuple, Optional, Any
+import pandas as pd
 
+import networkx as nx
 import sqlalchemy
 
 import nexinfosys
 from nexinfosys.command_generators import Issue, IssueLocation, IType
+from nexinfosys.command_generators.parser_ast_evaluators import ast_evaluator
+from nexinfosys.command_generators.parser_field_parsers import string_to_ast, expression_with_parameters
 from nexinfosys.command_generators.parsers_factory import commands_container_parser_factory
-from nexinfosys.common.helper import create_dictionary, strcmp
+from nexinfosys.common.helper import create_dictionary, strcmp, istr
 from nexinfosys.model_services import IExecutableCommand, get_case_study_registry_objects
 from nexinfosys.model_services import State
 from nexinfosys.models.musiasem_concepts import ProblemStatement, FactorsRelationDirectedFlowObservation, Processor, \
@@ -33,7 +37,7 @@ from nexinfosys.restful_service import tm_default_users, tm_authenticators, tm_c
     tm_object_types, tm_permissions
 from nexinfosys.restful_service.serialization import serialize_state, deserialize_state
 from nexinfosys.solving import BasicQuery
-from nexinfosys.solving.flow_graph_solver import flow_graph_solver
+from nexinfosys.solving.flow_graph_solver import flow_graph_solver, evaluate_parameters_for_scenario, get_dataset
 
 logger = logging.getLogger(__name__)
 
@@ -345,7 +349,7 @@ def call_solver(state: State, systems: Dict[str, Set[Processor]], dynamic_scenar
                 return ps_list[0]
 
     # Registry and the other objects also
-    glb_idx, _, _, _, _ = get_case_study_registry_objects(state)
+    glb_idx, _, _, datasets, _ = get_case_study_registry_objects(state)
 
     global_parameters: List[Parameter] = glb_idx.get(Parameter.partial_key())
 
@@ -354,6 +358,20 @@ def call_solver(state: State, systems: Dict[str, Set[Processor]], dynamic_scenar
         problem_statement = obtain_problem_statement()
     else:
         problem_statement = obtain_problem_statement(dynamic_scenario_parameters)
+
+    # Obtain "parameters" Dataset
+    params_keys = []
+    params_data = []
+    for scenario_name, scenario_exp_params in problem_statement.scenarios.items():  # type: str, dict
+        p = evaluate_parameters_for_scenario(global_parameters, scenario_exp_params)
+        for k, v in p.items():
+            params_keys.append((scenario_name, k))
+            params_data.append(v)
+
+    df = pd.DataFrame(params_data,
+                      index=pd.MultiIndex.from_tuples(params_keys, names=["Scenario", "Parameter"]),
+                      columns=["Value"])
+    datasets["params"] = get_dataset(df, "params", "Parameter values per Scenario")
 
     solver_type = problem_statement.solving_parameters.get("solver", "flow_graph").lower()
 
