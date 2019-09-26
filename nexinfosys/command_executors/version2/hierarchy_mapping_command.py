@@ -3,7 +3,7 @@ from dotted.collection import DottedDict
 
 from nexinfosys.command_generators import Issue, IssueLocation, IType
 from nexinfosys.model_services import IExecutableCommand, get_case_study_registry_objects
-from nexinfosys.common.helper import obtain_dataset_metadata, create_dictionary, obtain_dataset_source
+from nexinfosys.common.helper import obtain_dataset_metadata, create_dictionary
 from nexinfosys.models.musiasem_concepts import Mapping
 
 
@@ -103,13 +103,14 @@ class HierarchyMappingCommand(IExecutableCommand):
                 for dst in local_mappings[d].mapping[orig]:
                     lst.append(dict(d=dst, w=local_mappings[d].mapping[orig][dst]))
                 mapping.append(dict(o=orig, to=lst))
+            from nexinfosys.ie_imports.data_source_manager import DataSourceManager
             if local_mappings[d].origin_dataset:
-                if not obtain_dataset_source(local_mappings[d].origin_dataset):
+                if not DataSourceManager.obtain_dataset_source(local_mappings[d].origin_dataset, datasets):
                     issues.append(Issue(itype=IType.ERROR,
                                         description=f"The dataset '{local_mappings[d].origin_dataset}' was not found",
                                         location=IssueLocation(sheet_name=name, row=r, column=None)))
                     continue
-                dims, attrs, meas = obtain_dataset_metadata(local_mappings[d].origin_dataset)
+                dims, attrs, meas = obtain_dataset_metadata(local_mappings[d].origin_dataset, None, datasets)
                 if local_mappings[d].origin_hierarchy not in dims:
                     issues.append(Issue(itype=IType.ERROR,
                                         description="The origin dimension '" + local_mappings[d].origin_hierarchy + "' does not exist in dataset '" + local_mappings[d].origin_dataset + "'",
@@ -123,7 +124,7 @@ class HierarchyMappingCommand(IExecutableCommand):
             origin_hierarchy = local_mappings[d].origin_hierarchy
             destination_hierarchy = local_mappings[d].destination_hierarchy
             # Create Mapping and add it to Case Study mappings variable
-            mappings[d] = Mapping(d, obtain_dataset_source(origin_dataset), origin_dataset, origin_hierarchy, destination_hierarchy, mapping)
+            mappings[d] = Mapping(d, DataSourceManager.obtain_dataset_source(origin_dataset, datasets), origin_dataset, origin_hierarchy, destination_hierarchy, mapping)
 
         # TODO
         # Use the function to perform many to many mappings, "augment_dataframe_with_mapped_columns"

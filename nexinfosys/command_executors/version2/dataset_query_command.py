@@ -122,7 +122,7 @@ class DatasetQryCommand(IExecutableCommand):
             issues.append((2, "A dataset called '"+result_name+"' is already stored in the registry of datasets"))
 
         # Dataset metadata
-        dims, attrs, measures = obtain_dataset_metadata(dataset_name, source)
+        dims, attrs, measures = obtain_dataset_metadata(dataset_name, source, datasets)
 
         # Obtain filter parameters
         params = create_dictionary()  # Native dimension name to list of values the filter will allow to pass
@@ -160,7 +160,7 @@ class DatasetQryCommand(IExecutableCommand):
             params[p] = [i for i in params[p]]
 
         # Obtain the filtered Dataset <<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
-        ds = nexinfosys.data_source_manager.get_dataset_filtered(source, dataset_name, params)
+        ds = nexinfosys.data_source_manager.get_dataset_filtered(source, dataset_name, params, datasets)
         df = ds.data
 
         # Join with mapped dimensions (augment it)

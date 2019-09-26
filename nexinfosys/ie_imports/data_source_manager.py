@@ -3,9 +3,10 @@ from typing import List, Union
 import pandas as pd
 import numpy as np
 
+import nexinfosys
 from nexinfosys import case_sensitive
-from nexinfosys.common.helper import create_dictionary, Memoize2, obtain_dataset_source, \
-    get_dataframe_copy_with_lowercase_multiindex
+from nexinfosys.common.helper import create_dictionary, Memoize2, \
+    get_dataframe_copy_with_lowercase_multiindex, strcmp
 from nexinfosys.models.statistical_datasets import DataSource, Database, Dataset
 from nexinfosys.models.musiasem_methodology_support import force_load
 
@@ -68,14 +69,22 @@ class DataSourceManager:
         self._session_factory = session_factory
 
     # ---------------------------------------------------------------------------------
-    def update_sources(self):
-        """ Update bulk downloads for sources allowing full database. Not full dataset (on demand) """
-        for s in self.registry:
-            # Check last update
-            poli = self.registry[s].get_refresh_policy()
-            update = False
-            if update:
-                pass
+    def register_local_datasets(self, local_datasets):
+        from nexinfosys.ie_imports.data_sources.ad_hoc_dataset import AdHocDatasets
+        # Register AdHocDatasets
+        if local_datasets:
+            if "adhoc" not in self.registry:
+                adhoc = AdHocDatasets(local_datasets)
+                self.register_datasource_manager(adhoc)
+
+    def unregister_local_datasets(self, local_datasets):
+        from nexinfosys.ie_imports.data_sources.ad_hoc_dataset import AdHocDatasets
+        # Unregister AdHocDatasets
+        if local_datasets:
+            for i in self.registry.values():
+                if isinstance(i, AdHocDatasets):
+                    self.unregister_datasource_manager(i)
+                    break
 
     def register_datasource_manager(self, instance: IDataSourceManager):
         self.registry[instance.get_name()] = instance
@@ -108,32 +117,78 @@ class DataSourceManager:
     # ---------------------------------------------------------------------------------
 
     def get_supported_sources(self):
+        # e.g.: return ["Eurostat", "FAO", "OECD", "FADN", "COMEXT"]
         return [s for s in self.registry]
-        # e.g.: return ["Eurostat", "SSP"]
 
-    def get_databases(self, source: Union[IDataSourceManager, str]):
+    def update_sources(self, local_datasets=None):
+        """ Update bulk downloads for sources allowing full database. Not full dataset (on demand) """
+        # Register AdHoc datasets
+        self.register_local_datasets(local_datasets)
+
+        for s in self.registry:
+            # Check last update
+            poli = self.registry[s].get_refresh_policy()
+            update = False
+            if update:
+                pass
+
+        # Unregister AdHoc datasets
+        self.unregister_local_datasets(local_datasets)
+
+    def get_databases(self, source: Union[IDataSourceManager, str], local_datasets=None):
+        # Register AdHoc datasets
+        self.register_local_datasets(local_datasets)
+
         # List of databases in source (a database contains one or more datasets)
         if source:
             source = self._get_source_manager(source)
 
+        lst = []
         if not source:
-            lst = []
             for s in self.registry:
                 lst.extend([(s,
                              [db for db in self.registry[s].get_databases()]
                              )
                             ]
                            )
-            return lst
         else:
-            return [(source.get_name(),
+            lst = [(source.get_name(),
                      [db for db in source.get_databases()]
-                     )
-                    ]
+                    )
+                   ]
+
+        # Unregister AdHoc datasets
+        self.unregister_local_datasets(local_datasets)
+
+        return lst
 
     # @cachier(stale_after=datetime.timedelta(days=1))
+    def get_datasets(self, source: Union[IDataSourceManager, str]=None, database=None, local_datasets=None):
+        # Register AdHoc datasets
+        self.register_local_datasets(local_datasets)
+
+        if source:
+            source = self._get_source_manager(source)
+
+        lst = []
+        if source:
+            if strcmp(source.get_name(), "AdHoc"):
+                lst = [(source.get_name(), source.get_datasets(database))]
+            else:
+                lst = self.get_external_datasets(source, database)
+        else:  # ALL DATASETS
+            lst = self.get_external_datasets(source, database)
+            for s in self.registry:
+                if strcmp(s, "AdHoc"):
+                    lst.append((s, [ds for ds in self.registry[s].get_datasets()]))
+
+        # Unregister AdHoc datasets
+        self.unregister_local_datasets(local_datasets)
+
+        return lst
+
     @Memoize2
-    def get_datasets(self, source: Union[IDataSourceManager, str]=None, database=None):
+    def get_external_datasets(self, source: Union[IDataSourceManager, str]=None, database=None):
         """
         Obtain a list of tuples (Source, Dataset name)
 
@@ -141,6 +196,7 @@ class DataSourceManager:
         :param database: If specified, the name of a database in the source
         :return: List of tuples (Source name, Dataset name)
         """
+
         if source:
             source = self._get_source_manager(source)
 
@@ -155,23 +211,64 @@ class DataSourceManager:
         else:  # ALL DATASETS
             lst = []
             for s in self.registry:
-                lst.append((s, [ds for ds in self.registry[s].get_datasets()]))
+                if not strcmp(s, "AdHoc"):
+                    lst.append((s, [ds for ds in self.registry[s].get_datasets()]))
             return lst  # List of tuples (source, dataset code, description, urn)
 
-    def get_dataset_structure(self, source: Union[IDataSourceManager, str], dataset: str) -> Dataset:
+    def get_dataset_structure(self, source: Union[IDataSourceManager, str], dataset: str, local_datasets=None) -> Dataset:
         """ Obtain the structure of a dataset, a list of dimensions and measures, without data """
+        # Register AdHoc datasets
+        self.register_local_datasets(local_datasets)
+
         if not source:
-            source = obtain_dataset_source(dataset)
+            source = DataSourceManager.obtain_dataset_source(dataset, local_datasets)
             if not source:
                 raise Exception("Could not find a Source containing the Dataset '"+dataset+"'")
 
         source = self._get_source_manager(source)
-        return source.get_dataset_structure(None, dataset)
+        struc = source.get_dataset_structure(None, dataset)
 
-    def get_dataset_filtered(self, source: Union[IDataSourceManager, str], dataset: str, dataset_params: dict) -> Dataset:
+        # Unregister AdHoc datasets
+        self.unregister_local_datasets(local_datasets)
+
+        return struc
+
+    def get_dataset_filtered(self, source: Union[IDataSourceManager, str], dataset: str, dataset_params: dict, local_datasets=None) -> Dataset:
         """ Obtain the structure of a dataset, and DATA according to the specified FILTER, dataset_params """
+        # Register AdHoc datasets
+        self.register_local_datasets(local_datasets)
         source = self._get_source_manager(source)
-        return source.get_dataset_filtered(dataset, dataset_params)
+
+        fds = source.get_dataset_filtered(dataset, dataset_params)
+
+        # Unregister AdHoc datasets
+        self.unregister_local_datasets(local_datasets)
+
+        return fds
+
+    @staticmethod
+    def obtain_dataset_source(dset_name, local_datasets=None):
+        from nexinfosys.ie_imports.data_sources.ad_hoc_dataset import AdHocDatasets
+        # Register AdHocDatasets
+        if local_datasets:
+            if "AdHoc" not in nexinfosys.data_source_manager.registry:
+                adhoc = AdHocDatasets(local_datasets)
+                nexinfosys.data_source_manager.register_datasource_manager(adhoc)
+
+        # Obtain the list of ALL datasets, and find the desired one, then find the source of the dataset
+        lst = nexinfosys.data_source_manager.get_datasets(None, None, local_datasets)  # ALL Datasets, (source, dataset)
+        ds = create_dictionary(data={d[0]: t[0] for t in lst for d in t[1]})  # Dataset to Source (to obtain the source given the dataset name)
+
+        if dset_name in ds:
+            source = ds[dset_name]
+        else:
+            source = None
+
+        # Unregister AdHocDatasets
+        if local_datasets:
+            nexinfosys.data_source_manager.unregister_datasource_manager(adhoc)
+
+        return source
 
 # --------------------------------------------------------------------------------------------------------------------
 

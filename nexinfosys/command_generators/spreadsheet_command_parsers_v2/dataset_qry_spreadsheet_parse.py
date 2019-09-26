@@ -5,7 +5,7 @@ from openpyxl.worksheet.worksheet import Worksheet
 from nexinfosys import AreaTupleType, IssuesLabelContentTripleType
 from nexinfosys.command_generators import parser_field_parsers, Issue, IssueLocation, IType
 from nexinfosys.command_generators.parser_field_parsers import simple_ident
-from nexinfosys.common.helper import obtain_dataset_source, obtain_dataset_metadata, create_dictionary, strcmp
+from nexinfosys.common.helper import obtain_dataset_metadata, create_dictionary, strcmp
 from nexinfosys.model_services import get_case_study_registry_objects
 
 
@@ -66,9 +66,10 @@ def parse_dataset_qry_command(sh: Worksheet, area: AreaTupleType, name, state) -
                     break  # Stop on first definition
 
     # Obtain the source
-    source = obtain_dataset_source(dataset_name)
+    from nexinfosys.ie_imports.data_source_manager import DataSourceManager
+    source = DataSourceManager.obtain_dataset_source(dataset_name, datasets)
     # Obtain metadata
-    dims, attrs, meas = obtain_dataset_metadata(dataset_name, source)
+    dims, attrs, meas = obtain_dataset_metadata(dataset_name, source, datasets)
     # Load all code lists in a temporary dictionary of sets
     # Also check if there is a TIME dimension in the dataset
     cl = create_dictionary()

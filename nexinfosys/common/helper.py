@@ -692,7 +692,7 @@ def get_statistical_dataset_structure(source, dset_name, local_datasets=None):
         nexinfosys.data_source_manager.register_datasource_manager(adhoc)
 
     # Obtain DATASET: Datasource -> Database -> DATASET -> Dimension(s) -> CodeList (no need for "Concept")
-    dset = nexinfosys.data_source_manager.get_dataset_structure(source, dset_name)
+    dset = nexinfosys.data_source_manager.get_dataset_structure(source, dset_name, local_datasets)
 
     # Generate "dims", "attrs" and "meas" from "dset"
     dims = create_dictionary()  # Each dimension has a name, a description and a code list
@@ -735,48 +735,26 @@ def get_statistical_dataset_structure(source, dset_name, local_datasets=None):
     return lst_dim, (dims, attrs, meas)
 
 
-def obtain_dataset_source(dset_name, local_datasets=None):
-    from nexinfosys.ie_imports.data_sources.ad_hoc_dataset import AdHocDatasets
-    # Register AdHocDatasets
-    if local_datasets:
-        # Register AdHocSource, which needs the current state
-        adhoc = AdHocDatasets(local_datasets)
-        nexinfosys.data_source_manager.register_datasource_manager(adhoc)
-
-    # Obtain the list of ALL datasets, and find the desired one, then find the source of the dataset
-    lst = nexinfosys.data_source_manager.get_datasets()  # ALL Datasets, (source, dataset)
-    ds = create_dictionary(data={d[0]: t[0] for t in lst for d in t[1]})  # Dataset to Source (to obtain the source given the dataset name)
-
-    if dset_name in ds:
-        source = ds[dset_name]
-    else:
-        source = None
-
-    # Unregister AdHocDatasets
-    if local_datasets:
-        nexinfosys.data_source_manager.unregister_datasource_manager(adhoc)
-
-    return source
-
-
-def check_dataset_exists(dset_name):
+def check_dataset_exists(dset_name, local_datasets=None):
+    from nexinfosys.ie_imports.data_source_manager import DataSourceManager
     if len(dset_name.split(".")) == 2:
         source, d_set = dset_name.split(".")
     else:
         d_set = dset_name
-    res = obtain_dataset_source(d_set)
+    res = DataSourceManager.obtain_dataset_source(d_set, local_datasets)
     return res is not None
 
 
-def obtain_dataset_metadata(dset_name, source=None):
+def obtain_dataset_metadata(dset_name, source=None, local_datasets=None):
+    from nexinfosys.ie_imports.data_source_manager import DataSourceManager
     d_set = dset_name
     if not source:
         if len(dset_name.split(".")) == 2:
             source, d_set = dset_name.split(".")
         else:
-            source = obtain_dataset_source(d_set)
+            source = DataSourceManager.obtain_dataset_source(d_set, local_datasets)
 
-    _, metadata = get_statistical_dataset_structure(source, d_set)
+    _, metadata = get_statistical_dataset_structure(source, d_set, local_datasets)
 
     return metadata
 
@@ -1157,11 +1135,12 @@ def load_dataset(location: str=None):
         if "#" in location:
             pos = location.find("#")
             fragment = location[pos + 1:]
+            location = location[:pos-1]
         # Then, try to read it
         t = mimetypes.guess_type(location, strict=True)
         if t[0] == "text/csv":
             df = pd.read_csv(data)
-        elif t[0] == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet":
+        elif t[0] == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" or t[0] == "application/vnd.ms-excel":
             if fragment:
                 df = pd.read_excel(data, sheet_name=fragment)
             else:

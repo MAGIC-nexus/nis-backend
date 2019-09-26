@@ -2,7 +2,7 @@ import json
 from anytree import Node
 
 from nexinfosys.model_services import IExecutableCommand, get_case_study_registry_objects
-from nexinfosys.common.helper import obtain_dataset_metadata, strcmp, create_dictionary, obtain_dataset_source
+from nexinfosys.common.helper import obtain_dataset_metadata, strcmp, create_dictionary
 from nexinfosys.models.musiasem_concepts import Mapping
 
 
@@ -182,14 +182,17 @@ class MappingCommand(IExecutableCommand):
 
         # Create and store the mapping
         glb_idx, p_sets, hh, datasets, mappings = get_case_study_registry_objects(state)
-        mappings[self._name] = Mapping(self._name, obtain_dataset_source(origin_dataset), origin_dataset, origin_dimension, destination, map)
+
+        from nexinfosys.ie_imports.data_source_manager import DataSourceManager
+        source = DataSourceManager.obtain_dataset_source(origin_dataset, datasets)
+
+        mappings[self._name] = Mapping(self._name, source, origin_dataset, origin_dimension, destination, map)
 
         # TODO If the categories to the left are not totally covered, what to do?
         # TODO - If a non-listed category appears, remove the line
         # TODO - If a non-listed category appears, leave the target column NA
 
-        # Store it in State
-        # If there are datasets matching the origin, JOIN
+        # TODO - If there are datasets matching the origin, JOIN
 
         return None, None
 

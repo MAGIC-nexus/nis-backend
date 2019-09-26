@@ -22,6 +22,9 @@ data_source_manager = None  # type: DataSourceManager
 # REDIS
 redis = None
 
+# Use AdHoc datasets source (datasets in memory as a datasource, for DatasetQry)
+enable_adhoc_datasets_source = True
+
 # Case sensitive
 case_sensitive = False
 

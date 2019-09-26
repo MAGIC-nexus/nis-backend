@@ -46,7 +46,7 @@ if __name__ == '__main__':
                 os.environ["MAGIC_NIS_SERVICE_CONFIG_FILE"] = f
                 break
 
-from nexinfosys.common.helper import generate_json, obtain_dataset_source, gzipped, str2bool, \
+from nexinfosys.common.helper import generate_json, gzipped, str2bool, \
     add_label_columns_to_dataframe, download_file, create_dictionary
 from nexinfosys.models.musiasem_methodology_support import *
 from nexinfosys.common.create_database import create_pg_database_engine, create_monet_database_engine
@@ -1749,7 +1749,7 @@ def reproducible_session_append_command_generator():  # Receive a command_execut
             exc_info = ' :: '.join([s.strip() for s in tmp])
             # Error Issue with the extracted Exception text
             issues = [Issue(itype=IType.ERROR,
-                            description=f"UNCONTROLLED CONDITION: {exc_info}. Please, contact the developers.",
+                            description=f"UNCONTROLLED CONDITION: {exc_info}. Please, contact the development team.",
                             location=None)]
 
         # STORE the issues in the state
@@ -3072,7 +3072,9 @@ def data_source_database_dataset_detail(source_id, database_id, dataset_id):
         raise Exception("It is mandatory to define the dataset name when requesting the dataset parameters")
 
     if not source_id:
-        source_id = obtain_dataset_source(dataset_id)
+        _, _, _, datasets, _ = get_case_study_registry_objects(isess.state)
+        from nexinfosys.ie_imports.data_source_manager import DataSourceManager
+        source_id = DataSourceManager.obtain_dataset_source(dataset_id, datasets)
 
     ds = dsm.get_dataset_structure(source_id, dataset_id)
     dims = []

@@ -512,7 +512,7 @@ level_name = (simple_ident + Optional(plusop + positive_int)
 # RULES: Time expression
 # A valid time specification. Possibilities: Year, Month-Year / Year-Month, Time span (two dates)
 period_name = Or([Literal("Year"), Literal("Semester"), Literal("Quarter"), Literal("Month")])
-four_digits_year = Word(nums, min=4, max=4)
+four_digits_year = Combine(Word(nums, min=4, max=4)+Optional(Literal(".0")).suppress())
 month = Word(nums, min=1, max=2)
 year_month_separator = oneOf("- /")
 date = Group(Or([four_digits_year.setResultsName("y") +
