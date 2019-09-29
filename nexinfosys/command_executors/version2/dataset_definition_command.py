@@ -5,9 +5,10 @@ from nexinfosys.command_generators.parser_ast_evaluators import dictionary_from_
 from nexinfosys.command_generators.parser_field_parsers import url_parser
 from nexinfosys.common.helper import create_dictionary, load_dataset, prepare_dataframe_after_external_read
 from nexinfosys.model_services import IExecutableCommand, get_case_study_registry_objects
+from nexinfosys.models import CodeImmutable
 from nexinfosys.models.musiasem_concepts import Hierarchy
 from nexinfosys.models.musiasem_concepts_helper import convert_hierarchy_to_code_list
-from nexinfosys.models.statistical_datasets import Dataset, Dimension
+from nexinfosys.models.statistical_datasets import Dataset, Dimension, CodeList
 
 
 class DatasetDefCommand(IExecutableCommand):
@@ -51,6 +52,7 @@ class DatasetDefCommand(IExecutableCommand):
                     ds.code = dsd_dataset_name  # Name
                     if not dsd_concept_type:
                         attributes["_location"] = dsd_dataset_data_location  # Location
+                        attributes["_dataset_first_row"] = r
                         ds.description = dsd_concept_description
                         ds.attributes = attributes  # Set attributes
                     ds.database = None
@@ -90,6 +92,7 @@ class DatasetDefCommand(IExecutableCommand):
                         # Reencode the Hierarchy as a CodeList
                         cl = convert_hierarchy_to_code_list(h)
                         d.code_list = cl
+
                     attributes["_datatype"] = dsd_concept_data_type
                     attributes["_domain"] = dsd_concept_domain
                     d.attributes = attributes
@@ -134,7 +137,7 @@ class DatasetDefCommand(IExecutableCommand):
             if "_location" not in ds.attributes:
                 error = True
                 issues.append(Issue(itype=IType.ERROR,
-                                    description="Location of data not specified  for dataset '" + ds.code + "'",
+                                    description="Location of data not specified, for dataset '" + ds.code + "'",
                                     location=IssueLocation(sheet_name=name, row=r, column=None)))
             else:
                 loc = ds.attributes["_location"]
@@ -144,7 +147,7 @@ class DatasetDefCommand(IExecutableCommand):
                     if df is None:
                         error = True
                         issues.append(Issue(itype=IType.ERROR,
-                                            description="Could not obtain data for dataset '" + ds.code + "'",
+                                            description=f"Could not obtain data for dataset '{ds.code}' at '{loc}'",
                                             location=IssueLocation(sheet_name=name, row=r, column=None)))
                     else:
                         iss = prepare_dataframe_after_external_read(ds, df, name)
@@ -156,6 +159,26 @@ class DatasetDefCommand(IExecutableCommand):
         if not error:
             # If no error happened, add the new Datasets to the Datasets in the "global" state
             for ds in current_ds:
+                r = current_ds[ds].attributes["_dataset_first_row"]
+                df = current_ds[ds].data
+                if df is not None:
+                    # Loop over "ds" concepts.
+                    # - "dimension" concepts of type "string" generate a CodeHierarchy
+                    # - Check that the DataFrame contains ALL declared concepts. If not, generate issue
+                    for c in current_ds[ds].dimensions:
+                        if c.code in df.columns:
+                            dsd_concept_data_type = c.attributes["_datatype"]
+                            if dsd_concept_data_type.lower() == "string" and not c.is_measure:  # Freely defined dimension
+                                cl = df[c.code].unique().tolist()
+                                c.code_list = CodeList.construct(
+                                    c.code, c.code, [""],
+                                    codes=[CodeImmutable(c, c, "", []) for c in cl]
+                                )
+                        else:
+                            issues.append(Issue(itype=IType.ERROR,
+                                                description=f"Concept '{c.code}' not defined for '{ds}' in {loc}",
+                                                location=IssueLocation(sheet_name=name, row=r, column=None)))
+
                 datasets[ds] = current_ds[ds]
 
         return issues, None

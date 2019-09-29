@@ -1195,7 +1195,7 @@ def get_dataframe_copy_with_lowercase_multiindex(dataframe: DataFrame) -> DataFr
     :return: A copy of the input dataframe with lowercased index values.
     """
     # df = dataframe.copy()
-    levels = [dataframe.index.get_level_values(n).str.lower() for n in range(dataframe.index.nlevels)]
+    levels = [dataframe.index.get_level_values(n).astype(str).str.lower() for n in range(dataframe.index.nlevels)]
     df = pd.DataFrame(index=pd.MultiIndex.from_arrays(levels))
     # df.index = pd.MultiIndex.from_arrays(levels)
     return df

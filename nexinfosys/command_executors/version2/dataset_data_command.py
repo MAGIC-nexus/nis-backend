@@ -5,6 +5,8 @@ import pandas as pd
 from nexinfosys.command_generators import Issue, IssueLocation, IType
 from nexinfosys.model_services import IExecutableCommand, get_case_study_registry_objects
 from nexinfosys.common.helper import strcmp, prepare_dataframe_after_external_read, create_dictionary
+from nexinfosys.models import CodeImmutable
+from nexinfosys.models.statistical_datasets import CodeList
 
 
 class DatasetDataCommand(IExecutableCommand):
@@ -54,6 +56,23 @@ class DatasetDataCommand(IExecutableCommand):
                     issues.extend(iss)
                     # Everything ok? Store the dataframe!
                     if len(iss) == 0:
+                        r = ds.attributes["_dataset_first_row"]
+                        # Loop over "ds" concepts.
+                        # - "dimension" concepts of type "string" generate a CodeHierarchy
+                        # - Check that the DataFrame contains ALL declared concepts. If not, generate issue
+                        for c in ds.dimensions:
+                            if c.code in df.columns:
+                                dsd_concept_data_type = c.attributes["_datatype"]
+                                if dsd_concept_data_type.lower() == "string" and not c.is_measure:  # Freely defined dimension
+                                    cl = df[c.code].unique().tolist()
+                                    c.code_list = CodeList.construct(
+                                        c.code, c.code, [""],
+                                        codes=[CodeImmutable(c, c, "", []) for c in cl]
+                                    )
+                            else:
+                                issues.append(Issue(itype=IType.ERROR,
+                                                    description=f"Concept '{c.code}' not defined for '{ds.code}'",
+                                                    location=IssueLocation(sheet_name=name, row=r, column=None)))
                         ds.data = df
                     break
             else:
