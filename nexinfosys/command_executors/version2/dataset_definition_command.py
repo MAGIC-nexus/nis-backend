@@ -3,7 +3,8 @@ import json
 from nexinfosys.command_generators import Issue, IssueLocation, parser_field_parsers, IType
 from nexinfosys.command_generators.parser_ast_evaluators import dictionary_from_key_value_list
 from nexinfosys.command_generators.parser_field_parsers import url_parser
-from nexinfosys.common.helper import create_dictionary, load_dataset, prepare_dataframe_after_external_read
+from nexinfosys.common.helper import create_dictionary, load_dataset, prepare_dataframe_after_external_read, strcmp, \
+    any_error_issue
 from nexinfosys.model_services import IExecutableCommand, get_case_study_registry_objects
 from nexinfosys.models import CodeImmutable
 from nexinfosys.models.musiasem_concepts import Hierarchy
@@ -50,15 +51,31 @@ class DatasetDefCommand(IExecutableCommand):
                 if not ds:
                     ds = Dataset()
                     ds.code = dsd_dataset_name  # Name
-                    if not dsd_concept_type:
-                        attributes["_location"] = dsd_dataset_data_location  # Location
-                        attributes["_dataset_first_row"] = r
-                        ds.description = dsd_concept_description
-                        ds.attributes = attributes  # Set attributes
                     ds.database = None
+                    ds.attributes = {}
                     current_ds[dsd_dataset_name] = ds
-                # If concept_type is defined => add a concept
-                if dsd_concept_type:
+                if not dsd_concept_type:
+                    if ds.attributes.get("_location"):
+                        issues.append(Issue(itype=IType.WARNING,
+                                            description=f"Location of data for dataset {ds.code} previously declared. "
+                                                        f"Former: {attributes.get('_location')}, "
+                                                        f"Current: {dsd_dataset_data_location}",
+                                            location=IssueLocation(sheet_name=name, row=r, column=None)))
+                        attributes = ds.attributes
+                    else:
+                        attributes["_dataset_first_row"] = r
+                    attributes["_location"] = dsd_dataset_data_location  # Location
+                    ds.description = dsd_concept_description
+                    ds.attributes = attributes  # Set attributes
+                else:  # If concept_type is defined => add a concept
+                    # Check if the concept name already appears --> Error
+                    for d1 in ds.dimensions:
+                        if strcmp(d1.code, dsd_concept_name):
+                            issues.append(Issue(itype=IType.ERROR,
+                                                description=f"Concept {dsd_concept_name} already declared for dataset {ds.code}",
+                                                location=IssueLocation(sheet_name=name, row=r, column=None)))
+                            break
+
                     d = Dimension()
                     d.dataset = ds
                     d.description = dsd_concept_description
@@ -125,12 +142,7 @@ class DatasetDefCommand(IExecutableCommand):
                 process_line(line)
 
         # Any error?
-        for issue in issues:
-            if issue.itype == IType.ERROR:
-                error = True
-                break
-        else:
-            error = False
+        error = any_error_issue(issues)
 
         # Load the data for those datasets that are not local (data defined later in the same spreadsheet)
         for ds in current_ds.values():

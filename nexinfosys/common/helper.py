@@ -1149,17 +1149,44 @@ def load_dataset(location: str=None):
     return df
 
 
+def any_error_issue(issues):
+    """
+    Just iterate through a list of Issues (of the three types) to check if there is any error
+
+    :param issues:
+    :return:
+    """
+    any_error = False
+    for i in issues:
+        from nexinfosys.command_generators import Issue, IType
+        if isinstance(i, dict):
+            if i["type"] == 3:
+                any_error = True
+        elif isinstance(i, tuple):
+            if i[0] == 3:  # Error
+                any_error = True
+        elif isinstance(i, Issue):
+            if i.itype == IType.ERROR:  # Error
+                any_error = True
+    return any_error
+
+
 def prepare_dataframe_after_external_read(ds, df, cmd_name):
     from nexinfosys.command_generators import IType, Issue, IssueLocation  # Declared here to avoid circular "import"
     issues = []
     dims = set()  # Set of dimensions, to index Dataframe on them
     cols = []  # Same columns, with exact case (matching Dataset object)
+    orig_cols = []  # Original column names appearing in the target Dataset
     for c in df.columns:
         for d in ds.dimensions:
             if strcmp(c, d.code):
+                orig_cols.append(c)
                 cols.append(d.code)  # Exact case
                 if not d.is_measure:
                     dims.add(d.code)
+                    # Also, convert to string if it is numeric
+                    if df.dtypes[c] in [np.int64, np.float]:
+                        df[c] = df[c].astype(str)
                 break
         else:
             del df[c]
@@ -1168,8 +1195,9 @@ def prepare_dataframe_after_external_read(ds, df, cmd_name):
                           location=IssueLocation(sheet_name=cmd_name,
                                                  row=None, column=None))
             issues.append(issue)
-    df.columns = cols
-    df.set_index(list(dims), inplace=True)
+    df = df[orig_cols]  # Remove unused columns
+    df.columns = cols  # Rename columns
+    df.set_index(list(dims), inplace=True)  # Index by Dimension Concepts
     # Check Index: unique
     tmp = np.where(df.index.duplicated(keep=False))
     if len(tmp[0]) > 0:

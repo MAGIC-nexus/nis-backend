@@ -4,7 +4,7 @@ import pandas as pd
 
 from nexinfosys.command_generators import Issue, IssueLocation, IType
 from nexinfosys.model_services import IExecutableCommand, get_case_study_registry_objects
-from nexinfosys.common.helper import strcmp, prepare_dataframe_after_external_read, create_dictionary
+from nexinfosys.common.helper import strcmp, prepare_dataframe_after_external_read, create_dictionary, any_error_issue
 from nexinfosys.models import CodeImmutable
 from nexinfosys.models.statistical_datasets import CodeList
 
@@ -24,7 +24,7 @@ class DatasetDataCommand(IExecutableCommand):
         ds_names = [ds.code for ds in datasets.values()]
 
         # List of datasets with local worksheet name
-        external_dataset_name = None
+        external_dataset_names = []
         for ds in datasets.values():
             if ds.attributes["_location"].lower().startswith("data://#"):
                 worksheet = ds.attributes["_location"][len("data://#"):]
@@ -32,53 +32,58 @@ class DatasetDataCommand(IExecutableCommand):
                     worksheet = "DatasetData " + worksheet
 
                 if strcmp(worksheet, name):
-                    external_dataset_name = ds.code
+                    external_dataset_names.append(ds.code)
 
         # Process parsed information
         for r, line in enumerate(self._content["items"]):
             # A dataset
-            dataset_name = line["name"]
-            if dataset_name == "":
-                if external_dataset_name:
-                    dataset_name = external_dataset_name
+            dataset_names = line["name"]
+            if dataset_names == "":
+                if external_dataset_names:
+                    dataset_names = external_dataset_names
                 else:
                     issues.append(Issue(itype=IType.ERROR,
                                         description="The column name 'DatasetName' was not defined for command 'DatasetData' and there is no 'location' in a DatasetDef command pointing to it",
                                         location=IssueLocation(sheet_name=name, row=1, column=None)))
+            else:
+                dataset_names = [dataset_names]
 
             # Find it in the already available datasets. MUST EXIST
             for n in ds_names:
-                if strcmp(dataset_name, n):
-                    df = pd.read_json(StringIO(line["values"]), orient="split")
-                    # Check columns
-                    ds = datasets[n]
-                    iss = prepare_dataframe_after_external_read(ds, df, name)
-                    issues.extend(iss)
-                    # Everything ok? Store the dataframe!
-                    if len(iss) == 0:
-                        r = ds.attributes["_dataset_first_row"]
-                        # Loop over "ds" concepts.
-                        # - "dimension" concepts of type "string" generate a CodeHierarchy
-                        # - Check that the DataFrame contains ALL declared concepts. If not, generate issue
-                        for c in ds.dimensions:
-                            if c.code in df.columns:
-                                dsd_concept_data_type = c.attributes["_datatype"]
-                                if dsd_concept_data_type.lower() == "string" and not c.is_measure:  # Freely defined dimension
-                                    cl = df[c.code].unique().tolist()
-                                    c.code_list = CodeList.construct(
-                                        c.code, c.code, [""],
-                                        codes=[CodeImmutable(c, c, "", []) for c in cl]
-                                    )
-                            else:
-                                issues.append(Issue(itype=IType.ERROR,
-                                                    description=f"Concept '{c.code}' not defined for '{ds.code}'",
-                                                    location=IssueLocation(sheet_name=name, row=r, column=None)))
-                        ds.data = df
-                    break
-            else:
+                for dataset_name in dataset_names:
+                    if strcmp(dataset_name, n):
+                        df = pd.read_json(StringIO(line["values"]), orient="split")
+                        # Check columns
+                        ds = datasets[n]
+                        iss = prepare_dataframe_after_external_read(ds, df, name)
+                        issues.extend(iss)
+                        # Everything ok? Store the dataframe!
+                        if not any_error_issue(iss):
+                            r = ds.attributes["_dataset_first_row"]
+                            # Loop over "ds" concepts.
+                            # - "dimension" concepts of type "string" generate a CodeHierarchy
+                            # - Check that the DataFrame contains ALL declared concepts. If not, generate issue
+                            for c in ds.dimensions:
+                                if c.code in df.columns:
+                                    dsd_concept_data_type = c.attributes["_datatype"]
+                                    if dsd_concept_data_type.lower() == "string" and not c.is_measure:  # Freely defined dimension
+                                        cl = df[c.code].unique().tolist()
+                                        c.code_list = CodeList.construct(
+                                            c.code, c.code, [""],
+                                            codes=[CodeImmutable(c, c, "", []) for c in cl]
+                                        )
+                                else:
+                                    issues.append(Issue(itype=IType.ERROR,
+                                                        description=f"Concept '{c.code}' not defined for '{ds.code}'",
+                                                        location=IssueLocation(sheet_name=name, row=r, column=None)))
+                            ds.data = df
+                        dataset_names.remove(dataset_name)
+                        break
+
+            if dataset_names:
                 issues.append(
                     Issue(itype=IType.ERROR,
-                          description="Metadata for the dataset '"+dataset_name+"' must be defined previously",
+                          description=f"Metadata for the datasets: {','.join(dataset_names)}, must be defined previously",
                           location=IssueLocation(sheet_name=name, row=-1, column=-1)))
 
         return issues, None

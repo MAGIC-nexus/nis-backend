@@ -194,10 +194,13 @@ def deserialize_state(st: str, state_version: int = MODEL_VERSION):
     :return:
     """
     def deserialize_dataframe(t):
-        dtypes = {i[0]: np.dtype(i[1]) for i in json.loads(t[1]).items()}
-        df = pd.read_json(t[0], orient="split", dtype=dtypes)  # pd.DataFrame(t[1])
-        # df.index.names = t[0]
-        return df
+        if t:
+            dtypes = {i[0]: np.dtype(i[1]) for i in json.loads(t[1]).items()}
+            df = pd.read_json(t[0], orient="split", dtype=dtypes)  # pd.DataFrame(t[1])
+            # df.index.names = t[0]
+            return df
+        else:
+            return pd.DataFrame()  # Return empty pd.Dataframe
 
     print("  deserialize_state")
     if isinstance(st, bytes):

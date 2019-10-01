@@ -73,10 +73,11 @@ def export_model_to_xml(registry: PartialRetrievalDictionary) -> Tuple[str, Dict
     children = set([po.child_processor for po in por])
     roots = parents.difference(children)
     # leaves = children.difference(parents)
-    result = ''
+    result = '<processors>'  # <?xml version="1.0" encoding="utf-8"?>\n
     p_map = {}
     for p in roots:
         result += xml_processor(p, registry, p_map)
+    result += "</processors>"
 
     return result, p_map
 

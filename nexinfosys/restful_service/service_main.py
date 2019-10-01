@@ -47,7 +47,7 @@ if __name__ == '__main__':
                 break
 
 from nexinfosys.common.helper import generate_json, gzipped, str2bool, \
-    add_label_columns_to_dataframe, download_file, create_dictionary
+    add_label_columns_to_dataframe, download_file, create_dictionary, any_error_issue
 from nexinfosys.models.musiasem_methodology_support import *
 from nexinfosys.common.create_database import create_pg_database_engine, create_monet_database_engine
 from nexinfosys.restful_service import app, register_external_datasources
@@ -294,6 +294,7 @@ def deserialize_isession_and_prepare_db_session(return_error_response_if_none=Tr
                 rs._session = o_list[2]  # type: CaseStudyVersionSession
                 sess._reproducible_session = rs
         except Exception as e:
+            traceback.print_exc()
             sess = None
     else:
         sess = None
@@ -1720,20 +1721,8 @@ def reproducible_session_append_command_generator():  # Receive a command_execut
             else:
                 issues = []
 
-            stop = False
-            for i in issues:
-                if isinstance(i, dict):
-                    if i["type"] == 3:
-                        stop = True
-                elif isinstance(i, tuple):
-                    if i[0] == 3:  # Error
-                        stop = True
-                elif isinstance(i, Issue):
-                    if i.itype == IType.ERROR:  # Error
-                        stop = True
-
             # SOLVE !!!!
-            if not stop:
+            if not any_error_issue(issues):
                 issues2 = prepare_and_solve_model(isess.state)
                 issues.extend(issues2)
         except Exception as e:
