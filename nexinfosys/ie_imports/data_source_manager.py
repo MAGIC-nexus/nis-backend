@@ -177,10 +177,12 @@ class DataSourceManager:
             else:
                 lst = self.get_external_datasets(source, database)
         else:  # ALL DATASETS
-            lst = self.get_external_datasets(source, database)
+            lst_total = []
+            lst = self.get_external_datasets(source, database)  # Because "get_external_datasets" uses "Memoize", DO NOT modify "lst" outside
+            lst_total.extend(lst)
             for s in self.registry:
-                if strcmp(s, "AdHoc"):
-                    lst.append((s, [ds for ds in self.registry[s].get_datasets()]))
+                if strcmp(s, "AdHoc") and local_datasets:
+                    lst_total.append((s, [ds for ds in self.registry[s].get_datasets()]))
 
         # Unregister AdHoc datasets
         self.unregister_local_datasets(local_datasets)
