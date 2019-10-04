@@ -41,7 +41,7 @@ class HierarchyMappingCommand(IExecutableCommand):
             mh_weight = item.get("weight", None)
 
             # Mapping name
-            name = ((mh_src_dataset + ".") if mh_src_dataset else "") + mh_dst_hierarchy + " -> " + mh_dst_hierarchy
+            name = ((mh_src_dataset + ".") if mh_src_dataset else "") + mh_src_hierarchy + " -> " + mh_dst_hierarchy
 
             if name in mappings:
                 issues.append(Issue(itype=IType.ERROR,
@@ -67,11 +67,11 @@ class HierarchyMappingCommand(IExecutableCommand):
                 to_dict = create_dictionary()
             if mh_dst_code in to_dict:
                 issues.append(Issue(itype=IType.ERROR,
-                                    description="The mapping of '" + mh_src_code + "' into '" + mh_dst_code + "' has been done already",
+                                    description="The mapping of '" + mh_src_code + "' into '" + mh_dst_code + "' has been already defined",
                                     location=IssueLocation(sheet_name=name, row=r, column=None)))
                 return
             else:
-                to_dict[mh_dst_code] = mh_weight  # NOTE: This could be an object instead of just a FLOAT or expression
+                to_dict[mh_dst_code] = (mh_weight, r)  # NOTE: This could be an object instead of just a FLOAT or expression
                 d.mapping[mh_src_code] = to_dict
 
         issues = []
@@ -98,17 +98,22 @@ class HierarchyMappingCommand(IExecutableCommand):
             # [{"o": "", "to": [{"d": "", "w": ""}]}]
             # [ {o: origin category, to: [{d: destination category, w: weight assigned to destination category}] } ]
             mapping = []
+            ds_rows = []  # Rows in which a dataset is mentioned
             for orig in local_mappings[d].mapping:
                 lst = []
                 for dst in local_mappings[d].mapping[orig]:
-                    lst.append(dict(d=dst, w=local_mappings[d].mapping[orig][dst]))
+                    t = local_mappings[d].mapping[orig][dst]
+                    lst.append(dict(d=dst, w=t[0]))
+                    if local_mappings[d].origin_dataset:
+                        ds_rows.append(t[1])
                 mapping.append(dict(o=orig, to=lst))
             from nexinfosys.ie_imports.data_source_manager import DataSourceManager
             if local_mappings[d].origin_dataset:
                 if not DataSourceManager.obtain_dataset_source(local_mappings[d].origin_dataset, datasets):
-                    issues.append(Issue(itype=IType.ERROR,
-                                        description=f"The dataset '{local_mappings[d].origin_dataset}' was not found",
-                                        location=IssueLocation(sheet_name=name, row=r, column=None)))
+                    for r in ds_rows:
+                        issues.append(Issue(itype=IType.ERROR,
+                                            description=f"The dataset '{local_mappings[d].origin_dataset}' was not found",
+                                            location=IssueLocation(sheet_name=name, row=r, column=None)))
                     continue
                 dims, attrs, meas = obtain_dataset_metadata(local_mappings[d].origin_dataset, None, datasets)
                 if local_mappings[d].origin_hierarchy not in dims:

@@ -89,6 +89,7 @@ class BasicCommand(IExecutableCommand):
 
         self._current_row_number = row["_row"]
         self._fields = self._get_command_fields_values(row)
+        tmp_fields = self._fields
         self._check_all_mandatory_fields_have_values()
         # If expandable, do it now
         expandable = row["_expandable"]
@@ -219,11 +220,13 @@ class BasicCommand(IExecutableCommand):
                                                                  row3,
                                                                  already_parsed_fields,
                                                                  location)
-                    if len(tmp_issues)>0:
+                    if len(tmp_issues) > 0:
                         self._issues.extend(tmp_issues)
                     # Process row
                     if processable:
+                        self._fields = row3
                         self._process_row(row3)
+                        self._fields = tmp_fields
             elif len(h_list) == 1:  # Expand hierarchy
                 pass
         else:

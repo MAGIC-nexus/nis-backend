@@ -20,29 +20,9 @@ class RelationshipsCommand(BasicCommand):
     def __init__(self, name: str):
         BasicCommand.__init__(self, name, get_command_fields_from_class(self.__class__))
 
-    def execute(self, state: "State") -> IssuesOutputPairType:
-        self._init_execution_state()
-        self._glb_idx, _, hh, datasets, _ = get_case_study_registry_objects(state)
-
-        # Obtain the names of all parameters
-        parameters = [p.name for p in self._glb_idx.get(Parameter.partial_key())]
-
-        # Obtain the names of all processors
-        all_processors = get_processor_names_to_processors_dictionary(self._glb_idx)
-
-        for row in self._content["items"]:
-            for sub_row in self.parse_and_unfold_line(row, hh, datasets, parameters, all_processors):
-                try:
-                    self._init_and_process_row(sub_row)
-                except CommandExecutionError as e:
-                    self._add_issue(IType.ERROR, str(e))
-
-        return self._issues, None
-
     def _process_row(self, fields: Dict[str, Any]) -> None:
         # source_cardinality = fields["source_cardinality"]
         # target_cardinality = fields["target_cardinality"]
-
         source_processor = self._get_processor_from_field("source_processor")
         target_processor = self._get_processor_from_field("target_processor")
         attributes = self._get_attributes_from_field("attributes")
@@ -165,131 +145,150 @@ class RelationshipsCommand(BasicCommand):
                 raise CommandExecutionError(f"The target interface '{target_interface.full_name}' has the wrong "
                                             f"orientation '{target_interface.orientation}'.")
 
-    def parse_and_unfold_line(self, item, hh, datasets, parameters, all_processors):
-        # Consider multiplicity because of:
-        # - A dataset (only one). First a list of dataset concepts used in the line is obtained.
-        #   Then the unique tuples formed by them are obtained.
-        # - Processor name.
-        #   - A set of processors (wildcard or filter by attributes)
-        #   - A set of interfaces (according to another filter?)
-        # - Multiple types of relation
-        # - Both (first each dataset record applied -expanded-, then the name evaluation is applied)
-        # - UNRESOLVED: expressions are resolved partially. Parts where parameters
-        # expressions depending on parameters. Only the part of the expression depending on varying things
-        # - The processor name could be a concatenation of multiple literals
-        #
-        # Look for multiple items in r_source_processor_name, source_interface_name,
-        #                            r_target_processor_name, target_interface_name
-        if item["_complex"]:
-            asts = parse_line(item, self._command_fields)
-            if item["_expandable"]:
-                # It is an expandable line
-                # Look for fields which are specified to be variable in order to originate the expansion
-                res = classify_variables(asts, datasets, hh, parameters)
-                ds_list = res["datasets"]
-                ds_concepts = res["ds_concepts"]
-                h_list = res["hierarchies"]
-                if len(ds_list) >= 1 and len(h_list) >= 1:
-                    self._add_issue(IType.ERROR, "Dataset(s): "+", ".join([d.name for d in ds_list])+", and hierarchy(ies): "+", ".join([h.name for h in h_list])+", have been specified. Either a single dataset or a single hiearchy is supported.")
-                    return
-                elif len(ds_list) > 1:
-                    self._add_issue(IType.ERROR, "More than one dataset has been specified: "+", ".join([d.name for d in ds_list])+", just one dataset is supported.")
-                    return
-                elif len(h_list) > 1:
-                    self._add_issue(IType.ERROR, "More than one hierarchy has been specified: " + ", ".join([h.name for h in h_list])+", just one hierarchy is supported.")
-                    return
-                const_dict = obtain_dictionary_with_literal_fields(item, asts)
-                if len(ds_list) == 1:
-                    # If a measure is requested and not all dimensions are used, aggregate or
-                    # issue an error (because it is not possible to reduce without aggregation).
-                    # If only dimensions are used, then obtain all the unique tuples
-                    ds = ds_list[0]
-                    measure_requested = False
-                    all_dimensions = set([c.code for c in ds.dimensions if not c.is_measure])
-                    for con in ds_concepts:
-                        for c in ds.dimensions:
-                            if strcmp(c.code, con):
-                                if c.is_measure:
-                                    measure_requested = True
-                                else:  # Dimension
-                                    all_dimensions.remove(c.code)
-                    only_dimensions_requested = len(all_dimensions) == 0
+    # def parse_and_unfold_line(self, item, hh, datasets, parameters, all_processors):
+    #     # Consider multiplicity because of:
+    #     # - A dataset (only one). First a list of dataset concepts used in the line is obtained.
+    #     #   Then the unique tuples formed by them are obtained.
+    #     # - Processor name.
+    #     #   - A set of processors (wildcard or filter by attributes)
+    #     #   - A set of interfaces (according to another filter?)
+    #     # - Multiple types of relation
+    #     # - Both (first each dataset record applied -expanded-, then the name evaluation is applied)
+    #     # - UNRESOLVED: expressions are resolved partially. Parts where parameters
+    #     # expressions depending on parameters. Only the part of the expression depending on varying things
+    #     # - The processor name could be a concatenation of multiple literals
+    #     #
+    #     # Look for multiple items in r_source_processor_name, source_interface_name,
+    #     #                            r_target_processor_name, target_interface_name
+    #     if item["_complex"]:
+    #         asts = parse_line(item, self._command_fields)
+    #         if item["_expandable"]:
+    #             # It is an expandable line
+    #             # Look for fields which are specified to be variable in order to originate the expansion
+    #             res = classify_variables(asts, datasets, hh, parameters)
+    #             ds_list = res["datasets"]
+    #             ds_concepts = res["ds_concepts"]
+    #             h_list = res["hierarchies"]
+    #             if len(ds_list) >= 1 and len(h_list) >= 1:
+    #                 self._add_issue(IType.ERROR, "Dataset(s): "+", ".join([d.name for d in ds_list])+", and hierarchy(ies): "+", ".join([h.name for h in h_list])+", have been specified. Either a single dataset or a single hiearchy is supported.")
+    #                 return
+    #             elif len(ds_list) > 1:
+    #                 self._add_issue(IType.ERROR, "More than one dataset has been specified: "+", ".join([d.name for d in ds_list])+", just one dataset is supported.")
+    #                 return
+    #             elif len(h_list) > 1:
+    #                 self._add_issue(IType.ERROR, "More than one hierarchy has been specified: " + ", ".join([h.name for h in h_list])+", just one hierarchy is supported.")
+    #                 return
+    #             const_dict = obtain_dictionary_with_literal_fields(item, asts)
+    #             if len(ds_list) == 1:
+    #                 # If a measure is requested and not all dimensions are used, aggregate or
+    #                 # issue an error (because it is not possible to reduce without aggregation).
+    #                 # If only dimensions are used, then obtain all the unique tuples
+    #                 ds = ds_list[0]
+    #                 measure_requested = False
+    #                 all_dimensions = set([c.code for c in ds.dimensions if not c.is_measure])
+    #                 for con in ds_concepts:
+    #                     for c in ds.dimensions:
+    #                         if strcmp(c.code, con):
+    #                             if c.is_measure:
+    #                                 measure_requested = True
+    #                             else:  # Dimension
+    #                                 all_dimensions.remove(c.code)
+    #                 only_dimensions_requested = len(all_dimensions) == 0
+    #
+    #                 if measure_requested and not only_dimensions_requested:
+    #                     self._add_issue(IType.ERROR, "It is not possible to use a measure if not all dimensions are used (cannot assume implicit aggregation)")
+    #                     return
+    #                 elif not measure_requested and not only_dimensions_requested:
+    #                     # TODO Reduce the dataset to the unique tuples (consider the current case -sensitive or not-sensitive-)
+    #                     data = None
+    #                 else:  # Take the dataset as-is
+    #                     data = ds.data
+    #
+    #                 for row in data.iterrows():
+    #                     item2 = const_dict.copy()
+    #
+    #                     d = {}
+    #                     for c in ds_concepts:
+    #                         d["{" + ds.code + "." + c + "}"] = row[c]
+    #                     # Expand in all fields
+    #                     for f in self._command_fields:
+    #                         if f not in const_dict:
+    #                             # Replace all
+    #                             string = item[f]
+    #                             # TODO Could iterate through the variables in the field (not IN ALL FIELDS of the row)
+    #                             for item in sorted(d.keys(), key=len, reverse=True):
+    #                                 string = re.sub(item, d[item], string)
+    #                             item2[f] = string
+    #                     # Now, look for wildcards where it is allowed
+    #                     r_source_processor_name = string_to_ast(processor_names, item2.get("source_processor"))
+    #                     r_target_processor_name = string_to_ast(processor_names, item2.get("target_processor"))
+    #                     if ".." in r_source_processor_name or ".." in r_target_processor_name:
+    #                         if ".." in r_source_processor_name:
+    #                             source_processor_names = obtain_matching_processors(r_source_processor_name, all_processors)
+    #                         else:
+    #                             source_processor_names = [r_source_processor_name]
+    #                         if ".." in r_target_processor_name:
+    #                             target_processor_names = obtain_matching_processors(r_target_processor_name, all_processors)
+    #                         else:
+    #                             target_processor_names = [r_target_processor_name]
+    #                         for s in source_processor_names:
+    #                             for t in target_processor_names:
+    #                                 item3 = item2.copy()
+    #                                 item3["source_processor"] = s
+    #                                 item3["target_processor"] = t
+    #                                 print("Multiple by dataset and wildcard: " + str(item3))
+    #                                 yield item3
+    #                     else:
+    #                         print("Multiple by dataset: " + str(item3))
+    #                         yield item2
+    #             elif len(h_list) == 1:
+    #                 pass
+    #             else:  # No dataset, no hierarchy of categories, but still complex, because of wildcards
+    #                 wildcard_in_source = ".." in item.get("source_processor", "")
+    #                 wildcard_in_target = ".." in item.get("target_processor", "")
+    #                 if wildcard_in_source or wildcard_in_target:
+    #                     r_source_processor_name = string_to_ast(processor_names, item.get("source_processor"))
+    #                     r_target_processor_name = string_to_ast(processor_names, item.get("target_processor"))
+    #                     if wildcard_in_source:
+    #                         source_processor_names = obtain_matching_processors(r_source_processor_name, all_processors)
+    #                     else:
+    #                         source_processor_names = [item["source_processor"]]
+    #                     if wildcard_in_target:
+    #                         target_processor_names = obtain_matching_processors(r_target_processor_name, all_processors)
+    #                     else:
+    #                         target_processor_names = [item["target_processor"]]
+    #                     for s in source_processor_names:
+    #                         for t in target_processor_names:
+    #                             item3 = const_dict.copy()
+    #                             item3["source_processor"] = s
+    #                             item3["target_processor"] = t
+    #                             print("Multiple by wildcard: "+str(item3))
+    #                             yield item3
+    #                 else:
+    #                     # yield item
+    #                     raise Exception("If 'complex' is signaled, it should not pass by this line")
+    #     else:
+    #         # print("Single: "+str(item))
+    #         yield item
 
-                    if measure_requested and not only_dimensions_requested:
-                        self._add_issue(IType.ERROR, "It is not possible to use a measure if not all dimensions are used (cannot assume implicit aggregation)")
-                        return
-                    elif not measure_requested and not only_dimensions_requested:
-                        # TODO Reduce the dataset to the unique tuples (consider the current case -sensitive or not-sensitive-)
-                        data = None
-                    else:  # Take the dataset as-is
-                        data = ds.data
-
-                    for row in data.iterrows():
-                        item2 = const_dict.copy()
-
-                        d = {}
-                        for c in ds_concepts:
-                            d["{" + ds.code + "." + c + "}"] = row[c]
-                        # Expand in all fields
-                        for f in self._command_fields:
-                            if f not in const_dict:
-                                # Replace all
-                                string = item[f]
-                                # TODO Could iterate through the variables in the field (not IN ALL FIELDS of the row)
-                                for item in sorted(d.keys(), key=len, reverse=True):
-                                    string = re.sub(item, d[item], string)
-                                item2[f] = string
-                        # Now, look for wildcards where it is allowed
-                        r_source_processor_name = string_to_ast(processor_names, item2.get("source_processor"))
-                        r_target_processor_name = string_to_ast(processor_names, item2.get("target_processor"))
-                        if ".." in r_source_processor_name or ".." in r_target_processor_name:
-                            if ".." in r_source_processor_name:
-                                source_processor_names = obtain_matching_processors(r_source_processor_name, all_processors)
-                            else:
-                                source_processor_names = [r_source_processor_name]
-                            if ".." in r_target_processor_name:
-                                target_processor_names = obtain_matching_processors(r_target_processor_name, all_processors)
-                            else:
-                                target_processor_names = [r_target_processor_name]
-                            for s in source_processor_names:
-                                for t in target_processor_names:
-                                    item3 = item2.copy()
-                                    item3["source_processor"] = s
-                                    item3["target_processor"] = t
-                                    print("Multiple by dataset and wildcard: " + str(item3))
-                                    yield item3
-                        else:
-                            print("Multiple by dataset: " + str(item3))
-                            yield item2
-                elif len(h_list) == 1:
-                    pass
-                else:  # No dataset, no hierarchy of categories, but still complex, because of wildcards
-                    wildcard_in_source = ".." in item.get("source_processor", "")
-                    wildcard_in_target = ".." in item.get("target_processor", "")
-                    if wildcard_in_source or wildcard_in_target:
-                        r_source_processor_name = string_to_ast(processor_names, item.get("source_processor"))
-                        r_target_processor_name = string_to_ast(processor_names, item.get("target_processor"))
-                        if wildcard_in_source:
-                            source_processor_names = obtain_matching_processors(r_source_processor_name, all_processors)
-                        else:
-                            source_processor_names = [item["source_processor"]]
-                        if wildcard_in_target:
-                            target_processor_names = obtain_matching_processors(r_target_processor_name, all_processors)
-                        else:
-                            target_processor_names = [item["target_processor"]]
-                        for s in source_processor_names:
-                            for t in target_processor_names:
-                                item3 = const_dict.copy()
-                                item3["source_processor"] = s
-                                item3["target_processor"] = t
-                                print("Multiple by wildcard: "+str(item3))
-                                yield item3
-                    else:
-                        # yield item
-                        raise Exception("If 'complex' is signaled, it should not pass by this line")
-        else:
-            # print("Single: "+str(item))
-            yield item
+    # def execute(self, state: "State") -> IssuesOutputPairType:
+    #     self._init_execution_state(state)
+    #     self._glb_idx, _, hh, datasets, _ = get_case_study_registry_objects(state)
+    #
+    #     # Obtain the names of all parameters
+    #     parameters = [p.name for p in self._glb_idx.get(Parameter.partial_key())]
+    #
+    #     # Obtain the names of all processors
+    #     all_processors = get_processor_names_to_processors_dictionary(self._glb_idx)
+    #
+    #     for row in self._content["items"]:
+    #         for sub_row in self.parse_and_unfold_line(row, hh, datasets, parameters, all_processors):
+    #             try:
+    #                 self._init_and_process_row(sub_row)
+    #             except CommandExecutionError as e:
+    #                 self._add_issue(IType.ERROR, str(e))
+    #
+    #     return self._issues, None
 
 
 def obtain_matching_processors(parsed_processor_name, all_processors):

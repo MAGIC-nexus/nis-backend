@@ -32,7 +32,7 @@ generic_field_syntax = {
     processor_name: "Hierarchical name. One or more 'simple names' (sequence of letters, numbers and/or '_' starting "
                     "with a letter), separated by '.'",
     alphanums_string: "Alphanumeric string. A sequence of letters and/or numbers",
-    code_string: "Code string. A sequence of letters, numbers and/or '_' '-', starting with a letter",
+    code_string: "Code string. A sequence of letters, numbers and/or '_' '-'",
     unquoted_string: "Unquoted string. Any string",
     # hierarchy_expression_v2: ["3*(5-2)", ],
     time_expression: "Time expression. Serves to specify a year or a month, or an interval from year to year, or from "

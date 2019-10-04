@@ -9,7 +9,8 @@ from nexinfosys.command_generators.parser_field_parsers import simple_ident, unq
     hierarchy_expression_v2, key_value_list, key_value, expression_with_parameters, \
     time_expression, indicator_expression, code_string, simple_h_name, domain_definition, unit_name, url_parser, \
     processor_names, value, list_simple_ident, reference, processor_name, processors_selector_expression, \
-    interfaces_list_expression, attributes_list_expression, indicators_list_expression, number_interval, pair_numbers
+    interfaces_list_expression, attributes_list_expression, indicators_list_expression, number_interval, pair_numbers, \
+    external_ds_name
 from nexinfosys.models.musiasem_concepts import Processor, Factor, RelationClassType
 from nexinfosys.command_definitions import valid_v2_command_names, commands
 from nexinfosys.common.helper import first, class_full_name
@@ -67,10 +68,10 @@ command_fields: Dict[str, List[CommandField]] = {
     ],
     
     "cat_hier_mapping": [
-        CommandField(allowed_names=["OriginDataset"], name="source_dataset", parser=simple_h_name),
-        CommandField(allowed_names=["OriginHierarchy"], name="source_hierarchy", mandatory=True, parser=simple_h_name),
+        CommandField(allowed_names=["OriginDataset"], name="source_dataset", parser=external_ds_name),
+        CommandField(allowed_names=["OriginHierarchy"], name="source_hierarchy", mandatory=True, parser=simple_ident),
         CommandField(allowed_names=["OriginCode"], name="source_code", mandatory=True, parser=code_string),
-        CommandField(allowed_names=["DestinationHierarchy"], name="destination_hierarchy", mandatory=True, parser=simple_h_name),
+        CommandField(allowed_names=["DestinationHierarchy"], name="destination_hierarchy", mandatory=True, parser=simple_ident),
         CommandField(allowed_names=["DestinationCode"], name="destination_code", mandatory=True, parser=code_string),
         CommandField(allowed_names=["Weight"], name="weight", mandatory=True, parser=expression_with_parameters),
     ],
@@ -355,7 +356,7 @@ command_fields: Dict[str, List[CommandField]] = {
 
     # Used only for help elaboration
     "datasetqry": [
-        CommandField(allowed_names=["InputDataset"], name="inputdataset", parser=simple_ident),
+        CommandField(allowed_names=["InputDataset"], name="inputdataset", parser=external_ds_name),
         CommandField(allowed_names=["AvailableAtDateTime"], name="availableatdatetime", parser=unquoted_string),
         CommandField(allowed_names=["StartTime"], name="starttime", parser=time_expression),
         CommandField(allowed_names=["EndTime"], name="endtime", parser=time_expression),

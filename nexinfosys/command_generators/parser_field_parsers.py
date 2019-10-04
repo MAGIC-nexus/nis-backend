@@ -69,6 +69,7 @@ true = Keyword("True")
 false = Keyword("False")
 # Simple identifier
 simple_ident = Word(alphas, alphanums+"_")  # Start in letter, then "_" + letters + numbers
+external_ds_name = Word(alphas, alphanums+"-"+"_"+".")  # Dataset names can have
 list_simple_ident = delimitedList(simple_ident, ",")
 
 interfaces_list_expression = list_simple_ident
