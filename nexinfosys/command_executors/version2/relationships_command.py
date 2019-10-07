@@ -2,7 +2,7 @@ import re
 from typing import Dict, Any
 
 from nexinfosys import IssuesOutputPairType
-from nexinfosys.command_executors import CommandExecutionError, BasicCommand
+from nexinfosys.command_executors import CommandExecutionError, BasicCommand, subrow_issue_message
 from nexinfosys.command_executors.execution_helpers import parse_line, classify_variables, \
     obtain_dictionary_with_literal_fields
 from nexinfosys.command_field_definitions import get_command_fields_from_class
@@ -20,7 +20,7 @@ class RelationshipsCommand(BasicCommand):
     def __init__(self, name: str):
         BasicCommand.__init__(self, name, get_command_fields_from_class(self.__class__))
 
-    def _process_row(self, fields: Dict[str, Any]) -> None:
+    def _process_row(self, fields: Dict[str, Any], subrow=None) -> None:
         # source_cardinality = fields["source_cardinality"]
         # target_cardinality = fields["target_cardinality"]
         source_processor = self._get_processor_from_field("source_processor")
@@ -32,7 +32,7 @@ class RelationshipsCommand(BasicCommand):
         except NotImplementedError as e:
             raise CommandExecutionError(str(e))
 
-        self._check_fields(relation_class, source_processor, target_processor)
+        self._check_fields(relation_class, source_processor, target_processor, subrow)
 
         if relation_class.is_between_processors:
             create_relation_observations(self._glb_idx, source_processor, [(target_processor, relation_class)],
@@ -58,7 +58,7 @@ class RelationshipsCommand(BasicCommand):
 
             if source_interface.taxon != target_interface.taxon:
                 interface_types_transform = self._get_interface_types_transform(
-                    source_interface.taxon, source_processor, target_interface.taxon, target_processor)
+                    source_interface.taxon, source_processor, target_interface.taxon, target_processor, subrow)
                 attributes.update(dict(scale_change_weight=interface_types_transform.scaled_weight))
 
             create_relation_observations(self._glb_idx, source_interface,
@@ -67,7 +67,8 @@ class RelationshipsCommand(BasicCommand):
 
     def _get_interface_types_transform(self,
                                        source_interface_type: FactorType, source_processor: Processor,
-                                       target_interface_type: FactorType, target_processor: Processor) \
+                                       target_interface_type: FactorType, target_processor: Processor,
+                                       subrow=None) \
             -> FactorTypesRelationUnidirectionalLinearTransformObservation:
         """Check if a transformation between interfaces has been specified"""
 
@@ -77,21 +78,21 @@ class RelationshipsCommand(BasicCommand):
         if len(interface_types_transforms) == 0:
             raise CommandExecutionError(f"Interface types are not the same (and transformation from one "
                                         f"to the other cannot be performed). Origin: "
-                                        f"{source_interface_type.name}; Target: {target_interface_type.name}")
+                                        f"{source_interface_type.name}; Target: {target_interface_type.name}"+subrow_issue_message(subrow))
         elif len(interface_types_transforms) > 1:
             raise CommandExecutionError(
                 f"Multiple transformations can be applied between interfaces. Origin: "
-                f"{source_interface_type.name}; Target: {target_interface_type.name}")
+                f"{source_interface_type.name}; Target: {target_interface_type.name}"+subrow_issue_message(subrow))
 
         return interface_types_transforms[0]
 
-    def _check_fields(self, relation_class: RelationClassType, source_processor: Processor, target_processor: Processor):
+    def _check_fields(self, relation_class: RelationClassType, source_processor: Processor, target_processor: Processor, subrow=None):
         # Use of column BackInterface is only allowed in some relation types
         back_allowed_classes = [RelationClassType.ff_directed_flow, RelationClassType.ff_reverse_directed_flow,
                                 RelationClassType.ff_directed_flow_back]
         if self._fields["back_interface"] and relation_class not in back_allowed_classes:
             raise CommandExecutionError(f"Column 'BackInterface' is only allowed in relations of type: "
-                                        f"{back_allowed_classes}")
+                                        f"{back_allowed_classes}"+subrow_issue_message(subrow))
 
         # Use of column Weight is only allowed in some relation types
         weight_allowed_classes = [RelationClassType.ff_directed_flow, RelationClassType.ff_reverse_directed_flow,

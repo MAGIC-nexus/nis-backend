@@ -18,6 +18,10 @@ class CommandExecutionError(Exception):
     pass
 
 
+def subrow_issue_message(subrow=None):
+    return f" (expanded row: {subrow})" if subrow else ""
+
+
 class BasicCommand(IExecutableCommand):
     def __init__(self, name: str, command_fields: List[CommandField]):
         self._name = name
@@ -55,7 +59,7 @@ class BasicCommand(IExecutableCommand):
             self._parameters = [p.name for p in self._glb_idx.get(Parameter.partial_key())]
             self._state = state
 
-    def _process_row(self, fields: Dict[str, Any]) -> None:
+    def _process_row(self, fields: Dict[str, Any], subrow=None) -> None:
         """This is the only method subclasses need to define. See current subclasses as examples"""
         pass
 
@@ -183,7 +187,7 @@ class BasicCommand(IExecutableCommand):
 
                 location = IssueLocation(sheet_name=self._command_name, row=self._current_row_number, column=None)
                 already_parsed_fields = set(const_dict.keys())
-                for row2 in data.iterrows():  # Each row in the dataset
+                for ds_row, row2 in enumerate(data.iterrows()):  # Each row in the dataset
                     # Initialize constant values (those with no "{..}" expressions)
                     row3 = const_dict.copy()
                     # Prepare state to evaluate functions
@@ -225,7 +229,7 @@ class BasicCommand(IExecutableCommand):
                     # Process row
                     if processable:
                         self._fields = row3
-                        self._process_row(row3)
+                        self._process_row(row3, ds_row)
                         self._fields = tmp_fields
             elif len(h_list) == 1:  # Expand hierarchy
                 pass

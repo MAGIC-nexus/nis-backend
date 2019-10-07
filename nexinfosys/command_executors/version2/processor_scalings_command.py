@@ -7,14 +7,14 @@ from nexinfosys.command_generators.parser_field_parsers import string_to_ast, ex
 from nexinfosys.common.helper import strcmp
 from nexinfosys.models.musiasem_concepts import Processor, ProcessorsRelationPartOfObservation, \
     FactorsRelationScaleObservation, Geolocation, ProcessorsSet
-from nexinfosys.command_executors import BasicCommand, CommandExecutionError
+from nexinfosys.command_executors import BasicCommand, CommandExecutionError, subrow_issue_message
 
 
 class ProcessorScalingsCommand(BasicCommand):
     def __init__(self, name: str):
         BasicCommand.__init__(self, name, get_command_fields_from_class(self.__class__))
 
-    def _process_row(self, fields: Dict[str, Any]) -> None:
+    def _process_row(self, fields: Dict[str, Any], subrow=None) -> None:
         scaling_type = fields["scaling_type"]
         scale: str = fields["scale"]
 
@@ -33,7 +33,7 @@ class ProcessorScalingsCommand(BasicCommand):
             try:
                 fields["attributes"] = dictionary_from_key_value_list(fields["attributes"], self._glb_idx)
             except Exception as e:
-                self._add_issue(IType.ERROR, str(e))
+                self._add_issue(IType.ERROR, str(e)+subrow_issue_message(subrow))
                 return
         else:
             fields["attributes"] = {}
@@ -45,7 +45,7 @@ class ProcessorScalingsCommand(BasicCommand):
             try:
                 parent_processor = self._get_processor_from_field("parent_processor")
             except CommandExecutionError:
-                self._add_issue(IType.ERROR, f"Specified parent processor, '{fields.get('parent_processor')}', does not exist")
+                self._add_issue(IType.ERROR, f"Specified parent processor, '{fields.get('parent_processor')}', does not exist"+subrow_issue_message(subrow))
                 return
         else:
             parent_processor = None
@@ -72,7 +72,7 @@ class ProcessorScalingsCommand(BasicCommand):
                                            parent_processor=invoking_processor,
                                            child_processor=requested_processor_clone)
             except Exception as e:
-                self._add_issue(IType.ERROR, str(e))
+                self._add_issue(IType.ERROR, str(e)+subrow_issue_message(subrow))
                 return
         elif strcmp(scaling_type, "Scale"):
             # Processors must be of same type (archetype or instance)
@@ -88,7 +88,7 @@ class ProcessorScalingsCommand(BasicCommand):
                                            parent_processor=invoking_processor,
                                            child_processor=requested_processor)
             except Exception as e:
-                self._add_issue(IType.ERROR, str(e))
+                self._add_issue(IType.ERROR, str(e)+subrow_issue_message(subrow))
                 return
 
         elif strcmp(scaling_type, "CloneScaled"):

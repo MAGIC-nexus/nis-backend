@@ -5,7 +5,7 @@ from pint import UndefinedUnitError
 from typing import Dict, Any
 
 from nexinfosys import ureg, CommandField
-from nexinfosys.command_executors import BasicCommand
+from nexinfosys.command_executors import BasicCommand, subrow_issue_message
 from nexinfosys.command_executors.execution_helpers import parse_line, classify_variables, \
     obtain_dictionary_with_literal_fields
 from nexinfosys.command_generators import parser_field_parsers, Issue, IssueLocation, IType
@@ -24,7 +24,7 @@ class InterfacesAndQualifiedQuantitiesCommand(BasicCommand):
     def __init__(self, name: str):
         BasicCommand.__init__(self, name, get_command_fields_from_class(self.__class__))
 
-    def _process_row(self, field_values: Dict[str, Any]) -> None:
+    def _process_row(self, field_values: Dict[str, Any], subrow=None) -> None:
         """
         Process a dictionary representing a row of the Interfaces command. The dictionary can come directly from
         the worksheet or from a dataset.
@@ -63,7 +63,7 @@ class InterfacesAndQualifiedQuantitiesCommand(BasicCommand):
             try:
                 field_values["interface_attributes"] = dictionary_from_key_value_list(field_val, self._glb_idx)
             except Exception as e:
-                self._add_issue(IType.ERROR, str(e))
+                self._add_issue(IType.ERROR, str(e)+subrow_issue_message(subrow))
                 return
         else:
             field_values["interface_attributes"] = {}
@@ -73,7 +73,7 @@ class InterfacesAndQualifiedQuantitiesCommand(BasicCommand):
             try:
                 number_attributes = dictionary_from_key_value_list(f_number_attributes, self._glb_idx)
             except Exception as e:
-                self._add_issue(IType.ERROR, str(e))
+                self._add_issue(IType.ERROR, str(e)+subrow_issue_message(subrow))
                 return
         else:
             number_attributes = {}
@@ -87,7 +87,7 @@ class InterfacesAndQualifiedQuantitiesCommand(BasicCommand):
         # IF i AND p AND NOT it => get "i" (MUST EXIST)
         if not f_interface_name:
             if not f_interface_type_name:
-                self._add_issue(IType.ERROR, "At least one of InterfaceType or Interface must be defined")
+                self._add_issue(IType.ERROR, "At least one of InterfaceType or Interface must be defined"+subrow_issue_message(subrow))
                 return
 
             possibly_local_interface_name = None
@@ -99,16 +99,16 @@ class InterfacesAndQualifiedQuantitiesCommand(BasicCommand):
         if f_pedigree_matrix and f_pedigree:
             pm = self._glb_idx.get(PedigreeMatrix.partial_key(name=f_pedigree_matrix))
             if len(pm) == 0:
-                self._add_issue(IType.ERROR, "Could not find Pedigree Matrix '" + f_pedigree_matrix + "'")
+                self._add_issue(IType.ERROR, "Could not find Pedigree Matrix '" + f_pedigree_matrix + "'"+subrow_issue_message(subrow))
                 return
             else:
                 try:
                     lst = pm[0].get_modes_for_code(f_pedigree)
                 except:
-                    self._add_issue(IType.ERROR, "Could not decode Pedigree '" + f_pedigree + "' for Pedigree Matrix '" + f_pedigree_matrix + "'")
+                    self._add_issue(IType.ERROR, "Could not decode Pedigree '" + f_pedigree + "' for Pedigree Matrix '" + f_pedigree_matrix + "'"+subrow_issue_message(subrow))
                     return
         elif f_pedigree and not f_pedigree_matrix:
-            self._add_issue(IType.ERROR, "Pedigree specified without accompanying Pedigree Matrix")
+            self._add_issue(IType.ERROR, "Pedigree specified without accompanying Pedigree Matrix"+subrow_issue_message(subrow))
             return
 
         # Source
@@ -124,7 +124,7 @@ class InterfacesAndQualifiedQuantitiesCommand(BasicCommand):
                     if len(references) == 1:
                         source = references[0]
                     else:
-                        self._add_issue(IType.ERROR, f"Reference '{f_source}' not found")
+                        self._add_issue(IType.ERROR, f"Reference '{f_source}' not found"+subrow_issue_message(subrow))
             except:
                 # TODO Change when Ref* are implemented
                 source = f_source + " (not found)"
@@ -149,10 +149,10 @@ class InterfacesAndQualifiedQuantitiesCommand(BasicCommand):
         # TODO Allow creating a basic Processor if it is not found?
         p = self._glb_idx.get(Processor.partial_key(f_processor_name))
         if len(p) == 0:
-            self._add_issue(IType.ERROR, "Processor '" + f_processor_name + "' not declared previously")
+            self._add_issue(IType.ERROR, "Processor '" + f_processor_name + "' not declared previously"+subrow_issue_message(subrow))
             return
         elif len(p) > 1:
-            self._add_issue(IType.ERROR, "Processor '" + f_processor_name + "' found " + str(len(p)) + " times. It must be uniquely identified.")
+            self._add_issue(IType.ERROR, "Processor '" + f_processor_name + "' found " + str(len(p)) + " times. It must be uniquely identified."+subrow_issue_message(subrow))
             return
         else:
             p = p[0]
@@ -166,16 +166,16 @@ class InterfacesAndQualifiedQuantitiesCommand(BasicCommand):
             if f_interface_type_name:
                 if not strcmp(ft.name, f_interface_type_name):
                     self._add_issue(IType.WARNING, f"The InterfaceType of the Interface, {ft.name} "
-                                    f"is different from the specified InterfaceType, {f_interface_type_name}. Record skipped.")
+                                    f"is different from the specified InterfaceType, {f_interface_type_name}. Record skipped."+subrow_issue_message(subrow))
                     return
         elif len(f) > 1:
             self._add_issue(IType.ERROR, f"Interface '{f_interface_name}' found {str(len(f))} times. "
-                                         f"It must be uniquely identified.")
+                                         f"It must be uniquely identified."+subrow_issue_message(subrow))
             return
         elif len(f) == 0:
             f: Factor = None  # Does not exist, create it below
             if not f_orientation:
-                self._add_issue(IType.ERROR, f"Orientation must be defined for new Interfaces")
+                self._add_issue(IType.ERROR, f"Orientation must be defined for new Interfaces"+subrow_issue_message(subrow))
                 return
 
         # InterfaceType still not found
@@ -184,11 +184,11 @@ class InterfacesAndQualifiedQuantitiesCommand(BasicCommand):
             # TODO Allow creating a basic FactorType if it is not found
             ft = self._glb_idx.get(FactorType.partial_key(f_interface_type_name))
             if len(ft) == 0:
-                self._add_issue(IType.ERROR, f"InterfaceType '{f_interface_type_name}' not declared previously")
+                self._add_issue(IType.ERROR, f"InterfaceType '{f_interface_type_name}' not declared previously"+subrow_issue_message(subrow))
                 return
             elif len(ft) > 1:
                 self._add_issue(IType.ERROR, f"InterfaceType '{f_interface_type_name}' found {str(len(ft))} times. "
-                                       f"It must be uniquely identified.")
+                                       f"It must be uniquely identified."+subrow_issue_message(subrow))
                 return
             else:
                 ft = ft[0]
@@ -220,12 +220,12 @@ class InterfacesAndQualifiedQuantitiesCommand(BasicCommand):
             self._glb_idx.put(f.key(), f)
 
         elif not f.compare_attributes(attributes):
-            self._add_issue(IType.ERROR, f"The same interface is being redeclared with different properties.")
+            self._add_issue(IType.ERROR, f"The same interface is being redeclared with different properties."+subrow_issue_message(subrow))
 
         # Find Observer
         oer = self._glb_idx.get(Observer.partial_key(f_source))
         if not oer:
-            self._add_issue(IType.WARNING, f"Observer '{f_source}' has not been found.")
+            self._add_issue(IType.WARNING, f"Observer '{f_source}' has not been found."+subrow_issue_message(subrow))
         else:
             oer = oer[0]
 
@@ -238,26 +238,26 @@ class InterfacesAndQualifiedQuantitiesCommand(BasicCommand):
                 f_unit = str((ureg(f_unit) / ureg(rel_unit_name)).units)
             except (UndefinedUnitError, AttributeError) as ex:
                 self._add_issue(IType.ERROR, f"The final unit could not be computed, interface '{f_unit}' / "
-                                       f"relative_to '{rel_unit_name}': {str(ex)}")
+                                       f"relative_to '{rel_unit_name}': {str(ex)}"+subrow_issue_message(subrow))
                 return
 
             f_relative_to = first(f.processor.factors, lambda ifc: strcmp(ifc.name, relative_to_interface_name))
 
             if not f_relative_to:
                 self._add_issue(IType.ERROR, f"Interface specified in 'relative_to' column "
-                                       f"'{relative_to_interface_name}' has not been found.")
+                                       f"'{relative_to_interface_name}' has not been found."+subrow_issue_message(subrow))
                 return
 
         if f_value is None and f_relative_to is not None:
             f_value = "0"
             self._add_issue(IType.WARNING, f"Field 'value' should be defined for unitary processors, i.e. those having a "
-                                     f"'relative_to' interface. Using value '0'.")
+                                     f"'relative_to' interface. Using value '0'."+subrow_issue_message(subrow))
 
         # Create quantitative observation
         if f_value is not None:
             # If an observation exists then "time" is mandatory
             if not f_time:
-                self._add_issue(IType.ERROR, f"Field 'time' needs to be specified for the given observation.")
+                self._add_issue(IType.ERROR, f"Field 'time' needs to be specified for the given observation."+subrow_issue_message(subrow))
                 return
 
             o = _create_or_append_quantitative_observation(f,

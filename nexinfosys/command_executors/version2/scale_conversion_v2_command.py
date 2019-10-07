@@ -6,7 +6,7 @@ from nexinfosys.common.helper import strcmp, first
 from nexinfosys.model_services import IExecutableCommand, get_case_study_registry_objects
 from nexinfosys.models.musiasem_concepts import Observer, FactorTypesRelationUnidirectionalLinearTransformObservation, \
     FactorType, Processor
-from nexinfosys.command_executors import BasicCommand, CommandExecutionError
+from nexinfosys.command_executors import BasicCommand, CommandExecutionError, subrow_issue_message
 from nexinfosys.command_field_definitions import get_command_fields_from_class
 from nexinfosys.models.musiasem_concepts_helper import find_or_create_observer, find_processor_by_name
 
@@ -15,7 +15,7 @@ class ScaleConversionV2Command(BasicCommand):
     def __init__(self, name: str):
         BasicCommand.__init__(self, name, get_command_fields_from_class(self.__class__))
 
-    def _process_row(self, fields: Dict[str, Any]) -> None:
+    def _process_row(self, fields: Dict[str, Any], subrow=None) -> None:
         origin_interface_type = self._get_factor_type_from_field("source_hierarchy", "source_interface_type")
         destination_interface_type = self._get_factor_type_from_field("target_hierarchy", "target_interface_type")
 
@@ -30,7 +30,7 @@ class ScaleConversionV2Command(BasicCommand):
         # Check that the interface types are from different hierarchies (warn if not; not error)
         if origin_interface_type.hierarchy == destination_interface_type.hierarchy:
             self._add_issue(IType.WARNING, f"The interface types '{origin_interface_type.name}' and "
-                                           f"'{destination_interface_type.name}' are in the same hierarchy")
+                                           f"'{destination_interface_type.name}' are in the same hierarchy"+subrow_issue_message(subrow))
 
         # Create the directed Scale (Linear "Transformation") Relationship
         o = FactorTypesRelationUnidirectionalLinearTransformObservation.create_and_append(

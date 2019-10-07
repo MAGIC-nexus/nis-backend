@@ -9,7 +9,7 @@ class MatrixIndicatorsCommand(BasicCommand):
     def __init__(self, name: str):
         BasicCommand.__init__(self, name, get_command_fields_from_class(self.__class__))
 
-    def _process_row(self, fields: Dict[str, Any]) -> None:
+    def _process_row(self, fields: Dict[str, Any], subrow=None) -> None:
         """
         Create and register MatrixIndicator object
 

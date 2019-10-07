@@ -3,7 +3,7 @@ import re
 from typing import Dict, Any
 
 from nexinfosys import CommandField
-from nexinfosys.command_executors import BasicCommand, CommandExecutionError
+from nexinfosys.command_executors import BasicCommand, CommandExecutionError, subrow_issue_message
 from nexinfosys.command_executors.execution_helpers import parse_line, classify_variables, \
     obtain_dictionary_with_literal_fields
 from nexinfosys.command_executors.version2.relationships_command import obtain_matching_processors
@@ -199,14 +199,14 @@ class ProcessorsCommand(BasicCommand):
     #
     #     return issues, None  # Issues, Output
 
-    def _process_row(self, field_values: Dict[str, Any]) -> None:
+    def _process_row(self, field_values: Dict[str, Any], subrow=None) -> None:
 
         # Transform text of "attributes" into a dictionary
         if field_values.get("attributes"):
             try:
                 field_values["attributes"] = dictionary_from_key_value_list(field_values["attributes"], self._glb_idx)
             except Exception as e:
-                self._add_issue(IType.ERROR, str(e))
+                self._add_issue(IType.ERROR, str(e)+subrow_issue_message(subrow))
                 return
         else:
             field_values["attributes"] = {}
@@ -218,7 +218,7 @@ class ProcessorsCommand(BasicCommand):
             try:
                 parent_processor = self._get_processor_from_field("parent_processor")
             except CommandExecutionError:
-                self._add_issue(IType.ERROR, f"Specified parent processor, '{field_values.get('parent_processor')}', does not exist")
+                self._add_issue(IType.ERROR, f"Specified parent processor, '{field_values.get('parent_processor')}', does not exist"+subrow_issue_message(subrow))
                 return
         else:
             parent_processor = None
