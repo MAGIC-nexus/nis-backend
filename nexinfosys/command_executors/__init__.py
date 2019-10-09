@@ -283,7 +283,7 @@ class BasicCommand(IExecutableCommand):
 
         interface = processor.factors_find(interface_name)
         if not interface:
-            raise CommandExecutionError(f"The interface '{interface_name}' from has not been found in "
+            raise CommandExecutionError(f"The interface '{interface_name}' has not been found in "
                                         f"processor '{processor.name}'.")
 
         return interface
