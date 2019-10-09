@@ -11,20 +11,77 @@ from nexinfosys.command_generators.parser_field_parsers import string_to_ast, pr
 from nexinfosys.common.helper import strcmp, FloatOrString
 from nexinfosys.model_services import get_case_study_registry_objects
 from nexinfosys.models.musiasem_concepts import Factor, RelationClassType, Parameter, Processor, FactorType, \
-    FactorTypesRelationUnidirectionalLinearTransformObservation
-from nexinfosys.models.musiasem_concepts_helper import create_relation_observations, find_factor_types_transform_relation
+    FactorTypesRelationUnidirectionalLinearTransformObservation, Observer
+from nexinfosys.models.musiasem_concepts_helper import create_relation_observations, \
+    find_factor_types_transform_relation, find_or_create_observer
 from nexinfosys.solving import get_processor_names_to_processors_dictionary
 
 
 class RelationshipsCommand(BasicCommand):
     def __init__(self, name: str):
         BasicCommand.__init__(self, name, get_command_fields_from_class(self.__class__))
+        self._all_processors = None
 
     def _process_row(self, fields: Dict[str, Any], subrow=None) -> None:
+        def process_relation(relation_class):
+            source_processor = self._get_processor_from_field("source_processor")
+            target_processor = self._get_processor_from_field("target_processor")
+
+            self._check_fields(relation_class, source_processor, target_processor, subrow)
+
+            if relation_class.is_between_processors:
+                create_relation_observations(self._glb_idx, source_processor, [(target_processor, relation_class)],
+                                             relation_class, None, attributes=attributes)
+
+            elif relation_class.is_between_interfaces:
+                source_interface = self._get_interface_from_field("source_interface", source_processor) if self._fields.get("source_interface") else self._get_interface_from_field("target_interface", source_processor)
+                target_interface = self._get_interface_from_field("target_interface", target_processor) if self._fields.get("target_interface") else self._get_interface_from_field("source_interface", target_processor)
+
+                if fields["back_interface"]:
+                    relation_class = RelationClassType.ff_directed_flow_back
+
+                if relation_class == RelationClassType.ff_directed_flow_back:
+                    back_interface = self._get_interface_from_field("back_interface", source_processor)
+                    self._check_flow_back_interface_types(source_interface, target_interface, back_interface)
+                    attributes.update(dict(back_interface=back_interface))
+
+                if relation_class.is_flow:
+                    self._check_flow_orientation(
+                        source_processor, target_processor, source_interface, target_interface,
+                        is_direct_flow=(relation_class == RelationClassType.ff_directed_flow)
+                    )
+
+                if source_interface.taxon != target_interface.taxon:
+                    interface_types_transforms = find_factor_types_transform_relation(
+                        self._glb_idx, source_interface.taxon, target_interface.taxon, source_processor, target_processor)
+
+                    # ChangeOfTypeScale
+                    if self._fields.get("change_type_scale"):
+                        o = FactorTypesRelationUnidirectionalLinearTransformObservation.create_and_append(
+                            source_interface.taxon, target_interface.taxon, self._fields.get("change_type_scale"),
+                            source_interface.processor, target_interface.processor,  # AdHoc source-target Context
+                            None, None,  # No unit conversion
+                            find_or_create_observer(Observer.no_observer_specified, self._glb_idx))
+                        self._glb_idx.put(o.key(), o)
+                        if len(interface_types_transforms) > 0:
+                            self._add_issue(IType.WARNING,
+                                            f"Preexisting matching ScaleChangeMap entry found. Overriding with "
+                                            f"{self._fields.get('change_type_scale')}")
+
+                    interface_types_transform = self._get_interface_types_transform(
+                        source_interface.taxon, source_processor, target_interface.taxon, target_processor, subrow)
+                    attributes.update(dict(scale_change_weight=interface_types_transform.scaled_weight))
+
+                create_relation_observations(self._glb_idx, source_interface,
+                                             [(target_interface, relation_class, fields["flow_weight"])],
+                                             relation_class, None, attributes=attributes)
+
+        if not self._all_processors:
+            self._all_processors = get_processor_names_to_processors_dictionary(self._glb_idx)
         # source_cardinality = fields["source_cardinality"]
         # target_cardinality = fields["target_cardinality"]
-        source_processor = self._get_processor_from_field("source_processor")
-        target_processor = self._get_processor_from_field("target_processor")
+        source_processors = self._fields["source_processor"]
+        target_processors = self._fields["target_processor"]
         attributes = self._get_attributes_from_field("attributes")
 
         try:  # Get relation class type
@@ -32,38 +89,22 @@ class RelationshipsCommand(BasicCommand):
         except NotImplementedError as e:
             raise CommandExecutionError(str(e))
 
-        self._check_fields(relation_class, source_processor, target_processor, subrow)
-
-        if relation_class.is_between_processors:
-            create_relation_observations(self._glb_idx, source_processor, [(target_processor, relation_class)],
-                                         relation_class, None, attributes=attributes)
-
-        elif relation_class.is_between_interfaces:
-            source_interface = self._get_interface_from_field("source_interface", source_processor)
-            target_interface = self._get_interface_from_field("target_interface", target_processor)
-
-            if fields["back_interface"]:
-                relation_class = RelationClassType.ff_directed_flow_back
-
-            if relation_class == RelationClassType.ff_directed_flow_back:
-                back_interface = self._get_interface_from_field("back_interface", source_processor)
-                self._check_flow_back_interface_types(source_interface, target_interface, back_interface)
-                attributes.update(dict(back_interface=back_interface))
-
-            if relation_class.is_flow:
-                self._check_flow_orientation(
-                    source_processor, target_processor, source_interface, target_interface,
-                    is_direct_flow=(relation_class == RelationClassType.ff_directed_flow)
-                )
-
-            if source_interface.taxon != target_interface.taxon:
-                interface_types_transform = self._get_interface_types_transform(
-                    source_interface.taxon, source_processor, target_interface.taxon, target_processor, subrow)
-                attributes.update(dict(scale_change_weight=interface_types_transform.scaled_weight))
-
-            create_relation_observations(self._glb_idx, source_interface,
-                                         [(target_interface, relation_class, fields["flow_weight"])],
-                                         relation_class, None, attributes=attributes)
+        if ".." in source_processors or ".." in target_processors:
+            if ".." in source_processors:
+                source_processor_names = obtain_matching_processors(string_to_ast(processor_names, self._fields["source_processor"]), self._all_processors)
+            else:
+                source_processor_names = [source_processors]
+            if ".." in target_processors:
+                target_processor_names = obtain_matching_processors(string_to_ast(processor_names, self._fields["target_processor"]), self._all_processors)
+            else:
+                target_processor_names = [target_processors]
+            for s in source_processor_names:
+                for t in target_processor_names:
+                    self._fields["source_processor"] = s
+                    self._fields["target_processor"] = t
+                    process_relation(relation_class)
+        else:
+            process_relation(relation_class)
 
     def _get_interface_types_transform(self,
                                        source_interface_type: FactorType, source_processor: Processor,

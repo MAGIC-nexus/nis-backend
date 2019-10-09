@@ -177,6 +177,8 @@ def parse_action_processor_name(s, l, tt, node_type="processor_name"):
             if "literal" in classif and tok in classif["literal"]:
                 parts.append(("literal", tok))
 
+    expandable = False
+
     return dict(type=node_type, parts=parts, variables=variables, input=s, expandable=expandable, complex=expandable)
 
 

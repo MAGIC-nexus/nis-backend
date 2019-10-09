@@ -271,6 +271,7 @@ def find_processor_by_name(state: Union[State, PartialRetrievalDictionary], proc
                             p = matches[0]
                         else:
                             raise Exception(str(len(matches))+" processors matched '"+partial_name+"' in '"+processor_name+"'")
+                return p
         else:  # The number of matching top level Processors is different from ONE
             if len(p) == 0:
                 return None

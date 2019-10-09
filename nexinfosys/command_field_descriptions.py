@@ -94,6 +94,7 @@ cf_descriptions = {
     ("relationships", "back_interface"): "The name of an Interface in the origin processor, used if a change of scale is requested, allowing to account back to the origin processor the amount. It is intended for expressing the accounting of money obtained in exchange for some good.",
     ("relationships", "relation_type"): "Please, refer to MAGIC - ""<a href=""https://docs.google.com/document/d/1kGJI7m9fL9eRHEG4CICzOCQM5qOBdFZ3eDR43d1dME8/edit#heading=h.vqpx27xubbp8"" target=""_blank"">DMP Annex 3</a>"" (text too long to show here)",
     ("relationships", "flow_weight"): "Proportion of the magnitude of the Origin Interface that goes into the Destination Interface.",
+    ("relationships", "change_type_scale"): "In case two Interfaces of different InterfaceTypes are connected by a flow (exchange), create an ad-hoc line of a ScaleChangeMap.",
     ("relationships", "source_cardinality"): "Only for “Associate” relations",
     ("relationships", "target_cardinality"): "Only for “Associate” relations",
     ("relationships", "attributes"): "A list of freely definable attributes attached to a Relationship. Columns with a header starting in “@” are considered attribute columns that are appended to the list of attributes.",
