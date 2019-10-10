@@ -249,7 +249,7 @@ class WorksheetCopy2(object):
             src = getattr(self.source, attr)
             target = getattr(self.target, attr)
             for key, dim in src.items():
-                # TODO COPY only if the dimension is correct
+                # TODO COPY only if the dimension is correct. From Kendo UI ticket
                 if attr == 'column_dimensions' and dim.min < 1021:
                     target[key] = copy(dim)
                     target[key].worksheet = self.target

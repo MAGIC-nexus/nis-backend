@@ -170,8 +170,8 @@ def construct_processors_graph(state: State, query: IQueryObjects, filt: Union[s
     """
     # Format
     a_processor = dict(graphics={"type": "hexagon", "color": "#aa2211"})
-    edge_flow = dict(graphics={"fill": "#ff00ff", "width": 3, "targetArrow": "standard"})
-    edge_part_of = dict(graphics={"fill": "#00ffff", "width": 3, "targetArrow": "standard"})
+    edge_flow = dict(relation="flow", graphics={"fill": "#ff00ff", "width": 3, "targetArrow": "standard"})
+    edge_part_of = dict(relation="part_of", graphics={"fill": "#00ffff", "width": 3, "targetArrow": "standard"})
 
     # Obtain the information needed to elaborate the graph
     objs = query.execute([Processor, Factor,

@@ -56,7 +56,7 @@ class ProcessorScalingsCommand(BasicCommand):
         # print(f"Invoking: {invoking_processor.name}:{invoking_interface_name}, Requested: {requested_processor.name}:{requested_interface_name}")
 
         requested_processor_clone = None
-        if strcmp(scaling_type, "CloneAndScale"):
+        if strcmp(scaling_type, "CloneAndScale") or strcmp(scaling_type, "Clone"):
             # TODO: check “RequestedProcessor” must be an archetype
             # 1. Clones “RequestedProcessor” as a child of “InvokingProcessor”
             requested_processor_clone = self._clone_processor_as_child(processor=requested_processor,
@@ -64,16 +64,17 @@ class ProcessorScalingsCommand(BasicCommand):
                                                                        name=requested_new_processor_name,
                                                                        other_attributes=attributes)
 
-            # 2. Constrains the value of “RequestedInterface” to the value of “InvokingInterface”, scaled by “Scale”
-            try:
-                self._constrains_interface(scale=scale,
-                                           invoking_interface_name=invoking_interface_name,
-                                           requested_interface_name=requested_interface_name,
-                                           parent_processor=invoking_processor,
-                                           child_processor=requested_processor_clone)
-            except Exception as e:
-                self._add_issue(IType.ERROR, str(e)+subrow_issue_message(subrow))
-                return
+            if strcmp(scaling_type, "CloneAndScale"):
+                # 2. Constrains the value of “RequestedInterface” to the value of “InvokingInterface”, scaled by “Scale”
+                try:
+                    self._constrains_interface(scale=scale,
+                                               invoking_interface_name=invoking_interface_name,
+                                               requested_interface_name=requested_interface_name,
+                                               parent_processor=invoking_processor,
+                                               child_processor=requested_processor_clone)
+                except Exception as e:
+                    self._add_issue(IType.ERROR, str(e)+subrow_issue_message(subrow))
+                    return
         elif strcmp(scaling_type, "Scale"):
             # Processors must be of same type (archetype or instance)
             if not strcmp(invoking_processor.instance_or_archetype, requested_processor.instance_or_archetype):
