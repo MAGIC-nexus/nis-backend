@@ -188,7 +188,7 @@ def parse_command_in_worksheet(sh: Worksheet, area: AreaTupleType, name: Optiona
                         if value.lower() not in [v.lower() for v in field_def.allowed_values]:  # TODO Case insensitive CI
                             issues.append(
                                 Issue(itype=IType.ERROR,
-                                      description=f"Field '{col_name}' of command '{cmd_name}' has invalid value "
+                                      description=f"Field '{col_name}' of command '{cmd_name}' has invalid category "
                                       f"'{value}'. Allowed values are: {', '.join(field_def.allowed_values)}.",
                                       location=IssueLocation(sheet_name=name, row=r, column=col_idx)))
                         else:

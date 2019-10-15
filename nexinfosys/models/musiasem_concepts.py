@@ -395,6 +395,8 @@ class HierarchyNode(Nameable, Encodable):
             raise Exception("The hierarchy of a node and the hierarchy of the referred cannot be the same")
         if hierarchy:  # Add name to the hierarchy
             hierarchy.codes[name] = self
+            if not parent:
+                hierarchy.roots_append(self)
         if parent:
             self.set_parent(parent, parent_weight)
 

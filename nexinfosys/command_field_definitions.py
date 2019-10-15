@@ -239,9 +239,9 @@ command_fields: Dict[str, List[CommandField]] = {
 
     "scale_conversion_v2": [
         CommandField(allowed_names=["OriginHierarchy"], name="source_hierarchy", parser=simple_ident),
-        CommandField(allowed_names=["OriginInterfaceType"], name="source_interface_type", mandatory=True, parser=simple_ident),
+        CommandField(allowed_names=["OriginInterfaceType"], name="source_interface_type", parser=simple_ident),
         CommandField(allowed_names=["DestinationHierarchy"], name="target_hierarchy", parser=simple_ident),
-        CommandField(allowed_names=["DestinationInterfaceType"], name="target_interface_type", mandatory=True, parser=simple_ident),
+        CommandField(allowed_names=["DestinationInterfaceType"], name="target_interface_type", parser=simple_ident),
         CommandField(allowed_names=["OriginContext"], name="source_context", parser=processor_names),
         CommandField(allowed_names=["DestinationContext"], name="target_context", parser=processor_names),
         CommandField(allowed_names=["Scale"], name="scale", mandatory=True, parser=expression_with_parameters),

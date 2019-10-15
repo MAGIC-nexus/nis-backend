@@ -10,7 +10,7 @@ from nexinfosys.common.helper import first, PartialRetrievalDictionary, head, st
 from nexinfosys.command_generators import IType, IssueLocation, Issue, parser_field_parsers
 from nexinfosys.command_generators.parser_ast_evaluators import dictionary_from_key_value_list, ast_evaluator
 from nexinfosys.model_services import IExecutableCommand, get_case_study_registry_objects, State
-from nexinfosys.models.musiasem_concepts import Processor, Factor, FactorType, Parameter
+from nexinfosys.models.musiasem_concepts import Processor, Factor, FactorType, Parameter, Hierarchy
 from nexinfosys.models.musiasem_concepts_helper import find_processor_by_name
 
 
@@ -292,6 +292,71 @@ class BasicCommand(IExecutableCommand):
         interface_type_name = self._fields[interface_type_field_name]
         if not interface_type_name:
             raise CommandExecutionError(f"The field '{interface_type_field_name}' has not been specified")
+
+        # Check if FactorType exists
+        interface_types = self._glb_idx.get(FactorType.partial_key(interface_type_name))
+
+        if len(interface_types) == 1:
+            return interface_types[0]
+        elif len(interface_types) == 0:
+            raise CommandExecutionError(f"The interface type '{interface_type_name}' has not been found")
+        else:
+            hierarchy_name = self._fields[hierarchy_field_name]
+            if not hierarchy_name:
+                raise CommandExecutionError(f"The field '{hierarchy_field_name}' has not been specified and "
+                                            f"the interface type '{interface_type_name}' is not unique")
+
+            interface_type = first(interface_types, lambda t: strcmp(t.hierarchy.name, hierarchy_name))
+            if not interface_type:
+                raise CommandExecutionError(f"The interface type '{interface_type_name}' has not been found in "
+                                            f"hierarchy '{hierarchy_name}'")
+
+            return interface_type
+
+    def _get_factor_types_from_field(self, hierarchy_field_name: str, interface_type_field_name: str) -> FactorType:
+        """ Possibly obtain not only one but many InterfaceTypes """
+
+        hierarchy_name = self._fields[hierarchy_field_name]
+        interface_type_name = self._fields[interface_type_field_name]
+
+        if not interface_type_name and not hierarchy_name:
+            raise CommandExecutionError(f"No hierarchy nor interface type have been specified. At least specify one of them.")
+        elif interface_type_name and hierarchy_name:
+            interface_types = self._glb_idx.get(FactorType.partial_key(interface_type_name))
+            if len(interface_types) == 1:
+                return [interface_types[0]]
+            elif len(interface_types) == 0:
+                raise CommandExecutionError(f"The interface type '{interface_type_name}' has not been found")
+            else:
+                hierarchy_name = self._fields[hierarchy_field_name]
+                if not hierarchy_name:
+                    raise CommandExecutionError(f"The field '{hierarchy_field_name}' has not been specified and "
+                                                f"the interface type '{interface_type_name}' is not unique")
+
+                interface_type = first(interface_types, lambda t: strcmp(t.hierarchy.name, hierarchy_name))
+                if not interface_type:
+                    raise CommandExecutionError(f"The interface type '{interface_type_name}' has not been found in "
+                                                f"hierarchy '{hierarchy_name}'")
+
+                return [interface_type]
+        elif interface_type_name and not hierarchy_name:
+            interface_types = self._glb_idx.get(FactorType.partial_key(interface_type_name))
+            if len(interface_types) == 1:
+                return [interface_types[0]]
+            elif len(interface_types) == 0:
+                raise CommandExecutionError(f"The interface type '{interface_type_name}' has not been found")
+            else:
+                raise CommandExecutionError(f"The field '{hierarchy_field_name}' has not been specified and "
+                                            f"the interface type '{interface_type_name}' is not unique")
+        elif not interface_type_name and hierarchy_name:
+            hie = self._glb_idx.get(Hierarchy.partial_key(hierarchy_name))
+            if len(hie) == 1:
+                # All children of "hierarchy_name"
+                return [v for v in hie[0].codes.values()]
+            elif len(hie) == 0:
+                raise CommandExecutionError(f"The InterfaceTypes hierarchy '{hierarchy_name}' has not been found")
+            else:
+                raise CommandExecutionError(f"The InterfaceTypes hierarchy '{hierarchy_name}' has been found multiple times!!")
 
         # Check if FactorType exists
         interface_types = self._glb_idx.get(FactorType.partial_key(interface_type_name))

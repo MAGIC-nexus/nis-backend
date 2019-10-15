@@ -16,8 +16,8 @@ class ScaleConversionV2Command(BasicCommand):
         BasicCommand.__init__(self, name, get_command_fields_from_class(self.__class__))
 
     def _process_row(self, fields: Dict[str, Any], subrow=None) -> None:
-        origin_interface_type = self._get_factor_type_from_field("source_hierarchy", "source_interface_type")
-        destination_interface_type = self._get_factor_type_from_field("target_hierarchy", "target_interface_type")
+        origin_interface_types = self._get_factor_types_from_field("source_hierarchy", "source_interface_type")
+        destination_interface_types = self._get_factor_types_from_field("target_hierarchy", "target_interface_type")
 
         origin_processor: Optional[Processor] = None
         if fields["source_context"]:
@@ -28,15 +28,17 @@ class ScaleConversionV2Command(BasicCommand):
             destination_processor = self._get_processor_from_field("target_context")
 
         # Check that the interface types are from different hierarchies (warn if not; not error)
-        if origin_interface_type.hierarchy == destination_interface_type.hierarchy:
-            self._add_issue(IType.WARNING, f"The interface types '{origin_interface_type.name}' and "
-                                           f"'{destination_interface_type.name}' are in the same hierarchy"+subrow_issue_message(subrow))
+        for origin_interface_type in origin_interface_types:
+            for destination_interface_type in destination_interface_types:
+                if origin_interface_type.hierarchy == destination_interface_type.hierarchy:
+                    self._add_issue(IType.WARNING, f"The interface types '{origin_interface_type.name}' and "
+                                                   f"'{destination_interface_type.name}' are in the same hierarchy"+subrow_issue_message(subrow))
 
-        # Create the directed Scale (Linear "Transformation") Relationship
-        o = FactorTypesRelationUnidirectionalLinearTransformObservation.create_and_append(
-            origin_interface_type, destination_interface_type, fields["scale"],
-            origin_processor, destination_processor,
-            fields["source_unit"], fields["target_unit"],
-            find_or_create_observer(Observer.no_observer_specified, self._glb_idx))
+                # Create the directed Scale (Linear "Transformation") Relationship
+                o = FactorTypesRelationUnidirectionalLinearTransformObservation.create_and_append(
+                    origin_interface_type, destination_interface_type, fields["scale"],
+                    origin_processor, destination_processor,
+                    fields["source_unit"], fields["target_unit"],
+                    find_or_create_observer(Observer.no_observer_specified, self._glb_idx))
 
-        self._glb_idx.put(o.key(), o)
+                self._glb_idx.put(o.key(), o)
