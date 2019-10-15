@@ -15,7 +15,8 @@ from nexinfosys.model_services import IExecutableCommand, get_case_study_registr
 from nexinfosys.models.musiasem_concepts import PedigreeMatrix, Reference, FactorType, \
     Processor, Factor, FactorInProcessorType, Observer, Parameter, GeographicReference, ProvenanceReference, \
     BibliographicReference
-from nexinfosys.models.musiasem_concepts_helper import _create_or_append_quantitative_observation
+from nexinfosys.models.musiasem_concepts_helper import _create_or_append_quantitative_observation, \
+    find_observable_by_name
 from nexinfosys.solving import get_processor_names_to_processors_dictionary
 from nexinfosys.command_field_definitions import get_command_fields_from_class
 
@@ -147,15 +148,11 @@ class InterfacesAndQualifiedQuantitiesCommand(BasicCommand):
 
         # Find Processor
         # TODO Allow creating a basic Processor if it is not found?
-        p = self._glb_idx.get(Processor.partial_key(f_processor_name))
-        if len(p) == 0:
+        p = find_observable_by_name(f_processor_name, self._glb_idx)
+        # p = self._glb_idx.get(Processor.partial_key(f_processor_name))
+        if not p:
             self._add_issue(IType.ERROR, "Processor '" + f_processor_name + "' not declared previously"+subrow_issue_message(subrow))
             return
-        elif len(p) > 1:
-            self._add_issue(IType.ERROR, "Processor '" + f_processor_name + "' found " + str(len(p)) + " times. It must be uniquely identified."+subrow_issue_message(subrow))
-            return
-        else:
-            p = p[0]
 
         # Try to find Interface
         ft: FactorType = None

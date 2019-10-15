@@ -182,9 +182,11 @@ def find_observable_by_name(name: str, idx: PartialRetrievalDictionary, processo
         if p_name:
             for alt_name in hierarchical_name_variants(p_name):
                 p = idx.get(Processor.partial_key(name=alt_name))
-                if p:
+                if len(p) == 1:
                     p = p[0]
                     break
+                elif len(p) > 1:
+                    raise Exception(f"{alt_name} appears more than one time.")
         elif processor:
             p = processor
         else:
