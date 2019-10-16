@@ -21,7 +21,7 @@ Before the elaboration of flow graphs, several preparatory steps:
 * [Datasets]
 * Scenarios
   - Parameters
-* Time. Clasify QQs by time, on storage
+* Time. Classify QQs by time, on storage
 * Observers (different versions). Take average always
 
 """
@@ -574,6 +574,17 @@ def compute_flow_and_scale_results(state: State, glb_idx, global_parameters, pro
             time_relations_scale = relations_scale.copy()
             time_relations_scale_change = relations_scale_change.copy()
 
+            # RNEBOT - This "for" iterator was AFTER the elaboration of "known_observations". Changing it to BEFORE
+            #          enables specifying unitary processors which are DIRECTLY SCALED by specifying the value of the
+            #          dimensioning Interface.
+            
+            # Add Processors internal -RelativeTo- relations (time dependent)
+            # Transform relative observations into graph edges
+            for expression, obs in time_observations_relative[time_period]:
+                time_relations_scale.add_edge(InterfaceNode(obs.relative_factor, obs.factor.processor),
+                                              InterfaceNode(obs.factor),
+                                              weight=expression)
+
             # Second and last pass to resolve observation expressions with parameters
             for expression, obs in observations:
                 obs_node = InterfaceNode(obs.factor)
@@ -592,16 +603,9 @@ def compute_flow_and_scale_results(state: State, glb_idx, global_parameters, pro
 
             if len(known_observations) == 0:
                 raise SolvingException(IType.ERROR,
-                                       f"Scenario '{scenario_name}' - period '{time_period}'. No observations available."
+                                       f"Scenario '{scenario_name}' - period '{time_period}'. No 'flowable' or 'scalable' observations available."
                                        )
             # assert(len(known_observations) > 0)
-
-            # Add Processors internal -RelativeTo- relations (time dependent)
-            # Transform relative observations into graph edges
-            for expression, obs in time_observations_relative[time_period]:
-                time_relations_scale.add_edge(InterfaceNode(obs.relative_factor, obs.factor.processor),
-                                              InterfaceNode(obs.factor),
-                                              weight=expression)
 
             # Second and last pass to resolve weight expressions: expressions with parameters can be solved
             resolve_weight_expressions([time_relations_flow, time_relations_scale, time_relations_scale_change], scenario_state, raise_error=True)
@@ -904,7 +908,6 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
     #Create Matrix to Sanskey graph
 
     FactorsRelationDirectedFlowObservation_list = glb_idx.get(FactorsRelationDirectedFlowObservation.partial_key())
-
 
     ds_flows = pd.DataFrame({'source': [i._source.full_name for i in FactorsRelationDirectedFlowObservation_list],
                               'source_processor': [i._source._processor._name for i in FactorsRelationDirectedFlowObservation_list],
