@@ -7,6 +7,9 @@ https://gist.github.com/cynici/5865326
 """
 import importlib
 from typing import Dict, Tuple, Union, List
+
+import lxml
+from nexinfosys import case_sensitive
 from pyparsing import quotedString
 
 from nexinfosys.model_services import State
@@ -78,6 +81,49 @@ def get_processor(attribute, value, prd: PartialRetrievalDictionary = None):
             return ret
         else:
             raise Exception(f"No Processor found having attribute '{attribute}' with value '{value}'")
+
+
+def obtain_processors(xquery: str=None, processors_dom=None, processors_map=None):
+
+    if xquery:
+        try:
+            processors = set()
+            r = processors_dom.xpath(xquery if case_sensitive else xquery.lower())
+            for e in r:
+                fname = e.get("fullname")
+                if fname:
+                    processors.add(processors_map[fname])
+                else:
+                    pass  # Interfaces...
+            return processors
+        except lxml.etree.XPathEvalError:
+            # TODO Try CSSSelector syntax
+            # TODO Generate Issue
+            pass
+    else:
+        # ALL
+        # TODO Probably this should not be used because it will normally imply double accounting
+        return set(processors_map.values())
+
+
+def aggregator_sum(field: str, xquery: str=None, processors_dom=None, processors_map=None):
+    """
+    SUM "field" for all processors meeting the XQuery
+    :param field:
+    :param xquery:
+    :param processors_dom:
+    :param processors_map:
+    :return:
+    """
+    processors = obtain_processors(xquery, processors_dom, processors_map)
+    accum = 0
+    for p in processors:
+        try:
+            accum += getattr(p, field, 0)
+        except AttributeError as e:
+            pass
+
+    return accum
 
 
 # Comparison operators
@@ -195,6 +241,11 @@ def ast_evaluator(exp: Dict, state: State, obj, issue_lst, evaluation_type="nume
                             for sp_kwarg, name in _f["special_kwargs"].items():
                                 if sp_kwarg == "PartialRetrievalDictionary":
                                     kwargs[name] = state.get("_glb_idx")
+                                elif sp_kwarg == "ProcessorsDOM":
+                                    kwargs[name] = state.get("_processors_dom")
+                                elif sp_kwarg == "ProcessorsMap":
+                                    kwargs[name] = state.get("_processors_map")
+
                         # CALL FUNCTION!!
                         try:
                             obj = func(*args, **kwargs)
@@ -288,7 +339,7 @@ def ast_evaluator(exp: Dict, state: State, obj, issue_lst, evaluation_type="nume
             return None, unresolved_vars
         elif t == "reference":
             return "[" + exp["ref_id"] + "]", unresolved_vars  # TODO Return a special type
-        elif t in ("u+", "u-", "multipliers", "adders", "comparison", "not", "and", "or"):  # Arithmetic and Boolean
+        elif t in ("u+", "u-", "exponentials", "multipliers", "adders", "comparison", "not", "and", "or"):  # Arithmetic and Boolean
             # Evaluate recursively the left and right operands
             if t in ("u+", "u-"):
                 if evaluation_type == "numeric":
@@ -324,7 +375,7 @@ def ast_evaluator(exp: Dict, state: State, obj, issue_lst, evaluation_type="nume
                                 following = -following
 
                             current += following
-                        elif op in ("*", "/", "//", "%"):
+                        elif op in ("*", "/", "//", "%", "**", "^"):
                             if following is None:
                                 following = 1
                             if current is None:
@@ -337,6 +388,8 @@ def ast_evaluator(exp: Dict, state: State, obj, issue_lst, evaluation_type="nume
                                 current //= following
                             elif op == "%":
                                 current %= following
+                            elif op in ("**", "^"):
+                                current ^= following
                         elif op == "not":
                             current = not bool(following)
                         elif op == "and":

@@ -5,6 +5,7 @@ Ideas for expression rules copied/adapted from:
 https://gist.github.com/cynici/5865326
 
 """
+import re
 from functools import partial
 
 import lxml
@@ -18,7 +19,7 @@ from pyparsing import (ParserElement, Regex,
 from typing import Dict
 
 from nexinfosys import ureg
-from nexinfosys.command_generators import global_functions
+from nexinfosys.command_generators import global_functions, global_functions_extended
 from nexinfosys.common.helper import create_dictionary, PartialRetrievalDictionary
 
 # Enable memoizing
@@ -55,6 +56,7 @@ quote = oneOf('" ''')  # Double quotes, single quotes
 signop = oneOf('+ -')
 multop = oneOf('* / // %')
 plusop = oneOf('+ -')
+expop = oneOf('^ **')
 tag = Literal('#')  # Used to specify literal Categories ("codes") in expressions
 comparisonop = oneOf("< <= > >= == != <>")
 andop = CaselessKeyword("AND")
@@ -105,6 +107,45 @@ code_string_reference = hash.suppress() + code_string + hash.suppress()
 string = quotedString.setParseAction(
     lambda t: {'type': 'str', 'value': t[0][1:-1]}
 )
+
+
+# RULES - XQuery/XPath string - used in aggregator expressions potentially involving several processors
+def xquery_validation(s, l, tt):
+    """
+    Function to elaborate a node for evaluation of processor name (definition of processor name) or
+    selection of processors, with variable names and wildcard (..)
+    :param s:
+    :param l:
+    :param tt:
+    :return:
+    """
+    try:
+        lxml.etree.XPath(s)
+        return {"type": "XQueryString", "query": s}
+    except lxml.etree.XPathSyntaxError:
+        # TODO Check if it is CSS syntax
+        raise Exception("Syntax error validating XQuery/XPath expression")
+
+
+xpath_string = (Literal("q") + quoted_string).setParseAction(xquery_validation)
+
+
+# RULES - Processor field string - Name of one Interface, Indicator or Attribute in a Processor
+def processor_field_string(s, l, tt):
+    """
+    :param s:
+    :param l:
+    :param tt:
+    :return:
+    """
+    # Parse s as simple_ident
+    if re.match(r"[a-zA-Z_]\w*", s):
+        return {'type': 'ProcessorField', 'value': s}
+    else:
+        raise Exception("Syntax error validating Processor field string")
+
+
+processor_field_string = (Literal("p") + quoted_string).setParseAction(processor_field_string)
 
 
 # RULES - unit name
@@ -280,6 +321,18 @@ def func_call_action(s, l, t):
 func_call = Group(simple_ident + lparen.suppress() + parameters_list + rparen.suppress()
                   ).setParseAction(func_call_action)
 
+
+def func_call_action_extended_list(s, l, t):
+    if t[0][0] in global_functions_extended:
+        return dict(type='function', name=t[0][0], params=t[0][1:])
+    else:
+        raise Exception(f"Function '{t[0][0]}' not defined")
+
+
+func_call_extended = Group(simple_ident + lparen.suppress() + parameters_list + rparen.suppress()
+                           ).setParseAction(func_call_action_extended_list)
+
+
 # RULES - key-value list
 # key "=" value. Key is a simple_ident; "Value" can be an expression referring to parameters
 value = Group(arith_boolean_expression).setParseAction(lambda t:
@@ -335,6 +388,11 @@ arith_expression << operatorPrecedence(Or([positive_float, positive_int, string,
                                      'terms': [0, t.asList()[0][1]],
                                      'ops': ['u'+t.asList()[0][0]]
                                   }),
+                                  (expop, 2, opAssoc.LEFT, lambda _s, l, t: {
+                                      'type': 'exponentials',
+                                      'terms': t.asList()[0][0::2],
+                                      'ops': t.asList()[0][1::2]
+                                  }),
                                   (multop, 2, opAssoc.LEFT, lambda _s, l, t: {
                                       'type': 'multipliers',
                                       'terms': t.asList()[0][0::2],
@@ -360,6 +418,11 @@ arith_boolean_expression << operatorPrecedence(Or([positive_float, positive_int,
                                      'type': 'u'+t.asList()[0][0],
                                      'terms': [0, t.asList()[0][1]],
                                      'ops': ['u'+t.asList()[0][0]]
+                                  }),
+                                  (expop, 2, opAssoc.LEFT, lambda _s, l, t: {
+                                      'type': 'exponentials',
+                                      'terms': t.asList()[0][0::2],
+                                      'ops': t.asList()[0][1::2]
                                   }),
                                   (multop, 2, opAssoc.LEFT, lambda _s, l, t: {
                                       'type': 'multipliers',
@@ -406,6 +469,7 @@ conditions_list << Group(conditions_opening.suppress() + delimitedList(condition
 # RULES - Expression type 2
 expression << operatorPrecedence(Or([positive_float, positive_int, string, h_name]),  # Operand types
                                  [(signop, 1, opAssoc.RIGHT, lambda _s, l, t: {'type': 'u'+t.asList()[0][0], 'terms': [0, t.asList()[0][1]], 'ops': ['u'+t.asList()[0][0]]}),
+                                  (expop, 2, opAssoc.LEFT, lambda _s, l, t: { 'type': 'exponentials', 'terms': t.asList()[0][0::2], 'ops': t.asList()[0][1::2]}),
                                   (multop, 2, opAssoc.LEFT, lambda _s, l, t: {'type': 'multipliers', 'terms': t.asList()[0][0::2], 'ops': t.asList()[0][1::2]}),
                                   (plusop, 2, opAssoc.LEFT, lambda _s, l, t: {'type': 'adders', 'terms': t.asList()[0][0::2], 'ops': t.asList()[0][1::2]}),
                                   ],
@@ -427,6 +491,7 @@ expression_with_parameters = arith_boolean_expression
 # RULES: Expression type 3. For hierarchies. Can mention only simple identifiers (codes) and numbers
 hierarchy_expression << operatorPrecedence(Or([positive_float, positive_int, simple_ident]),  # Operand types
                                            [(signop, 1, opAssoc.RIGHT, lambda _s, l, t: {'type': 'u'+t.asList()[0][0], 'terms': [0, t.asList()[0][1]], 'ops': ['u'+t.asList()[0][0]]}),
+                                            (expop, 2, opAssoc.LEFT, lambda _s, l, t: {'type': 'exponentials', 'terms': t.asList()[0][0::2], 'ops': t.asList()[0][1::2]}),
                                             (multop, 2, opAssoc.LEFT, lambda _s, l, t: {'type': 'multipliers', 'terms': t.asList()[0][0::2], 'ops': t.asList()[0][1::2]}),
                                             (plusop, 2, opAssoc.LEFT, lambda _s, l, t: {'type': 'adders', 'terms': t.asList()[0][0::2], 'ops': t.asList()[0][1::2]}),
                                             ],
@@ -438,11 +503,16 @@ indicator_expression << operatorPrecedence(Or([positive_float, positive_int,
                                                string, boolean,
                                                conditions_list,
                                                simple_h_name,
-                                               func_call]),  # Operand types
+                                               func_call_extended]),  # Operand types
                                  [(signop, 1, opAssoc.RIGHT, lambda _s, l, t: {
                                      'type': 'u'+t.asList()[0][0],
                                      'terms': [0, t.asList()[0][1]],
                                      'ops': ['u'+t.asList()[0][0]]
+                                  }),
+                                  (expop, 2, opAssoc.LEFT, lambda _s, l, t: {
+                                      'type': 'exponentials',
+                                      'terms': t.asList()[0][0::2],
+                                      'ops': t.asList()[0][1::2]
                                   }),
                                   (multop, 2, opAssoc.LEFT, lambda _s, l, t: {
                                       'type': 'multipliers',

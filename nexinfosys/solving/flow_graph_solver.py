@@ -941,8 +941,6 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
     # Register flow dataset
     datasets[ds_flows_name] = get_dataset(ds_flow_values, ds_flows_name, "Flow Graph Matrix - Interfaces")
 
-
-
     # Calculate and publish MatrixIndicators
     indicators = glb_idx.get(MatrixIndicator.partial_key())
     matrices = prepare_matrix_indicators(indicators, glb_idx, dom_tree, p_map, df, df_indicators, dynamic_scenario)
@@ -1129,6 +1127,9 @@ def calculate_local_scalar_indicators(indicators: List[Indicator],
                 else:
                     d[iface] = sdf["Value"]  # First appearance allowed, insert
             d.update(params)
+            # Variables for aggregator functions
+            d["_processors_map"] = p_map
+            d["_processors_dom"] = serialized_model
             if not case_sensitive:
                 d = {k.lower(): v for k, v in d.items()}
 

@@ -62,3 +62,27 @@ global_functions = create_dictionary(data={i["name"]: i for i in
                       "special_kwargs": {"PartialRetrievalDictionary": "prd"}}
                      ]
                     })
+
+global_functions_extended = create_dictionary(data={i["name"]: i for i in
+                    [{"name": "sum",
+                      "full_name": "nexinfosys.command_generators.parser_ast_evaluators.aggregator_sum",
+                      "kwargs": None,
+                      "special_kwargs": {"ProcessorsMap": "processors_map", "ProcessorsDOM": "processors_dom"}},
+                     {"name": "avg",
+                      "full_name": "nexinfosys.command_generators.parser_ast_evaluators.aggregator_avg",
+                      "kwargs": None,
+                      "special_kwargs": {"ProcessorsMap": "processors_map", "ProcessorsDOM": "processors_dom"}},
+                     {"name": "max",
+                      "full_name": "nexinfosys.command_generators.parser_ast_evaluators.aggregator_max",
+                      "kwargs": None,
+                      "special_kwargs": {"ProcessorsMap": "processors_map", "ProcessorsDOM": "processors_dom"}},
+                     {"name": "min",
+                      "full_name": "nexinfosys.command_generators.parser_ast_evaluators.aggregator_min",
+                      "kwargs": None,
+                      "special_kwargs": {"ProcessorsMap": "processors_map", "ProcessorsDOM": "processors_dom"}},
+                     {"name": "count",
+                      "full_name": "nexinfosys.command_generators.parser_ast_evaluators.aggregator_count",
+                      "kwargs": None,
+                      "special_kwargs": {"ProcessorsMap": "processors_map", "ProcessorsDOM": "processors_dom"}},
+                     ]
+                    })

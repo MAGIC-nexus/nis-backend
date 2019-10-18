@@ -16,11 +16,13 @@ import networkx as nx
 import sqlalchemy
 
 import nexinfosys
+from lxml import etree
 from nexinfosys.command_generators import Issue, IssueLocation, IType
 from nexinfosys.command_generators.parser_ast_evaluators import ast_evaluator
 from nexinfosys.command_generators.parser_field_parsers import string_to_ast, expression_with_parameters
 from nexinfosys.command_generators.parsers_factory import commands_container_parser_factory
 from nexinfosys.common.helper import create_dictionary, strcmp, istr
+from nexinfosys.ie_exports.xml import export_model_to_xml
 from nexinfosys.model_services import IExecutableCommand, get_case_study_registry_objects
 from nexinfosys.model_services import State
 from nexinfosys.models.musiasem_concepts import ProblemStatement, FactorsRelationDirectedFlowObservation, Processor, \
@@ -401,7 +403,7 @@ def prepare_model(state) -> Dict[str, Set[Processor]]:
     objs = query.execute([Factor], filt)
     processors_by_system = create_dictionary()
     for iface in objs[Factor]:  # type: Factor
-        if strcmp(iface.processor.instance_or_archetype, 'Archetype'):
+        if strcmp(iface.processor.instance_or_archetype, 'Archetype') or strcmp(iface.processor.instance_or_archetype, 'No'):
             continue
 
         system = iface.processor.processor_system
