@@ -113,16 +113,24 @@ def get_global_configuration_variable(key: str) -> str:
                     config_string = '[asection]\n' + f.read()
                 config = configparser.ConfigParser()
                 config.read_string(config_string)
-                return {t[0]: t[1].lstrip('\'"').rstrip('\'"') for t in config.items("asection")}
-            else:
-                return {}
-        else:
-            return {}
+                return {k: expand_paths(k, remove_quotes(v)) for k, v in config.items("asection")}
+        return {}
 
     global global_configuration
     if global_configuration is None:
         global_configuration = read_configuration()
     return global_configuration.get(key.lower())
+
+
+def remove_quotes(s: str) -> str:
+    return s.lstrip('\'"').rstrip('\'"')
+
+
+def expand_paths(key: str, value: str) -> str:
+    if key.endswith('_dir') or key.endswith('_location') or key.endswith('_file'):
+        return os.path.expanduser(value)
+    else:
+        return value
 
 # ##################################
 # Commands
