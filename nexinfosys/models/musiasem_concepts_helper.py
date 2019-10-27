@@ -711,7 +711,7 @@ def create_relation_observations(state: Union[State, PartialRetrievalDictionary]
     def get_requested_object(p_, ft_, f_):
         return f_ if f_ else (p_ if p_ else ft_)
 
-    def get_all_objects(input: str) -> Tuple[Processor, Optional[FactorType], Optional[Factor]]:
+    def get_all_objects(input: Union[str, Processor, Factor]) -> Tuple[Processor, Optional[FactorType], Optional[Factor]]:
         if isinstance(input, str):
             return find_or_create_observable(glb_idx, input)
         elif isinstance(input, Processor):
