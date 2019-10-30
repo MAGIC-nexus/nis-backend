@@ -247,8 +247,8 @@ class InterfacesAndQualifiedQuantitiesCommand(BasicCommand):
 
         if f_value is None and f_relative_to is not None:
             f_value = "0"
-            self._add_issue(IType.WARNING, f"Field 'value' should be defined for unitary processors, i.e. those having a "
-                                     f"'relative_to' interface. Using value '0'."+subrow_issue_message(subrow))
+            self._add_issue(IType.WARNING, f"Field 'value' should be defined for interfaces having a "
+                                           f"'RelativeTo' interface. Using value '0'."+subrow_issue_message(subrow))
 
         # Create quantitative observation
         if f_value is not None:

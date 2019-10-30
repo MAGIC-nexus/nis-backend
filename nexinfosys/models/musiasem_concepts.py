@@ -2614,8 +2614,24 @@ class Parameter(Nameable, Identifiable, Encodable):
         return d
 
     @property
+    def type(self):
+        return self._type
+
+    @property
     def default_value(self):
         return self._default_value
+
+    @property
+    def current_value(self):
+        return self._current_value
+
+    @current_value.setter
+    def current_value(self, value):
+        self._current_value = value
+
+    @property
+    def group(self):
+        return self._group
 
     @staticmethod
     def partial_key(name: str=None):
@@ -2632,10 +2648,10 @@ class ProblemStatement(Identifiable, Encodable):
     """
     Contains the parameters for the different scenarios, plus parameters needed to launch a solving process
     """
-    def __init__(self, parameters=None, scenarios=None):
+    def __init__(self, solving_parameters, scenarios=None):
         Identifiable.__init__(self)
         # Parameters characterizing the solver to be used and the parameters it receives
-        self._solving_parameters = ifnull(parameters, {})  # type: Dict[str, str]
+        self._solving_parameters = solving_parameters if solving_parameters else {}  # type: Dict[str, str]
         # Each scenario is a set of parameter values (expressions)
         self._scenarios = ifnull(scenarios, {})  # type: Dict[str, Dict[str, str]]
 

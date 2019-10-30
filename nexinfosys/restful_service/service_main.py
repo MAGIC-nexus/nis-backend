@@ -50,7 +50,7 @@ from nexinfosys.common.helper import generate_json, gzipped, str2bool, \
     add_label_columns_to_dataframe, download_file, create_dictionary, any_error_issue
 from nexinfosys.models.musiasem_methodology_support import *
 from nexinfosys.common.create_database import create_pg_database_engine, create_monet_database_engine
-from nexinfosys.restful_service import app, register_external_datasources
+from nexinfosys.restful_service import app, register_external_datasources, default_cmds
 import nexinfosys
 from nexinfosys.command_executors import create_command
 from nexinfosys.command_executors.specification.metadata_command import generate_dublin_core_xml
@@ -1046,8 +1046,8 @@ def query_state_list_results(isess):
             r = {"datasets":
                      [dict(name=k,
                            type="dataset",
-                           description=F"Dataset with {datasets[k].data.shape[0]} rows, {datasets[k].data.size} cells, "
-                           F"{datasets[k].data.memory_usage(True).sum()} bytes",
+                           description=F"{datasets[k].description} [{datasets[k].data.shape[0]} rows, {datasets[k].data.size} cells, "
+                           F"{datasets[k].data.memory_usage(True).sum()} bytes]",
                            # nelements=datasets[k].data.size,
                            # nrows=datasets[k].data.shape[0],
                            # size=datasets[k].data.memory_usage(True).sum(),
@@ -1710,9 +1710,16 @@ def reproducible_session_append_command_generator():  # Receive a command_execut
         # TODO Maybe do this only when some parameter is True
         reset_state_and_reproducible_session(isess)
 
-        generator_type, content_type, buffer, execute, register = receive_file_submission(request)
+        # Add system-level entities from JSON definition in "default_cmds"
+        ret = isess.register_andor_execute_command_generator("json", "application/json", default_cmds, False, True)
+
+        # Check that objects have been properly registered
+        # glb_idx, p_sets, hh, datasets, mappings = get_case_study_registry_objects(isess._state)
+        # ps = glb_idx.get(Parameter.partial_key())
+        # hs = glb_idx.get(Hierarchy.partial_key())
 
         # PARSE AND BUILD!!!
+        generator_type, content_type, buffer, execute, register = receive_file_submission(request)
 
         try:
             ret = isess.register_andor_execute_command_generator(generator_type, content_type, buffer, register, execute)

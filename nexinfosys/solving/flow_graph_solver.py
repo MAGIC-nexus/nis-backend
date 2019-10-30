@@ -41,12 +41,12 @@ from nexinfosys import case_sensitive
 from nexinfosys.command_generators.parser_ast_evaluators import ast_evaluator
 from nexinfosys.command_generators.parser_field_parsers import string_to_ast, expression_with_parameters, is_year, \
     is_month, indicator_expression
-from nexinfosys.common.helper import create_dictionary, PartialRetrievalDictionary, ifnull, Memoize, istr
+from nexinfosys.common.helper import create_dictionary, PartialRetrievalDictionary, ifnull, Memoize, istr, strcmp
 from nexinfosys.ie_exports.xml import export_model_to_xml
 from nexinfosys.models import CodeImmutable
 from nexinfosys.models.musiasem_concepts import ProblemStatement, Parameter, FactorsRelationDirectedFlowObservation, \
     FactorsRelationScaleObservation, Processor, FactorQuantitativeObservation, Factor, \
-    ProcessorsRelationPartOfObservation, FactorType, Indicator, MatrixIndicator
+    ProcessorsRelationPartOfObservation, FactorType, Indicator, MatrixIndicator, IndicatorCategories
 from nexinfosys.model_services import get_case_study_registry_objects, State
 from nexinfosys.models.musiasem_concepts_helper import find_quantitative_observations
 from nexinfosys.solving.graph.computation_graph import ComputationGraph
@@ -182,6 +182,8 @@ def evaluate_parameters_for_scenario(base_params: List[Parameter], scenario_para
     # Create dictionary without evaluation
     result_params = create_dictionary()
     result_params.update({p.name: p.default_value for p in base_params if p.default_value is not None})
+    param_types = create_dictionary()
+    param_types.update({p.name: p.type for p in base_params})
 
     # Overwrite with scenario expressions or constants
     result_params.update(scenario_params)
@@ -192,12 +194,17 @@ def evaluate_parameters_for_scenario(base_params: List[Parameter], scenario_para
 
     # Now, evaluate ALL expressions
     for param, expression in result_params.items():
-        value, ast, params, issues = evaluate_numeric_expression_with_parameters(expression, state)
-        if value is None:  # It is not a constant, store the parameters on which this depends
-            unknown_params[param] = (ast, set([istr(p) for p in params]))
-        else:  # It is a constant, store it
-            result_params[param] = value  # Overwrite
-            known_params[param] = value
+        ptype = param_types[param]
+        if strcmp(ptype, "Number") or strcmp(ptype, "Boolean"):
+            value, ast, params, issues = evaluate_numeric_expression_with_parameters(expression, state)
+            if value is None:  # It is not a constant, store the parameters on which this depends
+                unknown_params[param] = (ast, set([istr(p) for p in params]))
+            else:  # It is a constant, store it
+                result_params[param] = value  # Overwrite
+                known_params[param] = value
+        elif strcmp(ptype, "Code") or strcmp(ptype, "String"):
+            result_params[param] = expression
+            known_params[param] = expression
 
     cycles = get_circular_dependencies(unknown_params)
     if len(cycles) > 0:
@@ -308,7 +315,9 @@ def evaluate_numeric_expression_with_parameters(expression: Union[float, str, di
         try:
             value = float(expression)
         except ValueError:
+            print(f"{expression} before")
             ast = string_to_ast(expression_with_parameters, expression)
+            print(f"{expression} after")
             value, params = ast_evaluator(ast, state, None, issues)
             if value is not None:
                 ast = None
@@ -891,19 +900,28 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
 
     # Calculate ScalarIndicators
     indicators = glb_idx.get(Indicator.partial_key())
-    df_indicators = calculate_local_scalar_indicators(indicators, dom_tree, p_map, df, global_parameters, problem_statement)
+    df_local_indicators = calculate_local_scalar_indicators(indicators, dom_tree, p_map, df, global_parameters, problem_statement)
+    df_global_indicators = calculate_global_scalar_indicators(indicators, dom_tree, p_map, df, df_local_indicators, global_parameters, problem_statement)
 
     # Create datasets and store in State
     if not dynamic_scenario:
         ds_name = "flow_graph_solution"
         ds_indicators_name = "flow_graph_solution_indicators"
+        df_global_indicators_name = "flow_graph_global_indicators"
     else:
         ds_name = "dyn_flow_graph_solution"
         ds_indicators_name = "dyn_flow_graph_solution_indicators"
+        df_global_indicators_name = "dyn_flow_graph_global_indicators"
+
     datasets[ds_name] = get_dataset(df, ds_name, "Flow Graph Solver - Interfaces")
-    if not df_indicators.empty:
+
+    if not df_local_indicators.empty:
         # Register dataset
-        datasets[ds_indicators_name] = get_dataset(df_indicators, ds_indicators_name, "Flow Graph Solver - Indicators")
+        datasets[ds_indicators_name] = get_dataset(df_local_indicators, ds_indicators_name, "Flow Graph Solver - Local Indicators")
+
+    if not df_global_indicators.empty:
+        # Register dataset
+        datasets[df_global_indicators_name] = get_dataset(df_global_indicators, df_global_indicators_name, "Flow Graph Solver - Global Indicators")
 
     #Create Matrix to Sanskey graph
 
@@ -943,7 +961,7 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
 
     # Calculate and publish MatrixIndicators
     indicators = glb_idx.get(MatrixIndicator.partial_key())
-    matrices = prepare_matrix_indicators(indicators, glb_idx, dom_tree, p_map, df, df_indicators, dynamic_scenario)
+    matrices = prepare_matrix_indicators(indicators, glb_idx, dom_tree, p_map, df, df_local_indicators, dynamic_scenario)
     for n, ds in matrices.items():
         datasets[n] = ds
 
@@ -1149,9 +1167,99 @@ def calculate_local_scalar_indicators(indicators: List[Indicator],
     # For each ScalarIndicator...
     dfs = []
     for si in indicators:
-        dfi = prepare_scalar_indicator(si)
-        if not dfi.empty:
-            dfs.append(dfi)
+        if si._indicator_category == IndicatorCategories.factors_expression:
+            dfi = prepare_scalar_indicator(si)
+            if not dfi.empty:
+                dfs.append(dfi)
+    # Restore index
+    results.set_index(idx_to_change, append=True, inplace=True)
+
+    if dfs:
+        return pd.concat(dfs)
+    else:
+        return pd.DataFrame()
+
+
+def calculate_global_scalar_indicators(indicators: List[Indicator],
+                                      serialized_model: lxml.etree._ElementTree, p_map: Dict[str, Processor],
+                                      results: pd.DataFrame, local_indicators: pd.DataFrame,
+                                      global_parameters: List[Parameter], problem_statement: ProblemStatement) -> pd.DataFrame:
+    """
+    Compute global scalar indicators using data from "results", and return a pd.DataFrame
+
+    :param indicators: List of indicators to compute
+    :param serialized_model:
+    :param p_map:
+    :param results: Result of the graph solving process
+    :param global_parameters: List of parameter definitions
+    :param problem_statement: Object with a list of scenarios (defining Parameter sets)
+    :return: pd.DataFrame with all the local indicators
+    """
+
+    def prepare_global_scalar_indicator(indicator: Indicator) -> pd.DataFrame:
+        """
+
+        :param indicator:
+        :return:
+        """
+        df = results
+
+        # Parse the expression
+        ast = string_to_ast(indicator_expression, indicator.formula if case_sensitive else indicator.formula.lower())
+
+        # Scenario parameters
+        scenario_params = create_dictionary()
+        for scenario_name, scenario_exp_params in problem_statement.scenarios.items():  # type: str, dict
+            scenario_params[scenario_name] = evaluate_parameters_for_scenario(global_parameters, scenario_exp_params)
+
+        issues = []
+        new_df_rows_idx = []
+        new_df_rows_data = []
+        for t, g in df.groupby(idx_names):  # GROUP BY Scenario, Period
+            params = scenario_params[t[0]]  # Obtain parameter values from scenario, in t[0]
+            # TODO ALL interfaces and local indicators from the selected processors, for the selected Scenario, Period, Scope should go to a DataFrame: rows->Processors, columns->(interfaces and indicators)
+            extract = pd.DataFrame()
+            # TODO If a specific indicator or interface from a processor is mentioned, put it as a variable
+            # Elaborate a dictionary with dictionary values
+            d = {}
+            for row, sdf in g.iterrows():
+                iface = sdf["Interface"]
+                d[iface+"_"+sdf["Orientation"]] = sdf["Value"]
+                if iface in d:
+                    del d[iface]  # If exists, delete (only one appearance permitted, to avoid ambiguity)
+                else:
+                    d[iface] = sdf["Value"]  # First appearance allowed, insert
+            d.update(params)
+            # Variables for aggregator functions
+            d["_processors_map"] = p_map
+            d["_processors_dom"] = serialized_model
+            d["_results"] = extract
+            # d["_indicators"] = local_indicators
+            if not case_sensitive:
+                d = {k.lower(): v for k, v in d.items()}
+
+            state = State(d)
+            val, variables = ast_evaluator(ast, state, None, issues)
+
+            if val:
+                new_df_rows_idx.append(t)
+                new_df_rows_data.append((indicator.name, val, None))
+        df2 = pd.DataFrame(data=new_df_rows_data,
+                           index=pd.MultiIndex.from_tuples(new_df_rows_idx, names=idx_names),
+                           columns=["Indicator", "Value", "Unit"])
+        return df2
+
+    idx_names = ["Scenario", "Period", "Scope"]
+    idx_to_change = []
+    results.reset_index(idx_to_change, inplace=True)
+    # For each ScalarIndicator...
+    dfs = []
+    if False:  # DISABLED, "prepare_global_scalar_indicator" STILL NOT FINISHED
+        for si in indicators:
+            if si._indicator_category == IndicatorCategories.case_study:
+                dfi = prepare_global_scalar_indicator(si)
+                if not dfi.empty:
+                    dfs.append(dfi)
     # Restore index
     results.set_index(idx_to_change, append=True, inplace=True)
 

@@ -1,4 +1,5 @@
 import base64
+import json
 import uuid
 from abc import ABCMeta, abstractmethod  # Abstract Base Class
 
@@ -34,7 +35,7 @@ class IExecutableCommand(metaclass=ABCMeta):
     def json_serialize(self) -> Dict:
         pass
 
-    @abstractmethod
+    # @abstractmethod
     def json_deserialize(self, json_input: Union[dict, str, bytes, bytearray]) -> List[Issue]:
         """
         Read command parameters from a JSON string
@@ -44,8 +45,12 @@ class IExecutableCommand(metaclass=ABCMeta):
         :param json_input: JSON in a Unicode String 
         :return: --- (the object state is updated, ready for execution)
         """
-
-        pass
+        issues = []
+        if isinstance(json_input, dict):
+            self._content = json_input
+        else:
+            self._content = json.loads(json_input)
+        return issues
 
 
 class Scope:

@@ -349,7 +349,7 @@ command_fields: Dict[str, List[CommandField]] = {
     ],
 
     "problem_statement": [
-        CommandField(allowed_names=["Scenario"], name="scenario_name", mandatory=True, parser=simple_ident),
+        CommandField(allowed_names=["Scenario"], name="scenario_name", parser=simple_ident),
         CommandField(allowed_names=["Parameter"], name="parameter", mandatory=True, parser=simple_ident),
         CommandField(allowed_names=["Value"], name="parameter_value", mandatory=True, parser=expression_with_parameters),
         CommandField(allowed_names=["Description"], name="description", parser=unquoted_string)

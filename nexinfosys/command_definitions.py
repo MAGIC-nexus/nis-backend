@@ -99,15 +99,15 @@ commands: List[Command] = [
             cmd_type=CommandType.core,
             execution_class_name="nexinfosys.command_executors.version2.interfaces_command.InterfacesAndQualifiedQuantitiesCommand"),
 
-    Command(name="relationships", allowed_names=["Relationships", "Flows"], is_v2=True,
+    Command(name="relationships", allowed_names=["Relationships", "Relationship", "Flows"], is_v2=True,
             cmd_type=CommandType.core,
             execution_class_name="nexinfosys.command_executors.version2.relationships_command.RelationshipsCommand"),
 
-    Command(name="processor_scalings", allowed_names=["ProcessorScalings"], is_v2=True,
+    Command(name="processor_scalings", allowed_names=["ProcessorScalings", "ProcessorScaling"], is_v2=True,
             cmd_type=CommandType.core,
             execution_class_name="nexinfosys.command_executors.version2.processor_scalings_command.ProcessorScalingsCommand"),
 
-    Command(name="scale_conversion_v2", allowed_names=["ScaleChangeMap"], is_v2=True,
+    Command(name="scale_conversion_v2", allowed_names=["ScaleChangeMap", "ScaleChangeMaps"], is_v2=True,
             cmd_type=CommandType.core,
             execution_class_name="nexinfosys.command_executors.version2.scale_conversion_v2_command.ScaleConversionV2Command"),
 

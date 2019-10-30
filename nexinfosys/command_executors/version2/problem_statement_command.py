@@ -2,7 +2,7 @@ import json
 
 from nexinfosys.command_generators import Issue, IType
 from nexinfosys.command_generators.spreadsheet_command_parsers_v2 import IssueLocation
-from nexinfosys.common.helper import create_dictionary
+from nexinfosys.common.helper import create_dictionary, strcmp
 from nexinfosys.model_services import IExecutableCommand, get_case_study_registry_objects
 from nexinfosys.models.musiasem_concepts import Parameter, ProblemStatement
 
@@ -20,7 +20,6 @@ class ProblemStatementCommand(IExecutableCommand):
         glb_idx, p_sets, hh, datasets, mappings = get_case_study_registry_objects(state)
 
         scenarios = create_dictionary()
-        solver_parameters = create_dictionary()
 
         for r, param in enumerate(self._content["items"]):
             parameter = param["parameter"]
@@ -33,10 +32,10 @@ class ProblemStatementCommand(IExecutableCommand):
                                         location=IssueLocation(sheet_name=sheet_name, row=r, column=None)))
                     any_error = True
                     continue
-                p = p[0]
-                name = p.name
-            else:
-                name = parameter
+
+            p = p[0]
+            name = parameter
+
             value = param["parameter_value"]
             description = param.get("description", None)  # For readability of the workbook. Not used for solving
             if scenario:
@@ -47,9 +46,12 @@ class ProblemStatementCommand(IExecutableCommand):
                     scenarios[scenario] = sp
                 sp[name] = value
             else:
-                solver_parameters[name] = value
+                p.current_value = value
 
         if not any_error:
+            solver_parameters = {p.name: p.current_value
+                                 for p in glb_idx.get(Parameter.partial_key())
+                                 if p.group and strcmp(p.group, "NISSolverParameters")}
             ps = ProblemStatement(solver_parameters, scenarios)
             glb_idx.put(ps.key(), ps)
 

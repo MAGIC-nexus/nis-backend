@@ -36,6 +36,91 @@ except Exception as e:
 
 print(f"DB_CONNECTION_STRING: {app.config['DB_CONNECTION_STRING']}\n----------------------")
 
+default_cmds = """
+[
+    {
+      "command": "cat_hierarchies",
+      "label": "Hierarchies by default",
+      "content":
+        {
+            "command_name": "Hierarchies",
+            "items": [
+            {
+                "_complex": false,
+                "_expandable": [],
+                "_row": 2,
+                "code": "FlowGraph",
+                "description": "Flow graph algorithm for the solving",
+                "hierarchy_name": "SolvingAlgorithms",
+                "label": "Solve graph converting the MuSIASEM into overlapping flow graphs"
+            },
+            {
+                "_complex": false,
+                "_expandable": [],
+                "_row": 2,
+                "code": "TakeUpper",
+                "description": "Policy: take the value upper instead of the value coming from lower level accumulation",
+                "hierarchy_name": "PartOfConflictingDataResolutionPolicies",
+                "label": "Take value from the upper level"
+            },
+            {
+                "_complex": false,
+                "_expandable": [],
+                "_row": 3,
+                "code": "TakeLowerAggregation",
+                "hierarchy_name": "PartOfConflictingDataResolutionPolicies",
+                "label": "Take value accumulated from lower levels"
+            }
+    
+            ]
+        }
+    },
+    {
+      "command": "parameters",
+      "label": "Parameters by default",
+      "content":
+        {
+            "command_name": "Parameters",
+                    "items": [
+                        {
+                            "_complex": false,
+                            "_expandable": [],
+                            "_row": 2,
+                            "description": "Which algorithm to use for the solving",
+                            "domain": "SolvingAlgorithms",
+                            "group": "NISSolverParameters",
+                            "name": "NISSolverType",
+                            "type": "Code",
+                            "value": "FlowGraph"
+                        },
+                        {
+                            "_complex": false,
+                            "_expandable": [],
+                            "_row": 2,
+                            "description": "Ordered list of consideration of observations",
+                            "domain": "[0, 3)",
+                            "group": "NISSolverParameters",
+                            "name": "NISObserversPriority",
+                            "type": "String",
+                            "value": ""
+                        },
+                        {
+                            "_complex": false,
+                            "_expandable": [],
+                            "_row": 2,
+                            "description": "Conflicting data resolution policy",
+                            "domain": "PartOfConflictingDataResolutionPolicies",
+                            "group": "NISSolverParameters",
+                            "name": "NISConflictingDataResolutionPolicy",
+                            "type": "Code",
+                            "value": "TakeUpper"
+                        }
+                    ]
+        }
+    }
+]
+"""
+
 tm_permissions = {  # PermissionType
     "f19ad19f-0a74-44e8-bd4e-4762404a35aa": "read",
     "04cac7ca-a90b-4d12-a966-d8b0c77fca70": "annotate",
@@ -73,6 +158,7 @@ tm_case_study_version_statuses = {  # CaseStudyStatus
     "7d2cd2ae-0f4e-4962-b73c-4e40c553f533": "finished_and_published",
     "e5f3d8e6-accf-4175-9e74-5ad1b9a6faf5": "stopped"
 }
+
 
 # "22bc2577-883a-4408-bba9-fcace20c0fc8":
 # "e80a7d27-3ec8-4aa1-b49c-5498e0f85bee":

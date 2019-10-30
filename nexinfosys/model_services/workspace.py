@@ -375,10 +375,12 @@ def call_solver(state: State, systems: Dict[str, Set[Processor]], dynamic_scenar
                       columns=["Value"])
     datasets["params"] = get_dataset(df, "params", "Parameter values per Scenario")
 
-    solver_type = problem_statement.solving_parameters.get("solver", "flow_graph").lower()
+    solver_type_param = glb_idx.get(Parameter.partial_key("NISSolverType"))
+    solver_type_param = solver_type_param[0]
+    solver_type = solver_type_param.current_value
 
     issues: List[Issue] = []
-    if solver_type == "flow_graph":
+    if solver_type == "FlowGraph":
         issues = flow_graph_solver(global_parameters, problem_statement, systems, state, dynamic_scenario)
 
     return issues

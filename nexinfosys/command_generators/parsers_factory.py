@@ -34,7 +34,10 @@ def commands_container_parser_factory(generator_type, file_type, file, state, su
     def hash_file(f):
         import hashlib
         m = hashlib.md5()
-        m.update(f)
+        if isinstance(f, str):
+            m.update(f.encode("utf-8"))
+        else:
+            m.update(f)
         return m.digest()
 
     if not stack:

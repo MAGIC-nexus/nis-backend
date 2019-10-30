@@ -36,7 +36,7 @@ class ParametersCommand(IExecutableCommand):
             if "description" in param:
                 p._description = param["description"]
             if "group" in param:
-                p._group = None
+                p._group = param["group"]
             glb_idx.put(p.key(), p)
         return issues, None
 
