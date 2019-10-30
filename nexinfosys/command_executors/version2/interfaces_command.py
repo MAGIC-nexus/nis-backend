@@ -217,9 +217,9 @@ class InterfacesAndQualifiedQuantitiesCommand(BasicCommand):
             self._glb_idx.put(f.key(), f)
 
         elif not f.compare_attributes(attributes):
-            initial = ', '.join([f"{k}: {self.get_attribute(k)}" for k in attributes])
+            initial = ', '.join([f"{k}: {f.get_attribute(k)}" for k in attributes])
             new = ', '.join([f"{k}: {attributes[k]}" for k in attributes])
-            self._add_issue(IType.ERROR, f"The same interface ({f.full_name} is being redeclared with different properties (initial: {initial}; new: {new}."+subrow_issue_message(subrow))
+            self._add_issue(IType.ERROR, f"The same interface '{f.full_name}', is being redeclared with different properties. INITIAL: {initial}; NEW: {new}."+subrow_issue_message(subrow))
 
         # Find Observer
         oer = self._glb_idx.get(Observer.partial_key(f_source))
