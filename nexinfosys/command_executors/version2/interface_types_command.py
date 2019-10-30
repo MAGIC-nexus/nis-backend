@@ -105,5 +105,5 @@ class InterfaceTypesCommand(BasicCommand):
             if not strcmp(ft_name, ft.full_hierarchy_name()):
                 self._glb_idx.put(FactorType.partial_key(ft.full_hierarchy_name(), ft.ident), ft)
         else:
-            self._add_issue(IType.ERROR, f"Interface type name '{ft_name}' already registered"+subrow_issue_message(subrow))
+            self._add_issue(IType.WARNING, f"Interface type name '{ft_name}' already registered"+subrow_issue_message(subrow))
             return

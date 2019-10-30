@@ -6,6 +6,7 @@ https://gist.github.com/cynici/5865326
 
 """
 import importlib
+import re
 from typing import Dict, Tuple, Union, List
 
 import lxml
@@ -81,6 +82,19 @@ def get_processor(attribute, value, prd: PartialRetrievalDictionary = None):
             return ret
         else:
             raise Exception(f"No Processor found having attribute '{attribute}' with value '{value}'")
+
+
+def get_nis_name(original_name):
+    """
+    Convert the original_name to a name valid for NIS
+
+    :param original_name:
+    :return:
+    """
+
+    prefix = original_name[0] if original_name[0].isalpha() else "id_"
+
+    return prefix + re.sub("[^0-9a-zA-Z_]+", "_", original_name)
 
 
 def obtain_processors(xquery: str=None, processors_dom=None, processors_map=None):

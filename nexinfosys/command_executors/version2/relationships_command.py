@@ -34,8 +34,26 @@ class RelationshipsCommand(BasicCommand):
                                              relation_class, None, attributes=attributes)
 
             elif relation_class.is_between_interfaces:
-                source_interface = self._get_interface_from_field("source_interface", source_processor) if self._fields.get("source_interface") else self._get_interface_from_field("target_interface", source_processor)
-                target_interface = self._get_interface_from_field("target_interface", target_processor) if self._fields.get("target_interface") else self._get_interface_from_field("source_interface", target_processor)
+                try:
+                    source_interface = self._get_interface_from_field("source_interface", source_processor) if self._fields.get("source_interface") else self._get_interface_from_field("target_interface", source_processor)
+                except CommandExecutionError as e:
+                    source_interface = None
+                    if not str(e).startswith("The interface"):
+                        raise e
+                    else:
+                        self._add_issue(IType.WARNING, str(e))
+
+                try:
+                    target_interface = self._get_interface_from_field("target_interface", target_processor) if self._fields.get("target_interface") else self._get_interface_from_field("source_interface", target_processor)
+                except CommandExecutionError as e:
+                    target_interface = None
+                    if not str(e).startswith("The interface"):
+                        raise e
+                    else:
+                        self._add_issue(IType.WARNING, str(e))
+
+                if not source_interface or not target_interface:
+                    return
 
                 if fields["back_interface"]:
                     relation_class = RelationClassType.ff_directed_flow_back

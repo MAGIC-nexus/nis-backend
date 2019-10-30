@@ -1728,6 +1728,8 @@ def reproducible_session_append_command_generator():  # Receive a command_execut
             else:
                 issues = []
 
+            # TODO CHECK SEMANTIC INCONSISTENCIES. Referred to values in Interfaces use either Parameters
+
             # SOLVE !!!!
             if not any_error_issue(issues):
                 issues2 = prepare_and_solve_model(isess.state)
