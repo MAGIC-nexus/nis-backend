@@ -100,7 +100,7 @@ default_cmds = """
                             "description": "Ordered list of consideration of observations",
                             "domain": "[0, 3)",
                             "group": "NISSolverParameters",
-                            "name": "NISObserversPriority",
+                            "name": "NISSolverObserversPriority",
                             "type": "String",
                             "value": ""
                         },
@@ -111,7 +111,7 @@ default_cmds = """
                             "description": "Conflicting data resolution policy",
                             "domain": "PartOfConflictingDataResolutionPolicies",
                             "group": "NISSolverParameters",
-                            "name": "NISConflictingDataResolutionPolicy",
+                            "name": "NISSolverConflictingDataResolutionPolicy",
                             "type": "Code",
                             "value": "TakeUpper"
                         }
