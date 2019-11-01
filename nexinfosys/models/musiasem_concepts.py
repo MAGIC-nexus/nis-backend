@@ -2648,10 +2648,10 @@ class ProblemStatement(Identifiable, Encodable):
     """
     Contains the parameters for the different scenarios, plus parameters needed to launch a solving process
     """
-    def __init__(self, solving_parameters, scenarios=None):
+    def __init__(self, solving_parameters=None, scenarios=None):
         Identifiable.__init__(self)
         # Parameters characterizing the solver to be used and the parameters it receives
-        self._solving_parameters = solving_parameters if solving_parameters else {}  # type: Dict[str, str]
+        self._solving_parameters = ifnull(solving_parameters, {})  # type: Dict[str, str]
         # Each scenario is a set of parameter values (expressions)
         self._scenarios = ifnull(scenarios, {})  # type: Dict[str, Dict[str, str]]
 
