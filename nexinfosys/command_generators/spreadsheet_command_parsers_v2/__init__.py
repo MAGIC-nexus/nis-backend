@@ -186,14 +186,16 @@ def parse_command_in_worksheet(sh: Worksheet, area: AreaTupleType, name: Optiona
                             line[field_name] = value  # Store the value
                 else:
                     if field_def.allowed_values:  # If the CommandField checks for a list of allowed values
-                        if value.lower() not in [v.lower() for v in field_def.allowed_values]:  # TODO Case insensitive CI
+                        allowed_values_dict: Dict[str, str] = {v.lower(): v for v in field_def.allowed_values}
+                        if value.lower() not in allowed_values_dict:  # TODO Case insensitive CI
                             issues.append(
                                 Issue(itype=IType.ERROR,
                                       description=f"Field '{col_name}' of command '{cmd_name}' has invalid category "
                                       f"'{value}'. Allowed values are: {', '.join(field_def.allowed_values)}.",
                                       location=IssueLocation(sheet_name=name, row=r, column=col_idx)))
                         else:
-                            line[field_name] = value
+                            # Use case from allowed values
+                            line[field_name] = allowed_values_dict[value.lower()]
                     else:  # Instead of a list of values, check if a syntactic rule is met by the value
                         if field_def.parser:  # Parse, just check syntax (do not store the AST)
                             try:

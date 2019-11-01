@@ -38,6 +38,7 @@ import matplotlib.pyplot as plt
 from typing import Dict, List, Set, Any, Tuple, Union, Optional, NamedTuple, Generator, Type
 
 from nexinfosys import case_sensitive
+from nexinfosys.command_field_definitions import orientations
 from nexinfosys.command_generators.parser_ast_evaluators import ast_evaluator
 from nexinfosys.command_generators.parser_field_parsers import string_to_ast, expression_with_parameters, is_year, \
     is_month, indicator_expression
@@ -802,7 +803,7 @@ def compute_partof_aggregates(glb_idx: PartialRetrievalDictionary,
             for interface in interfaces:
                 print(f"********************* INTERFACE: {interface.name}")
 
-                for orientation in ["Input", "Output"]:
+                for orientation in orientations:
                     print(f"********************* ORIENTATION: {orientation}")
 
                     interfaced_proc_hierarchy = nx.DiGraph(
