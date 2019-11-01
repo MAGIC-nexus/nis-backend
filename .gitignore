@@ -25,6 +25,7 @@ magic_box/
 
 ~/nis_data/fadn/measures.csv
 
-nexinfosys/restful_service/tmp_nis_backend_redislite.db
+/nexinfosys/restful_service/tmp_nis_backend_redislite.db
 
-nexinfosys/restful_service/tmp_nis_backend_redislite.db.settings
+/nexinfosys/restful_service/tmp_nis_backend_redislite.db.settings
+/nexinfosys/restful_service/nis_metadata.db
