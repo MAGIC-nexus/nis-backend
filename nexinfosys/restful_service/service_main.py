@@ -419,7 +419,7 @@ def send_web_client_file(path=None):
 
     mimetype = detect_mimetype(new_name)
 
-    logger.debug("File: "+new_name+"; MIMETYPE: "+mimetype)
+    logger.debug(f"File: {new_name}; MIMETYPE: {mimetype}")
 
     try:
         return send_from_directory(base, new_name, mimetype=mimetype)
