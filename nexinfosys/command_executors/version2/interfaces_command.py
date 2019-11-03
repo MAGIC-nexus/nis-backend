@@ -1,24 +1,18 @@
-import json
-import re
-
-from pint import UndefinedUnitError
 from typing import Dict, Any, Optional, Sequence, List
 
-from nexinfosys import ureg, CommandField
+from pint import UndefinedUnitError
+
+from nexinfosys import ureg
 from nexinfosys.command_executors import BasicCommand, subrow_issue_message
-from nexinfosys.command_executors.execution_helpers import parse_line, classify_variables, \
-    obtain_dictionary_with_literal_fields
-from nexinfosys.command_generators import parser_field_parsers, Issue, IssueLocation, IType
+from nexinfosys.command_field_definitions import get_command_fields_from_class
+from nexinfosys.command_generators import parser_field_parsers, IType
 from nexinfosys.command_generators.parser_ast_evaluators import dictionary_from_key_value_list, ast_to_string
 from nexinfosys.common.helper import strcmp, first, ifnull
-from nexinfosys.model_services import IExecutableCommand, get_case_study_registry_objects
-from nexinfosys.models.musiasem_concepts import PedigreeMatrix, Reference, FactorType, \
-    Processor, Factor, FactorInProcessorType, Observer, Parameter, GeographicReference, ProvenanceReference, \
+from nexinfosys.models.musiasem_concepts import PedigreeMatrix, FactorType, \
+    Factor, FactorInProcessorType, Observer, GeographicReference, ProvenanceReference, \
     BibliographicReference, FactorTypesRelationUnidirectionalLinearTransformObservation
 from nexinfosys.models.musiasem_concepts_helper import _create_or_append_quantitative_observation, \
     find_observable_by_name, find_factor_types_transform_relation
-from nexinfosys.solving import get_processor_names_to_processors_dictionary
-from nexinfosys.command_field_definitions import get_command_fields_from_class
 
 
 class InterfacesAndQualifiedQuantitiesCommand(BasicCommand):
