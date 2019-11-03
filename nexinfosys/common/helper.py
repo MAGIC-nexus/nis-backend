@@ -7,21 +7,21 @@ import gzip
 import io
 import itertools
 import json
+import logging
 import mimetypes
 import tempfile
 import urllib
 import urllib.request
 import uuid
 from functools import partial
-from io import BytesIO
 from typing import IO, List, Tuple, Dict, Any, Optional, Iterable, Callable, TypeVar, Type, Union
 from urllib.parse import urlparse
 from uuid import UUID
 
-import logging
 import jsonpickle
 import numpy as np
 import pandas as pd
+import webdav.client as wc
 from flask import after_this_request, request
 from multidict import MultiDict, CIMultiDict
 from pandas import DataFrame
@@ -29,9 +29,7 @@ from pandas import DataFrame
 import nexinfosys
 from nexinfosys import case_sensitive, SDMXConcept, get_global_configuration_variable
 from nexinfosys.ie_imports.google_drive import download_xlsx_file_id
-from nexinfosys.models import ureg, log_level
-import webdav.client as wc
-
+from nexinfosys.models import log_level
 
 logger = logging.getLogger(__name__)
 logger.setLevel(log_level)
@@ -1397,7 +1395,7 @@ class FloatOrString:
 class UnitConversion:
     @staticmethod
     def ratio(from_unit: str, to_unit: str) -> float:
-        return ureg(from_unit).to(ureg(to_unit)).magnitude
+        return nexinfosys.ureg(from_unit).to(nexinfosys.ureg(to_unit)).magnitude
 
     @staticmethod
     def get_scaled_weight(weight: FloatOrStringT,

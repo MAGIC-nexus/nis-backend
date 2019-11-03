@@ -15,11 +15,7 @@ persistent (relational database) some are for memory (and they are persisted by 
 import logging
 from collections import namedtuple
 
-import pint
-
 MODEL_VERSION = 1
-
-ureg = pint.UnitRegistry()
 
 # Ad-hoc structures
 # CodeMutable = namedlist("Code", ["code", "description", "level", "children", "parents"])

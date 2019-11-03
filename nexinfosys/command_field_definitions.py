@@ -5,16 +5,16 @@
 from typing import Dict, List, Type
 
 from nexinfosys import CommandField
+from nexinfosys.command_definitions import valid_v2_command_names, commands
 from nexinfosys.command_generators.parser_field_parsers import simple_ident, unquoted_string, alphanums_string, \
     hierarchy_expression_v2, key_value_list, key_value, expression_with_parameters, \
     time_expression, indicator_expression, code_string, simple_h_name, domain_definition, unit_name, url_parser, \
     processor_names, value, list_simple_ident, reference, processor_name, processors_selector_expression, \
     interfaces_list_expression, attributes_list_expression, indicators_list_expression, number_interval, pair_numbers, \
     external_ds_name
-from nexinfosys.models.musiasem_concepts import Processor, Factor, RelationClassType
-from nexinfosys.command_definitions import valid_v2_command_names, commands
 from nexinfosys.common.helper import first, class_full_name
 from nexinfosys.model_services import IExecutableCommand
+from nexinfosys.models.musiasem_concepts import Processor, Factor, RelationClassType
 
 data_types = ["Number", "Boolean", "URL", "UUID", "Datetime", "String", "UnitName", "Code", "Geo"]
 concept_types = ["Dimension", "Measure", "Attribute"]
@@ -216,7 +216,7 @@ command_fields: Dict[str, List[CommandField]] = {
         CommandField(allowed_names=["ScalingType"], name="scaling_type", mandatory=True, allowed_values=processor_scaling_types, parser=simple_ident),
         CommandField(allowed_names=["InvokingInterface"], name="invoking_interface", mandatory=True, parser=simple_ident),
         CommandField(allowed_names=["RequestedInterface"], name="requested_interface", mandatory=True, parser=simple_ident),
-        CommandField(allowed_names=["Scale"], name="scale", mandatory=True, parser=expression_with_parameters),
+        CommandField(allowed_names=["Scale"], name="scale", parser=expression_with_parameters),
         # BareProcessor fields
         CommandField(allowed_names=["NewProcessorName"], name="new_processor_name", allowed_values=None, parser=processor_name),
         CommandField(allowed_names=["NewProcessorGroup"], name="processor_group", parser=simple_ident),

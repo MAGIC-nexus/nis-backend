@@ -5,13 +5,14 @@ from typing import Optional, List, Dict, Any, Union, Tuple, Set
 from nexinfosys import ExecutableCommandIssuesPairType, Command, CommandField, IssuesOutputPairType, case_sensitive
 from nexinfosys.command_definitions import commands
 from nexinfosys.command_executors.execution_helpers import classify_variables2
-from nexinfosys.command_generators.parser_field_parsers import arith_boolean_expression
-from nexinfosys.common.helper import first, PartialRetrievalDictionary, head, strcmp, create_dictionary
 from nexinfosys.command_generators import IType, IssueLocation, Issue, parser_field_parsers
 from nexinfosys.command_generators.parser_ast_evaluators import dictionary_from_key_value_list, ast_evaluator
+from nexinfosys.command_generators.parser_field_parsers import arith_boolean_expression
+from nexinfosys.common.helper import first, PartialRetrievalDictionary, head, strcmp, create_dictionary
 from nexinfosys.model_services import IExecutableCommand, get_case_study_registry_objects, State
-from nexinfosys.models.musiasem_concepts import Processor, Factor, FactorType, Parameter, Hierarchy
-from nexinfosys.models.musiasem_concepts_helper import find_processor_by_name
+from nexinfosys.models.musiasem_concepts import Processor, Factor, FactorType, Parameter, Hierarchy, \
+    FactorTypesRelationUnidirectionalLinearTransformObservation
+from nexinfosys.models.musiasem_concepts_helper import find_processor_by_name, find_factor_types_transform_relation
 
 
 class CommandExecutionError(Exception):
@@ -388,6 +389,27 @@ class BasicCommand(IExecutableCommand):
                 raise CommandExecutionError(str(e))
 
         return attributes
+
+    def _get_interface_types_transform(self,
+                                       source_interface_type: FactorType, source_processor: Processor,
+                                       target_interface_type: FactorType, target_processor: Processor,
+                                       subrow=None) \
+            -> FactorTypesRelationUnidirectionalLinearTransformObservation:
+        """Check if a transformation between interfaces has been specified"""
+
+        interface_types_transforms = find_factor_types_transform_relation(
+            self._glb_idx, source_interface_type, target_interface_type, source_processor, target_processor)
+
+        if len(interface_types_transforms) == 0:
+            raise CommandExecutionError(f"Interface types are not the same (and transformation from one "
+                                        f"to the other cannot be performed). Origin: "
+                                        f"{source_interface_type.name}; Target: {target_interface_type.name}"+subrow_issue_message(subrow))
+        elif len(interface_types_transforms) > 1:
+            raise CommandExecutionError(
+                f"Multiple transformations can be applied between interfaces. Origin: "
+                f"{source_interface_type.name}; Target: {target_interface_type.name}"+subrow_issue_message(subrow))
+
+        return interface_types_transforms[0]
 
 
 class ParseException(Exception):

@@ -1,16 +1,12 @@
 import re
 from typing import Dict, Any
 
-from nexinfosys import IssuesOutputPairType
 from nexinfosys.command_executors import CommandExecutionError, BasicCommand, subrow_issue_message
-from nexinfosys.command_executors.execution_helpers import parse_line, classify_variables, \
-    obtain_dictionary_with_literal_fields
 from nexinfosys.command_field_definitions import get_command_fields_from_class
 from nexinfosys.command_generators import IType
 from nexinfosys.command_generators.parser_field_parsers import string_to_ast, processor_names
-from nexinfosys.common.helper import strcmp, FloatOrString
-from nexinfosys.model_services import get_case_study_registry_objects
-from nexinfosys.models.musiasem_concepts import Factor, RelationClassType, Parameter, Processor, FactorType, \
+from nexinfosys.common.helper import strcmp
+from nexinfosys.models.musiasem_concepts import Factor, RelationClassType, Processor, \
     FactorTypesRelationUnidirectionalLinearTransformObservation, Observer
 from nexinfosys.models.musiasem_concepts_helper import create_relation_observations, \
     find_factor_types_transform_relation, find_or_create_observer
@@ -123,27 +119,6 @@ class RelationshipsCommand(BasicCommand):
                     process_relation(relation_class)
         else:
             process_relation(relation_class)
-
-    def _get_interface_types_transform(self,
-                                       source_interface_type: FactorType, source_processor: Processor,
-                                       target_interface_type: FactorType, target_processor: Processor,
-                                       subrow=None) \
-            -> FactorTypesRelationUnidirectionalLinearTransformObservation:
-        """Check if a transformation between interfaces has been specified"""
-
-        interface_types_transforms = find_factor_types_transform_relation(
-            self._glb_idx, source_interface_type, target_interface_type, source_processor, target_processor)
-
-        if len(interface_types_transforms) == 0:
-            raise CommandExecutionError(f"Interface types are not the same (and transformation from one "
-                                        f"to the other cannot be performed). Origin: "
-                                        f"{source_interface_type.name}; Target: {target_interface_type.name}"+subrow_issue_message(subrow))
-        elif len(interface_types_transforms) > 1:
-            raise CommandExecutionError(
-                f"Multiple transformations can be applied between interfaces. Origin: "
-                f"{source_interface_type.name}; Target: {target_interface_type.name}"+subrow_issue_message(subrow))
-
-        return interface_types_transforms[0]
 
     def _check_fields(self, relation_class: RelationClassType, source_processor: Processor, target_processor: Processor, subrow=None):
         # Use of column BackInterface is only allowed in some relation types
