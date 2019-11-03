@@ -2,7 +2,7 @@ import json
 import re
 
 from pint import UndefinedUnitError
-from typing import Dict, Any
+from typing import Dict, Any, Optional, Sequence, List
 
 from nexinfosys import ureg, CommandField
 from nexinfosys.command_executors import BasicCommand, subrow_issue_message
@@ -14,9 +14,9 @@ from nexinfosys.common.helper import strcmp, first, ifnull
 from nexinfosys.model_services import IExecutableCommand, get_case_study_registry_objects
 from nexinfosys.models.musiasem_concepts import PedigreeMatrix, Reference, FactorType, \
     Processor, Factor, FactorInProcessorType, Observer, Parameter, GeographicReference, ProvenanceReference, \
-    BibliographicReference
+    BibliographicReference, FactorTypesRelationUnidirectionalLinearTransformObservation
 from nexinfosys.models.musiasem_concepts_helper import _create_or_append_quantitative_observation, \
-    find_observable_by_name
+    find_observable_by_name, find_factor_types_transform_relation
 from nexinfosys.solving import get_processor_names_to_processors_dictionary
 from nexinfosys.command_field_definitions import get_command_fields_from_class
 
@@ -155,40 +155,41 @@ class InterfacesAndQualifiedQuantitiesCommand(BasicCommand):
             return
 
         # Try to find Interface
-        ft: FactorType = None
-        f = self._glb_idx.get(Factor.partial_key(processor=p, name=f_interface_name))
-        if len(f) == 1:
-            f: Factor = f[0]
-            ft: FactorType = f.taxon
+        ft: Optional[FactorType] = None
+        f: Optional[Factor] = None
+        f_list: Sequence[Factor] = self._glb_idx.get(Factor.partial_key(processor=p, name=f_interface_name))
+        if len(f_list) == 1:
+            f = f_list[0]
+            ft = f.taxon
             if f_interface_type_name:
                 if not strcmp(ft.name, f_interface_type_name):
                     self._add_issue(IType.WARNING, f"The InterfaceType of the Interface, {ft.name} "
                                     f"is different from the specified InterfaceType, {f_interface_type_name}. Record skipped."+subrow_issue_message(subrow))
                     return
-        elif len(f) > 1:
-            self._add_issue(IType.ERROR, f"Interface '{f_interface_name}' found {str(len(f))} times. "
+        elif len(f_list) > 1:
+            self._add_issue(IType.ERROR, f"Interface '{f_interface_name}' found {str(len(f_list))} times. "
                                          f"It must be uniquely identified."+subrow_issue_message(subrow))
             return
-        elif len(f) == 0:
-            f: Factor = None  # Does not exist, create it below
+        elif len(f_list) == 0:
+            # The interface does not exist, create it below
             if not f_orientation:
-                self._add_issue(IType.ERROR, f"Orientation must be defined for new Interfaces"+subrow_issue_message(subrow))
+                self._add_issue(IType.ERROR, f"Orientation must be defined for new Interfaces."+subrow_issue_message(subrow))
                 return
 
         # InterfaceType still not found
         if not ft:
             # Find FactorType
             # TODO Allow creating a basic FactorType if it is not found
-            ft = self._glb_idx.get(FactorType.partial_key(f_interface_type_name))
-            if len(ft) == 0:
+            ft_list: Sequence[FactorType] = self._glb_idx.get(FactorType.partial_key(f_interface_type_name))
+            if len(ft_list) == 0:
                 self._add_issue(IType.ERROR, f"InterfaceType '{f_interface_type_name}' not declared previously"+subrow_issue_message(subrow))
                 return
-            elif len(ft) > 1:
-                self._add_issue(IType.ERROR, f"InterfaceType '{f_interface_type_name}' found {str(len(ft))} times. "
+            elif len(ft_list) > 1:
+                self._add_issue(IType.ERROR, f"InterfaceType '{f_interface_type_name}' found {str(len(ft_list))} times. "
                                        f"It must be uniquely identified."+subrow_issue_message(subrow))
                 return
             else:
-                ft = ft[0]
+                ft = ft_list[0]
 
         # Get attributes default values taken from Interface Type or Processor attributes
         default_values = {
@@ -229,6 +230,8 @@ class InterfacesAndQualifiedQuantitiesCommand(BasicCommand):
         else:
             oer = oer[0]
 
+        # Search for a relative_to interface
+        f_relative_to_interface: Optional[Factor] = None
         if f_relative_to:
             ast = parser_field_parsers.string_to_ast(parser_field_parsers.factor_unit, f_relative_to)
             relative_to_interface_name = ast_to_string(ast["factor"])
@@ -241,17 +244,29 @@ class InterfacesAndQualifiedQuantitiesCommand(BasicCommand):
                                        f"relative_to '{rel_unit_name}': {str(ex)}"+subrow_issue_message(subrow))
                 return
 
-            f_relative_to = first(f.processor.factors, lambda ifc: strcmp(ifc.name, relative_to_interface_name))
+            f_relative_to_interface = first(f.processor.factors, lambda ifc: strcmp(ifc.name, relative_to_interface_name))
 
-            if not f_relative_to:
+            if not f_relative_to_interface:
                 self._add_issue(IType.ERROR, f"Interface specified in 'relative_to' column "
                                        f"'{relative_to_interface_name}' has not been found."+subrow_issue_message(subrow))
                 return
 
-        if f_value is None and f_relative_to is not None:
-            f_value = "0"
-            self._add_issue(IType.WARNING, f"Field 'value' should be defined for interfaces having a "
-                                           f"'RelativeTo' interface. Using value '0'."+subrow_issue_message(subrow))
+        if f_value is None and f_relative_to_interface is not None:
+            # Search for a Interface Type Conversion defined in the ScaleChangeMap command
+            interface_types_transforms: List[FactorTypesRelationUnidirectionalLinearTransformObservation] = \
+                find_factor_types_transform_relation(self._glb_idx, f_relative_to_interface.taxon, f.taxon, p, p)
+
+            if len(interface_types_transforms) == 1:
+                f_value = interface_types_transforms[0].scaled_weight
+            else:
+                interface_types_transforms_message = "an interface type conversion doesn't exist" \
+                    if (len(interface_types_transforms) == 0) \
+                    else f"{len(interface_types_transforms)} interface type conversions exist"
+
+                f_value = "0"
+                self._add_issue(IType.WARNING, f"Field 'value' should be defined for interfaces having a "
+                                               f"'RelativeTo' interface, and {interface_types_transforms_message}. "
+                                               f"Using value '0'."+subrow_issue_message(subrow))
 
         # Create quantitative observation
         if f_value is not None:
@@ -263,7 +278,7 @@ class InterfacesAndQualifiedQuantitiesCommand(BasicCommand):
             o = _create_or_append_quantitative_observation(f,
                                                            f_value, f_unit, f_uncertainty, f_assessment, f_pedigree, f_pedigree_matrix,
                                                            oer,
-                                                           f_relative_to,
+                                                           f_relative_to_interface,
                                                            f_time,
                                                            None,
                                                            f_comments,

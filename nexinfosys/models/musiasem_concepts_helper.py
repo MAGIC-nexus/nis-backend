@@ -903,7 +903,7 @@ def find_factor_types_transform_relation(registry: PartialRetrievalDictionary,
                                          origin_context: Processor, destination_context: Processor):
     """We try to get the best match from the existing factor types scale changes"""
 
-    def get_relations_from_contexts(orig=None, dest=None) -> Set[FactorTypesRelationUnidirectionalLinearTransformObservation]:
+    def get_relations_from_contexts(orig=None, dest=None) -> List[FactorTypesRelationUnidirectionalLinearTransformObservation]:
         return registry.get(FactorTypesRelationUnidirectionalLinearTransformObservation.partial_key(
             origin=origin_interface_type, destination=destination_interface_type,
             origin_context=orig, destination_context=dest))

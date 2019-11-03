@@ -313,7 +313,7 @@ class BasicCommand(IExecutableCommand):
 
             return interface_type
 
-    def _get_factor_types_from_field(self, hierarchy_field_name: str, interface_type_field_name: str) -> FactorType:
+    def _get_factor_types_from_field(self, hierarchy_field_name: str, interface_type_field_name: str) -> List[FactorType]:
         """ Possibly obtain not only one but many InterfaceTypes """
 
         hierarchy_name = self._fields[hierarchy_field_name]
