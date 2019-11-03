@@ -64,6 +64,18 @@ def download_xlsx_file_id(credentials_path, token_path, file_id):
 
 
 def main():
+    # How to get your "credentials.json" file:
+    #
+    # * Go to http://console.developers.google.com/apis/library
+    # * Create project
+    # * Go to "APIs y servicios" -> "Credenciales"
+    # * Select "Crear credenciales" -> "Ayúdame a elegir"
+    # * Select
+    # ** ¿Qué API estás utilizando?: Google Drive API
+    # ** ¿Desde dónde llamarás a la API?: Otra UI
+    # ** ¿A qué tipo de datos accederás?: Datos de usuario
+
+
     # File ID. Go to any Google Calc or XLSX (open it converting to Google Calc first), then take the file ID from the
     # URL. It has 44 or 33 characters long.
     file_id = '--------------------------------------------'
