@@ -34,11 +34,18 @@ class ScaleConversionV2Command(BasicCommand):
                     self._add_issue(IType.WARNING, f"The interface types '{origin_interface_type.name}' and "
                                                    f"'{destination_interface_type.name}' are in the same hierarchy"+subrow_issue_message(subrow))
 
-                # Create the directed Scale (Linear "Transformation") Relationship
-                o = FactorTypesRelationUnidirectionalLinearTransformObservation.create_and_append(
-                    origin_interface_type, destination_interface_type, fields["scale"],
-                    origin_processor, destination_processor,
-                    fields["source_unit"], fields["target_unit"],
-                    find_or_create_observer(Observer.no_observer_specified, self._glb_idx))
+                observer = find_or_create_observer(Observer.no_observer_specified, self._glb_idx)
 
-                self._glb_idx.put(o.key(), o)
+                # Check existence of ScaleChange
+                key = FactorTypesRelationUnidirectionalLinearTransformObservation.partial_key(origin_interface_type, destination_interface_type, origin_processor, destination_processor, observer)
+                tmp = self._glb_idx.get(key)
+                if len(tmp) == 0:
+                    # Create the directed Scale (Linear "Transformation") Relationship
+                    o = FactorTypesRelationUnidirectionalLinearTransformObservation.create_and_append(
+                        origin_interface_type, destination_interface_type, fields["scale"],
+                        origin_processor, destination_processor,
+                        fields["source_unit"], fields["target_unit"],
+                        observer)
+                    self._glb_idx.put(o.key(), o)
+                elif len(tmp) > 0:
+                    self._add_issue(IType.WARNING, f"The ScaleChange {tmp[0]} has already been defined with weight {tmp[0]._weight}")

@@ -1974,6 +1974,9 @@ class FactorTypesRelationUnidirectionalLinearTransformObservation(FactorTypesRel
 
         return d
 
+    def __str__(self):
+        return f"ScaleChange: from {self._origin.name} to {self._destination.name}, origin ctx {self._origin_context.name if self._origin_context else '-'}, dst ctx {self._destination_context.name if self._destination_context else '-'}"
+
     @staticmethod
     def create_and_append(origin: FactorType, destination: FactorType, weight, origin_context: Processor = None,
                           destination_context: Processor = None, origin_unit=None, destination_unit=None,
