@@ -3106,8 +3106,10 @@ def download_external_xlsx():  # From the URL of an external XLSX, obtain it and
     buffer = bytes(io.BytesIO(request.get_data()).getbuffer())
     url = buffer.decode("utf-8")
     data = download_file(url)
-
-    r = Response(data.getvalue(),
+    xl = openpyxl.load_workbook(data, data_only=True)
+    rewrite_xlsx_file(xl)
+    data = save_virtual_workbook(xl)
+    r = Response(data,
                  mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                  status=200)
 
