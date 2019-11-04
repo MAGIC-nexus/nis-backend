@@ -185,7 +185,7 @@ class Command:
         else:
             pattern = simple_regex(self.allowed_names)
 
-        return re.compile(pattern, flags=re.IGNORECASE)
+        return re.compile("^"+pattern, flags=re.IGNORECASE)
 
     @property
     def execution_class(self):

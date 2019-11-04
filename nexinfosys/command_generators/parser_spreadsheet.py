@@ -93,7 +93,7 @@ def commands_generator_from_ooxml_file(input, state, sublist, stack) -> nexinfos
         c_label: str = None
         c_content = None
 
-        name = sheet.title
+        name = sheet.title.strip()
 
         # Use an equivalent command name
         if name in worksheet_to_command:

@@ -205,7 +205,7 @@ commands: List[Command] = [
             cmd_type=CommandType.core,
             execution_class_name="nexinfosys.command_executors.external_data.mapping_command.MappingCommand",
             parse_function=parse_mapping_command,
-            alt_regex=r"^(Mapping|Map)([ _]" + regex_cplex_var + "[ _]" + regex_cplex_var + ")?")
+            alt_regex=r"(Mapping|Map)([ _]" + regex_cplex_var + "[ _]" + regex_cplex_var + ")?")
 
 ]
 
