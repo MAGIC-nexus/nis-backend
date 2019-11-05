@@ -22,7 +22,8 @@ from flask_session import Session as FlaskSessionServerSide
 from flask_cors import CORS
 from werkzeug.exceptions import NotFound
 import json
-
+import pyximport
+pyximport.install(reload_support=True, language_level=3)
 
 # >>>>>>>>>> IMPORTANT <<<<<<<<<
 # For debugging in local mode, prepare an environment variable "MAGIC_NIS_SERVICE_CONFIG_FILE", with value "./nis_local.conf"
@@ -34,9 +35,10 @@ from nexinfosys.command_field_descriptions import cf_descriptions
 from nexinfosys.command_generators import Issue, IType
 from nexinfosys.command_generators.parser_field_examples import generic_field_examples, generic_field_syntax
 from nexinfosys.command_generators.parser_field_parsers import string_to_ast, arith_boolean_expression
-from nexinfosys.command_generators.parser_spreadsheet_utils import rewrite_xlsx_file
+from nexinfosys.command_generators.parser_spreadsheet_utils_accel import rewrite_xlsx_file
 from nexinfosys.ie_exports.json import export_model_to_json, model_to_json
 from nexinfosys.models.musiasem_concepts import Parameter
+
 
 if __name__ == '__main__':
     print("Executing locally!")
@@ -3107,8 +3109,11 @@ def download_external_xlsx():  # From the URL of an external XLSX, obtain it and
     url = buffer.decode("utf-8")
     data = download_file(url)
     xl = openpyxl.load_workbook(data, data_only=True)
-    rewrite_xlsx_file(xl)
+    rewrite_xlsx_file(xl, copy_style=False)
     data = save_virtual_workbook(xl)
+    with open("/home/rnebot/Downloads/borrame.xlsx", "wb") as f:
+        f.write(data)
+
     r = Response(data,
                  mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                  status=200)
