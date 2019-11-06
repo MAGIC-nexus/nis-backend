@@ -69,12 +69,15 @@ def nis_format_spreadsheet(s: State):
             if len(r) > max_columns:
                 max_columns = len(r)
             for i in range(len(r)):
-                width = len(str(r[i])) * 20
+                width = int(len(str(r[i])) * 1.1)
                 if width > widths[i]:
                     widths[i] = width
-            ws.append(r)
+
         for i, column_width in enumerate(widths):
             ws.column_dimensions[get_column_letter(i+1)].width = column_width
+
+        for r in dataframe_to_rows(df, index=False, header=True):
+            ws.append(r)
 
     return save_virtual_workbook(wb)
 
@@ -86,22 +89,28 @@ def list_to_dataframe(lst: List) -> pd.DataFrame:
 def get_metadata(s: State) -> pd.DataFrame:
     metadata_dictionary = s.get("_metadata")
     lst = list()
-    lst.append(("Case study code", metadata_dictionary.get("case_study_code", "")))
-    lst.append(("Case study name", metadata_dictionary.get("case_study_name", "")))
-    lst.append(("Title", metadata_dictionary.get("title", "")))
-    lst.append(("Subject, topic and/or keywords", metadata_dictionary.get("subject_topic_keywords", "")))
-    lst.append(("Description", metadata_dictionary.get("description", "")))
-    lst.append(("Geographical level", metadata_dictionary.get("geographical_level", "")))  # A list
-    lst.append(("Dimensions", metadata_dictionary.get("dimensions", ""))) # A list
-    lst.append(("Reference documentation", metadata_dictionary.get("reference_documentation", "")))
-    lst.append(("Authors", metadata_dictionary.get("authors", "")))
-    lst.append(("Date of elaboration", metadata_dictionary.get("date_of_elaboration", "")))
-    lst.append(("Temporal situation", metadata_dictionary.get("temporal_situation", "")))
-    lst.append(("Geographical location", metadata_dictionary.get("geographical_situation", "")))
-    lst.append(("DOI", metadata_dictionary.get("doi", "")[0] if metadata_dictionary.get("doi") else ""))
-    lst.append(("Language", metadata_dictionary.get("language", "")))
-    lst.append(("Restriction level", metadata_dictionary.get("restriction_level", "")))  # A list
-    lst.append(("Version", metadata_dictionary.get("version", "")[0] if metadata_dictionary.get("version") else ""))
+    lst.append(("Case study code", metadata_dictionary.get("case_study_code", "") if metadata_dictionary else ""))
+    lst.append(("Case study name", metadata_dictionary.get("case_study_name", "") if metadata_dictionary else ""))
+    lst.append(("Title", metadata_dictionary.get("title", "") if metadata_dictionary else ""))
+    lst.append(("Subject, topic and/or keywords", metadata_dictionary.get("subject_topic_keywords", "") if metadata_dictionary else ""))
+    lst.append(("Description", metadata_dictionary.get("description", "") if metadata_dictionary else ""))
+    lst.append(("Geographical level", metadata_dictionary.get("geographical_level", "") if metadata_dictionary else ""))  # A list
+    lst.append(("Dimensions", metadata_dictionary.get("dimensions", "") if metadata_dictionary else "")) # A list
+    lst.append(("Reference documentation", metadata_dictionary.get("reference_documentation", "") if metadata_dictionary else ""))
+    lst.append(("Authors", metadata_dictionary.get("authors", "") if metadata_dictionary else ""))
+    lst.append(("Date of elaboration", metadata_dictionary.get("date_of_elaboration", "") if metadata_dictionary else ""))
+    lst.append(("Temporal situation", metadata_dictionary.get("temporal_situation", "") if metadata_dictionary else ""))
+    lst.append(("Geographical location", metadata_dictionary.get("geographical_situation", "") if metadata_dictionary else ""))
+    if metadata_dictionary:
+        lst.append(("DOI", metadata_dictionary.get("doi", "")[0] if metadata_dictionary.get("doi") else ""))
+    else:
+        lst.append(("DOI", ""))
+    lst.append(("Language", metadata_dictionary.get("language", "") if metadata_dictionary else ""))
+    lst.append(("Restriction level", metadata_dictionary.get("restriction_level", "") if metadata_dictionary else ""))  # A list
+    if metadata_dictionary:
+        lst.append(("Version", metadata_dictionary.get("version", "")[0] if metadata_dictionary.get("version") else ""))
+    else:
+        lst.append(("Version", ""))
 
     # Expand lists
     for i, t in enumerate(lst):
