@@ -47,7 +47,8 @@ class InterfaceTypesCommand(BasicCommand):
         # Process
         # Mandatory fields
         if not ft_h_name:
-            self._add_issue(IType.WARNING, "Empty interface type hierarchy name. It is recommended to specify one."+subrow_issue_message(subrow))
+            self._add_issue(IType.WARNING, "Empty interface type hierarchy name. It is recommended to specify one, assuming '_default'."+subrow_issue_message(subrow))
+            ft_h_name = "_default"
 
         if not ft_name:
             self._add_issue(IType.ERROR, "Empty interface type name. Skipped."+subrow_issue_message(subrow))

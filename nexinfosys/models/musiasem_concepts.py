@@ -495,6 +495,8 @@ class Geolocation:
     def create(reference, code) -> Optional["Geolocation"]:
         if reference and code:
             return Geolocation(reference, code)
+        elif reference:
+            return Geolocation(reference, None)
         else:
             return None
 
@@ -1615,7 +1617,7 @@ class Factor(Identifiable, Nameable, Taggable, Qualifiable, Observable, Automata
         return f
 
     @staticmethod
-    def partial_key(processor: Processor=None, factor_type: FactorType=None, name: str=None):
+    def partial_key(processor: Processor=None, factor_type: FactorType=None, name: str=None, ident=None):
         d = {"_t": "f"}
         if processor:
             d["__p"] = processor.ident
@@ -1623,6 +1625,8 @@ class Factor(Identifiable, Nameable, Taggable, Qualifiable, Observable, Automata
             d["__ft"] = factor_type.ident
         if name:
             d["_n"] = name
+        if ident:
+            d["__id"] = ident
 
         return d
 

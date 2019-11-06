@@ -5,6 +5,7 @@ from nexinfosys.command_generators import IType
 from nexinfosys.command_generators.parser_ast_evaluators import ast_evaluator, dictionary_from_key_value_list
 from nexinfosys.command_generators.parser_field_parsers import string_to_ast, expression_with_parameters
 from nexinfosys.common.helper import strcmp
+from nexinfosys.model_services import State
 from nexinfosys.models.musiasem_concepts import Processor, ProcessorsRelationPartOfObservation, \
     FactorsRelationScaleObservation, Geolocation, ProcessorsSet
 from nexinfosys.command_executors import BasicCommand, CommandExecutionError, subrow_issue_message
@@ -198,7 +199,8 @@ class ProcessorScalingsCommand(BasicCommand):
             ast = string_to_ast(expression_with_parameters, scale)
 
             evaluation_issues: List[Tuple[int, str]] = []
-            value, unresolved_vars = ast_evaluator(exp=ast, state=self._glb_idx, obj=None, issue_lst=evaluation_issues)
+            s = State()
+            value, unresolved_vars = ast_evaluator(exp=ast, state=s, obj=None, issue_lst=evaluation_issues)
 
             if len(evaluation_issues) > 0:
                 evaluation_issues_str = [i[1] for i in evaluation_issues]

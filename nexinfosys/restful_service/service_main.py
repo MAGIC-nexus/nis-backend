@@ -23,6 +23,9 @@ from flask_cors import CORS
 from werkzeug.exceptions import NotFound
 import json
 import pyximport
+
+from nexinfosys.ie_exports.back_to_nis_format import nis_format_spreadsheet
+
 pyximport.install(reload_support=True, language_level=3)
 
 # >>>>>>>>>> IMPORTANT <<<<<<<<<
@@ -1034,8 +1037,7 @@ def reproducible_session_query_state_everything_executed():  # Query if all comm
     return r
 
 
-# Obtain a list of ALL possible outputs
-
+# Obtain list of ALL possible outputs (not only datasets) IN the current state. output datasets outputs datasets.
 def query_state_list_results(isess):
     dataset_formats = ["CSV", "XLSX"] #, "XLSXwithPivotTable", "NISembedded", "NISdetached"]
     graph_formats = ["VisJS", "GML"] #, "GraphML"]
@@ -1090,7 +1092,7 @@ def query_state_list_results(isess):
                            description="Model",
                            formats=[
                                dict(format=f, url=nis_api_base + F"/isession/rsession/state_query/model.{f.lower()}")
-                               for f in ["JSON"]]),
+                               for f in ["JSON", "XLSX"]]),
                       ] +
                      [dict(name="Ontology",
                            type="ontology",
@@ -1119,7 +1121,7 @@ def query_state_list_results(isess):
 
 @app.route(nis_api_base + "/isession/rsession/state_query/outputs", methods=["GET"])
 @app.route(nis_api_base + "/isession/rsession/state_query/datasets", methods=["GET"])
-def reproducible_session_query_state_list_results():  # Query list of datasets IN the current state
+def reproducible_session_query_state_list_results():  # Query list of outputs (not only datasets) IN the current state
     # Recover InteractiveSession
     isess = deserialize_isession_and_prepare_db_session()
     if isess and isinstance(isess, Response):
@@ -1317,6 +1319,13 @@ def get_model(format):
                     # Prepare a JSON string
                     output = str(export_model_to_json(isess.state))
             mimetype = "text/json"
+        elif format == "xlsx":
+            # A reproducible session must be open, signal about it if not
+            if isess.reproducible_session_opened():
+                if isess.state:
+                    # Prepare a XLSX binary
+                    output = nis_format_spreadsheet(isess.state)
+            mimetype = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
 
     if output:
         return Response(output, mimetype=mimetype, status=200)
@@ -1388,6 +1397,7 @@ def obtain_processors_graph_visjs_format():
         r = build_json_response({}, 200)
 
     return r
+
 
 @app.route(nis_api_base + '/isession/rsession/state_query/sankey_graph.json', methods=["GET"])
 @app.route(nis_api_base + '/isession/rsession/query/sankey_graph.json', methods=["GET"])

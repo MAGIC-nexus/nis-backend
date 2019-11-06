@@ -229,6 +229,7 @@ class ProcessorsCommand(BasicCommand):
         # TODO Improve allowing CLONE(<processor name>)
         # TODO Pass the attributes:
         #  p_type, p_f_or_s, p_i_or_a, p_alias, p_description, p_copy_interfaces
+        pgroup = field_values.get("processor_group")
         if field_values.get("clone_processor"):
             # TODO Find origin processor
             # TODO Clone it
@@ -237,6 +238,7 @@ class ProcessorsCommand(BasicCommand):
             # Get internal and user-defined attributes in one dictionary
             attributes = {c.name: field_values[c.name] for c in self._command_fields if c.attribute_of == Processor}
             attributes.update(field_values["attributes"])
+            attributes["processor_group"] = pgroup
 
             if not attributes.get("processor_system"):
                 attributes["processor_system"] = "default"
@@ -260,10 +262,9 @@ class ProcessorsCommand(BasicCommand):
             )
 
         # Add to ProcessorsGroup, if specified
-        field_val = field_values.get("processor_group")
-        if field_val:
-            p_set = self._p_sets.get(field_val, ProcessorsSet(field_val))
-            self._p_sets[field_val] = p_set
+        if pgroup:
+            p_set = self._p_sets.get(pgroup, ProcessorsSet(pgroup))
+            self._p_sets[pgroup] = p_set
             if p_set.append(p, self._glb_idx):  # Appends codes to the pset if the processor was not member of the pset
                 p_set.append_attributes_codes(field_values["attributes"])
 

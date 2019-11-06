@@ -27,16 +27,11 @@ class ParametersCommand(IExecutableCommand):
                                     location=IssueLocation(sheet_name=sheet_name, row=r, column=None)))
                 continue
             p = Parameter(name)
-            if "value" in param:
-                p._default_value = p._current_value = param["value"]
-            if "type" in param:
-                p._type = param["type"]
-            if "range" in param:
-                p._range = param["range"]
-            if "description" in param:
-                p._description = param["description"]
-            if "group" in param:
-                p._group = param["group"]
+            p._default_value = p._current_value = param.get("value")
+            p._type = param.get("type")
+            p._range = param.get("domain")
+            p._description = param.get("description")
+            p._group = param.get("group")
             glb_idx.put(p.key(), p)
         return issues, None
 

@@ -99,6 +99,7 @@ class MetadataCommand(IExecutableCommand):
                 # Generate internal code according to DMP
                 correlative = 1  # TODO Obtain unique -MAGIC project level- correlative number
                 cs.internal_code = "CS"+str(correlative)+"_"+cs.geographic_level+"_"+cs.areas+"_"+cs.restriction_level+"-"+cs.version
+                self._metadata_dictionary["case_study_code"] = cs.internal_code
             else:
                 cs.internal_code = self._metadata_dictionary["case_study_code"][0]
 
