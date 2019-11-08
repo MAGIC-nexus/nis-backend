@@ -171,7 +171,7 @@ def get_scale_change_map(glb_idx: PartialRetrievalDictionary) -> pd.DataFrame:
 
 
 def get_processors(glb_idx: PartialRetrievalDictionary) -> pd.DataFrame:
-    procs = glb_idx.get(Processor.partial_key())
+    procs = set(glb_idx.get(Processor.partial_key()))  # Unique processors
     d = {}
     for p in procs:
         parent_relations = glb_idx.get(ProcessorsRelationPartOfObservation.partial_key(child=p))
