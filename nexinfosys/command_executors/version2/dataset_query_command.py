@@ -190,7 +190,7 @@ class DatasetQryCommand(IExecutableCommand):
             # TODO: use metadata name (e.g. "OBS_VALUE") instead of hardcoded "value"
             # values = self._content["measures"]
             out_names = self._content["measures_as"]
-            group_by_dims = translate_case(self._content["group_by"], params)  # Group by dimension names
+            group_by_dims = translate_case(self._content["group_by"], df.columns)  # Group by dimension names
             lcase_group_by_dims = [d.lower() for d in group_by_dims]
             # Now joined_dimensions
             for d in joined_dimensions:

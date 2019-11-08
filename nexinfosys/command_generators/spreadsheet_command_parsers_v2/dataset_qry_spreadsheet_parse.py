@@ -65,6 +65,12 @@ def parse_dataset_qry_command(sh: Worksheet, area: AreaTupleType, name, state) -
                     available_at_datetime = v
                     break  # Stop on first definition
 
+    if dataset_name is None:
+        issues.append(Issue(itype=IType.ERROR,
+                            description=f"The name of the input dataset must be specified under column 'InputDataset'. Skipping {name} command",
+                            location=IssueLocation(sheet_name=name, row=None, column=None)))
+        return issues, None, None
+
     # Obtain the source
     from nexinfosys.ie_imports.data_source_manager import DataSourceManager
     source = DataSourceManager.obtain_dataset_source(dataset_name, datasets)
