@@ -16,7 +16,7 @@ from nexinfosys.models.musiasem_concepts import PedigreeMatrix, Reference, Facto
     Processor, Factor, FactorInProcessorType, Observer, Parameter, GeographicReference, ProvenanceReference, \
     BibliographicReference
 from nexinfosys.models.musiasem_concepts_helper import _create_or_append_quantitative_observation, \
-    find_observable_by_name
+    find_observable_by_name, find_processors_matching_name
 from nexinfosys.solving import get_processor_names_to_processors_dictionary
 from nexinfosys.command_field_definitions import get_command_fields_from_class
 
@@ -148,11 +148,17 @@ class InterfacesAndQualifiedQuantitiesCommand(BasicCommand):
 
         # Find Processor
         # TODO Allow creating a basic Processor if it is not found?
-        p = find_observable_by_name(f_processor_name, self._glb_idx)
+        p = find_processors_matching_name(f_processor_name, self._glb_idx)
+        # p = find_observable_by_name(f_processor_name, self._glb_idx)
         # p = self._glb_idx.get(Processor.partial_key(f_processor_name))
-        if not p:
+        if len(p) == 0:
             self._add_issue(IType.ERROR, "Processor '" + f_processor_name + "' not declared previously"+subrow_issue_message(subrow))
             return
+        elif len(p) > 1:
+            self._add_issue(IType.ERROR, f"Processor '{f_processor_name}' declared previously {len(p)} times"+subrow_issue_message(subrow))
+            return
+
+        p = p[0]
 
         # Try to find Interface
         ft: FactorType = None

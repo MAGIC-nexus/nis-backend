@@ -13,9 +13,11 @@ from nexinfosys.command_generators.parser_ast_evaluators import dictionary_from_
 from nexinfosys.command_generators.parser_field_parsers import string_to_ast, processor_names
 from nexinfosys.common.helper import head, strcmp, ifnull
 from nexinfosys.model_services import IExecutableCommand, get_case_study_registry_objects
-from nexinfosys.models.musiasem_concepts import ProcessorsSet, ProcessorsRelationPartOfObservation, Parameter, Processor, \
-    Geolocation
-from nexinfosys.models.musiasem_concepts_helper import find_or_create_processor, find_processor_by_name
+from nexinfosys.models.musiasem_concepts import ProcessorsSet, ProcessorsRelationPartOfObservation, Parameter, \
+    Processor, \
+    Geolocation, Observer
+from nexinfosys.models.musiasem_concepts_helper import find_or_create_processor, find_processor_by_name, \
+    obtain_name_parts, find_processors_matching_name
 from nexinfosys.solving import get_processor_names_to_processors_dictionary
 
 
@@ -217,6 +219,11 @@ class ProcessorsCommand(BasicCommand):
         if field_values.get("parent_processor"):
             try:
                 parent_processor = self._get_processor_from_field("parent_processor")
+                # parents = find_processors_matching_name(parent_processor)
+                # if len(parents) > 1:
+                #     self._add_issue(IType.WARNING,
+                #                     f"Parent processor '{parent_processor}' not unique. Matches: {', '.join(p.hierarchical_names[0] for p in parents)}. Skipped." + subrow_issue_message(subrow))
+                #     return
             except CommandExecutionError:
                 self._add_issue(IType.ERROR, f"Specified parent processor, '{field_values.get('parent_processor')}', does not exist"+subrow_issue_message(subrow))
                 return
@@ -226,40 +233,68 @@ class ProcessorsCommand(BasicCommand):
         # Find or create processor and REGISTER it in "glb_idx"
         # TODO Now, only Simple name allowed
         # TODO Improve allowing hierarchical names, and hierarchical names with wildcards
-        # TODO Improve allowing CLONE(<processor name>)
-        # TODO Pass the attributes:
-        #  p_type, p_f_or_s, p_i_or_a, p_alias, p_description, p_copy_interfaces
         pgroup = field_values.get("processor_group")
-        if field_values.get("clone_processor"):
-            # TODO Find origin processor
-            # TODO Clone it
-            pass
+
+        # Get internal and user-defined attributes in one dictionary
+        attributes = {c.name: field_values[c.name] for c in self._command_fields if c.attribute_of == Processor}
+        attributes.update(field_values["attributes"])
+        attributes["processor_group"] = pgroup
+
+        if not attributes.get("processor_system"):
+            attributes["processor_system"] = "default"
+
+        # Needed to support the new name of the field, "Accounted" (previously it was "InstanceOrArchetype")
+        # (internally the values have the same meaning, "Instance" for a processor which has to be accounted,
+        # "Archetype" for a processor which hasn't)
+        v = attributes.get("instance_or_archetype", None)
+        if strcmp(v, "Yes"):
+            v = "Instance"
+        elif strcmp(v, "No"):
+            v = "Archetype"
+        if v:
+            attributes["instance_or_archetype"] = v
+
+        name = field_values["processor"]
+        p_names, _ = obtain_name_parts(name)
+
+        geolocation = Geolocation.create(field_values["geolocation_ref"], field_values["geolocation_code"])
+
+        ps = find_processors_matching_name(name, self._glb_idx)
+        more_than_one = len(ps) > 1
+        simple = len(p_names) == 1
+        exists = True if len(ps) == 1 else False
+        # SIMPLE? EXISTS? PARENT? ACTION:
+        # Yes     Yes     Yes     NEW; HANG FROM PARENT
+        # Yes     Yes     No      Warning: repeated
+        # Yes     No      Yes     NEW; HANG FROM PARENT
+        # Yes     No      No      NEW
+        # No      Yes     Yes     Warning: cannot hang from parent
+        # No      Yes     No      Warning: repeated AND not simple not allowed
+        # No      No      Yes     Warning: cannot create more than one processor AND not simple not allowed
+        # No      No      No      Warning: cannot create more than one processor AND not simple not allowed
+
+        create_new = False
+        if not simple:
+            if not parent_processor:
+                self._add_issue(IType.WARNING,
+                                f"When a processor does not have parent, the name must be simple. Skipped." + subrow_issue_message(subrow))
+                return
         else:
-            # Get internal and user-defined attributes in one dictionary
-            attributes = {c.name: field_values[c.name] for c in self._command_fields if c.attribute_of == Processor}
-            attributes.update(field_values["attributes"])
-            attributes["processor_group"] = pgroup
+            if exists and not parent_processor:
+                self._add_issue(IType.WARNING,
+                                f"Repeated declaration of {name}. Skipped." + subrow_issue_message(subrow))
+                return
+            create_new = True
 
-            if not attributes.get("processor_system"):
-                attributes["processor_system"] = "default"
-
-            # Needed to support the new name of the field, "Accounted" (previously it was "InstanceOrArchetype")
-            # (internally the values have the same meaning, "Instance" for a processor which has to be accounted,
-            # "Archetype" for a processor which hasn't)
-            v = attributes.get("instance_or_archetype", None)
-            if strcmp(v, "Yes"):
-                v = "Instance"
-            elif strcmp(v, "No"):
-                v = "Archetype"
-            if v:
-                attributes["instance_or_archetype"] = v
-
+        if create_new:
             p = find_or_create_processor(
                 state=self._glb_idx,
-                name=field_values["processor"],  # TODO: add parent hierarchical name
+                name=name,
                 proc_attributes=attributes,
-                proc_location=Geolocation.create(field_values["geolocation_ref"], field_values["geolocation_code"])
-            )
+                proc_location=geolocation)
+        else:
+            if exists:
+                p = ps[0]
 
         # Add to ProcessorsGroup, if specified
         if pgroup:
@@ -272,5 +307,14 @@ class ProcessorsCommand(BasicCommand):
         # The processor may have previously other parent processors that will keep its parentship
         if parent_processor:
             # Create "part-of" relationship
+            if len(self._glb_idx.get(ProcessorsRelationPartOfObservation.partial_key(parent_processor, p))) > 0:
+                self._add_issue(IType.WARNING,
+                                f"{p.name} is already part-of {parent_processor.name}. Skipped." + subrow_issue_message(subrow))
+                return
             o1 = ProcessorsRelationPartOfObservation.create_and_append(parent_processor, p, None)  # Part-of
             self._glb_idx.put(o1.key(), o1)
+            p_key = Processor.partial_key(f"{parent_processor.name}.{name}", p.ident)
+            if attributes:
+                p_key.update({k: ("" if v is None else v) for k, v in attributes.items()})
+            self._glb_idx.put(p_key, p)
+

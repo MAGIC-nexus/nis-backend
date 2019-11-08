@@ -218,12 +218,29 @@ def find_observable_by_name(name: str, idx: PartialRetrievalDictionary, processo
     return res
 
 
+def find_processors_matching_name(processor_name, registry):
+    parts, _ = obtain_name_parts(processor_name)
+    ps = registry.get(Processor.partial_key(name=parts[0]))
+    i = 1
+    while len(ps) > 0 and i < len(parts):
+        ps_tmp = []
+        for p in ps:
+            for partof_rel in registry.get(ProcessorsRelationPartOfObservation.partial_key(parent=p)):
+                if strcmp(partof_rel.child_processor.name, parts[i]):
+                    ps_tmp.append(partof_rel.child_processor)
+                    break
+        ps = ps_tmp
+        i += 1
+    return ps
+
+
 def find_processor_by_name(state: Union[State, PartialRetrievalDictionary], processor_name: str) -> Optional[Processor]:
     """
     Find a processor by its name
 
     The name can be:
       * simple
+      * partial hierarchical
       * absolute hierarchical
 
     The result can be:
@@ -238,7 +255,7 @@ def find_processor_by_name(state: Union[State, PartialRetrievalDictionary], proc
     """
 
     # Decompose the name
-    p_names, _ = _obtain_name_parts(processor_name)
+    p_names, _ = obtain_name_parts(processor_name)
 
     # Get registry object
     if isinstance(state, PartialRetrievalDictionary):
@@ -246,39 +263,12 @@ def find_processor_by_name(state: Union[State, PartialRetrievalDictionary], proc
     else:
         glb_idx, _, _, _, _ = get_case_study_registry_objects(state)
 
-    if len(p_names) > 0:
-        # Directly accessible
-        p = glb_idx.get(Processor.partial_key(p_names[0]))
-        if len(p) == 1:
-            p = p[0]
-            if len(p_names) == 1:
-                return p  # Found!
-            else:
-                # Look for children of "p" matching each piece
-                for partial_name in p_names[1:]:
-                    # Obtain part-of relationships whose parent is "p"
-                    pors = glb_idx.get(ProcessorsRelationPartOfObservation.partial_key(parent=p))
-                    if len(pors) == 0:
-                        return None
-                    else:
-                        # Find child Processors matching the name
-                        matches = []
-                        for por in pors:
-                            if strcmp(partial_name, por.child_processor.name):
-                                # Found a match
-                                matches.append(por.child_processor)
-                        if len(matches) == 0:
-                            return None
-                        elif len(matches) == 1:
-                            p = matches[0]
-                        else:
-                            raise Exception(str(len(matches))+" processors matched '"+partial_name+"' in '"+processor_name+"'")
-                return p
-        else:  # The number of matching top level Processors is different from ONE
-            if len(p) == 0:
-                return None
-            else:
-                raise Exception(str(len(p)+" processors found matching '"+processor_name+"'"))
+    if processor_name:
+        ps = find_processors_matching_name(processor_name, glb_idx)
+        if len(ps) == 1:
+            return ps[0]  # One found!
+        else:
+            raise Exception(f"{len(ps)} processors matched '{processor_name}': {', '.join([p.full_hierarchy_names(glb_idx)[0] for p in ps])}")
     else:
         raise Exception("No processor name specified: '"+processor_name+"'")
 
@@ -303,7 +293,7 @@ def find_factortype_by_name(state: Union[State, PartialRetrievalDictionary], fac
     """
 
     # Decompose the name
-    p_names, _ = _obtain_name_parts(factortype_name)
+    p_names, _ = obtain_name_parts(factortype_name)
 
     # Get registry object
     if isinstance(state, PartialRetrievalDictionary):
@@ -371,7 +361,7 @@ def find_or_create_observable(state: Union[State, PartialRetrievalDictionary],
     """
 
     # Decompose the name
-    p_names, f_names = _obtain_name_parts(name)
+    p_names, f_names = obtain_name_parts(name)
 
     # Get objects from state
     if isinstance(state, PartialRetrievalDictionary):
@@ -425,7 +415,7 @@ def find_or_create_observable(state: Union[State, PartialRetrievalDictionary],
             # CREATE processor(s) (if it does not exist). The processor is an Observable
             acum_name += ("." if acum_name != "" else "") + p_name
             p = glb_idx.get(Processor.partial_key(name=acum_name))
-            if not p:
+            if not p or strcmp(acum_name, p_name):
                 attrs = proc_attributes if last else None
                 location = proc_location if last else None
                 # Create processor
@@ -449,6 +439,10 @@ def find_or_create_observable(state: Union[State, PartialRetrievalDictionary],
                 if not o1:
                     o1 = ProcessorsRelationPartOfObservation.create_and_append(parent, p, oer)  # Part-of
                     glb_idx.put(o1.key(), o1)
+                    p_key = Processor.partial_key(f"{parent.name}.{acum_name}", p.ident)
+                    if proc_attributes:
+                        p_key.update({k: ("" if v is None else v) for k, v in proc_attributes.items()})
+                    glb_idx.put(p_key, p)
 
             parent = p
 
@@ -536,7 +530,7 @@ def find_or_create_factor_type(state: Union[State, PartialRetrievalDictionary],
     :param fact_attributes:
     :return:
     """
-    p_names, f_names = _obtain_name_parts(name)
+    p_names, f_names = obtain_name_parts(name)
     if not p_names:
         _, ft, _ = find_or_create_observable(state, name, fact_roegen_type=fact_roegen_type,
                                              fact_attributes=fact_attributes)
@@ -558,7 +552,7 @@ def find_or_create_processor(state: Union[State, PartialRetrievalDictionary],
     :param proc_location:
     :return:
     """
-    p_names, f_names = _obtain_name_parts(name)
+    p_names, f_names = obtain_name_parts(name)
     if not f_names:
         p, _, _ = find_or_create_observable(state, name,
                                             proc_attributes=proc_attributes,
@@ -809,7 +803,7 @@ def create_relation_observations(state: Union[State, PartialRetrievalDictionary]
 # ########################################################################################
 
 
-def _obtain_name_parts(n):
+def obtain_name_parts(n):
     """
     Parse the name. List of processor names + list of factor names
     :param n:
@@ -1200,3 +1194,8 @@ def _build_hierarchy(name, type_name, registry: PartialRetrievalDictionary, h: d
         return hie
     else:
         return None
+
+
+def get_processors(registry: PartialRetrievalDictionary):
+    # Just remove duplicates (processors can be registered multiple times under different names)
+    return set(registry.get(Processor.partial_key()))
