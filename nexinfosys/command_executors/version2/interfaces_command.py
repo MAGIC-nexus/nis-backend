@@ -230,7 +230,12 @@ class InterfacesAndQualifiedQuantitiesCommand(BasicCommand):
             oer = oer[0]
 
         if f_relative_to:
-            ast = parser_field_parsers.string_to_ast(parser_field_parsers.factor_unit, f_relative_to)
+            try:
+                ast = parser_field_parsers.string_to_ast(parser_field_parsers.factor_unit, f_relative_to)
+            except:
+                self._add_issue(IType.ERROR, f"Could not parse the RelativeTo column, value {str(f_relative_to)}. "+subrow_issue_message(subrow))
+                return
+
             relative_to_interface_name = ast_to_string(ast["factor"])
 
             rel_unit_name = ast["unparsed_unit"]
