@@ -225,9 +225,10 @@ class WorksheetCopy2(object):
         self._copy_cells()
         self._copy_dimensions()
 
-        self.target.sheet_format = copy(self.source.sheet_format)
-        self.target.sheet_properties = copy(self.source.sheet_properties)
+        if self._copy_style:
+            self.target.sheet_format = copy(self.source.sheet_format)
         self.target._merged_cells = copy(self.source._merged_cells)
+        self.target.sheet_properties = copy(self.source.sheet_properties)
 
     def _copy_cells(self):
         for (row, col), source_cell in self.source._cells.items():
@@ -274,7 +275,11 @@ def rewrite_xlsx_file(xl, copy_style=True):
     sn = xl.sheetnames
     for c, sh_name in enumerate(sn):
         source = xl.get_sheet_by_name(sh_name)
-        tmp = copy_worksheet(xl, source)
-        #tmp = xl.copy_worksheet(source)
+        copy_sheet = source.sheet_state != "hidden"
+        if copy_sheet:
+            tmp = copy_worksheet(xl, source)
+        else:
+            print(f"Skipping copy of '{sh_name}' worksheet")
         xl.remove_sheet(source)
-        tmp.title = sh_name
+        if copy_sheet:
+            tmp.title = sh_name
