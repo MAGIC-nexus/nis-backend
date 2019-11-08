@@ -62,6 +62,9 @@ def nis_format_spreadsheet(s: State):
     # Convert list of pd.DataFrames to Excel workbook
     wb = Workbook(write_only=True)
     for name, df in lst:
+        if df.shape[0] < 2:
+            continue
+
         ws = wb.create_sheet(name)
         widths = [0]*100  # A maximum of 100 columns
         max_columns = 0
