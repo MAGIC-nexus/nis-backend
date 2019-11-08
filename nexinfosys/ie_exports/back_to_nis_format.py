@@ -184,14 +184,24 @@ def get_processors(glb_idx: PartialRetrievalDictionary) -> pd.DataFrame:
         gref = p.geolocation.reference if p.geolocation else ""
         gcode = p.geolocation.code if p.geolocation else ""
         pgroup = p.attributes.get("processor_group")
+        fname = p.full_hierarchy_names(glb_idx)[0]
         t = [pgroup if pgroup else "", p.name, "", p.attributes.get("subsystem_type", ""), p.attributes.get("processor_system", ""), p.attributes.get("functional_or_structural", ""), p.attributes.get("instance_or_archetype", ""), p.attributes.get("stock"), "", gref, gcode, "", ""]
         parent_relations = glb_idx.get(ProcessorsRelationPartOfObservation.partial_key(child=p))
         if len(parent_relations) == 0:
             lst.append(t)
         else:
+            first = True
             for rel in parent_relations:
                 t[2] = rel.parent_processor.full_hierarchy_names(glb_idx)[0]
-                lst.append(t)
+                lst.append(t.copy())
+                if first:
+                    first = False
+                    proper = None
+                    for n in p.full_hierarchy_names(glb_idx):
+                        if t[2] in n:
+                            proper = n
+                            break
+                    t[1] = proper if proper else t[1]
 
     return list_to_dataframe(lst)
 
