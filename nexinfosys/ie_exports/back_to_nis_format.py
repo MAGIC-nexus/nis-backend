@@ -190,7 +190,7 @@ def get_processors(glb_idx: PartialRetrievalDictionary) -> pd.DataFrame:
             lst.append(t)
         else:
             for rel in parent_relations:
-                t[2] = rel.parent_processor.name
+                t[2] = rel.parent_processor.full_hierarchy_names(glb_idx)[0]
                 lst.append(t)
 
     return list_to_dataframe(lst)
