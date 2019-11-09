@@ -1374,8 +1374,11 @@ class FloatOrString:
         value_a = FloatOrString.to_float(a)
         value_b = FloatOrString.to_float(b)
 
-        if value_a is None or value_b is None:
-            return ifnull(value_a, value_b)
+        if value_a is None:
+            return value_b
+
+        if value_b is None:
+            return value_a
 
         if isinstance(value_a, float) and isinstance(value_b, float):
             return value_a * value_b

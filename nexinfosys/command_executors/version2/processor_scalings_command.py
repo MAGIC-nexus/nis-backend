@@ -5,7 +5,7 @@ from nexinfosys.command_field_definitions import get_command_fields_from_class
 from nexinfosys.command_generators import IType
 from nexinfosys.command_generators.parser_ast_evaluators import ast_evaluator, dictionary_from_key_value_list
 from nexinfosys.command_generators.parser_field_parsers import string_to_ast, expression_with_parameters
-from nexinfosys.common.helper import strcmp, first
+from nexinfosys.common.helper import strcmp, first, FloatOrString
 from nexinfosys.models.musiasem_concepts import Processor, ProcessorsRelationPartOfObservation, \
     FactorsRelationScaleObservation, ProcessorsSet
 
@@ -21,6 +21,10 @@ class ProcessorScalingsCommand(BasicCommand):
         # Find processors
         invoking_processor = self._get_processor_from_field("invoking_processor")
         requested_processor = self._get_processor_from_field("requested_processor")
+
+        if invoking_processor == requested_processor:
+            raise CommandExecutionError(f"Invoking and Requested processors cannot be the same '{invoking_processor.name}'. "
+                                        f"Use the 'relative_to' attribute in 'Interfaces' command instead.")
 
         invoking_interface_name: str = fields["invoking_interface"]
         requested_interface_name: str = fields["requested_interface"]
@@ -108,7 +112,6 @@ class ProcessorScalingsCommand(BasicCommand):
                                                                        other_attributes=attributes)
 
             # Value Scale, which can be an expression, should be evaluated (ast) because we need a final float number
-            # TODO: Apply
             scale_value = self._get_scale_value(scale)
 
             # In the cloned processor search in all interfaces if there are Observations relative_to RequestedInterface
@@ -176,10 +179,11 @@ class ProcessorScalingsCommand(BasicCommand):
         if not destination_factor:
             raise Exception("Requested interface name '"+invoking_interface_name+"' not found for processor '"+parent_processor.name+"'")
 
-        if not scale:
-            # Search for a Interface Type Conversion defined in the ScaleChangeMap command
-            scale = self._get_interface_types_transform(origin_factor.taxon, parent_processor,
-                                                        destination_factor.taxon, child_processor).scaled_weight
+        if origin_factor.taxon != destination_factor.taxon:
+            # Search for an Interface Type Conversion defined in the ScaleChangeMap command
+            interface_types_transform = self._get_interface_types_transform(origin_factor.taxon, parent_processor,
+                                                                            destination_factor.taxon, child_processor)
+            scale = FloatOrString.multiply(scale, interface_types_transform.scaled_weight)
 
         relationship = FactorsRelationScaleObservation.create_and_append(origin=origin_factor,
                                                                          destination=destination_factor,

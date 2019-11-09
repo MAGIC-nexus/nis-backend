@@ -216,7 +216,7 @@ command_fields: Dict[str, List[CommandField]] = {
         CommandField(allowed_names=["ScalingType"], name="scaling_type", mandatory=True, allowed_values=processor_scaling_types, parser=simple_ident),
         CommandField(allowed_names=["InvokingInterface"], name="invoking_interface", mandatory=True, parser=simple_ident),
         CommandField(allowed_names=["RequestedInterface"], name="requested_interface", mandatory=True, parser=simple_ident),
-        CommandField(allowed_names=["Scale"], name="scale", parser=expression_with_parameters),
+        CommandField(allowed_names=["Scale"], name="scale", mandatory=True, parser=expression_with_parameters),
         # BareProcessor fields
         CommandField(allowed_names=["NewProcessorName"], name="new_processor_name", allowed_values=None, parser=processor_name),
         CommandField(allowed_names=["NewProcessorGroup"], name="processor_group", parser=simple_ident),

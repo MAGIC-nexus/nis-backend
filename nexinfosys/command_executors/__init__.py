@@ -267,7 +267,7 @@ class BasicCommand(IExecutableCommand):
 
         return []
 
-    def _get_processor_from_field(self, field_name: str) -> Optional[Processor]:
+    def _get_processor_from_field(self, field_name: str) -> Processor:
         processor_name = self._fields[field_name]
         processor = find_processor_by_name(state=self._glb_idx, processor_name=processor_name)
 
