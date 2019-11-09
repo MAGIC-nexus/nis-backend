@@ -376,19 +376,12 @@ def compute_graph_values(comp_graph: ComputationGraph, params: NodeFloatDict, ot
     print(f"****** NODES: {comp_graph.nodes}")
 
     # Filter params in graph
-    graph_params = {k: v for k, v in params.items() if k in comp_graph.nodes}
+    graph_params: NodeFloatDict = {k: v for k, v in params.items() if k in comp_graph.nodes}
     print("Missing values: ", [k for k, v in graph_params.items() if v is None])
 
-    conflicts = comp_graph.compute_param_conflicts(set(graph_params.keys()))
+    conflicts: Dict[InterfaceNode, Set[InterfaceNode]] = comp_graph.compute_param_conflicts(set(graph_params.keys()))
 
-    conflict_strings: List[str] = []
-    for param, conf_params in conflicts.items():
-        if len(conf_params) > 0:
-            conf_params_string = "{" + ', '.join([f"{p} ({round(graph_params[p], 3)})" for p in conf_params]) + "}"
-            conflict_strings.append(f"{param} ({round(graph_params[param], 3)}) -> {conf_params_string}")
-
-    if len(conflict_strings) > 0:
-        raise SolvingException(IType.ERROR, f"There are conflicts: {', '.join(conflict_strings)}")
+    raise_error_if_conflicts(conflicts, graph_params)
 
     graph_params = {**graph_params, **other_values}
 
@@ -414,6 +407,17 @@ def compute_graph_values(comp_graph: ComputationGraph, params: NodeFloatDict, ot
             unknown_nodes.append(k)
 
     return results_with_values, unknown_nodes
+
+
+def raise_error_if_conflicts(conflicts: Dict[InterfaceNode, Set[InterfaceNode]], graph_params: NodeFloatDict):
+    conflict_strings: List[str] = []
+    for param, conf_params in conflicts.items():
+        if len(conf_params) > 0:
+            conf_params_string = "{" + ', '.join([f"{p} ({round(graph_params[p], 3)})" for p in conf_params]) + "}"
+            conflict_strings.append(f"{param} ({round(graph_params[param], 3)}) -> {conf_params_string}")
+
+    if len(conflict_strings) > 0:
+        raise SolvingException(IType.ERROR, f"There are conflicts: {', '.join(conflict_strings)}")
 
 
 def split_name(processor_interface: str) -> Tuple[str, Optional[str]]:
