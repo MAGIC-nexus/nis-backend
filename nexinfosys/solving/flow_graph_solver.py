@@ -26,6 +26,7 @@ Before the elaboration of flow graphs, several preparatory steps:
 
 """
 from _operator import add
+from collections import defaultdict
 from enum import Enum
 from functools import reduce
 from itertools import chain
@@ -145,7 +146,13 @@ class Scope(Enum):
     External = 3
 
 
+class Computed(Enum):
+    No = 1
+    Yes = 2
+
+
 NodeFloatDict = Dict[InterfaceNode, float]
+# Key = Tuple[scenario_name, time_period, Scope, Computed]
 ResultDict = Dict[Tuple[str, str, str], NodeFloatDict]
 
 
@@ -247,17 +254,20 @@ def evaluate_parameters_for_scenario(base_params: List[Parameter], scenario_para
 TimeObservationsType = Dict[str, List[Tuple[float, FactorQuantitativeObservation]]]
 
 
-def get_observations_by_time(prd: PartialRetrievalDictionary) -> Tuple[TimeObservationsType, TimeObservationsType]:
+def get_evaluated_observations_by_time(prd: PartialRetrievalDictionary) -> TimeObservationsType:
     """
-    Process All QQ observations (intensive or extensive):
-    * Store in a compact way (then clear), by Time-period, by Interface, by Observer.
-    * Convert to float or prepare AST
-    * Store as value the result plus the QQ observation (in a tuple)
+        Get all interface observations (intensive or extensive) by time.
+        Also resolve expressions without parameters. Cannot resolve expressions depending only on global parameters
+        because some of them can be overridden by scenario parameters.
 
-    :param prd:
-    :return:
+        Each evaluated observation is stored as a tuple:
+        * First: the evaluated result as a float or the prepared AST
+        * Second: the observation
+
+    :param prd: the global objects dictionary
+    :return: a time dictionary with a list of observation on each time
     """
-    observations: Dict[str, List[Tuple[float, FactorQuantitativeObservation]]] = {}
+    observations: TimeObservationsType = defaultdict(list)
     state = State()
 
     # Get all observations by time
@@ -268,28 +278,24 @@ def get_observations_by_time(prd: PartialRetrievalDictionary) -> Tuple[TimeObser
 
         # Store: (Value, FactorQuantitativeObservation)
         time = observation.attributes["time"].lower()
-        if time not in observations:
-            observations[time] = []
-
         observations[time].append((ifnull(value, ast), observation))
 
     if len(observations) == 0:
-        return {}, {}
+        return {}
 
     # Check all time periods are consistent. All should be Year or Month, but not both.
-    time_period_type = get_type_from_all_time_periods(list(observations.keys()))
+    time_period_type = check_type_consistency_from_all_time_periods(list(observations.keys()))
     assert(time_period_type in ["year", "month"])
 
     # Remove generic period type and insert it into all specific periods. E.g. "Year" into "2010", "2011" and "2012"
     if time_period_type in observations:
         # Generic monthly ("Month") or annual ("Year") data
-        periodic_observations = observations[time_period_type]
-        del observations[time_period_type]
+        periodic_observations = observations.pop(time_period_type)
 
         for time in observations:
             observations[time] += periodic_observations
 
-    return split_observations_by_relativeness(observations)
+    return observations
 
 
 def evaluate_numeric_expression_with_parameters(expression: Union[float, str, dict], state: State) \
@@ -329,7 +335,7 @@ def evaluate_numeric_expression_with_parameters(expression: Union[float, str, di
     return value, ast, params, [i[1] for i in issues]
 
 
-def get_type_from_all_time_periods(time_periods: List[str]) -> Optional[str]:
+def check_type_consistency_from_all_time_periods(time_periods: List[str]) -> str:
     """ Check if all time periods are of the same period type, either Year or Month:
          - general "Year" & specific year (YYYY)
          - general "Month" & specific month (mm-YYYY or YYYY-mm, separator can be any of "-/")
@@ -347,21 +353,20 @@ def get_type_from_all_time_periods(time_periods: List[str]) -> Optional[str]:
         period_type = "month"
         period_check = is_month
     else:
-        return None
+        raise SolvingException(IType.ERROR, f"Found invalid period type '{period}'")
 
     for time_period in time_periods:
         if time_period != period_type and not period_check(time_period):
-            return None
+            raise SolvingException(IType.ERROR,
+                f"Found period type inconsistency: accepting '{period_type}' but found '{time_period}'")
 
     return period_type
 
 
-def split_observations_by_relativeness(observations_by_time: TimeObservationsType):
-    observations_by_time_norelative = {}
-    observations_by_time_relative = {}
+def split_observations_by_relativeness(observations_by_time: TimeObservationsType) -> Tuple[TimeObservationsType, TimeObservationsType]:
+    observations_by_time_norelative = defaultdict(list)
+    observations_by_time_relative = defaultdict(list)
     for time, observations in observations_by_time.items():
-        observations_by_time_norelative[time] = []
-        observations_by_time_relative[time] = []
         for value, obs in observations:
             if obs.is_relative:
                 observations_by_time_relative[time].append((value, obs))
@@ -488,9 +493,7 @@ def iterative_solving(comp_graph_list: List[ComputationGraph], observations: Nod
 
         num_unknown_nodes = reduce(add, [len(l) for l in unknown_nodes])
 
-    all_unknown_nodes = []
-    for l in unknown_nodes:
-        all_unknown_nodes.extend(l)
+    all_unknown_nodes = [node for node_list in unknown_nodes for node in node_list]
 
     return all_data, all_unknown_nodes
 
@@ -539,16 +542,45 @@ def create_scale_change_relations_and_update_flow_relations(relations_flow: nx.D
     return relations_scale_change
 
 
-def compute_flow_and_scale_results(state: State, glb_idx, global_parameters, problem_statement):
-    # Get all interface observations. Also resolve expressions without parameters. Cannot resolve expressions
-    # depending only on global parameters because some of them can be overridden by scenario parameters.
-    time_observations_absolute, time_observations_relative = get_observations_by_time(glb_idx)
+def get_scenario_evaluated_observation_results(scenario_states: Dict[str, State],
+                                               time_observations: TimeObservationsType) -> ResultDict:
+    results: ResultDict = {}
 
-    if len(time_observations_absolute) == 0:
-        raise SolvingException(
-            IType.WARNING, f"No absolute observations have been found. The solver has nothing to solve."
-        )
+    for scenario_name, scenario_state in scenario_states.items():  # type: str, State
+        for time_period, observations in time_observations.items():
+            resolved_observations: NodeFloatDict = {}
 
+            # Second and last pass to resolve observation expressions with parameters
+            for expression, obs in observations:
+                value, _, params, issues = evaluate_numeric_expression_with_parameters(expression, scenario_state)
+                if value is None:
+                    raise SolvingException(IType.ERROR,
+                        f"Scenario '{scenario_name}' - period '{time_period}'. Cannot evaluate expression "
+                        f"'{expression}' for observation at interface '{obs.factor.name}'. Params: {params}. "
+                        f"Issues: {', '.join(issues)}"
+                    )
+
+                resolved_observations[InterfaceNode(obs.factor)] = value
+
+            # results[(scenario_name, time_period, Scope.Total.name, Computed.No.name)] = resolved_observations
+            results[(scenario_name, time_period, Scope.Total.name)] = resolved_observations
+
+            empty_graph: ComputationGraph = ComputationGraph()
+            internal_data, external_data = compute_separated_results(resolved_observations, empty_graph)
+            if len(external_data) > 0:
+                # results[(scenario_name, time_period, Scope.External.name, Computed.No.name)] = external_data
+                results[(scenario_name, time_period, Scope.External.name)] = external_data
+
+            if len(internal_data) > 0:
+                # results[(scenario_name, time_period, Scope.Internal.name, Computed.No.name)] = internal_data
+                results[(scenario_name, time_period, Scope.Internal.name)] = internal_data
+
+    return results
+
+
+def compute_flow_and_scale_results(state: State, glb_idx, scenario_states: Dict[str, State],
+                                   observation_results: ResultDict,
+                                   time_observations_relative: TimeObservationsType) -> ResultDict:
     # Add Interfaces -Flow- relations (time independent)
     relations_flow = nx.DiGraph(
         incoming_graph_data=create_interface_edges(
@@ -574,15 +606,12 @@ def compute_flow_and_scale_results(state: State, glb_idx, global_parameters, pro
 
     results: ResultDict = {}
 
-    for scenario_name, scenario_params in problem_statement.scenarios.items():  # type: str, dict
+    for scenario_name, scenario_state in scenario_states.items():  # type: str, State
         print(f"********************* SCENARIO: {scenario_name}")
 
-        scenario_state = State(evaluate_parameters_for_scenario(global_parameters, scenario_params))
-
-        for time_period, observations in time_observations_absolute.items():
+        for time_period, observations in [(k[1], v) for k, v in observation_results.items() if k[0] == scenario_name]:
             print(f"********************* TIME PERIOD: {time_period}")
 
-            known_observations: NodeFloatDict = {}
             # Create a copy of the main relations structures that are modified with time-dependent values
             time_relations_flow = relations_flow.copy()
             time_relations_scale = relations_scale.copy()
@@ -599,30 +628,16 @@ def compute_flow_and_scale_results(state: State, glb_idx, global_parameters, pro
                                               InterfaceNode(obs.factor),
                                               weight=expression)
 
-            # Second and last pass to resolve observation expressions with parameters
-            for expression, obs in observations:
-                obs_node = InterfaceNode(obs.factor)
-                if obs_node not in chain(time_relations_flow.nodes, time_relations_scale.nodes, time_relations_scale_change.nodes):
-                    print(f"WARNING: observation at interface '{obs_node}' is not taken into account.")
-                else:
-                    value, _, params, issues = evaluate_numeric_expression_with_parameters(expression, scenario_state)
-                    if value is None:
-                        raise SolvingException(IType.ERROR,
-                            f"Scenario '{scenario_name}' - period '{time_period}'. Cannot evaluate expression "
-                            f"'{expression}' for observation at interface '{obs_node}'. Params: {params}. "
-                            f"Issues: {', '.join(issues)}"
-                        )
-
-                    known_observations[obs_node] = value
-
-            if len(known_observations) == 0:
-                raise SolvingException(IType.ERROR,
-                                       f"Scenario '{scenario_name}' - period '{time_period}'. No 'flowable' or 'scalable' observations available."
-                                       )
-            # assert(len(known_observations) > 0)
+            # Are there observations we can use to resolve the graphs? If not continue
+            if observations.keys().isdisjoint(set().union(time_relations_flow.nodes, time_relations_scale.nodes,
+                                                          time_relations_scale_change.nodes)):
+                # raise SolvingException(IType.ERROR, f"Scenario '{scenario_name}' - period '{time_period}'. No 'flowable' or 'scalable' observations available.")
+                print(f"WARNING: Scenario '{scenario_name}' - period '{time_period}'. No 'flowable' or 'scalable' observations available.")
+                continue
 
             # Second and last pass to resolve weight expressions: expressions with parameters can be solved
-            resolve_weight_expressions([time_relations_flow, time_relations_scale, time_relations_scale_change], scenario_state, raise_error=True)
+            resolve_weight_expressions([time_relations_flow, time_relations_scale, time_relations_scale_change],
+                                       scenario_state, raise_error=True)
 
             # Show graphs with Matplotlib. Use only for debugging!
             # if scenario_name == 'Scenario1' and time_period == '2011':
@@ -639,24 +654,25 @@ def compute_flow_and_scale_results(state: State, glb_idx, global_parameters, pro
             comp_graph_scale_change = ComputationGraph(relations_scale_change)
 
             # Solve computation graphs
-            data, unknown_data = iterative_solving([comp_graph_scale, comp_graph_scale_change, comp_graph_flow],
-                                                   known_observations)
+            data, unknown_data = iterative_solving([comp_graph_scale, comp_graph_scale_change, comp_graph_flow], observations)
 
             print(f"Unknown data: {unknown_data}")
 
             # Filter out results without a real processor
-            data = {k: v for k, v in data.items() if k.processor}
+            data: NodeFloatDict = {k: v for k, v in data.items() if k.processor}
 
-            data = {**known_observations, **data}
+            # results[(scenario_name, time_period, Scope.Total.name, Computed.Yes.name)] = data
             results[(scenario_name, time_period, Scope.Total.name)] = data
 
             # TODO INDICATORS
 
             internal_data, external_data = compute_separated_results(data, comp_graph_flow)
             if len(external_data) > 0:
+                # results[(scenario_name, time_period, Scope.External.name, Computed.Yes.name)] = external_data
                 results[(scenario_name, time_period, Scope.External.name)] = external_data
 
             if len(internal_data) > 0:
+                # results[(scenario_name, time_period, Scope.Internal.name, Computed.Yes.name)] = internal_data
                 results[(scenario_name, time_period, Scope.Internal.name)] = internal_data
 
     return results
@@ -708,7 +724,7 @@ def compute_separated_results(values: NodeFloatDict, comp_graph: ComputationGrap
             if internal_value is not None:
                 internal_results[node] = internal_value
 
-        if node not in external_results and node not in internal_results:
+        if node not in chain(external_results, internal_results):
             # res = compute resulting vector based on containing PROCESSOR
             if node.subsystem.lower() in ["external", "externalenvironment"]:
                 external_results[node] = value
@@ -856,8 +872,26 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
     glb_idx, _, _, datasets, _ = get_case_study_registry_objects(state)
     InterfaceNode.registry = glb_idx
 
+    absolute_observations, relative_observations = \
+        split_observations_by_relativeness(get_evaluated_observations_by_time(glb_idx))
+
+    if len(absolute_observations) == 0:
+        raise SolvingException(
+            IType.WARNING, f"No absolute observations have been found. The solver has nothing to solve."
+        )
+
+    scenario_states: Dict[str, State] = \
+        {scenario_name: State(evaluate_parameters_for_scenario(global_parameters, scenario_params))
+         for scenario_name, scenario_params in problem_statement.scenarios.items()}
+
+    observation_results = get_scenario_evaluated_observation_results(scenario_states, absolute_observations)
+
     try:
-        results = compute_flow_and_scale_results(state, glb_idx, global_parameters, problem_statement)
+        results = compute_flow_and_scale_results(state, glb_idx, scenario_states, observation_results, relative_observations)
+
+        # Add "observation_results" to "results"
+        for key, value in observation_results.items():
+            results[key].update(value)
 
         agg_results = compute_partof_aggregates(glb_idx, input_systems, results)
 
