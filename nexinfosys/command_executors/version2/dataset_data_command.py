@@ -4,7 +4,8 @@ import pandas as pd
 
 from nexinfosys.command_generators import Issue, IssueLocation, IType
 from nexinfosys.model_services import IExecutableCommand, get_case_study_registry_objects
-from nexinfosys.common.helper import strcmp, prepare_dataframe_after_external_read, create_dictionary, any_error_issue
+from nexinfosys.common.helper import strcmp, prepare_dataframe_after_external_read, create_dictionary, any_error_issue, \
+    translate_case
 from nexinfosys.models import CodeImmutable
 from nexinfosys.models.statistical_datasets import CodeList
 
@@ -63,11 +64,15 @@ class DatasetDataCommand(IExecutableCommand):
                             # Loop over "ds" concepts.
                             # - "dimension" concepts of type "string" generate a CodeHierarchy
                             # - Check that the DataFrame contains ALL declared concepts. If not, generate issue
+                            # dims = translate_case([d.code for d in ds.dimensions], df.columns)
+                            cid = create_dictionary(data={col: col for col in df.columns})
+                            col_names = list(df.columns)
                             for c in ds.dimensions:
-                                if c.code in df.columns:
+                                if c.code in cid:
+                                    col_names[df.columns.get_loc(cid[c.code])] = c.code  # Rename column
                                     dsd_concept_data_type = c.attributes["_datatype"]
                                     if dsd_concept_data_type.lower() == "string" and not c.is_measure:  # Freely defined dimension
-                                        cl = df[c.code].unique().tolist()
+                                        cl = df[cid[c.code]].unique().tolist()
                                         c.code_list = CodeList.construct(
                                             c.code, c.code, [""],
                                             codes=[CodeImmutable(c, c, "", []) for c in cl]
@@ -76,6 +81,7 @@ class DatasetDataCommand(IExecutableCommand):
                                     issues.append(Issue(itype=IType.ERROR,
                                                         description=f"Concept '{c.code}' not defined for '{ds.code}'",
                                                         location=IssueLocation(sheet_name=name, row=r, column=None)))
+                            df.columns = col_names
                             ds.data = df
                         dataset_names.remove(dataset_name)
                         break

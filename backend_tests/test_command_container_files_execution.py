@@ -642,7 +642,7 @@ class TestCommandFiles(unittest.TestCase):
         # Close interactive session
         isess.close_db_session()
 
-    def test_023_solving_flow_graph_matrix(self):
+    def test_030_solving_flow_graph_matrix(self):
         file_path = os.path.dirname(
             os.path.abspath(__file__)) + "/z_input_files/v2/15_graph_solver_example.xlsx"
         output_path =  os.path.dirname(
@@ -694,7 +694,7 @@ class TestCommandFiles(unittest.TestCase):
         # Close interactive session
         isess.close_db_session()
 
-    def test_024_export_JupyterNotebook(self):
+    def test_031_export_JupyterNotebook(self):
         from nbformat import write, v4
         text = []
         code = []
@@ -761,7 +761,7 @@ class TestCommandFiles(unittest.TestCase):
         with open(fname, 'w') as f:
             write(nb, f)
 
-    def test_025_new_processor_declaration_convention(self):
+    def test_032_new_processor_declaration_convention(self):
         """
         Test new convention for creation of Processors, using BareProcessors command
         See the descriptions in the file
@@ -865,7 +865,7 @@ if __name__ == '__main__':
         #i.test_026_NL_ES()
         #i.test_027_solving_it2it()
         #i.test_028_dataset_expansion_and_integration()
-        #i.test_029_dataset_expansion2()
-        #i.test_023_solving_flow_graph_matrix()
-        #i.test_024_export_JupyterNotebook()
-        i.test_025_new_processor_declaration_convention()
+        i.test_029_dataset_expansion2()
+        #i.test_030_solving_flow_graph_matrix()
+        #i.test_031_export_JupyterNotebook()
+        #i.test_032_new_processor_declaration_convention()

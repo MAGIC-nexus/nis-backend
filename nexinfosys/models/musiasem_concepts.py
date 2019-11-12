@@ -1096,8 +1096,13 @@ class FactorType(Identifiable, HierarchyNode, HierarchyExpression, Taggable, Qua
         self._roegen_type = roegen_type
         self._sphere = sphere
         self._opposite_processor_type = opposite_processor_type
+        if "unit" in self.attributes:
+            self._default_unit_str = self.attributes["unit"]
+            del self.attributes["unit"]
+        else:
+            self._default_unit_str = None  # TODO A string representing the unit, compatible with the physical type
+
         self._physical_type = None  # TODO Which physical types. An object
-        self._default_unit_str = None  # TODO A string representing the unit, compatible with the physical type
         self._factors = []
 
     def encode(self):
@@ -1150,6 +1155,10 @@ class FactorType(Identifiable, HierarchyNode, HierarchyExpression, Taggable, Qua
     @property
     def sphere(self):
         return self._sphere
+
+    @property
+    def unit(self):
+        return self._default_unit_str
 
     def simple_name(self):
         parts = self.name.split(".")

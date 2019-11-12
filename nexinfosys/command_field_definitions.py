@@ -122,7 +122,7 @@ command_fields: Dict[str, List[CommandField]] = {
         CommandField(allowed_names=["ParentInterfaceType"], name="parent_interface_type", parser=simple_ident),
         CommandField(allowed_names=["Formula", "Expression"], name="formula", parser=unquoted_string),
         CommandField(allowed_names=["Description"], name="description", parser=unquoted_string),
-        CommandField(allowed_names=["Unit"], name="unit", parser=unit_name),
+        CommandField(allowed_names=["Unit"], name="unit", mandatory=True, parser=unit_name),
         CommandField(allowed_names=["OppositeSubsystemType", "OppositeProcessorType"], name="opposite_processor_type",
                      allowed_values=processor_types, parser=simple_ident),
         CommandField(allowed_names=[attributeRegex], name="attributes", many_appearances=True, parser=value),

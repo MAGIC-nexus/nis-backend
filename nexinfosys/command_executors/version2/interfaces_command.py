@@ -1,6 +1,6 @@
 from typing import Dict, Any, Optional, Sequence, List
 
-from pint import UndefinedUnitError
+from pint import UndefinedUnitError, DimensionalityError
 
 from nexinfosys import ureg
 from nexinfosys.command_executors import BasicCommand, subrow_issue_message
@@ -179,7 +179,7 @@ class InterfacesAndQualifiedQuantitiesCommand(BasicCommand):
         # InterfaceType still not found
         if not ft:
             # Find FactorType
-            # TODO Allow creating a basic FactorType if it is not found
+            # TODO Allow creating a basic FactorType if it is not found?
             ft_list: Sequence[FactorType] = self._glb_idx.get(FactorType.partial_key(f_interface_type_name))
             if len(ft_list) == 0:
                 self._add_issue(IType.ERROR, f"InterfaceType '{f_interface_type_name}' not declared previously"+subrow_issue_message(subrow))
@@ -197,6 +197,9 @@ class InterfacesAndQualifiedQuantitiesCommand(BasicCommand):
             "roegen_type": ft.roegen_type,
             "opposite_processor_type": ft.opposite_processor_type
         }
+
+        if not f_unit:
+            f_unit = ft.unit
 
         # Get internal and user-defined attributes in one dictionary
         attributes = {c.name: ifnull(field_values[c.name], default_values.get(c.name))
@@ -229,6 +232,25 @@ class InterfacesAndQualifiedQuantitiesCommand(BasicCommand):
             self._add_issue(IType.WARNING, f"Observer '{f_source}' has not been found."+subrow_issue_message(subrow))
         else:
             oer = oer[0]
+
+        # Unify unit (it must be done before considering RelativeTo -below-, because it adds a transformation to "f_unit")
+        if f_value:
+            if f_unit != ft.unit:
+                try:
+                    conv_factor = ureg(f_unit).to(ft.unit).magnitude
+                except DimensionalityError:
+                    self._add_issue(IType.ERROR,
+                                    f"Dimensions of units in InterfaceType ({ft.unit}) and specified ({f_unit}) are not convertible" + subrow_issue_message(
+                                        subrow))
+                    return
+            else:
+                conv_factor = 1
+            try:
+                f_value = str(float(f_value) * conv_factor)
+            except ValueError:
+                f_value = f"({f_value}) * {conv_factor}"
+
+            f_unit = ft.unit
 
         # Search for a relative_to interface
         f_relative_to_interface: Optional[Factor] = None

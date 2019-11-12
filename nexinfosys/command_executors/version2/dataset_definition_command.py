@@ -177,11 +177,14 @@ class DatasetDefCommand(IExecutableCommand):
                     # Loop over "ds" concepts.
                     # - "dimension" concepts of type "string" generate a CodeHierarchy
                     # - Check that the DataFrame contains ALL declared concepts. If not, generate issue
+                    cid = create_dictionary(data={col: col for col in df.columns})
+                    col_names = list(df.columns)
                     for c in current_ds[ds].dimensions:
                         if c.code in df.columns:
+                            col_names[df.columns.get_loc(cid[c.code])] = c.code  # Rename column
                             dsd_concept_data_type = c.attributes["_datatype"]
                             if dsd_concept_data_type.lower() == "string" and not c.is_measure:  # Freely defined dimension
-                                cl = df[c.code].unique().tolist()
+                                cl = df[cid[c.code]].unique().tolist()
                                 c.code_list = CodeList.construct(
                                     c.code, c.code, [""],
                                     codes=[CodeImmutable(c, c, "", []) for c in cl]
@@ -190,7 +193,7 @@ class DatasetDefCommand(IExecutableCommand):
                             issues.append(Issue(itype=IType.ERROR,
                                                 description=f"Concept '{c.code}' not defined for '{ds}' in {loc}",
                                                 location=IssueLocation(sheet_name=name, row=r, column=None)))
-
+                    df.columns = col_names
                 datasets[ds] = current_ds[ds]
 
         return issues, None
