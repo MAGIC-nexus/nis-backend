@@ -16,6 +16,7 @@ from nexinfosys.models.musiasem_concepts import Observer, \
 from nexinfosys.restful_service import register_external_datasources
 from nexinfosys.restful_service.serialization import serialize_state, deserialize_state
 from nexinfosys.solving import get_processor_names_to_processors_dictionary
+from nexinfosys.common.helper import add_label_columns_to_dataframe
 
 
 class TestFAOCommandFiles(unittest.TestCase):
@@ -91,27 +92,30 @@ class TestCommandFiles(unittest.TestCase):
         # Close interactive session
         isess.close_db_session()
 
-    def test_002_execute_file_two(self):
-        """
-        A file containing QQs for three different sets of processor: Crop, Farm, AgrarianRegion
-        AND UPSCALING
-        (extracted from Almeria case study)
-        Test number of processors read for each category, using processor sets and PartialRetrievalDictionary
-        :return:
-        """
-        file_path = os.path.dirname(os.path.abspath(__file__)) + "/z_input_files/test_spreadsheet_upscale_reduced.xlsx"
-        isess = execute_file(file_path, generator_type="spreadsheet")
-        # # Save state
-        s = serialize_state(isess.state)
-        with open("/home/rnebot/GoogleDrive/AA_MAGIC/MiniAlmeria.serialized", "wt") as f:
-            f.write(s)
-        local_state = deserialize_state(s)
-        # Check State of things
-        glb_idx, p_sets, hh, datasets, mappings = get_case_study_registry_objects(local_state)
-        # Three processor sets
-        self.assertEqual(len(p_sets), 3)
-        # Close interactive session
-        isess.close_db_session()
+    # TEST USING DEPRECATED COMMANDS
+    #
+    # def test_002_execute_file_two(self):
+    #     """
+    #     A file containing QQs for three different sets of processor: Crop, Farm, AgrarianRegion
+    #     AND UPSCALING
+    #     (extracted from Almeria case study)
+    #     Test number of processors read for each category, using processor sets and PartialRetrievalDictionary
+    #     :return:
+    #     """
+    #     file_path = os.path.dirname(os.path.abspath(__file__)) + "/z_input_files/test_spreadsheet_upscale_reduced.xlsx"
+    #     isess = execute_file(file_path, generator_type="spreadsheet")
+    #     # # Save state
+    #     s = serialize_state(isess.state)
+    #     # Changed "wt" to "wb": the output of "serialize_state" is a byte array (it is compressed now)
+    #     with open("/home/rnebot/GoogleDrive/AA_MAGIC/MiniAlmeria.serialized", "wb") as f:
+    #         f.write(s)
+    #     local_state = deserialize_state(s)
+    #     # Check State of things
+    #     glb_idx, p_sets, hh, datasets, mappings = get_case_study_registry_objects(local_state)
+    #     # Three processor sets
+    #     self.assertEqual(len(p_sets), 3)
+    #     # Close interactive session
+    #     isess.close_db_session()
 
     def test_003_execute_file_three(self):
         """
@@ -162,7 +166,8 @@ class TestCommandFiles(unittest.TestCase):
         isess = execute_file(file_path, generator_type="spreadsheet")
         # # Save state
         s = serialize_state(isess.state)
-        with open("/home/rnebot/GoogleDrive/AA_MAGIC/Soslaires.serialized", "wt") as f:
+        # Changed "wt" to "wb": the output of "serialize_state" is a byte array (it is compressed now)
+        with open("/home/rnebot/GoogleDrive/AA_MAGIC/Soslaires.serialized", "wb") as f:
             f.write(s)
         local_state = deserialize_state(s)
         # Check State of things
@@ -294,20 +299,23 @@ class TestCommandFiles(unittest.TestCase):
         # Close interactive session
         isess.close_db_session()
 
-    def test_010_execute_file_v2_four(self):
-        """
-        Brazilian oil case study
+    # File "brazilian oil" deleted
+    # (the following test does not work)
 
-        :return:
-        """
-        file_path = os.path.dirname(os.path.abspath(__file__)) + "/z_input_files/v2/04_brazilian_oil.xlsx"
-        isess = execute_file(file_path, generator_type="spreadsheet")
-        # Check State of things
-        glb_idx, p_sets, hh, datasets, mappings = get_case_study_registry_objects(isess.state)
-        # TODO Check things!!!
-        # self.assertEqual(len(p_sets), 3)
-        # Close interactive session
-        isess.close_db_session()
+    # def test_010_execute_file_v2_four(self):
+    #     """
+    #     Brazilian oil case study
+    #
+    #     :return:
+    #     """
+    #     file_path = os.path.dirname(os.path.abspath(__file__)) + "/z_input_files/v2/04_brazilian_oil.xlsx"
+    #     isess = execute_file(file_path, generator_type="spreadsheet")
+    #     # Check State of things
+    #     glb_idx, p_sets, hh, datasets, mappings = get_case_study_registry_objects(isess.state)
+    #     # TODO Check things!!!
+    #     # self.assertEqual(len(p_sets), 3)
+    #     # Close interactive session
+    #     isess.close_db_session()
 
     def test_011_execute_file_v2_five(self):
         """
@@ -384,53 +392,53 @@ class TestCommandFiles(unittest.TestCase):
         print(ds2.head())
         isess.close_db_session()
 
-    def test_015_execute_file_v2_nine(self):
-        """
-        Dataset queries using Mappings, then use of Datasets to create Processors and Interfaces
+    # def test_015_execute_file_v2_nine(self):
+    #     """
+    #     Dataset queries using Mappings, then use of Datasets to create Processors and Interfaces
+    #
+    #     :return:
+    #     """
+    #     file_path = os.path.dirname(
+    #         os.path.abspath(__file__)) + "/z_input_files/v2/09_mapping_dataset_qry_and_dataset_expansion.xlsx"
+    #     isess = execute_file(file_path, generator_type="spreadsheet")
+    #     # Check State of things
+    #     glb_idx, p_sets, hh, datasets, mappings = get_case_study_registry_objects(isess.state)
+    #     # TODO Check things!!!
+    #     # self.assertEqual(len(p_sets), 3)
+    #     # Close interactive session
+    #     isess.close_db_session()
 
-        :return:
-        """
-        file_path = os.path.dirname(
-            os.path.abspath(__file__)) + "/z_input_files/v2/09_mapping_dataset_qry_and_dataset_expansion.xlsx"
-        isess = execute_file(file_path, generator_type="spreadsheet")
-        # Check State of things
-        glb_idx, p_sets, hh, datasets, mappings = get_case_study_registry_objects(isess.state)
-        # TODO Check things!!!
-        # self.assertEqual(len(p_sets), 3)
-        # Close interactive session
-        isess.close_db_session()
+    # def test_016_execute_file_v2_ten(self):
+    #     """
+    #     Upscaling using Instantiations. Translation of Louisa's file "Electricity state of the play 16.03.xlsm"
+    #
+    #     :return:
+    #     """
+    #     file_path = os.path.dirname(
+    #         os.path.abspath(__file__)) + "/z_input_files/v2/10_electricity_state_of_the_play.xlsx"
+    #     isess = execute_file(file_path, generator_type="spreadsheet")
+    #     # Check State of things
+    #     glb_idx, p_sets, hh, datasets, mappings = get_case_study_registry_objects(isess.state)
+    #     # TODO Check things!!!
+    #     # self.assertEqual(len(p_sets), 3)
+    #     # Close interactive session
+    #     isess.close_db_session()
 
-    def test_016_execute_file_v2_ten(self):
-        """
-        Upscaling using Instantiations. Translation of Louisa's file "Electricity state of the play 16.03.xlsm"
-
-        :return:
-        """
-        file_path = os.path.dirname(
-            os.path.abspath(__file__)) + "/z_input_files/v2/10_electricity_state_of_the_play.xlsx"
-        isess = execute_file(file_path, generator_type="spreadsheet")
-        # Check State of things
-        glb_idx, p_sets, hh, datasets, mappings = get_case_study_registry_objects(isess.state)
-        # TODO Check things!!!
-        # self.assertEqual(len(p_sets), 3)
-        # Close interactive session
-        isess.close_db_session()
-
-    def test_017_execute_file_v2_eleven(self):
-        """
-        Dataset queries using Mappings, then use of resulting Datasets to create Processors and Interfaces
-
-        :return:
-        """
-        file_path = os.path.dirname(
-            os.path.abspath(__file__)) + "/z_input_files/v2/11_dataset_to_musiasem_maddalena.xlsx"
-        isess = execute_file(file_path, generator_type="spreadsheet")
-        # Check State of things
-        glb_idx, p_sets, hh, datasets, mappings = get_case_study_registry_objects(isess.state)
-        # TODO Check things!!!
-        # self.assertEqual(len(p_sets), 3)
-        # Close interactive session
-        isess.close_db_session()
+    # def test_017_execute_file_v2_eleven(self):
+    #     """
+    #     Dataset queries using Mappings, then use of resulting Datasets to create Processors and Interfaces
+    #
+    #     :return:
+    #     """
+    #     file_path = os.path.dirname(
+    #         os.path.abspath(__file__)) + "/z_input_files/v2/11_dataset_to_musiasem_maddalena.xlsx"
+    #     isess = execute_file(file_path, generator_type="spreadsheet")
+    #     # Check State of things
+    #     glb_idx, p_sets, hh, datasets, mappings = get_case_study_registry_objects(isess.state)
+    #     # TODO Check things!!!
+    #     # self.assertEqual(len(p_sets), 3)
+    #     # Close interactive session
+    #     isess.close_db_session()
 
     def test_018_many_to_many_mappings(self):
         """
@@ -449,21 +457,23 @@ class TestCommandFiles(unittest.TestCase):
         datasets["ds1"].data.to_csv("/tmp/09_many_to_many_mapping_ds1_results.csv", index=False)
         isess.close_db_session()
 
-    def test_019_import_commands(self):
-        """
-        Testing import commands
-
-        :return:
-        """
-        file_path = os.path.dirname(
-            os.path.abspath(__file__)) + "/z_input_files/v2/12_import_commands_example.xlsx"
-        isess = execute_file(file_path, generator_type="spreadsheet")
-        # Check State of things
-        glb_idx, p_sets, hh, datasets, mappings = get_case_study_registry_objects(isess.state)
-        # TODO Check things!!!
-        # self.assertEqual(len(p_sets), 3)
-        # Close interactive session
-        isess.close_db_session()
+    # Cannot be tested properly (must place file in "/tmp" directory first)
+    #
+    # def test_019_import_commands(self):
+    #     """
+    #     Testing import commands
+    #
+    #     :return:
+    #     """
+    #     file_path = os.path.dirname(
+    #         os.path.abspath(__file__)) + "/z_input_files/v2/12_import_commands_example.xlsx"
+    #     isess = execute_file(file_path, generator_type="spreadsheet")
+    #     # Check State of things
+    #     glb_idx, p_sets, hh, datasets, mappings = get_case_study_registry_objects(isess.state)
+    #     # TODO Check things!!!
+    #     # self.assertEqual(len(p_sets), 3)
+    #     # Close interactive session
+    #     isess.close_db_session()
 
     def test_020_list_of_commands(self):
         """
@@ -537,40 +547,40 @@ class TestCommandFiles(unittest.TestCase):
         # Close interactive session
         isess.close_db_session()
 
-    def test_025_biofuel(self):
-        file_path = os.path.dirname(
-            os.path.abspath(__file__)) + "/z_input_files/v2/Biofuel_NIS.xlsx"
-        isess, issues = execute_file_return_issues(file_path, generator_type="spreadsheet")
-        issues2 = prepare_and_solve_model(isess.state)
-        serialize_state(isess.state)
-        # Check State of things
-        self.assertEqual(len(issues), 6)  # One issue
-        glb_idx, p_sets, hh, datasets, mappings = get_case_study_registry_objects(isess.state)
-        p = glb_idx.get(Processor.partial_key("Society"))
-        self.assertEqual(len(p), 1)
-        p = p[0]
-        self.assertEqual(len(p.factors), 2)
-        f = glb_idx.get(Factor.partial_key(p, None, name="Bioethanol"))
-        self.assertEqual(len(f), 1)
-        self.assertEqual(len(f[0].observations), 2)
-        # TODO These Observations are not registered, uncomment in case they are
-        # obs = glb_idx.get(FactorQuantitativeObservation.partial_key(f[0]))
-        #self.assertEqual(len(obs), 2)
-        f = glb_idx.get(Factor.partial_key(p, None, name="Biodiesel"))
-        self.assertEqual(len(f), 1)
-        self.assertEqual(len(f[0].observations), 2)
-        # Close interactive session
-        isess.close_db_session()
+    # def test_025_biofuel(self):
+    #     file_path = os.path.dirname(
+    #         os.path.abspath(__file__)) + "/z_input_files/v2/Biofuel_NIS.xlsx"
+    #     isess, issues = execute_file_return_issues(file_path, generator_type="spreadsheet")
+    #     issues2 = prepare_and_solve_model(isess.state)
+    #     serialize_state(isess.state)
+    #     # Check State of things
+    #     self.assertEqual(len(issues), 6)  # One issue
+    #     glb_idx, p_sets, hh, datasets, mappings = get_case_study_registry_objects(isess.state)
+    #     p = glb_idx.get(Processor.partial_key("Society"))
+    #     self.assertEqual(len(p), 1)
+    #     p = p[0]
+    #     self.assertEqual(len(p.factors), 2)
+    #     f = glb_idx.get(Factor.partial_key(p, None, name="Bioethanol"))
+    #     self.assertEqual(len(f), 1)
+    #     self.assertEqual(len(f[0].observations), 2)
+    #     # TODO These Observations are not registered, uncomment in case they are
+    #     # obs = glb_idx.get(FactorQuantitativeObservation.partial_key(f[0]))
+    #     #self.assertEqual(len(obs), 2)
+    #     f = glb_idx.get(Factor.partial_key(p, None, name="Biodiesel"))
+    #     self.assertEqual(len(f), 1)
+    #     self.assertEqual(len(f[0].observations), 2)
+    #     # Close interactive session
+    #     isess.close_db_session()
 
-    def test_026_NL_ES(self):
-        file_path = os.path.dirname(
-            os.path.abspath(__file__)) + "/../../nis-internal-tests/NL_ES.xlsx"
-        isess, issues = execute_file_return_issues(file_path, generator_type="spreadsheet")
-        # Check State of things
-        self.assertEqual(len(issues), 1)  # Just one issue
-        glb_idx, p_sets, hh, datasets, mappings = get_case_study_registry_objects(isess.state)
-        # Close interactive session
-        isess.close_db_session()
+    # def test_026_NL_ES(self):
+    #     file_path = os.path.dirname(
+    #         os.path.abspath(__file__)) + "/../../nis-internal-tests/NL_ES.xlsx"
+    #     isess, issues = execute_file_return_issues(file_path, generator_type="spreadsheet")
+    #     # Check State of things
+    #     self.assertEqual(len(issues), 1)  # Just one issue
+    #     glb_idx, p_sets, hh, datasets, mappings = get_case_study_registry_objects(isess.state)
+    #     # Close interactive session
+    #     isess.close_db_session()
 
     def test_027_solving_it2it(self):
         file_path = os.path.dirname(
@@ -588,24 +598,24 @@ class TestCommandFiles(unittest.TestCase):
         # Close interactive session
         isess.close_db_session()
 
-    def test_028_dataset_expansion_and_integration(self):
-        file_path = os.path.dirname(
-            os.path.abspath(__file__)) + "/../../nis-internal-tests/test_dataset_expansion.xlsx"
-
-        isess = execute_file(file_path, generator_type="spreadsheet")
-
-        # issues = prepare_and_solve_model(isess.state)
-        # for idx, issue in enumerate(issues):
-        #     print(f"Issue {idx + 1}/{len(issues)} = {issue}")
-
-        # Check State of things
-        glb_idx, p_sets, hh, datasets, mappings = get_case_study_registry_objects(isess.state)
-        p = glb_idx.get(Processor.partial_key())
-        self.assertGreater(len(p), 50)
-        p = p[0]
-
-        # Close interactive session
-        isess.close_db_session()
+    # def test_028_dataset_expansion_and_integration(self):
+    #     file_path = os.path.dirname(
+    #         os.path.abspath(__file__)) + "/../../nis-internal-tests/test_dataset_expansion.xlsx"
+    #
+    #     isess = execute_file(file_path, generator_type="spreadsheet")
+    #
+    #     # issues = prepare_and_solve_model(isess.state)
+    #     # for idx, issue in enumerate(issues):
+    #     #     print(f"Issue {idx + 1}/{len(issues)} = {issue}")
+    #
+    #     # Check State of things
+    #     glb_idx, p_sets, hh, datasets, mappings = get_case_study_registry_objects(isess.state)
+    #     p = glb_idx.get(Processor.partial_key())
+    #     self.assertGreater(len(p), 50)
+    #     p = p[0]
+    #
+    #     # Close interactive session
+    #     isess.close_db_session()
 
     def test_029_dataset_expansion2(self):
         """
@@ -751,6 +761,39 @@ class TestCommandFiles(unittest.TestCase):
         with open(fname, 'w') as f:
             write(nb, f)
 
+    def test_025_new_processor_declaration_convention(self):
+        """
+        Test new convention for creation of Processors, using BareProcessors command
+        See the descriptions in the file
+
+        :return:
+        """
+        file_path = os.path.dirname(
+            os.path.abspath(__file__)) + "/z_input_files/v2/19_naming_processors_new_convention.xlsx"
+
+        isess = execute_file(file_path, generator_type="spreadsheet")
+
+        # issues = prepare_and_solve_model(isess.state)
+        # for idx, issue in enumerate(issues):
+        #     print(f"Issue {idx + 1}/{len(issues)} = {issue}")
+
+        # Check State of things
+        glb_idx, p_sets, hh, datasets, mappings = get_case_study_registry_objects(isess.state)
+        ps = glb_idx.get(Processor.partial_key())
+        lst1 = []
+        for p in ps:
+            lst = p.full_hierarchy_names(glb_idx)
+            lst1.extend(lst)
+        p1 = glb_idx.get(Processor.partial_key("P2.C"))
+        p2 = glb_idx.get(Processor.partial_key("P3.C"))
+        self.assertEqual(p1[0], p2[0])
+        p = glb_idx.get(Processor.partial_key("P1.C.P2"))
+        self.assertEqual(len(p), 1)
+
+        # Close interactive session
+        isess.close_db_session()
+
+
 if __name__ == '__main__':
     # import pandas as pd
     # import openpyxl
@@ -786,8 +829,6 @@ if __name__ == '__main__':
     #
     # a = 1 / 0
 
-    from nexinfosys.common.helper import add_label_columns_to_dataframe
-
     is_fao_test = False
     fao_dir = "/home/marco/temp/Data/FAOSTAT/"
     if is_fao_test:
@@ -812,7 +853,7 @@ if __name__ == '__main__':
         #i.test_011_execute_file_v2_five()  # Dataset
         #i.test_012_execute_file_v2_six()  # Almeria using v2 commands and v1 upscale
         #i.test_013_execute_file_v2_seven()  # Custom datasets
-        i.test_014_execute_file_v2_eight()
+        #i.test_014_execute_file_v2_eight()
         #i.test_018_many_to_many_mappings()
         #i.test_019_import_commands()
         #i.test_020_list_of_commands()
@@ -827,3 +868,4 @@ if __name__ == '__main__':
         #i.test_029_dataset_expansion2()
         #i.test_023_solving_flow_graph_matrix()
         #i.test_024_export_JupyterNotebook()
+        i.test_025_new_processor_declaration_convention()

@@ -36,7 +36,7 @@ from nexinfosys.models.musiasem_methodology_support import (User,
                                                             DBSession, ORMBase, load_table, Authenticator, CaseStudyStatus,
                                                             ObjectType, PermissionType)
 from nexinfosys.restful_service import tm_default_users, tm_authenticators, tm_case_study_version_statuses, \
-    tm_object_types, tm_permissions
+    tm_object_types, tm_permissions, default_cmds
 from nexinfosys.restful_service.serialization import serialize_state, deserialize_state
 from nexinfosys.solving import BasicQuery
 from nexinfosys.solving.flow_graph_solver import flow_graph_solver, evaluate_parameters_for_scenario, get_dataset
@@ -193,7 +193,7 @@ def execute_command_container_file(state, generator_type, file_type: str, file):
             c = "\n"
             print(f"Issues:\n{c.join([i.message for i in issues])}")
         else:
-            print(f"{type(cmd)} {cmd._source_block_name}; # syntax issues: {len(issues)}")
+            print(f"{type(cmd)} {cmd._source_block_name if hasattr(cmd, '_source_block_name') else ''}; # syntax issues: {len(issues)}")
         cmd_number += 1  # Command counter
 
         errors_exist = False
@@ -1027,7 +1027,7 @@ class ReproducibleSession:
 
 def execute_file_return_issues(file_name, generator_type):
     """
-    Execution of files in the context of tests
+    Execution of files in the context of TESTS
 
     :param file_name:
     :param generator_type:
@@ -1047,8 +1047,13 @@ def execute_file_return_issues(file_name, generator_type):
                                     recover_previous_state=None,
                                     cr_new=CreateNew.CASE_STUDY,
                                     allow_saving=False)
-    with open(file_name, read_type) as f:
-        buffer = f.read()
+
+    # Add system-level entities from JSON definition in "default_cmds"
+    ret = isess.register_andor_execute_command_generator("json", "application/json", default_cmds, False, True)
+
+    # Execute current file
+    with open(file_name, read_type) as f1:
+        buffer = f1.read()
 
     issues, output = isess.register_andor_execute_command_generator(generator_type, content_type, buffer, False, True)
 
@@ -1064,7 +1069,7 @@ def execute_file_return_issues(file_name, generator_type):
 
 def execute_file(file_name, generator_type):
     """
-    Execution of files in the context of tests
+    Execution of files in the context of TESTS
 
     :param file_name:
     :param generator_type:

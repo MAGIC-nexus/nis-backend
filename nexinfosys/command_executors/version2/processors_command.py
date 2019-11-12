@@ -313,8 +313,9 @@ class ProcessorsCommand(BasicCommand):
                 return
             o1 = ProcessorsRelationPartOfObservation.create_and_append(parent_processor, p, None)  # Part-of
             self._glb_idx.put(o1.key(), o1)
-            p_key = Processor.partial_key(f"{parent_processor.name}.{name}", p.ident)
-            if attributes:
-                p_key.update({k: ("" if v is None else v) for k, v in attributes.items()})
-            self._glb_idx.put(p_key, p)
+            for hname in parent_processor.full_hierarchy_names(self._glb_idx):
+                p_key = Processor.partial_key(f"{hname}.{p.name}", p.ident)
+                if attributes:
+                    p_key.update({k: ("" if v is None else v) for k, v in attributes.items()})
+                self._glb_idx.put(p_key, p)
 

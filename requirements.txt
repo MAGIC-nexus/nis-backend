@@ -52,7 +52,8 @@ openpyxl==2.4.8
 xlsxwriter==1.0.4
 #koala2==0.0.17
 lxml==4.3.3
-jsonpickle==0.9.6
+#jsonpickle==0.9.6
+jsonpickle==1.2
 python_magic>=0.4.13  # To be removed, it is used only by the Magic Box file type detection
 dotted>=0.1.8 # <- Dotted notation: !!Fantastic!!
 sympy>=1.1.1
