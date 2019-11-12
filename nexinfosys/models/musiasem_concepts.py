@@ -1785,24 +1785,24 @@ class ProcessorsSet(Nameable):
 
 class RelationClassType(Enum):
     # Relations between Processors
-    pp_part_of = ("part_of", "partof", "|")  # Left is inside Right. No assumptions on flows between child and parent.
-    pp_undirected_flow = ("<>", "><")
-    pp_upscale = "||"
-    pp_isa = ("is_a", "isa")  # "Left" gets a copy of ALL "Right" interface types
-    # pp_asa = ("as_a", "asa")  # Left must already have ALL interfaces from Right. Similar to "part-of" in the sense that ALL Right interfaces are connected from Left to Right
-    # pp_compose = "compose"
-    pp_aggregate = ("aggregate", "aggregation")
-    pp_associate = ("associate", "association")
+    pp_part_of = ("part_of", "partof", "|")  # Left depends on function Right. No assumptions on flows between child and parent.
+    pp_undirected_flow = ("<>", "><")  # There are flows (unspecified) between two processors
+    pp_upscale = "||"  # Clone + Scale. Not used because cloning is resolved directly
+    pp_isa = ("is_a", "isa")  # "Left" gets a copy of ALL interfaces of Right (Left behaves like Right)
+    pp_asa = ("as_a", "asa")  # Left must already have ALL interfaces from Right ("see Left as if it were Right, reduce its view)
+    pp_compose = "compose"  # Right is physically inside Left
+    pp_aggregate = ("aggregate", "aggregation")  # Left aggregates Right (similar to compose)
+    pp_associate = ("associate", "association")  # Left is associated, by an unspecified relation type, to Right
 
     # Relations between Interfaces
-    ff_directed_flow = ("flow", ">")
-    ff_reverse_directed_flow = "<"
-    ff_scale = "scale"
-    ff_directed_flow_back = ("flowback", "flow_back")
-    ff_scale_change = ("scalechange", "scale_change")
+    ff_directed_flow = ("flow", ">")  # Exchange from Interface in Left to Interface in Right
+    ff_reverse_directed_flow = "<"  # Exchange from Interface in Right to Interface in Left
+    ff_scale = "scale"  # Interface in Left scales Interface in Right
+    ff_directed_flow_back = ("flowback", "flow_back")  # Due to a directed flow, there is a flow back, from Interface in Right to Interface in Left
+    ff_scale_change = ("scalechange", "scale_change")  # Transform InterfaceTypes inside Interfaces of a processor
 
     # Relations between Interface Types
-    ftft_directed_linear_transform = "interface_type_change"
+    ftft_directed_linear_transform = "interface_type_change"  # Transform InterfaceTypes between Interfaces of two processors, connected by Flow or Scale
 
     def __init__(self, *labels):
         self.labels = labels
@@ -1831,6 +1831,14 @@ class RelationClassType(Enum):
     @staticmethod
     def all_labels() -> List[str]:
         return [label for member in list(RelationClassType) for label in member.labels]
+
+    @staticmethod
+    def relationships_command_labels() -> List[str]:
+        # Relationship types supported by "Relationships" command
+        supported_relationships = [RelationClassType.pp_part_of, RelationClassType.ff_directed_flow,
+                                   RelationClassType.ff_reverse_directed_flow, RelationClassType.ff_scale,
+                                   RelationClassType.ff_directed_flow_back]
+        return [label for member in list(supported_relationships) for label in member.labels]
 
 
 class FactorQuantitativeObservation(Taggable, Qualifiable, Automatable, Encodable):
