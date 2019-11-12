@@ -50,22 +50,20 @@ An interesting paper: "A survey of RDB to RDF translation approaches and tools"
 """
 
 import collections
-import json
 import logging
 from collections import OrderedDict
 from enum import Enum
 from typing import *  # Type hints
 
 import pandas as pd
-import pint  # Physical Units management
 
 from nexinfosys.common.helper import create_dictionary, strcmp, PartialRetrievalDictionary, \
     case_sensitive, is_boolean, is_integer, is_float, is_datetime, is_url, is_uuid, to_datetime, to_integer, to_float, \
     to_url, to_uuid, to_boolean, to_category, to_str, is_category, is_str, is_geo, to_geo, ascii2uuid, \
-    Encodable, name_and_id_dict, ifnull, FloatOrString, UnitConversion
+    Encodable, name_and_id_dict, ifnull, UnitConversion
 from nexinfosys.model_services import State, get_case_study_registry_objects, LocallyUniqueIDManager
 from nexinfosys.models import CodeImmutable
-from nexinfosys.models import ureg, log_level
+from nexinfosys.models import log_level
 
 logger = logging.getLogger(__name__)
 logger.setLevel(log_level)

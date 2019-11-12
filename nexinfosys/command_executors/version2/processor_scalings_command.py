@@ -1,14 +1,14 @@
 from typing import List, Dict, Union, Any, Tuple
 
+from nexinfosys.command_executors import BasicCommand, CommandExecutionError, subrow_issue_message
 from nexinfosys.command_field_definitions import get_command_fields_from_class
 from nexinfosys.command_generators import IType
 from nexinfosys.command_generators.parser_ast_evaluators import ast_evaluator, dictionary_from_key_value_list
 from nexinfosys.command_generators.parser_field_parsers import string_to_ast, expression_with_parameters
-from nexinfosys.common.helper import strcmp
+from nexinfosys.common.helper import strcmp, first, FloatOrString
 from nexinfosys.model_services import State
 from nexinfosys.models.musiasem_concepts import Processor, ProcessorsRelationPartOfObservation, \
-    FactorsRelationScaleObservation, Geolocation, ProcessorsSet
-from nexinfosys.command_executors import BasicCommand, CommandExecutionError, subrow_issue_message
+    FactorsRelationScaleObservation, ProcessorsSet
 
 
 class ProcessorScalingsCommand(BasicCommand):
@@ -22,6 +22,10 @@ class ProcessorScalingsCommand(BasicCommand):
         # Find processors
         invoking_processor = self._get_processor_from_field("invoking_processor")
         requested_processor = self._get_processor_from_field("requested_processor")
+
+        if invoking_processor == requested_processor:
+            raise CommandExecutionError(f"Invoking and Requested processors cannot be the same '{invoking_processor.name}'. "
+                                        f"Use the 'relative_to' attribute in 'Interfaces' command instead.")
 
         invoking_interface_name: str = fields["invoking_interface"]
         requested_interface_name: str = fields["requested_interface"]
@@ -165,19 +169,22 @@ class ProcessorScalingsCommand(BasicCommand):
                               requested_interface_name: str,
                               parent_processor: Processor,
                               child_processor: Processor):
-        for f in parent_processor.factors:
-            if strcmp(f.name, invoking_interface_name):
-                origin_factor = f
-                break
-        else:
+
+        origin_factor = first(parent_processor.factors, lambda i: strcmp(i.name, invoking_interface_name))
+
+        if not origin_factor:
             raise Exception("Invoking interface name '"+invoking_interface_name+"' not found for processor '"+parent_processor.name+"'")
 
-        for f in child_processor.factors:
-            if strcmp(f.name, requested_interface_name):
-                destination_factor = f
-                break
-        else:
+        destination_factor = first(child_processor.factors, lambda i: strcmp(i.name, requested_interface_name))
+
+        if not destination_factor:
             raise Exception("Requested interface name '"+invoking_interface_name+"' not found for processor '"+parent_processor.name+"'")
+
+        if origin_factor.taxon != destination_factor.taxon:
+            # Search for an Interface Type Conversion defined in the ScaleChangeMap command
+            interface_types_transform = self._get_interface_types_transform(origin_factor.taxon, parent_processor,
+                                                                            destination_factor.taxon, child_processor)
+            scale = FloatOrString.multiply(scale, interface_types_transform.scaled_weight)
 
         relationship = FactorsRelationScaleObservation.create_and_append(origin=origin_factor,
                                                                          destination=destination_factor,
