@@ -12,7 +12,7 @@ from nexinfosys.models.musiasem_concepts import PedigreeMatrix, FactorType, \
     Factor, FactorInProcessorType, Observer, GeographicReference, ProvenanceReference, \
     BibliographicReference, FactorTypesRelationUnidirectionalLinearTransformObservation
 from nexinfosys.models.musiasem_concepts_helper import _create_or_append_quantitative_observation, \
-    find_processors_matching_name, find_factor_types_transform_relation
+    find_observable_by_name, find_factor_types_transform_relation
 
 
 class InterfacesAndQualifiedQuantitiesCommand(BasicCommand):
