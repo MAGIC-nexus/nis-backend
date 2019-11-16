@@ -153,7 +153,7 @@ class Computed(Enum):
 
 NodeFloatDict = Dict[InterfaceNode, float]
 # Key = Tuple[scenario_name, time_period, Scope, Computed]
-ResultDict = Dict[Tuple[str, str, str], NodeFloatDict]
+ResultDict = Dict[Tuple[str, str, str, str], NodeFloatDict]
 
 
 @Memoize
@@ -562,17 +562,14 @@ def get_scenario_evaluated_observation_results(scenario_states: Dict[str, State]
 
                 resolved_observations[InterfaceNode(obs.factor)] = value
 
-            # results[(scenario_name, time_period, Scope.Total.name, Computed.No.name)] = resolved_observations
-            results[(scenario_name, time_period, Scope.Total.name)] = resolved_observations
+            results[(scenario_name, time_period, Scope.Total.name, Computed.No.name)] = resolved_observations
 
             internal_data, external_data = compute_internal_external_results(resolved_observations)
             if len(external_data) > 0:
-                # results[(scenario_name, time_period, Scope.External.name, Computed.No.name)] = external_data
-                results[(scenario_name, time_period, Scope.External.name)] = external_data
+                results[(scenario_name, time_period, Scope.External.name, Computed.No.name)] = external_data
 
             if len(internal_data) > 0:
-                # results[(scenario_name, time_period, Scope.Internal.name, Computed.No.name)] = internal_data
-                results[(scenario_name, time_period, Scope.Internal.name)] = internal_data
+                results[(scenario_name, time_period, Scope.Internal.name, Computed.No.name)] = internal_data
 
     return results
 
@@ -660,19 +657,16 @@ def compute_flow_and_scale_results(state: State, glb_idx, scenario_states: Dict[
             # Filter out results without a real processor
             data: NodeFloatDict = {k: v for k, v in data.items() if k.processor}
 
-            # results[(scenario_name, time_period, Scope.Total.name, Computed.Yes.name)] = data
-            results[(scenario_name, time_period, Scope.Total.name)] = data
+            results[(scenario_name, time_period, Scope.Total.name, Computed.Yes.name)] = data
 
             # TODO INDICATORS
 
             internal_data, external_data = compute_internal_external_results(data, comp_graph_flow)
             if len(external_data) > 0:
-                # results[(scenario_name, time_period, Scope.External.name, Computed.Yes.name)] = external_data
-                results[(scenario_name, time_period, Scope.External.name)] = external_data
+                results[(scenario_name, time_period, Scope.External.name, Computed.Yes.name)] = external_data
 
             if len(internal_data) > 0:
-                # results[(scenario_name, time_period, Scope.Internal.name, Computed.Yes.name)] = internal_data
-                results[(scenario_name, time_period, Scope.Internal.name)] = internal_data
+                results[(scenario_name, time_period, Scope.Internal.name, Computed.Yes.name)] = internal_data
 
     return results
 
@@ -734,7 +728,7 @@ def compute_internal_external_results(values: NodeFloatDict, comp_graph: Optiona
     return internal_results, external_results
 
 
-def compute_interfacetype_aggregates(glb_idx, results):
+def compute_interfacetype_aggregates(glb_idx: PartialRetrievalDictionary, results: ResultDict) -> ResultDict:
 
     def get_sum(processor: Processor, children: Set[FactorType]) -> float:
         sum_children = None
@@ -872,6 +866,7 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
     glb_idx, _, _, datasets, _ = get_case_study_registry_objects(state)
     InterfaceNode.registry = glb_idx
 
+    # Get available observations
     absolute_observations, relative_observations = \
         split_observations_by_relativeness(get_evaluated_observations_by_time(glb_idx))
 
@@ -880,18 +875,19 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
             IType.WARNING, f"No absolute observations have been found. The solver has nothing to solve."
         )
 
+    # Get a list of scenario states, each one being a combination of the global state with a specific scenario state
     scenario_states: Dict[str, State] = \
         {scenario_name: State(evaluate_parameters_for_scenario(global_parameters, scenario_params))
          for scenario_name, scenario_params in problem_statement.scenarios.items()}
 
+    # Get final results from the absolute observations
     observation_results = get_scenario_evaluated_observation_results(scenario_states, absolute_observations)
 
     try:
         results = compute_flow_and_scale_results(state, glb_idx, scenario_states, observation_results, relative_observations)
 
-        # Add "observation_results" to "results"
-        for key, value in observation_results.items():
-            results[key].update(value)
+        # Merge "observation_results" with "results"
+        results = {**observation_results, **results}
 
         agg_results = compute_partof_aggregates(glb_idx, input_systems, results)
 
@@ -925,7 +921,7 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
     df = df.round(3)
 
     # Give a name to the dataframe indexes
-    index_names = ["Scenario", "Period", "Scope"] + InterfaceNode.key_labels()  # "Processor", "Interface", "Orientation"
+    index_names = ["Scenario", "Period", "Scope", "Computed"] + InterfaceNode.key_labels()  # "Processor", "Interface", "Orientation"
     df.index.names = index_names
 
     # Sort the dataframe based on indexes. Not necessary, only done for debugging purposes.
