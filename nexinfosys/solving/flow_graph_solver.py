@@ -565,8 +565,7 @@ def get_scenario_evaluated_observation_results(scenario_states: Dict[str, State]
             # results[(scenario_name, time_period, Scope.Total.name, Computed.No.name)] = resolved_observations
             results[(scenario_name, time_period, Scope.Total.name)] = resolved_observations
 
-            empty_graph: ComputationGraph = ComputationGraph()
-            internal_data, external_data = compute_separated_results(resolved_observations, empty_graph)
+            internal_data, external_data = compute_internal_external_results(resolved_observations, None)
             if len(external_data) > 0:
                 # results[(scenario_name, time_period, Scope.External.name, Computed.No.name)] = external_data
                 results[(scenario_name, time_period, Scope.External.name)] = external_data
@@ -666,7 +665,7 @@ def compute_flow_and_scale_results(state: State, glb_idx, scenario_states: Dict[
 
             # TODO INDICATORS
 
-            internal_data, external_data = compute_separated_results(data, comp_graph_flow)
+            internal_data, external_data = compute_internal_external_results(data, comp_graph_flow)
             if len(external_data) > 0:
                 # results[(scenario_name, time_period, Scope.External.name, Computed.Yes.name)] = external_data
                 results[(scenario_name, time_period, Scope.External.name)] = external_data
@@ -694,12 +693,12 @@ def create_computation_graph_from_flows(relations_flow: nx.DiGraph, relations_sc
     return comp_graph_flow
 
 
-def compute_separated_results(values: NodeFloatDict, comp_graph: ComputationGraph) -> Tuple[NodeFloatDict, NodeFloatDict]:
+def compute_internal_external_results(values: NodeFloatDict, comp_graph: Optional[ComputationGraph]) -> Tuple[NodeFloatDict, NodeFloatDict]:
     internal_results: NodeFloatDict = {}
     external_results: NodeFloatDict = {}
     for node, value in values.items():
 
-        if node in comp_graph.graph:
+        if comp_graph is not None and node in comp_graph.graph:
             if node.orientation.lower() == 'input':
                 # res = compute resulting vector based on INCOMING flows processor.subsystem_type
                 edges: Set[Tuple[InterfaceNode, InterfaceNode, Dict]] = comp_graph.graph.in_edges(node, data=True)
