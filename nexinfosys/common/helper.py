@@ -1453,6 +1453,12 @@ def add_label_columns_to_dataframe(ds_name, df, prd):
     return df
 
 
+def change_tuple_value(t: Tuple, index: int, value: Any) -> Tuple:
+    lst = list(t)
+    lst[index] = value
+    return tuple(lst)
+
+
 if __name__ == '__main__':
     import random
     import string

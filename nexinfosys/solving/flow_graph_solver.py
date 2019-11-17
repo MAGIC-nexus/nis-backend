@@ -151,9 +151,27 @@ class Computed(Enum):
     Yes = 2
 
 
+class ResultKey(NamedTuple):
+    scenario: str
+    period: str
+    scope: Scope
+    computed: Computed
+
+    def as_string_tuple(self) -> Tuple[str, str, str, str]:
+        return self.scenario, self.period, self.scope.name, self.computed.name
+
+    @staticmethod
+    def remove_field_to_produce_dict(dic: Dict[NamedTuple, Dict], field: str) -> Dict[Tuple, Dict]:
+        new_dic: Dict[Tuple, Dict] = {}
+        for k, v in dic.items():
+            new_k = tuple(fv for fk, fv in k._asdict().items() if fk != field)
+            new_dic.setdefault(new_k, {}).update(v)
+
+        return new_dic
+
+
 NodeFloatDict = Dict[InterfaceNode, float]
-# Key = Tuple[scenario_name, time_period, Scope, Computed]
-ResultDict = Dict[Tuple[str, str, str, str], NodeFloatDict]
+ResultDict = Dict[ResultKey, NodeFloatDict]
 
 
 @Memoize
@@ -562,14 +580,15 @@ def get_scenario_evaluated_observation_results(scenario_states: Dict[str, State]
 
                 resolved_observations[InterfaceNode(obs.factor)] = value
 
-            results[(scenario_name, time_period, Scope.Total.name, Computed.No.name)] = resolved_observations
+            result_key = ResultKey(scenario_name, time_period, Scope.Total, Computed.No)
+            results[result_key] = resolved_observations
 
             internal_data, external_data = compute_internal_external_results(resolved_observations)
             if len(external_data) > 0:
-                results[(scenario_name, time_period, Scope.External.name, Computed.No.name)] = external_data
+                results[result_key._replace(scope=Scope.External)] = external_data
 
             if len(internal_data) > 0:
-                results[(scenario_name, time_period, Scope.Internal.name, Computed.No.name)] = internal_data
+                results[result_key._replace(scope=Scope.Internal)] = internal_data
 
     return results
 
@@ -657,16 +676,17 @@ def compute_flow_and_scale_results(state: State, glb_idx, scenario_states: Dict[
             # Filter out results without a real processor
             data: NodeFloatDict = {k: v for k, v in data.items() if k.processor}
 
-            results[(scenario_name, time_period, Scope.Total.name, Computed.Yes.name)] = data
+            result_key = ResultKey(scenario_name, time_period, Scope.Total, Computed.Yes)
+            results[result_key] = data
 
             # TODO INDICATORS
 
             internal_data, external_data = compute_internal_external_results(data, comp_graph_flow)
             if len(external_data) > 0:
-                results[(scenario_name, time_period, Scope.External.name, Computed.Yes.name)] = external_data
+                results[result_key._replace(scope=Scope.External)] = external_data
 
             if len(internal_data) > 0:
-                results[(scenario_name, time_period, Scope.Internal.name, Computed.Yes.name)] = internal_data
+                results[result_key._replace(scope=Scope.Internal)] = internal_data
 
     return results
 
@@ -833,8 +853,6 @@ def compute_partof_aggregates(glb_idx: PartialRetrievalDictionary,
                                                           if values.get(k) is not None}
 
                         if len(filtered_values) > 0:
-                            print(f"*** (Results key = {key})")
-
                             # Aggregate top-down, starting from root
                             agg_res, error_msg = compute_aggregate_results(interfaced_proc_hierarchy, filtered_values)
 
@@ -844,7 +862,8 @@ def compute_partof_aggregates(glb_idx: PartialRetrievalDictionary,
                                                  f"Orientation: '{orientation}'. Error: {error_msg}")
 
                             if len(agg_res) > 0:
-                                agg_results.setdefault(key, {}).update(agg_res)
+                                computed_key = ResultKey(key[0], key[1], key[2], Computed.Yes)
+                                agg_results.setdefault(computed_key, {}).update(agg_res)
 
     return agg_results
 
@@ -887,7 +906,7 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
         results = compute_flow_and_scale_results(state, glb_idx, scenario_states, observation_results, relative_observations)
 
         # Merge "observation_results" with "results"
-        results = {**observation_results, **results}
+        results: ResultDict = {**observation_results, **results}
 
         agg_results = compute_partof_aggregates(glb_idx, input_systems, results)
 
@@ -904,14 +923,15 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
     for key, value in agg_results.items():
         results[key].update(value)
 
-    data = {k + node.key: {"RoegenType": node.roegen_type if node else "-",
-                           "Value": value,
-                           "Unit": node.unit if node else "-",
-                           "Level": node.processor.attributes.get('level', '') if node else "-",
-                           "System": node.system if node else "-",
-                           "Subsystem": node.subsystem if node else "-",
-                           "Sphere": node.sphere if node else "-"
-                           }
+    data = {k.as_string_tuple() + node.key:
+                {"RoegenType": node.roegen_type if node else "-",
+                 "Value": value,
+                 "Unit": node.unit if node else "-",
+                 "Level": node.processor.attributes.get('level', '') if node else "-",
+                 "System": node.system if node else "-",
+                 "Subsystem": node.subsystem if node else "-",
+                 "Sphere": node.sphere if node else "-"
+                }
             for k, v in results.items()
             for node, value in v.items()}
 
@@ -921,7 +941,7 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
     df = df.round(3)
 
     # Give a name to the dataframe indexes
-    index_names = ["Scenario", "Period", "Scope", "Computed"] + InterfaceNode.key_labels()  # "Processor", "Interface", "Orientation"
+    index_names = [f.title() for f in ResultKey._fields] + InterfaceNode.key_labels()  # "Processor", "Interface", "Orientation"
     df.index.names = index_names
 
     # Sort the dataframe based on indexes. Not necessary, only done for debugging purposes.
