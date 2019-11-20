@@ -815,6 +815,12 @@ def compute_partof_aggregates(glb_idx: PartialRetrievalDictionary,
                               systems: Dict[str, Set[Processor]],
                               results: ResultDict):
     agg_results: ResultDict = {}
+    # We need to remove the computed column from key because we want to aggregate values no matter they are
+    # computed or not. The results of course will be of type Computed.Yes.
+    # TODO: another solution would be to work in flow_graph_solver() without the "Computed" column and add it after
+    #       the computations - all results will be computed except for the absolute observations. Before applying
+    #       this change we should evaluate the best option depending on the "conflict resolution" handling.
+    reduced_key_results = ResultKey.remove_field_to_produce_dict(results, "computed")
 
     # Get all different existing interfaces and their units
     # TODO: interfaces could need a unit transformation according to interface type
@@ -846,7 +852,7 @@ def compute_partof_aggregates(glb_idx: PartialRetrievalDictionary,
                                              for u, v in proc_hierarchy.edges]
                     )
 
-                    for key, values in results.items():
+                    for key, values in reduced_key_results.items():
 
                         filtered_values: NodeFloatDict = {k: values[k]
                                                           for k in interfaced_proc_hierarchy.nodes
