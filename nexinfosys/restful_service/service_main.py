@@ -3121,8 +3121,6 @@ def download_external_xlsx():  # From the URL of an external XLSX, obtain it and
     xl = openpyxl.load_workbook(data, data_only=True)
     rewrite_xlsx_file(xl, copy_style=False)
     data = save_virtual_workbook(xl)
-    with open("/home/rnebot/Downloads/borrame.xlsx", "wb") as f:
-        f.write(data)
 
     r = Response(data,
                  mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
