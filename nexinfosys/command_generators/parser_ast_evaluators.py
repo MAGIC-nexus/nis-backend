@@ -360,6 +360,7 @@ def ast_evaluator(exp: Dict, state: State, obj, issue_lst, evaluation_type="nume
                     current = 0
                 else:
                     current = True
+                tmp1 = []  # Unary operators do not have "left" side. So empty list for unresolved vars
             else:
                 current, tmp1 = ast_evaluator(exp["terms"][0], state, obj, issue_lst, evaluation_type, atomic_h_names)
                 unresolved_vars.update(tmp1)
