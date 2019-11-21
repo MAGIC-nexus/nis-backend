@@ -65,7 +65,7 @@ class ProcessorScalingsCommand(BasicCommand):
             # TODO: check “RequestedProcessor” must be an archetype
             # 1. Clones “RequestedProcessor” as a child of “InvokingProcessor”
             requested_processor_clone = self._clone_processor_as_child(processor=requested_processor,
-                                                                       parent_processor=invoking_processor,
+                                                                       parent_processor=invoking_processor if not parent_processor else parent_processor,
                                                                        name=requested_new_processor_name,
                                                                        other_attributes=attributes)
 
@@ -109,7 +109,7 @@ class ProcessorScalingsCommand(BasicCommand):
             # 1. Clones “RequestedProcessor” as a child of “InvokingProcessor”
             # 2. Scales the new processor using “Scale” as the value of “RequestedInterface”
             requested_processor_clone = self._clone_processor_as_child(processor=requested_processor,
-                                                                       parent_processor=invoking_processor,
+                                                                       parent_processor=invoking_processor if not parent_processor else parent_processor,
                                                                        other_attributes=attributes)
 
             # Value Scale, which can be an expression, should be evaluated (ast) because we need a final float number
@@ -131,13 +131,6 @@ class ProcessorScalingsCommand(BasicCommand):
                 if p_set.append(requested_processor_clone,
                                 self._glb_idx):  # Appends codes to the pset if the processor was not member of the pset
                     p_set.append_attributes_codes(fields["attributes"])
-
-            # Add Relationship "part-of" if parent was specified
-            # The processor may have previously other parent processors that will keep its parentship
-            if parent_processor:
-                # Create "part-of" relationship
-                o1 = ProcessorsRelationPartOfObservation.create_and_append(parent_processor, requested_processor_clone, None)  # Part-of
-                self._glb_idx.put(o1.key(), o1)
 
     def _clone_processor_as_child(self, processor: Processor, parent_processor: Processor, name: str = None,
                                   other_attributes: Dict = {}) -> Processor:
