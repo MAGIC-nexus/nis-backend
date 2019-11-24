@@ -840,6 +840,7 @@ def compute_partof_aggregates(glb_idx: PartialRetrievalDictionary,
             # nx.draw_spring(proc_hierarchy, with_labels=True, font_size=8, node_size=60)
             # plt.show()
 
+            # Create a hierarchy of processors with each kind of interface and try to aggregate
             for interface in interfaces:
                 print(f"********************* INTERFACE: {interface.name}")
 
@@ -852,15 +853,18 @@ def compute_partof_aggregates(glb_idx: PartialRetrievalDictionary,
                                              for u, v in proc_hierarchy.edges]
                     )
 
+                    # For every dimension tuple extract the results we have (observations or computed) and use them
+                    # to aggregate values in the current hierarchy
                     for key, values in reduced_key_results.items():
 
+                        # Do we have any value for the current hierarchy?
                         filtered_values: NodeFloatDict = {k: values[k]
                                                           for k in interfaced_proc_hierarchy.nodes
                                                           if values.get(k) is not None}
 
                         if len(filtered_values) > 0:
                             # Aggregate top-down, starting from root
-                            agg_res, error_msg = compute_aggregate_results(interfaced_proc_hierarchy, filtered_values)
+                            agg_res, conflict_results, error_msg = compute_aggregate_results(interfaced_proc_hierarchy, filtered_values)
 
                             if error_msg is not None:
                                 raise SolvingException(
@@ -870,6 +874,11 @@ def compute_partof_aggregates(glb_idx: PartialRetrievalDictionary,
                             if len(agg_res) > 0:
                                 computed_key = ResultKey(key[0], key[1], key[2], Computed.Yes)
                                 agg_results.setdefault(computed_key, {}).update(agg_res)
+
+                            print(f"!!!!!!!!!! Conflicts: {conflict_results}")
+                            # if len(conflict_results) > 0:
+                            #     computed_key = ResultKey(key[0], key[1], key[2], Computed.No)
+                            #     agg_results.setdefault(computed_key, {}).update(agg_res)
 
     return agg_results
 
@@ -1330,12 +1339,11 @@ def calculate_global_scalar_indicators(indicators: List[Indicator],
         return pd.DataFrame()
 
 
-def compute_aggregate_results(tree: nx.DiGraph, params: NodeFloatDict) -> Tuple[NodeFloatDict, Optional[str]]:
-    def compute_node(node: str) -> float:
-        if params.get(node) is not None:
-            return params[node]
-
-        sum_children = None
+def compute_aggregate_results(tree: nx.DiGraph, params: NodeFloatDict) -> Tuple[NodeFloatDict, NodeFloatDict, Optional[str]]:
+    def compute_node(node: str) -> Optional[float]:
+        # Depth-first search
+        return_value: Optional[float]
+        sum_children: Optional[float] = None
 
         for pred in tree.predecessors(node):
             pred_value = compute_node(pred)
@@ -1343,17 +1351,26 @@ def compute_aggregate_results(tree: nx.DiGraph, params: NodeFloatDict) -> Tuple[
                 sum_children = (0 if sum_children is None else sum_children) + pred_value
 
         if sum_children is not None:
-            values[node] = sum_children
+            if params.get(node) is not None:
+                # Conflict here: applies strategy
+                # Take computed aggregation over existing value
+                return_value = values[node] = sum_children  # Computed
+                conflicts[node] = params[node]  # Observation
+            else:
+                return_value = values[node] = sum_children
+        else:
+            return_value = params.get(node)
 
-        return sum_children
+        return return_value
 
     root_nodes = [node for node, degree in tree.out_degree if degree == 0]
     if len(root_nodes) != 1 or root_nodes[0] is None:
         return {}, f"Root node cannot be taken from list '{root_nodes}'"
 
     values: NodeFloatDict = {}
+    conflicts: NodeFloatDict = {}
     compute_node(root_nodes[0])
-    return values, None
+    return values, conflicts, None
 
 
 def get_eum_dataset(dataframe: pd.DataFrame) -> "Dataset":
