@@ -10,6 +10,7 @@ import redis
 import logging
 from pathlib import Path
 import sqlalchemy.schema
+from nexinfosys.ie_exports.jupyter_notebook import generate_jupyter_notebook_python, generate_jupyter_notebook_r
 from openpyxl.writer.excel import save_virtual_workbook
 from sqlalchemy.pool import StaticPool
 # from flask import (jsonify, abort, redirect, url_for,
@@ -1265,15 +1266,11 @@ script capaz de reproducir lo ejecutado
             output = io.StringIO()
             mimetype = "application/x-python-code"  # or text/x-python
         elif format == "jupyternotebook":
-            # TODO Prepare Jupyternotebook file
-            #      Update cells below the one containing Widgets
-            #  display(Javascript('IPython.notebook.execute_cell_range(IPython.notebook.get_selected_index()+1,
-            #  IPython.notebook.get_selected_index()+2)'))
-            output = io.StringIO()
+            output = generate_jupyter_notebook_python(isess.state)
             mimetype = "application/x-ipynb+json"  # TODO
 
     if output:
-        return Response(output.getvalue(), mimetype=mimetype, status=200)
+        return Response(output, mimetype=mimetype, status=200)
     else:
         return build_json_response({"error": F"Cannot return Python script, format '{format}' not recognized"}, 401)
 
@@ -1293,12 +1290,11 @@ def get_r_script(format):
             output = io.StringIO()
             mimetype = "application/r-system"  # TODO
         elif format == "jupyternotebook":
-            # TODO Prepare Jupyternotebook file
-            output = io.StringIO()
+            output = generate_jupyter_notebook_r(isess.state)
             mimetype = "application/x-ipynb+json"  # TODO
 
     if output:
-        return Response(output.getvalue(), mimetype=mimetype, status=200)
+        return Response(output, mimetype=mimetype, status=200)
     else:
         return build_json_response({"error": F"Cannot return R script, format '{format}' not recognized"}, 401)
 
