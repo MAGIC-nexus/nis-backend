@@ -30,43 +30,58 @@ from collections import defaultdict
 from enum import Enum
 from functools import reduce
 from itertools import chain
+from typing import Dict, List, Set, Any, Tuple, Union, Optional, NamedTuple, Generator, Type
 
 import lxml
-import pandas as pd
-import numpy as np
 import networkx as nx
-import matplotlib.pyplot as plt
-from typing import Dict, List, Set, Any, Tuple, Union, Optional, NamedTuple, Generator, Type
+import pandas as pd
+from lxml import etree
 
 from nexinfosys import case_sensitive
 from nexinfosys.command_field_definitions import orientations
+from nexinfosys.command_generators import Issue
 from nexinfosys.command_generators.parser_ast_evaluators import ast_evaluator
 from nexinfosys.command_generators.parser_field_parsers import string_to_ast, expression_with_parameters, is_year, \
     is_month, indicator_expression
 from nexinfosys.common.helper import create_dictionary, PartialRetrievalDictionary, ifnull, Memoize, istr, strcmp
 from nexinfosys.ie_exports.xml import export_model_to_xml
+from nexinfosys.model_services import get_case_study_registry_objects, State
 from nexinfosys.models import CodeImmutable
 from nexinfosys.models.musiasem_concepts import ProblemStatement, Parameter, FactorsRelationDirectedFlowObservation, \
     FactorsRelationScaleObservation, Processor, FactorQuantitativeObservation, Factor, \
     ProcessorsRelationPartOfObservation, FactorType, Indicator, MatrixIndicator, IndicatorCategories
-from nexinfosys.model_services import get_case_study_registry_objects, State
 from nexinfosys.models.musiasem_concepts_helper import find_quantitative_observations
+from nexinfosys.models.statistical_datasets import Dataset, Dimension, CodeList
 from nexinfosys.solving.graph.computation_graph import ComputationGraph
 from nexinfosys.solving.graph.flow_graph import FlowGraph, IType
-from nexinfosys.models.statistical_datasets import Dataset, Dimension, CodeList
-from nexinfosys.command_generators import Issue
-from lxml import etree
 
 
 class SolvingException(Exception):
     pass
 
 
+class Scope(Enum):
+    Total = 1
+    Internal = 2
+    External = 3
+
+
+class Computed(Enum):
+    No = 1
+    Yes = 2
+
+
+class ConflictResolution(Enum):
+    No = 1
+    Taken = 2
+    Dismiss = 3
+
+
 class InterfaceNode:
     registry: PartialRetrievalDictionary = None
 
-    def __init__(self, interface_or_type: Union[Factor, FactorType], processor: Processor = None,
-                 orientation: str = None, processor_name: str = None):
+    def __init__(self, interface_or_type: Union[Factor, FactorType], processor: Optional[Processor] = None,
+                 orientation: Optional[str] = None, processor_name: Optional[str] = None):
         if isinstance(interface_or_type, Factor):
             self.interface: Optional[Factor] = interface_or_type
             self.interface_type = self.interface.taxon
@@ -113,18 +128,18 @@ class InterfaceNode:
             return ""
 
     @property
-    def sphere(self):
+    def sphere(self) -> Optional[str]:
         if self.interface and self.interface.sphere:
             return self.interface.sphere
         else:
             return self.interface_type.sphere
 
     @property
-    def system(self):
+    def system(self) -> Optional[str]:
         return self.processor.processor_system if self.processor else None
 
     @property
-    def subsystem(self):
+    def subsystem(self) -> Optional[str]:
         return self.processor.subsystem_type if self.processor else None
 
     def __str__(self):
@@ -140,34 +155,14 @@ class InterfaceNode:
         return hash(repr(self))
 
 
-class Scope(Enum):
-    Total = 1
-    Internal = 2
-    External = 3
-
-
-class Computed(Enum):
-    No = 1
-    Yes = 2
-
-
 class ResultKey(NamedTuple):
     scenario: str
     period: str
     scope: Scope
-    computed: Computed
+    conflict: ConflictResolution = ConflictResolution.No
 
     def as_string_tuple(self) -> Tuple[str, str, str, str]:
-        return self.scenario, self.period, self.scope.name, self.computed.name
-
-    @staticmethod
-    def remove_field_to_produce_dict(dic: Dict[NamedTuple, Dict], field: str) -> Dict[Tuple, Dict]:
-        new_dic: Dict[Tuple, Dict] = {}
-        for k, v in dic.items():
-            new_k = tuple(fv for fk, fv in k._asdict().items() if fk != field)
-            new_dic.setdefault(new_k, {}).update(v)
-
-        return new_dic
+        return self.scenario, self.period, self.scope.name, self.conflict.name
 
 
 NodeFloatDict = Dict[InterfaceNode, float]
@@ -580,7 +575,7 @@ def get_scenario_evaluated_observation_results(scenario_states: Dict[str, State]
 
                 resolved_observations[InterfaceNode(obs.factor)] = value
 
-            result_key = ResultKey(scenario_name, time_period, Scope.Total, Computed.No)
+            result_key = ResultKey(scenario_name, time_period, Scope.Total)
             results[result_key] = resolved_observations
 
             internal_data, external_data = compute_internal_external_results(resolved_observations)
@@ -676,7 +671,7 @@ def compute_flow_and_scale_results(state: State, glb_idx, scenario_states: Dict[
             # Filter out results without a real processor
             data: NodeFloatDict = {k: v for k, v in data.items() if k.processor}
 
-            result_key = ResultKey(scenario_name, time_period, Scope.Total, Computed.Yes)
+            result_key = ResultKey(scenario_name, time_period, Scope.Total)
             results[result_key] = data
 
             # TODO INDICATORS
@@ -813,14 +808,9 @@ def get_processor_partof_hierarchies(glb_idx, system):
 
 def compute_partof_aggregates(glb_idx: PartialRetrievalDictionary,
                               systems: Dict[str, Set[Processor]],
-                              results: ResultDict):
+                              results: ResultDict) -> Tuple[ResultDict, ResultDict]:
     agg_results: ResultDict = {}
-    # We need to remove the computed column from key because we want to aggregate values no matter they are
-    # computed or not. The results of course will be of type Computed.Yes.
-    # TODO: another solution would be to work in flow_graph_solver() without the "Computed" column and add it after
-    #       the computations - all results will be computed except for the absolute observations. Before applying
-    #       this change we should evaluate the best option depending on the "conflict resolution" handling.
-    reduced_key_results = ResultKey.remove_field_to_produce_dict(results, "computed")
+    conflict_results: ResultDict = {}
 
     # Get all different existing interfaces and their units
     # TODO: interfaces could need a unit transformation according to interface type
@@ -855,7 +845,7 @@ def compute_partof_aggregates(glb_idx: PartialRetrievalDictionary,
 
                     # For every dimension tuple extract the results we have (observations or computed) and use them
                     # to aggregate values in the current hierarchy
-                    for key, values in reduced_key_results.items():
+                    for key, values in results.items():
 
                         # Do we have any value for the current hierarchy?
                         filtered_values: NodeFloatDict = {k: values[k]
@@ -864,7 +854,7 @@ def compute_partof_aggregates(glb_idx: PartialRetrievalDictionary,
 
                         if len(filtered_values) > 0:
                             # Aggregate top-down, starting from root
-                            agg_res, conflict_results, error_msg = compute_aggregate_results(interfaced_proc_hierarchy, filtered_values)
+                            agg_res, conf_res, error_msg = compute_aggregate_results(interfaced_proc_hierarchy, filtered_values)
 
                             if error_msg is not None:
                                 raise SolvingException(
@@ -872,15 +862,12 @@ def compute_partof_aggregates(glb_idx: PartialRetrievalDictionary,
                                                  f"Orientation: '{orientation}'. Error: {error_msg}")
 
                             if len(agg_res) > 0:
-                                computed_key = ResultKey(key[0], key[1], key[2], Computed.Yes)
-                                agg_results.setdefault(computed_key, {}).update(agg_res)
+                                agg_results.setdefault(key, {}).update(agg_res)
 
-                            print(f"!!!!!!!!!! Conflicts: {conflict_results}")
-                            # if len(conflict_results) > 0:
-                            #     computed_key = ResultKey(key[0], key[1], key[2], Computed.No)
-                            #     agg_results.setdefault(computed_key, {}).update(agg_res)
+                            if len(conf_res) > 0:
+                                conflict_results.setdefault(key, {}).update(conf_res)
 
-    return agg_results
+    return agg_results, conflict_results
 
 
 def flow_graph_solver(global_parameters: List[Parameter], problem_statement: ProblemStatement,
@@ -920,10 +907,11 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
     try:
         results = compute_flow_and_scale_results(state, glb_idx, scenario_states, observation_results, relative_observations)
 
-        # Merge "observation_results" with "results"
-        results: ResultDict = {**observation_results, **results}
+        # Add "observation_results" to "results"
+        for key, value in observation_results.items():
+            results[key].update(value)
 
-        agg_results = compute_partof_aggregates(glb_idx, input_systems, results)
+        agg_results, conflict_results = compute_partof_aggregates(glb_idx, input_systems, results)
 
     except SolvingException as e:
         return [Issue(e.args[0], str(e.args[1]))]
@@ -1340,7 +1328,7 @@ def calculate_global_scalar_indicators(indicators: List[Indicator],
 
 
 def compute_aggregate_results(tree: nx.DiGraph, params: NodeFloatDict) -> Tuple[NodeFloatDict, NodeFloatDict, Optional[str]]:
-    def compute_node(node: str) -> Optional[float]:
+    def compute_node(node: InterfaceNode) -> Optional[float]:
         # Depth-first search
         return_value: Optional[float]
         sum_children: Optional[float] = None
@@ -1352,20 +1340,31 @@ def compute_aggregate_results(tree: nx.DiGraph, params: NodeFloatDict) -> Tuple[
 
         if sum_children is not None:
             if params.get(node) is not None:
-                # Conflict here: applies strategy
-                # Take computed aggregation over existing value
-                return_value = values[node] = sum_children  # Computed
-                conflicts[node] = params[node]  # Observation
+                if params[node] != sum_children:
+                    # Conflict here: applies strategy
+                    if True:
+                        # Take computed aggregation over existing value
+                        return_value = values[node] = sum_children  # Computed
+                        conflicts[node] = params[node]  # Observation or flow-scale computed value
+                    else:
+                        # Take existing value over computed aggregation
+                        return_value = params[node]  # Observation or flow-scale computed value
+                        conflicts[node] = sum_children  # Computed
+                else:
+                    # Value already present in "params", no need to add to "values"
+                    return_value = sum_children
             else:
+                # New value has been computed, add it to "values"
                 return_value = values[node] = sum_children
         else:
+            # No value got from children, try to search in "params"
             return_value = params.get(node)
 
         return return_value
 
-    root_nodes = [node for node, degree in tree.out_degree if degree == 0]
+    root_nodes: List[InterfaceNode] = [node for node, degree in tree.out_degree if degree == 0]
     if len(root_nodes) != 1 or root_nodes[0] is None:
-        return {}, f"Root node cannot be taken from list '{root_nodes}'"
+        return {}, {}, f"Root node cannot be taken from list '{root_nodes}'"
 
     values: NodeFloatDict = {}
     conflicts: NodeFloatDict = {}
