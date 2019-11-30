@@ -74,7 +74,7 @@ class Computed(Enum):
 class ConflictResolution(Enum):
     No = 1
     Taken = 2
-    Dismiss = 3
+    Dismissed = 3
 
 
 class InterfaceNode:
@@ -165,8 +165,15 @@ class ResultKey(NamedTuple):
         return self.scenario, self.period, self.scope.name, self.conflict.name
 
 
+class FloatComputedTuple(NamedTuple):
+    value: float
+    computed: Computed
+
+
 NodeFloatDict = Dict[InterfaceNode, float]
 ResultDict = Dict[ResultKey, NodeFloatDict]
+NodeFloatComputedDict = Dict[InterfaceNode, FloatComputedTuple]
+ResultComputedDict = Dict[ResultKey, NodeFloatComputedDict]
 
 
 @Memoize
@@ -743,12 +750,14 @@ def compute_internal_external_results(values: NodeFloatDict, comp_graph: Optiona
     return internal_results, external_results
 
 
-def compute_interfacetype_aggregates(glb_idx: PartialRetrievalDictionary, results: ResultDict) -> ResultDict:
+def compute_interfacetype_aggregates(glb_idx: PartialRetrievalDictionary, existing_results: ResultComputedDict) \
+        -> ResultComputedDict:
 
-    def get_sum(processor: Processor, children: Set[FactorType]) -> float:
-        sum_children = None
+    def get_sum(processor: Processor, children: Set[FactorType]) -> Optional[float]:
+        sum_children: Optional[float] = None
         for child in children:
-            child_value = values.get(InterfaceNode(child, processor, orientation))
+            child_float_computed = values.get(InterfaceNode(child, processor, orientation))
+            child_value = child_float_computed.value if child_float_computed else None
             if child_value is None:
                 if child in parent_interfaces:
                     child_value = get_sum(processor, parent_interfaces[child])
@@ -761,14 +770,14 @@ def compute_interfacetype_aggregates(glb_idx: PartialRetrievalDictionary, result
 
         return sum_children
 
-    agg_results: ResultDict = {}
-    processors: Set[Processor] = {node.processor for values in results.values() for node in values}
+    results: ResultComputedDict = {}
+    processors: Set[Processor] = {node.processor for values in existing_results.values() for node in values}
 
     # Get all different existing interfaces types that can be computed based on children interface types
     parent_interfaces: Dict[FactorType, Set[FactorType]] = \
         {ft: ft.get_children() for ft in glb_idx.get(FactorType.partial_key()) if len(ft.get_children()) > 0}
 
-    for key, values in results.items():
+    for key, values in existing_results.items():
         for parent_interface, children_interfaces in parent_interfaces.items():
             for proc in processors:
                 for orientation in ["Input", "Output"]:
@@ -777,11 +786,11 @@ def compute_interfacetype_aggregates(glb_idx: PartialRetrievalDictionary, result
                     if values.get(interface_node) is None:
                         sum_result = get_sum(proc, children_interfaces)
                         if sum_result is not None:
-                            agg_results.setdefault(key, {}).update({
-                                interface_node: sum_result
+                            results.setdefault(key, {}).update({
+                                interface_node: FloatComputedTuple(sum_result, Computed.Yes)
                             })
 
-    return agg_results
+    return results
 
 
 def get_processor_partof_hierarchies(glb_idx, system):
@@ -808,9 +817,8 @@ def get_processor_partof_hierarchies(glb_idx, system):
 
 def compute_partof_aggregates(glb_idx: PartialRetrievalDictionary,
                               systems: Dict[str, Set[Processor]],
-                              results: ResultDict) -> Tuple[ResultDict, ResultDict]:
-    agg_results: ResultDict = {}
-    conflict_results: ResultDict = {}
+                              existing_results: ResultComputedDict) -> ResultComputedDict:
+    results: ResultComputedDict = {}
 
     # Get all different existing interfaces and their units
     # TODO: interfaces could need a unit transformation according to interface type
@@ -845,29 +853,35 @@ def compute_partof_aggregates(glb_idx: PartialRetrievalDictionary,
 
                     # For every dimension tuple extract the results we have (observations or computed) and use them
                     # to aggregate values in the current hierarchy
-                    for key, values in results.items():
+                    for result_key, node_floatcomputed_dict in existing_results.items():
 
                         # Do we have any value for the current hierarchy?
-                        filtered_values: NodeFloatDict = {k: values[k]
-                                                          for k in interfaced_proc_hierarchy.nodes
-                                                          if values.get(k) is not None}
+                        filtered_values: NodeFloatComputedDict = {k: node_floatcomputed_dict[k]
+                                                                  for k in interfaced_proc_hierarchy.nodes
+                                                                  if node_floatcomputed_dict.get(k) is not None}
 
                         if len(filtered_values) > 0:
                             # Aggregate top-down, starting from root
-                            agg_res, conf_res, error_msg = compute_aggregate_results(interfaced_proc_hierarchy, filtered_values)
+                            aggregations, taken_conflicts, dismissed_conflicts, error_msg = \
+                                compute_aggregate_results(interfaced_proc_hierarchy, filtered_values)
 
                             if error_msg is not None:
                                 raise SolvingException(
                                     IType.ERROR, f"System: '{system}'. Interface: '{interface.name}'. "
                                                  f"Orientation: '{orientation}'. Error: {error_msg}")
 
-                            if len(agg_res) > 0:
-                                agg_results.setdefault(key, {}).update(agg_res)
+                            key_taken = result_key._replace(conflict=ConflictResolution.Taken)
+                            key_dismissed = result_key._replace(conflict=ConflictResolution.Dismissed)
 
-                            if len(conf_res) > 0:
-                                conflict_results.setdefault(key, {}).update(conf_res)
+                            for node, float_computed in aggregations.items():
+                                if node in taken_conflicts:
+                                    del existing_results[result_key][node]
+                                    results.setdefault(key_taken, {})[node] = taken_conflicts[node]
+                                    results.setdefault(key_dismissed, {})[node] = dismissed_conflicts[node]
+                                else:
+                                    results.setdefault(result_key, {})[node] = float_computed
 
-    return agg_results, conflict_results
+    return results
 
 
 def flow_graph_solver(global_parameters: List[Parameter], problem_statement: ProblemStatement,
@@ -905,38 +919,46 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
     observation_results = get_scenario_evaluated_observation_results(scenario_states, absolute_observations)
 
     try:
-        results = compute_flow_and_scale_results(state, glb_idx, scenario_states, observation_results, relative_observations)
+        results = compute_flow_and_scale_results(state, glb_idx, scenario_states, observation_results,
+                                                            relative_observations)
 
         # Add "observation_results" to "results"
         for key, value in observation_results.items():
             results[key].update(value)
 
-        agg_results, conflict_results = compute_partof_aggregates(glb_idx, input_systems, results)
+        results_with_computed: ResultComputedDict = {}
+        for result_key, node_float_dict in results.items():
+            results_with_computed[result_key] = \
+                {node: FloatComputedTuple(value, Computed.Yes if observation_results[result_key].get(node) is None else Computed.No)
+                 for node, value in node_float_dict.items()}
+
+        aggregated_results = compute_partof_aggregates(glb_idx, input_systems, results_with_computed)
 
     except SolvingException as e:
         return [Issue(e.args[0], str(e.args[1]))]
 
-    # Add "agg_results" to "results"
-    for key, value in agg_results.items():
-        results[key].update(value)
+    # Add "aggregated_results" to "results_with_computed"
+    for key, value in aggregated_results.items():
+        results_with_computed.setdefault(key, {}).update(value)
 
-    agg_results = compute_interfacetype_aggregates(glb_idx, results)
+    aggregated_results = compute_interfacetype_aggregates(glb_idx, results_with_computed)
 
-    # Add "agg_results" to "results"
-    for key, value in agg_results.items():
-        results[key].update(value)
+    # Add "aggregated_results" to "results_with_computed"
+    for key, value in aggregated_results.items():
+        results_with_computed[key].update(value)
 
-    data = {k.as_string_tuple() + node.key:
+    data = {result_key.as_string_tuple() + node.key:
                 {"RoegenType": node.roegen_type if node else "-",
-                 "Value": value,
+                 "Value": float_computed.value,
+                 "Computed": float_computed.computed.name,
                  "Unit": node.unit if node else "-",
                  "Level": node.processor.attributes.get('level', '') if node else "-",
                  "System": node.system if node else "-",
                  "Subsystem": node.subsystem if node else "-",
                  "Sphere": node.sphere if node else "-"
                 }
-            for k, v in results.items()
-            for node, value in v.items()}
+            for result_key, node_floatcomputed_dict in results_with_computed.items()
+            for node, float_computed in node_floatcomputed_dict.items()}
 
     df = pd.DataFrame.from_dict(data, orient='index')
 
@@ -1327,7 +1349,8 @@ def calculate_global_scalar_indicators(indicators: List[Indicator],
         return pd.DataFrame()
 
 
-def compute_aggregate_results(tree: nx.DiGraph, params: NodeFloatDict) -> Tuple[NodeFloatDict, NodeFloatDict, Optional[str]]:
+def compute_aggregate_results(tree: nx.DiGraph, params: NodeFloatComputedDict) \
+        -> Tuple[NodeFloatComputedDict, NodeFloatComputedDict, NodeFloatComputedDict, Optional[str]]:
     def compute_node(node: InterfaceNode) -> Optional[float]:
         # Depth-first search
         return_value: Optional[float]
@@ -1339,37 +1362,38 @@ def compute_aggregate_results(tree: nx.DiGraph, params: NodeFloatDict) -> Tuple[
                 sum_children = (0 if sum_children is None else sum_children) + pred_value
 
         if sum_children is not None:
+            # New value has been computed, add it to "new_values"
+            new_values[node] = FloatComputedTuple(sum_children, Computed.Yes)  # Computed
+
             if params.get(node) is not None:
-                if params[node] != sum_children:
-                    # Conflict here: applies strategy
-                    if True:
-                        # Take computed aggregation over existing value
-                        return_value = values[node] = sum_children  # Computed
-                        conflicts[node] = params[node]  # Observation or flow-scale computed value
-                    else:
-                        # Take existing value over computed aggregation
-                        return_value = params[node]  # Observation or flow-scale computed value
-                        conflicts[node] = sum_children  # Computed
-                else:
-                    # Value already present in "params", no need to add to "values"
+                # Conflict here: applies strategy
+                if True:
+                    # Take computed aggregation over existing value
+                    taken_conflicts[node] = new_values[node]
                     return_value = sum_children
+                    dismissed_conflicts[node] = params[node]
+                else:
+                    # Take existing value over computed aggregation
+                    taken_conflicts[node] = params[node]  # Observation or flow-scale computed value
+                    return_value = params[node].value
+                    dismissed_conflicts[node] = new_values[node]
             else:
-                # New value has been computed, add it to "values"
-                return_value = values[node] = sum_children
+                return_value = sum_children
         else:
             # No value got from children, try to search in "params"
-            return_value = params.get(node)
+            return_value = params[node].value if params.get(node) is not None else None
 
         return return_value
 
     root_nodes: List[InterfaceNode] = [node for node, degree in tree.out_degree if degree == 0]
     if len(root_nodes) != 1 or root_nodes[0] is None:
-        return {}, {}, f"Root node cannot be taken from list '{root_nodes}'"
+        return {}, {}, {}, f"Root node cannot be taken from list '{root_nodes}'"
 
-    values: NodeFloatDict = {}
-    conflicts: NodeFloatDict = {}
+    new_values: NodeFloatComputedDict = {}  # All computed aggregations
+    taken_conflicts: NodeFloatComputedDict = {}  # Taken values on conflicting nodes
+    dismissed_conflicts: NodeFloatComputedDict = {}  # Dismissed values on conflicting nodes
     compute_node(root_nodes[0])
-    return values, conflicts, None
+    return new_values, taken_conflicts, dismissed_conflicts, None
 
 
 def get_eum_dataset(dataframe: pd.DataFrame) -> "Dataset":
