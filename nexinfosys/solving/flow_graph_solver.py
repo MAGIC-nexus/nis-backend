@@ -26,46 +26,88 @@ Before the elaboration of flow graphs, several preparatory steps:
 
 """
 from _operator import add
+from collections import defaultdict
 from enum import Enum
 from functools import reduce
 from itertools import chain
+from typing import Dict, List, Set, Any, Tuple, Union, Optional, NamedTuple, Generator, Type
 
 import lxml
-import pandas as pd
-import numpy as np
 import networkx as nx
-import matplotlib.pyplot as plt
-from typing import Dict, List, Set, Any, Tuple, Union, Optional, NamedTuple, Generator, Type
+import pandas as pd
+from lxml import etree
 
 from nexinfosys import case_sensitive
 from nexinfosys.command_field_definitions import orientations
+from nexinfosys.command_generators import Issue
 from nexinfosys.command_generators.parser_ast_evaluators import ast_evaluator
 from nexinfosys.command_generators.parser_field_parsers import string_to_ast, expression_with_parameters, is_year, \
     is_month, indicator_expression
 from nexinfosys.common.helper import create_dictionary, PartialRetrievalDictionary, ifnull, Memoize, istr, strcmp
 from nexinfosys.ie_exports.xml import export_model_to_xml
+from nexinfosys.model_services import get_case_study_registry_objects, State
 from nexinfosys.models import CodeImmutable
 from nexinfosys.models.musiasem_concepts import ProblemStatement, Parameter, FactorsRelationDirectedFlowObservation, \
     FactorsRelationScaleObservation, Processor, FactorQuantitativeObservation, Factor, \
     ProcessorsRelationPartOfObservation, FactorType, Indicator, MatrixIndicator, IndicatorCategories
-from nexinfosys.model_services import get_case_study_registry_objects, State
 from nexinfosys.models.musiasem_concepts_helper import find_quantitative_observations
+from nexinfosys.models.statistical_datasets import Dataset, Dimension, CodeList
 from nexinfosys.solving.graph.computation_graph import ComputationGraph
 from nexinfosys.solving.graph.flow_graph import FlowGraph, IType
-from nexinfosys.models.statistical_datasets import Dataset, Dimension, CodeList
-from nexinfosys.command_generators import Issue
-from lxml import etree
 
 
 class SolvingException(Exception):
     pass
 
 
+class Scope(Enum):
+    Total = 1
+    Internal = 2
+    External = 3
+
+
+class Computed(Enum):
+    No = 1
+    Yes = 2
+
+
+class FloatComputedTuple(NamedTuple):
+    value: float
+    computed: Computed
+
+
+class ConflictResolution(Enum):
+    No = 1
+    Taken = 2
+    Dismissed = 3
+
+
+class ConflictingDataResolutionPolicy(Enum):
+    TakeUpper = 1
+    TakeLowerAggregation = 2
+
+    @staticmethod
+    def get_key():
+        return "NISSolverConflictingDataResolutionPolicy"
+
+    @classmethod
+    def resolve(cls, computed_value: FloatComputedTuple, existing_value: FloatComputedTuple,
+                policy: "ConflictingDataResolutionPolicy") \
+            -> Tuple[FloatComputedTuple, FloatComputedTuple]:
+
+        if policy == cls.TakeLowerAggregation:
+            # Take computed aggregation over existing value
+            return computed_value, existing_value
+        elif policy == cls.TakeUpper:
+            # Take existing value over computed aggregation
+            return existing_value, computed_value
+
+
 class InterfaceNode:
     registry: PartialRetrievalDictionary = None
 
-    def __init__(self, interface_or_type: Union[Factor, FactorType], processor: Processor = None,
-                 orientation: str = None, processor_name: str = None):
+    def __init__(self, interface_or_type: Union[Factor, FactorType], processor: Optional[Processor] = None,
+                 orientation: Optional[str] = None, processor_name: Optional[str] = None):
         if isinstance(interface_or_type, Factor):
             self.interface: Optional[Factor] = interface_or_type
             self.interface_type = self.interface.taxon
@@ -112,18 +154,18 @@ class InterfaceNode:
             return ""
 
     @property
-    def sphere(self):
+    def sphere(self) -> Optional[str]:
         if self.interface and self.interface.sphere:
             return self.interface.sphere
         else:
             return self.interface_type.sphere
 
     @property
-    def system(self):
+    def system(self) -> Optional[str]:
         return self.processor.processor_system if self.processor else None
 
     @property
-    def subsystem(self):
+    def subsystem(self) -> Optional[str]:
         return self.processor.subsystem_type if self.processor else None
 
     def __str__(self):
@@ -139,14 +181,19 @@ class InterfaceNode:
         return hash(repr(self))
 
 
-class Scope(Enum):
-    Total = 1
-    Internal = 2
-    External = 3
+class ResultKey(NamedTuple):
+    scenario: str
+    period: str
+    scope: Scope
+    conflict: ConflictResolution = ConflictResolution.No
+
+    def as_string_tuple(self) -> Tuple[str, str, str, str]:
+        return self.scenario, self.period, self.scope.name, self.conflict.name
 
 
 NodeFloatDict = Dict[InterfaceNode, float]
-ResultDict = Dict[Tuple[str, str, str], NodeFloatDict]
+NodeFloatComputedDict = Dict[InterfaceNode, FloatComputedTuple]
+ResultDict = Dict[ResultKey, NodeFloatComputedDict]
 
 
 @Memoize
@@ -247,17 +294,20 @@ def evaluate_parameters_for_scenario(base_params: List[Parameter], scenario_para
 TimeObservationsType = Dict[str, List[Tuple[float, FactorQuantitativeObservation]]]
 
 
-def get_observations_by_time(prd: PartialRetrievalDictionary) -> Tuple[TimeObservationsType, TimeObservationsType]:
+def get_evaluated_observations_by_time(prd: PartialRetrievalDictionary) -> TimeObservationsType:
     """
-    Process All QQ observations (intensive or extensive):
-    * Store in a compact way (then clear), by Time-period, by Interface, by Observer.
-    * Convert to float or prepare AST
-    * Store as value the result plus the QQ observation (in a tuple)
+        Get all interface observations (intensive or extensive) by time.
+        Also resolve expressions without parameters. Cannot resolve expressions depending only on global parameters
+        because some of them can be overridden by scenario parameters.
 
-    :param prd:
-    :return:
+        Each evaluated observation is stored as a tuple:
+        * First: the evaluated result as a float or the prepared AST
+        * Second: the observation
+
+    :param prd: the global objects dictionary
+    :return: a time dictionary with a list of observation on each time
     """
-    observations: Dict[str, List[Tuple[float, FactorQuantitativeObservation]]] = {}
+    observations: TimeObservationsType = defaultdict(list)
     state = State()
 
     # Get all observations by time
@@ -268,28 +318,24 @@ def get_observations_by_time(prd: PartialRetrievalDictionary) -> Tuple[TimeObser
 
         # Store: (Value, FactorQuantitativeObservation)
         time = observation.attributes["time"].lower()
-        if time not in observations:
-            observations[time] = []
-
         observations[time].append((ifnull(value, ast), observation))
 
     if len(observations) == 0:
-        return {}, {}
+        return {}
 
     # Check all time periods are consistent. All should be Year or Month, but not both.
-    time_period_type = get_type_from_all_time_periods(list(observations.keys()))
+    time_period_type = check_type_consistency_from_all_time_periods(list(observations.keys()))
     assert(time_period_type in ["year", "month"])
 
     # Remove generic period type and insert it into all specific periods. E.g. "Year" into "2010", "2011" and "2012"
     if time_period_type in observations:
         # Generic monthly ("Month") or annual ("Year") data
-        periodic_observations = observations[time_period_type]
-        del observations[time_period_type]
+        periodic_observations = observations.pop(time_period_type)
 
         for time in observations:
             observations[time] += periodic_observations
 
-    return split_observations_by_relativeness(observations)
+    return observations
 
 
 def evaluate_numeric_expression_with_parameters(expression: Union[float, str, dict], state: State) \
@@ -329,7 +375,7 @@ def evaluate_numeric_expression_with_parameters(expression: Union[float, str, di
     return value, ast, params, [i[1] for i in issues]
 
 
-def get_type_from_all_time_periods(time_periods: List[str]) -> Optional[str]:
+def check_type_consistency_from_all_time_periods(time_periods: List[str]) -> str:
     """ Check if all time periods are of the same period type, either Year or Month:
          - general "Year" & specific year (YYYY)
          - general "Month" & specific month (mm-YYYY or YYYY-mm, separator can be any of "-/")
@@ -347,21 +393,20 @@ def get_type_from_all_time_periods(time_periods: List[str]) -> Optional[str]:
         period_type = "month"
         period_check = is_month
     else:
-        return None
+        raise SolvingException(IType.ERROR, f"Found invalid period type '{period}'")
 
     for time_period in time_periods:
         if time_period != period_type and not period_check(time_period):
-            return None
+            raise SolvingException(IType.ERROR,
+                f"Found period type inconsistency: accepting '{period_type}' but found '{time_period}'")
 
     return period_type
 
 
-def split_observations_by_relativeness(observations_by_time: TimeObservationsType):
-    observations_by_time_norelative = {}
-    observations_by_time_relative = {}
+def split_observations_by_relativeness(observations_by_time: TimeObservationsType) -> Tuple[TimeObservationsType, TimeObservationsType]:
+    observations_by_time_norelative = defaultdict(list)
+    observations_by_time_relative = defaultdict(list)
     for time, observations in observations_by_time.items():
-        observations_by_time_norelative[time] = []
-        observations_by_time_relative[time] = []
         for value, obs in observations:
             if obs.is_relative:
                 observations_by_time_relative[time].append((value, obs))
@@ -376,19 +421,12 @@ def compute_graph_values(comp_graph: ComputationGraph, params: NodeFloatDict, ot
     print(f"****** NODES: {comp_graph.nodes}")
 
     # Filter params in graph
-    graph_params = {k: v for k, v in params.items() if k in comp_graph.nodes}
+    graph_params: NodeFloatDict = {k: v for k, v in params.items() if k in comp_graph.nodes}
     print("Missing values: ", [k for k, v in graph_params.items() if v is None])
 
-    conflicts = comp_graph.compute_param_conflicts(set(graph_params.keys()))
+    conflicts: Dict[InterfaceNode, Set[InterfaceNode]] = comp_graph.compute_param_conflicts(set(graph_params.keys()))
 
-    conflict_strings: List[str] = []
-    for param, conf_params in conflicts.items():
-        if len(conf_params) > 0:
-            conf_params_string = "{" + ', '.join([f"{p} ({round(graph_params[p], 3)})" for p in conf_params]) + "}"
-            conflict_strings.append(f"{param} ({round(graph_params[param], 3)}) -> {conf_params_string}")
-
-    if len(conflict_strings) > 0:
-        raise SolvingException(IType.ERROR, f"There are conflicts: {', '.join(conflict_strings)}")
+    raise_error_if_conflicts(conflicts, graph_params)
 
     graph_params = {**graph_params, **other_values}
 
@@ -414,6 +452,17 @@ def compute_graph_values(comp_graph: ComputationGraph, params: NodeFloatDict, ot
             unknown_nodes.append(k)
 
     return results_with_values, unknown_nodes
+
+
+def raise_error_if_conflicts(conflicts: Dict[InterfaceNode, Set[InterfaceNode]], graph_params: NodeFloatDict):
+    conflict_strings: List[str] = []
+    for param, conf_params in conflicts.items():
+        if len(conf_params) > 0:
+            conf_params_string = "{" + ', '.join([f"{p} ({round(graph_params[p], 3)})" for p in conf_params]) + "}"
+            conflict_strings.append(f"{param} ({round(graph_params[param], 3)}) -> {conf_params_string}")
+
+    if len(conflict_strings) > 0:
+        raise SolvingException(IType.ERROR, f"There are conflicts: {', '.join(conflict_strings)}")
 
 
 def split_name(processor_interface: str) -> Tuple[str, Optional[str]]:
@@ -484,9 +533,7 @@ def iterative_solving(comp_graph_list: List[ComputationGraph], observations: Nod
 
         num_unknown_nodes = reduce(add, [len(l) for l in unknown_nodes])
 
-    all_unknown_nodes = []
-    for l in unknown_nodes:
-        all_unknown_nodes.extend(l)
+    all_unknown_nodes = [node for node_list in unknown_nodes for node in node_list]
 
     return all_data, all_unknown_nodes
 
@@ -535,16 +582,42 @@ def create_scale_change_relations_and_update_flow_relations(relations_flow: nx.D
     return relations_scale_change
 
 
-def compute_flow_and_scale_results(state: State, glb_idx, global_parameters, problem_statement):
-    # Get all interface observations. Also resolve expressions without parameters. Cannot resolve expressions
-    # depending only on global parameters because some of them can be overridden by scenario parameters.
-    time_observations_absolute, time_observations_relative = get_observations_by_time(glb_idx)
+def compute_scenario_evaluated_observation_results(scenario_states: Dict[str, State],
+                                                   time_observations: TimeObservationsType) -> ResultDict:
+    results: ResultDict = {}
 
-    if len(time_observations_absolute) == 0:
-        raise SolvingException(
-            IType.WARNING, f"No absolute observations have been found. The solver has nothing to solve."
-        )
+    for scenario_name, scenario_state in scenario_states.items():  # type: str, State
+        for time_period, observations in time_observations.items():
+            resolved_observations: NodeFloatComputedDict = {}
 
+            # Second and last pass to resolve observation expressions with parameters
+            for expression, obs in observations:
+                value, _, params, issues = evaluate_numeric_expression_with_parameters(expression, scenario_state)
+                if value is None:
+                    raise SolvingException(IType.ERROR,
+                        f"Scenario '{scenario_name}' - period '{time_period}'. Cannot evaluate expression "
+                        f"'{expression}' for observation at interface '{obs.factor.name}'. Params: {params}. "
+                        f"Issues: {', '.join(issues)}"
+                    )
+
+                resolved_observations[InterfaceNode(obs.factor)] = FloatComputedTuple(value, Computed.No)
+
+            result_key = ResultKey(scenario_name, time_period, Scope.Total)
+            results[result_key] = resolved_observations
+
+            internal_data, external_data = compute_internal_external_results(resolved_observations)
+            if len(external_data) > 0:
+                results[result_key._replace(scope=Scope.External)] = external_data
+
+            if len(internal_data) > 0:
+                results[result_key._replace(scope=Scope.Internal)] = internal_data
+
+    return results
+
+
+def compute_flow_and_scale_results(state: State, glb_idx, scenario_states: Dict[str, State],
+                                   observation_results: ResultDict,
+                                   time_observations_relative: TimeObservationsType) -> ResultDict:
     # Add Interfaces -Flow- relations (time independent)
     relations_flow = nx.DiGraph(
         incoming_graph_data=create_interface_edges(
@@ -570,15 +643,12 @@ def compute_flow_and_scale_results(state: State, glb_idx, global_parameters, pro
 
     results: ResultDict = {}
 
-    for scenario_name, scenario_params in problem_statement.scenarios.items():  # type: str, dict
+    for scenario_name, scenario_state in scenario_states.items():  # type: str, State
         print(f"********************* SCENARIO: {scenario_name}")
 
-        scenario_state = State(evaluate_parameters_for_scenario(global_parameters, scenario_params))
-
-        for time_period, observations in time_observations_absolute.items():
+        for time_period, observations in [(k.period, v) for k, v in observation_results.items() if k.scenario == scenario_name]:
             print(f"********************* TIME PERIOD: {time_period}")
 
-            known_observations: NodeFloatDict = {}
             # Create a copy of the main relations structures that are modified with time-dependent values
             time_relations_flow = relations_flow.copy()
             time_relations_scale = relations_scale.copy()
@@ -595,30 +665,16 @@ def compute_flow_and_scale_results(state: State, glb_idx, global_parameters, pro
                                               InterfaceNode(obs.factor),
                                               weight=expression)
 
-            # Second and last pass to resolve observation expressions with parameters
-            for expression, obs in observations:
-                obs_node = InterfaceNode(obs.factor)
-                if obs_node not in chain(time_relations_flow.nodes, time_relations_scale.nodes, time_relations_scale_change.nodes):
-                    print(f"WARNING: observation at interface '{obs_node}' is not taken into account.")
-                else:
-                    value, _, params, issues = evaluate_numeric_expression_with_parameters(expression, scenario_state)
-                    if value is None:
-                        raise SolvingException(IType.ERROR,
-                            f"Scenario '{scenario_name}' - period '{time_period}'. Cannot evaluate expression "
-                            f"'{expression}' for observation at interface '{obs_node}'. Params: {params}. "
-                            f"Issues: {', '.join(issues)}"
-                        )
-
-                    known_observations[obs_node] = value
-
-            if len(known_observations) == 0:
-                raise SolvingException(IType.ERROR,
-                                       f"Scenario '{scenario_name}' - period '{time_period}'. No 'flowable' or 'scalable' observations available."
-                                       )
-            # assert(len(known_observations) > 0)
+            # Are there observations we can use to resolve the graphs? If not continue
+            if observations.keys().isdisjoint(set().union(time_relations_flow.nodes, time_relations_scale.nodes,
+                                                          time_relations_scale_change.nodes)):
+                # raise SolvingException(IType.ERROR, f"Scenario '{scenario_name}' - period '{time_period}'. No 'flowable' or 'scalable' observations available.")
+                print(f"WARNING: Scenario '{scenario_name}' - period '{time_period}'. No 'flowable' or 'scalable' observations available.")
+                continue
 
             # Second and last pass to resolve weight expressions: expressions with parameters can be solved
-            resolve_weight_expressions([time_relations_flow, time_relations_scale, time_relations_scale_change], scenario_state, raise_error=True)
+            resolve_weight_expressions([time_relations_flow, time_relations_scale, time_relations_scale_change],
+                                       scenario_state, raise_error=True)
 
             # Show graphs with Matplotlib. Use only for debugging!
             # if scenario_name == 'Scenario1' and time_period == '2011':
@@ -635,25 +691,26 @@ def compute_flow_and_scale_results(state: State, glb_idx, global_parameters, pro
             comp_graph_scale_change = ComputationGraph(relations_scale_change)
 
             # Solve computation graphs
-            data, unknown_data = iterative_solving([comp_graph_scale, comp_graph_scale_change, comp_graph_flow],
-                                                   known_observations)
+            known_data, unknown_data = iterative_solving([comp_graph_scale, comp_graph_scale_change, comp_graph_flow],
+                                                         {k: v.value for k, v in observations.items()})
 
             print(f"Unknown data: {unknown_data}")
 
-            # Filter out results without a real processor
-            data = {k: v for k, v in data.items() if k.processor}
+            # Filter out results without a real processor and add Computed information
+            data: NodeFloatComputedDict = {k: FloatComputedTuple(v, Computed.Yes)
+                                           for k, v in known_data.items() if k.processor}
 
-            data = {**known_observations, **data}
-            results[(scenario_name, time_period, Scope.Total.name)] = data
+            result_key = ResultKey(scenario_name, time_period, Scope.Total)
+            results[result_key] = data
 
             # TODO INDICATORS
 
-            internal_data, external_data = compute_separated_results(data, comp_graph_flow)
+            internal_data, external_data = compute_internal_external_results(data, comp_graph_flow)
             if len(external_data) > 0:
-                results[(scenario_name, time_period, Scope.External.name)] = external_data
+                results[result_key._replace(scope=Scope.External)] = external_data
 
             if len(internal_data) > 0:
-                results[(scenario_name, time_period, Scope.Internal.name)] = internal_data
+                results[result_key._replace(scope=Scope.Internal)] = internal_data
 
     return results
 
@@ -674,12 +731,13 @@ def create_computation_graph_from_flows(relations_flow: nx.DiGraph, relations_sc
     return comp_graph_flow
 
 
-def compute_separated_results(values: NodeFloatDict, comp_graph: ComputationGraph) -> Tuple[NodeFloatDict, NodeFloatDict]:
-    internal_results: NodeFloatDict = {}
-    external_results: NodeFloatDict = {}
+def compute_internal_external_results(values: NodeFloatComputedDict, comp_graph: Optional[ComputationGraph] = None) \
+        -> Tuple[NodeFloatComputedDict, NodeFloatComputedDict]:
+    internal_results: NodeFloatComputedDict = {}
+    external_results: NodeFloatComputedDict = {}
     for node, value in values.items():
 
-        if node in comp_graph.graph:
+        if comp_graph is not None and node in comp_graph.graph:
             if node.orientation.lower() == 'input':
                 # res = compute resulting vector based on INCOMING flows processor.subsystem_type
                 edges: Set[Tuple[InterfaceNode, InterfaceNode, Dict]] = comp_graph.graph.in_edges(node, data=True)
@@ -691,7 +749,7 @@ def compute_separated_results(values: NodeFloatDict, comp_graph: ComputationGrap
             internal_value: Optional[float] = None
             for opposite_node, _, data in edges:
                 if data['weight'] and opposite_node in values:
-                    edge_value = values[opposite_node] * data['weight']
+                    edge_value = values[opposite_node].value * data['weight']
 
                     if opposite_node.subsystem.lower() in ["external", "externalenvironment"]:
                         external_value = (0.0 if external_value is None else external_value) + edge_value
@@ -699,12 +757,12 @@ def compute_separated_results(values: NodeFloatDict, comp_graph: ComputationGrap
                         internal_value = (0.0 if internal_value is None else internal_value) + edge_value
 
             if external_value is not None:
-                external_results[node] = external_value
+                external_results[node] = FloatComputedTuple(external_value, Computed.Yes)
 
             if internal_value is not None:
-                internal_results[node] = internal_value
+                internal_results[node] = FloatComputedTuple(internal_value, Computed.Yes)
 
-        if node not in external_results and node not in internal_results:
+        if node not in chain(external_results, internal_results):
             # res = compute resulting vector based on containing PROCESSOR
             if node.subsystem.lower() in ["external", "externalenvironment"]:
                 external_results[node] = value
@@ -714,12 +772,14 @@ def compute_separated_results(values: NodeFloatDict, comp_graph: ComputationGrap
     return internal_results, external_results
 
 
-def compute_interfacetype_aggregates(glb_idx, results):
+def compute_interfacetype_aggregate_results(glb_idx: PartialRetrievalDictionary, existing_results: ResultDict) \
+        -> ResultDict:
 
-    def get_sum(processor: Processor, children: Set[FactorType]) -> float:
-        sum_children = None
+    def get_sum(processor: Processor, children: Set[FactorType]) -> Optional[float]:
+        sum_children: Optional[float] = None
         for child in children:
-            child_value = values.get(InterfaceNode(child, processor, orientation))
+            child_float_computed = values.get(InterfaceNode(child, processor, orientation))
+            child_value = child_float_computed.value if child_float_computed else None
             if child_value is None:
                 if child in parent_interfaces:
                     child_value = get_sum(processor, parent_interfaces[child])
@@ -732,14 +792,14 @@ def compute_interfacetype_aggregates(glb_idx, results):
 
         return sum_children
 
-    agg_results: ResultDict = {}
-    processors: Set[Processor] = {node.processor for values in results.values() for node in values}
+    results: ResultDict = {}
+    processors: Set[Processor] = {node.processor for values in existing_results.values() for node in values}
 
     # Get all different existing interfaces types that can be computed based on children interface types
     parent_interfaces: Dict[FactorType, Set[FactorType]] = \
         {ft: ft.get_children() for ft in glb_idx.get(FactorType.partial_key()) if len(ft.get_children()) > 0}
 
-    for key, values in results.items():
+    for key, values in existing_results.items():
         for parent_interface, children_interfaces in parent_interfaces.items():
             for proc in processors:
                 for orientation in ["Input", "Output"]:
@@ -748,11 +808,11 @@ def compute_interfacetype_aggregates(glb_idx, results):
                     if values.get(interface_node) is None:
                         sum_result = get_sum(proc, children_interfaces)
                         if sum_result is not None:
-                            agg_results.setdefault(key, {}).update({
-                                interface_node: sum_result
+                            results.setdefault(key, {}).update({
+                                interface_node: FloatComputedTuple(sum_result, Computed.Yes)
                             })
 
-    return agg_results
+    return results
 
 
 def get_processor_partof_hierarchies(glb_idx, system):
@@ -777,10 +837,9 @@ def get_processor_partof_hierarchies(glb_idx, system):
     return proc_hierarchies
 
 
-def compute_partof_aggregates(glb_idx: PartialRetrievalDictionary,
-                              systems: Dict[str, Set[Processor]],
-                              results: ResultDict):
-    agg_results: ResultDict = {}
+def compute_partof_aggregate_results(glb_idx: PartialRetrievalDictionary, scenario_states: Dict[str, State],
+                                     systems: Dict[str, Set[Processor]], existing_results: ResultDict) -> ResultDict:
+    results: ResultDict = {}
 
     # Get all different existing interfaces and their units
     # TODO: interfaces could need a unit transformation according to interface type
@@ -800,6 +859,7 @@ def compute_partof_aggregates(glb_idx: PartialRetrievalDictionary,
             # nx.draw_spring(proc_hierarchy, with_labels=True, font_size=8, node_size=60)
             # plt.show()
 
+            # Create a hierarchy of processors with each kind of interface and try to aggregate
             for interface in interfaces:
                 print(f"********************* INTERFACE: {interface.name}")
 
@@ -812,27 +872,40 @@ def compute_partof_aggregates(glb_idx: PartialRetrievalDictionary,
                                              for u, v in proc_hierarchy.edges]
                     )
 
-                    for key, values in results.items():
+                    # For every dimension tuple extract the results we have (observations or computed) and use them
+                    # to aggregate values in the current hierarchy
+                    for result_key, node_floatcomputed_dict in existing_results.items():
 
-                        filtered_values: NodeFloatDict = {k: values[k]
-                                                          for k in interfaced_proc_hierarchy.nodes
-                                                          if values.get(k) is not None}
+                        policy: str = scenario_states[result_key.scenario].get(ConflictingDataResolutionPolicy.get_key())
+
+                        # Do we have any value for the current hierarchy?
+                        filtered_values: NodeFloatComputedDict = {k: node_floatcomputed_dict[k]
+                                                                  for k in interfaced_proc_hierarchy.nodes
+                                                                  if node_floatcomputed_dict.get(k) is not None}
 
                         if len(filtered_values) > 0:
-                            print(f"*** (Results key = {key})")
-
                             # Aggregate top-down, starting from root
-                            agg_res, error_msg = compute_aggregate_results(interfaced_proc_hierarchy, filtered_values)
+                            aggregations, taken_conflicts, dismissed_conflicts, error_msg = \
+                                compute_aggregate_results(interfaced_proc_hierarchy, filtered_values,
+                                                          ConflictingDataResolutionPolicy[policy])
 
                             if error_msg is not None:
                                 raise SolvingException(
                                     IType.ERROR, f"System: '{system}'. Interface: '{interface.name}'. "
                                                  f"Orientation: '{orientation}'. Error: {error_msg}")
 
-                            if len(agg_res) > 0:
-                                agg_results.setdefault(key, {}).update(agg_res)
+                            key_taken = result_key._replace(conflict=ConflictResolution.Taken)
+                            key_dismissed = result_key._replace(conflict=ConflictResolution.Dismissed)
 
-    return agg_results
+                            for node, float_computed in aggregations.items():
+                                if node in taken_conflicts:
+                                    del existing_results[result_key][node]
+                                    results.setdefault(key_taken, {})[node] = taken_conflicts[node]
+                                    results.setdefault(key_dismissed, {})[node] = dismissed_conflicts[node]
+                                else:
+                                    results.setdefault(result_key, {})[node] = float_computed
+
+    return results
 
 
 def flow_graph_solver(global_parameters: List[Parameter], problem_statement: ProblemStatement,
@@ -852,34 +925,54 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
     glb_idx, _, _, datasets, _ = get_case_study_registry_objects(state)
     InterfaceNode.registry = glb_idx
 
-    try:
-        results = compute_flow_and_scale_results(state, glb_idx, global_parameters, problem_statement)
+    # Get available observations
+    absolute_observations, relative_observations = \
+        split_observations_by_relativeness(get_evaluated_observations_by_time(glb_idx))
 
-        agg_results = compute_partof_aggregates(glb_idx, input_systems, results)
+    if len(absolute_observations) == 0:
+        raise SolvingException(
+            IType.WARNING, f"No absolute observations have been found. The solver has nothing to solve."
+        )
+
+    # Get a list of scenario states, each one being a combination of the global state with a specific scenario state
+    scenario_states: Dict[str, State] = \
+        {scenario_name: State(evaluate_parameters_for_scenario(global_parameters, scenario_params))
+         for scenario_name, scenario_params in problem_statement.scenarios.items()}
+
+    try:
+        # Get final results from the absolute observations
+        results = compute_scenario_evaluated_observation_results(scenario_states, absolute_observations)
+
+        new_results = compute_flow_and_scale_results(state, glb_idx, scenario_states, results, relative_observations)
+
+        for key, value in new_results.items():
+            results.setdefault(key, {}).update(value)
+
+        new_results = compute_partof_aggregate_results(glb_idx, scenario_states, input_systems, results)
+
+        for key, value in new_results.items():
+            results.setdefault(key, {}).update(value)
+
+        new_results = compute_interfacetype_aggregate_results(glb_idx, results)
+
+        for key, value in new_results.items():
+            results.setdefault(key, {}).update(value)
 
     except SolvingException as e:
         return [Issue(e.args[0], str(e.args[1]))]
 
-    # Add "agg_results" to "results"
-    for key, value in agg_results.items():
-        results[key].update(value)
-
-    agg_results = compute_interfacetype_aggregates(glb_idx, results)
-
-    # Add "agg_results" to "results"
-    for key, value in agg_results.items():
-        results[key].update(value)
-
-    data = {k + node.key: {"RoegenType": node.roegen_type if node else "-",
-                           "Value": value,
-                           "Unit": node.unit if node else "-",
-                           "Level": node.processor.attributes.get('level', '') if node else "-",
-                           "System": node.system if node else "-",
-                           "Subsystem": node.subsystem if node else "-",
-                           "Sphere": node.sphere if node else "-"
-                           }
-            for k, v in results.items()
-            for node, value in v.items()}
+    data = {result_key.as_string_tuple() + node.key:
+                {"RoegenType": node.roegen_type if node else "-",
+                 "Value": float_computed.value,
+                 "Computed": float_computed.computed.name,
+                 "Unit": node.unit if node else "-",
+                 "Level": node.processor.attributes.get('level', '') if node else "-",
+                 "System": node.system if node else "-",
+                 "Subsystem": node.subsystem if node else "-",
+                 "Sphere": node.sphere if node else "-"
+                }
+            for result_key, node_floatcomputed_dict in results.items()
+            for node, float_computed in node_floatcomputed_dict.items()}
 
     df = pd.DataFrame.from_dict(data, orient='index')
 
@@ -887,7 +980,7 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
     df = df.round(3)
 
     # Give a name to the dataframe indexes
-    index_names = ["Scenario", "Period", "Scope"] + InterfaceNode.key_labels()  # "Processor", "Interface", "Orientation"
+    index_names = [f.title() for f in ResultKey._fields] + InterfaceNode.key_labels()  # "Processor", "Interface", "Orientation"
     df.index.names = index_names
 
     # Sort the dataframe based on indexes. Not necessary, only done for debugging purposes.
@@ -1270,12 +1363,13 @@ def calculate_global_scalar_indicators(indicators: List[Indicator],
         return pd.DataFrame()
 
 
-def compute_aggregate_results(tree: nx.DiGraph, params: NodeFloatDict) -> Tuple[NodeFloatDict, Optional[str]]:
-    def compute_node(node: str) -> float:
-        if params.get(node) is not None:
-            return params[node]
-
-        sum_children = None
+def compute_aggregate_results(tree: nx.DiGraph, params: NodeFloatComputedDict,
+                              resolution_policy: ConflictingDataResolutionPolicy) \
+        -> Tuple[NodeFloatComputedDict, NodeFloatComputedDict, NodeFloatComputedDict, Optional[str]]:
+    def compute_node(node: InterfaceNode) -> Optional[float]:
+        # Depth-first search
+        return_value: Optional[float]
+        sum_children: Optional[float] = None
 
         for pred in tree.predecessors(node):
             pred_value = compute_node(pred)
@@ -1283,17 +1377,31 @@ def compute_aggregate_results(tree: nx.DiGraph, params: NodeFloatDict) -> Tuple[
                 sum_children = (0 if sum_children is None else sum_children) + pred_value
 
         if sum_children is not None:
-            values[node] = sum_children
+            # New value has been computed, add it to "new_values"
+            new_values[node] = FloatComputedTuple(sum_children, Computed.Yes)  # Computed
 
-        return sum_children
+            if params.get(node) is not None:
+                # Conflict here: applies strategy
+                taken_conflicts[node], dismissed_conflicts[node] = \
+                    ConflictingDataResolutionPolicy.resolve(new_values[node], params[node], resolution_policy)
+                return_value = taken_conflicts[node].value
+            else:
+                return_value = sum_children
+        else:
+            # No value got from children, try to search in "params"
+            return_value = params[node].value if params.get(node) is not None else None
 
-    root_nodes = [node for node, degree in tree.out_degree if degree == 0]
+        return return_value
+
+    root_nodes: List[InterfaceNode] = [node for node, degree in tree.out_degree if degree == 0]
     if len(root_nodes) != 1 or root_nodes[0] is None:
-        return {}, f"Root node cannot be taken from list '{root_nodes}'"
+        return {}, {}, {}, f"Root node cannot be taken from list '{root_nodes}'"
 
-    values: NodeFloatDict = {}
+    new_values: NodeFloatComputedDict = {}  # All computed aggregations
+    taken_conflicts: NodeFloatComputedDict = {}  # Taken values on conflicting nodes
+    dismissed_conflicts: NodeFloatComputedDict = {}  # Dismissed values on conflicting nodes
     compute_node(root_nodes[0])
-    return values, None
+    return new_values, taken_conflicts, dismissed_conflicts, None
 
 
 def get_eum_dataset(dataframe: pd.DataFrame) -> "Dataset":

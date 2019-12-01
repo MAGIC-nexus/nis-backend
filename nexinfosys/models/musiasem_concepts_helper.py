@@ -139,12 +139,10 @@ def find_quantitative_observations(idx: PartialRetrievalDictionary, processor_in
     """ Find all available quantitative observations """
     interfaces: List[Factor] = idx.get(Factor.partial_key())
 
-    if processor_instances_only:
-        return [o for i in interfaces if i.processor.instance_or_archetype == "Instance"
-                  for o in i.quantitative_observations]
-    else:
-        return [o for i in interfaces
-                  for o in i.quantitative_observations]
+    return [o for i in interfaces
+                    if not processor_instances_only or i.processor.instance_or_archetype == "Instance"
+              for o in i.quantitative_observations
+           ]
 
 
 def find_observable_by_name(name: str, idx: PartialRetrievalDictionary, processor: Processor = None,
