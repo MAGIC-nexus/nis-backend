@@ -71,10 +71,36 @@ class Computed(Enum):
     Yes = 2
 
 
+class FloatComputedTuple(NamedTuple):
+    value: float
+    computed: Computed
+
+
 class ConflictResolution(Enum):
     No = 1
     Taken = 2
     Dismissed = 3
+
+
+class ConflictingDataResolutionPolicy(Enum):
+    TakeUpper = 1
+    TakeLowerAggregation = 2
+
+    @staticmethod
+    def get_key():
+        return "NISSolverConflictingDataResolutionPolicy"
+
+    @classmethod
+    def resolve(cls, computed_value: FloatComputedTuple, existing_value: FloatComputedTuple,
+                policy: "ConflictingDataResolutionPolicy") \
+            -> Tuple[FloatComputedTuple, FloatComputedTuple]:
+
+        if policy == cls.TakeLowerAggregation:
+            # Take computed aggregation over existing value
+            return computed_value, existing_value
+        elif policy == cls.TakeUpper:
+            # Take existing value over computed aggregation
+            return existing_value, computed_value
 
 
 class InterfaceNode:
@@ -163,11 +189,6 @@ class ResultKey(NamedTuple):
 
     def as_string_tuple(self) -> Tuple[str, str, str, str]:
         return self.scenario, self.period, self.scope.name, self.conflict.name
-
-
-class FloatComputedTuple(NamedTuple):
-    value: float
-    computed: Computed
 
 
 NodeFloatDict = Dict[InterfaceNode, float]
@@ -816,9 +837,8 @@ def get_processor_partof_hierarchies(glb_idx, system):
     return proc_hierarchies
 
 
-def compute_partof_aggregate_results(glb_idx: PartialRetrievalDictionary,
-                                     systems: Dict[str, Set[Processor]],
-                                     existing_results: ResultDict) -> ResultDict:
+def compute_partof_aggregate_results(glb_idx: PartialRetrievalDictionary, scenario_states: Dict[str, State],
+                                     systems: Dict[str, Set[Processor]], existing_results: ResultDict) -> ResultDict:
     results: ResultDict = {}
 
     # Get all different existing interfaces and their units
@@ -856,6 +876,8 @@ def compute_partof_aggregate_results(glb_idx: PartialRetrievalDictionary,
                     # to aggregate values in the current hierarchy
                     for result_key, node_floatcomputed_dict in existing_results.items():
 
+                        policy: str = scenario_states[result_key.scenario].get(ConflictingDataResolutionPolicy.get_key())
+
                         # Do we have any value for the current hierarchy?
                         filtered_values: NodeFloatComputedDict = {k: node_floatcomputed_dict[k]
                                                                   for k in interfaced_proc_hierarchy.nodes
@@ -864,7 +886,8 @@ def compute_partof_aggregate_results(glb_idx: PartialRetrievalDictionary,
                         if len(filtered_values) > 0:
                             # Aggregate top-down, starting from root
                             aggregations, taken_conflicts, dismissed_conflicts, error_msg = \
-                                compute_aggregate_results(interfaced_proc_hierarchy, filtered_values)
+                                compute_aggregate_results(interfaced_proc_hierarchy, filtered_values,
+                                                          ConflictingDataResolutionPolicy[policy])
 
                             if error_msg is not None:
                                 raise SolvingException(
@@ -925,7 +948,7 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
         for key, value in new_results.items():
             results.setdefault(key, {}).update(value)
 
-        new_results = compute_partof_aggregate_results(glb_idx, input_systems, results)
+        new_results = compute_partof_aggregate_results(glb_idx, scenario_states, input_systems, results)
 
         for key, value in new_results.items():
             results.setdefault(key, {}).update(value)
@@ -1340,7 +1363,8 @@ def calculate_global_scalar_indicators(indicators: List[Indicator],
         return pd.DataFrame()
 
 
-def compute_aggregate_results(tree: nx.DiGraph, params: NodeFloatComputedDict) \
+def compute_aggregate_results(tree: nx.DiGraph, params: NodeFloatComputedDict,
+                              resolution_policy: ConflictingDataResolutionPolicy) \
         -> Tuple[NodeFloatComputedDict, NodeFloatComputedDict, NodeFloatComputedDict, Optional[str]]:
     def compute_node(node: InterfaceNode) -> Optional[float]:
         # Depth-first search
@@ -1358,16 +1382,9 @@ def compute_aggregate_results(tree: nx.DiGraph, params: NodeFloatComputedDict) \
 
             if params.get(node) is not None:
                 # Conflict here: applies strategy
-                if True:
-                    # Take computed aggregation over existing value
-                    taken_conflicts[node] = new_values[node]
-                    return_value = sum_children
-                    dismissed_conflicts[node] = params[node]
-                else:
-                    # Take existing value over computed aggregation
-                    taken_conflicts[node] = params[node]  # Observation or flow-scale computed value
-                    return_value = params[node].value
-                    dismissed_conflicts[node] = new_values[node]
+                taken_conflicts[node], dismissed_conflicts[node] = \
+                    ConflictingDataResolutionPolicy.resolve(new_values[node], params[node], resolution_policy)
+                return_value = taken_conflicts[node].value
             else:
                 return_value = sum_children
         else:
