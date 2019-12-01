@@ -171,9 +171,8 @@ class FloatComputedTuple(NamedTuple):
 
 
 NodeFloatDict = Dict[InterfaceNode, float]
-ResultDict = Dict[ResultKey, NodeFloatDict]
 NodeFloatComputedDict = Dict[InterfaceNode, FloatComputedTuple]
-ResultComputedDict = Dict[ResultKey, NodeFloatComputedDict]
+ResultDict = Dict[ResultKey, NodeFloatComputedDict]
 
 
 @Memoize
@@ -562,13 +561,13 @@ def create_scale_change_relations_and_update_flow_relations(relations_flow: nx.D
     return relations_scale_change
 
 
-def get_scenario_evaluated_observation_results(scenario_states: Dict[str, State],
-                                               time_observations: TimeObservationsType) -> ResultDict:
+def compute_scenario_evaluated_observation_results(scenario_states: Dict[str, State],
+                                                   time_observations: TimeObservationsType) -> ResultDict:
     results: ResultDict = {}
 
     for scenario_name, scenario_state in scenario_states.items():  # type: str, State
         for time_period, observations in time_observations.items():
-            resolved_observations: NodeFloatDict = {}
+            resolved_observations: NodeFloatComputedDict = {}
 
             # Second and last pass to resolve observation expressions with parameters
             for expression, obs in observations:
@@ -580,7 +579,7 @@ def get_scenario_evaluated_observation_results(scenario_states: Dict[str, State]
                         f"Issues: {', '.join(issues)}"
                     )
 
-                resolved_observations[InterfaceNode(obs.factor)] = value
+                resolved_observations[InterfaceNode(obs.factor)] = FloatComputedTuple(value, Computed.No)
 
             result_key = ResultKey(scenario_name, time_period, Scope.Total)
             results[result_key] = resolved_observations
@@ -626,7 +625,7 @@ def compute_flow_and_scale_results(state: State, glb_idx, scenario_states: Dict[
     for scenario_name, scenario_state in scenario_states.items():  # type: str, State
         print(f"********************* SCENARIO: {scenario_name}")
 
-        for time_period, observations in [(k[1], v) for k, v in observation_results.items() if k[0] == scenario_name]:
+        for time_period, observations in [(k.period, v) for k, v in observation_results.items() if k.scenario == scenario_name]:
             print(f"********************* TIME PERIOD: {time_period}")
 
             # Create a copy of the main relations structures that are modified with time-dependent values
@@ -671,12 +670,14 @@ def compute_flow_and_scale_results(state: State, glb_idx, scenario_states: Dict[
             comp_graph_scale_change = ComputationGraph(relations_scale_change)
 
             # Solve computation graphs
-            data, unknown_data = iterative_solving([comp_graph_scale, comp_graph_scale_change, comp_graph_flow], observations)
+            known_data, unknown_data = iterative_solving([comp_graph_scale, comp_graph_scale_change, comp_graph_flow],
+                                                         {k: v.value for k, v in observations.items()})
 
             print(f"Unknown data: {unknown_data}")
 
-            # Filter out results without a real processor
-            data: NodeFloatDict = {k: v for k, v in data.items() if k.processor}
+            # Filter out results without a real processor and add Computed information
+            data: NodeFloatComputedDict = {k: FloatComputedTuple(v, Computed.Yes)
+                                           for k, v in known_data.items() if k.processor}
 
             result_key = ResultKey(scenario_name, time_period, Scope.Total)
             results[result_key] = data
@@ -709,10 +710,10 @@ def create_computation_graph_from_flows(relations_flow: nx.DiGraph, relations_sc
     return comp_graph_flow
 
 
-def compute_internal_external_results(values: NodeFloatDict, comp_graph: Optional[ComputationGraph] = None) \
-        -> Tuple[NodeFloatDict, NodeFloatDict]:
-    internal_results: NodeFloatDict = {}
-    external_results: NodeFloatDict = {}
+def compute_internal_external_results(values: NodeFloatComputedDict, comp_graph: Optional[ComputationGraph] = None) \
+        -> Tuple[NodeFloatComputedDict, NodeFloatComputedDict]:
+    internal_results: NodeFloatComputedDict = {}
+    external_results: NodeFloatComputedDict = {}
     for node, value in values.items():
 
         if comp_graph is not None and node in comp_graph.graph:
@@ -727,7 +728,7 @@ def compute_internal_external_results(values: NodeFloatDict, comp_graph: Optiona
             internal_value: Optional[float] = None
             for opposite_node, _, data in edges:
                 if data['weight'] and opposite_node in values:
-                    edge_value = values[opposite_node] * data['weight']
+                    edge_value = values[opposite_node].value * data['weight']
 
                     if opposite_node.subsystem.lower() in ["external", "externalenvironment"]:
                         external_value = (0.0 if external_value is None else external_value) + edge_value
@@ -735,10 +736,10 @@ def compute_internal_external_results(values: NodeFloatDict, comp_graph: Optiona
                         internal_value = (0.0 if internal_value is None else internal_value) + edge_value
 
             if external_value is not None:
-                external_results[node] = external_value
+                external_results[node] = FloatComputedTuple(external_value, Computed.Yes)
 
             if internal_value is not None:
-                internal_results[node] = internal_value
+                internal_results[node] = FloatComputedTuple(internal_value, Computed.Yes)
 
         if node not in chain(external_results, internal_results):
             # res = compute resulting vector based on containing PROCESSOR
@@ -750,8 +751,8 @@ def compute_internal_external_results(values: NodeFloatDict, comp_graph: Optiona
     return internal_results, external_results
 
 
-def compute_interfacetype_aggregates(glb_idx: PartialRetrievalDictionary, existing_results: ResultComputedDict) \
-        -> ResultComputedDict:
+def compute_interfacetype_aggregate_results(glb_idx: PartialRetrievalDictionary, existing_results: ResultDict) \
+        -> ResultDict:
 
     def get_sum(processor: Processor, children: Set[FactorType]) -> Optional[float]:
         sum_children: Optional[float] = None
@@ -770,7 +771,7 @@ def compute_interfacetype_aggregates(glb_idx: PartialRetrievalDictionary, existi
 
         return sum_children
 
-    results: ResultComputedDict = {}
+    results: ResultDict = {}
     processors: Set[Processor] = {node.processor for values in existing_results.values() for node in values}
 
     # Get all different existing interfaces types that can be computed based on children interface types
@@ -815,10 +816,10 @@ def get_processor_partof_hierarchies(glb_idx, system):
     return proc_hierarchies
 
 
-def compute_partof_aggregates(glb_idx: PartialRetrievalDictionary,
-                              systems: Dict[str, Set[Processor]],
-                              existing_results: ResultComputedDict) -> ResultComputedDict:
-    results: ResultComputedDict = {}
+def compute_partof_aggregate_results(glb_idx: PartialRetrievalDictionary,
+                                     systems: Dict[str, Set[Processor]],
+                                     existing_results: ResultDict) -> ResultDict:
+    results: ResultDict = {}
 
     # Get all different existing interfaces and their units
     # TODO: interfaces could need a unit transformation according to interface type
@@ -915,37 +916,27 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
         {scenario_name: State(evaluate_parameters_for_scenario(global_parameters, scenario_params))
          for scenario_name, scenario_params in problem_statement.scenarios.items()}
 
-    # Get final results from the absolute observations
-    observation_results = get_scenario_evaluated_observation_results(scenario_states, absolute_observations)
-
     try:
-        results = compute_flow_and_scale_results(state, glb_idx, scenario_states, observation_results,
-                                                            relative_observations)
+        # Get final results from the absolute observations
+        results = compute_scenario_evaluated_observation_results(scenario_states, absolute_observations)
 
-        # Add "observation_results" to "results"
-        for key, value in observation_results.items():
-            results[key].update(value)
+        new_results = compute_flow_and_scale_results(state, glb_idx, scenario_states, results, relative_observations)
 
-        results_with_computed: ResultComputedDict = {}
-        for result_key, node_float_dict in results.items():
-            results_with_computed[result_key] = \
-                {node: FloatComputedTuple(value, Computed.Yes if observation_results[result_key].get(node) is None else Computed.No)
-                 for node, value in node_float_dict.items()}
+        for key, value in new_results.items():
+            results.setdefault(key, {}).update(value)
 
-        aggregated_results = compute_partof_aggregates(glb_idx, input_systems, results_with_computed)
+        new_results = compute_partof_aggregate_results(glb_idx, input_systems, results)
+
+        for key, value in new_results.items():
+            results.setdefault(key, {}).update(value)
+
+        new_results = compute_interfacetype_aggregate_results(glb_idx, results)
+
+        for key, value in new_results.items():
+            results.setdefault(key, {}).update(value)
 
     except SolvingException as e:
         return [Issue(e.args[0], str(e.args[1]))]
-
-    # Add "aggregated_results" to "results_with_computed"
-    for key, value in aggregated_results.items():
-        results_with_computed.setdefault(key, {}).update(value)
-
-    aggregated_results = compute_interfacetype_aggregates(glb_idx, results_with_computed)
-
-    # Add "aggregated_results" to "results_with_computed"
-    for key, value in aggregated_results.items():
-        results_with_computed[key].update(value)
 
     data = {result_key.as_string_tuple() + node.key:
                 {"RoegenType": node.roegen_type if node else "-",
@@ -957,7 +948,7 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
                  "Subsystem": node.subsystem if node else "-",
                  "Sphere": node.sphere if node else "-"
                 }
-            for result_key, node_floatcomputed_dict in results_with_computed.items()
+            for result_key, node_floatcomputed_dict in results.items()
             for node, float_computed in node_floatcomputed_dict.items()}
 
     df = pd.DataFrame.from_dict(data, orient='index')
