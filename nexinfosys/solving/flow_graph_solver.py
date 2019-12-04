@@ -94,7 +94,7 @@ class InterfaceNode:
 
     @property
     def unit(self):
-        return self.interface_type.attributes.get('unit')
+        return self.interface_type.unit
 
     @property
     def roegen_type(self):
