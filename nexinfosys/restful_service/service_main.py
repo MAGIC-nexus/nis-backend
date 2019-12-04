@@ -151,50 +151,65 @@ def initialize_databases():
         sys.exit(1)
 
 
-def connect_redis():
+def construct_session_persistence_backend():
     # A REDIS instance needs to be available. Check it
     # A local REDIS could be as simple as:
     #
     # docker run --rm -p 6379:6379 redis:alpine
     #
+    d = {}
     if 'REDIS_HOST' in app.config:
         r_host = app.config['REDIS_HOST']
+        d["SESSION_KEY_PREFIX"] = "nis:"
+        d["SESSION_PERMANENT"] = False
+        rs2 = None
         if r_host == "redis_lite":
             import redislite
             rs2 = redislite.Redis("tmp_nis_backend_redislite.db")  # serverconfig={'port': '6379'}
+            d["SESSION_TYPE"] = "redis"
+            d["SESSION_REDIS"] = rs2
+            # d["PERMANENT_SESSION_LIFETIME"] = 3600
+        elif r_host.startswith("filesystem:"):
+            d["SESSION_TYPE"] = "filesystem"
+            # d["SESSION_FILE_DIR"] = r_host[len("filesystem:"):]
+            d["SESSION_FILE_THRESHOLD"] = 100
+            # d["SESSION_FILE_MODE"] = 666
         else:
             rs2 = redis.Redis(r_host)
-        try:
-            print("Trying connection to REDIS '"+r_host+"'")
-            rs2.ping()
-            print("Connected to REDIS instance '"+r_host+"'")
-        except:
-            print("REDIS instance '"+r_host+"' not reachable, exiting now!")
+            d["SESSION_TYPE"] = "redis"
+            d["SESSION_REDIS"] = rs2
+            # d["PERMANENT_SESSION_LIFETIME"] = 3600
+        if rs2:
+            try:
+                print("Trying connection to REDIS '"+r_host+"'")
+                rs2.ping()
+                print("Connected to REDIS instance '"+r_host+"'")
+            except:
+                print("REDIS instance '"+r_host+"' not reachable, exiting now!")
+                sys.exit(1)
+        elif "SESSION_TYPE" not in d:
+            print("No session persistence backend configured, exiting now!")
             sys.exit(1)
-    else:
-        print("No REDIS instance configured, exiting now!")
-        sys.exit(1)
-    return rs2
+    return d
+
 
 # #####################################################################################################################
 # >>>> THE INITIALIZATION CODE <<<<
 #
 
-
 initialize_databases()
 nexinfosys.data_source_manager = register_external_datasources(app.config)
-nexinfosys.redis = connect_redis()
 
-# Now initialize Flask-Session, using the REDIS instance
-app.config["SESSION_TYPE"] = "redis"
-app.config["SESSION_KEY_PREFIX"] = "nis:"
-app.config["SESSION_PERMANENT"] = False
-#app.config["PERMANENT_SESSION_LIFETIME"] = 3600
-app.config["SESSION_REDIS"] = nexinfosys.redis
+d = construct_session_persistence_backend()
+if "SESSION_REDIS" in d:
+    nexinfosys.redis = d["SESSION_REDIS"]
+else:
+    nexinfosys.redis = None
 
-FlaskSessionServerSide(app)
-CORS(app,
-     # resources={r"/nis_api/*": {"origins": "http://localhost:4200"}},
+app.config.update(d)
+
+FlaskSessionServerSide(app)  # Flask Session
+CORS(app,                    # CORS
      resources={r"/nis_api/*": {"origins": "*"}},
      supports_credentials=True
      )
