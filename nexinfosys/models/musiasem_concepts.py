@@ -2643,6 +2643,10 @@ class Parameter(Nameable, Identifiable, Encodable):
     def default_value(self):
         return self._default_value
 
+    @default_value.setter
+    def default_value(self, value):
+        self._default_value = value
+
     @property
     def current_value(self):
         return self._current_value
@@ -2650,6 +2654,10 @@ class Parameter(Nameable, Identifiable, Encodable):
     @current_value.setter
     def current_value(self, value):
         self._current_value = value
+
+    @property
+    def range(self):
+        return self._range
 
     @property
     def group(self):

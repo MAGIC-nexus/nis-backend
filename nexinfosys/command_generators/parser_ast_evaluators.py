@@ -14,11 +14,12 @@ from nexinfosys import case_sensitive
 from pyparsing import quotedString
 
 from nexinfosys.model_services import State
-from nexinfosys.command_generators import global_functions
+from nexinfosys.command_generators import global_functions, IType, Issue, IssueLocation
 from nexinfosys.command_generators.parser_field_parsers import string_to_ast, arith_boolean_expression, key_value_list, \
-    simple_ident, expression_with_parameters
+    simple_ident, expression_with_parameters, number_interval
 from nexinfosys.common.helper import create_dictionary, PartialRetrievalDictionary, strcmp, is_float
-from nexinfosys.models.musiasem_concepts import ExternalDataset, FactorType, Processor
+from nexinfosys.models.musiasem_concepts import ExternalDataset, FactorType, Processor, Hierarchy
+
 
 # #################################################################################################################### #
 
@@ -569,6 +570,57 @@ def dictionary_from_key_value_list(kvl, state: State = None):
             except:
                 raise Exception("Key must be a string: " + k + " in key-value list: " + kvl)
     return d
+
+
+# Check value domain (according to Parameter definition)
+def check_parameter_value(glb_idx, p, value, issues, sheet_name, row):
+    retval = True
+    if p.range:
+        try:  # Try "numeric interval"
+            ast = string_to_ast(number_interval, p.range)
+            # try Convert value to float
+            ast2 = string_to_ast(expression_with_parameters, value)
+            evaluation_issues: List[Tuple[int, str]] = []
+            s = State()
+            value, unresolved_vars = ast_evaluator(exp=ast2, state=s, obj=None, issue_lst=evaluation_issues)
+            if value is not None:
+                try:
+                    value = float(value)
+                    left = ast["left"]
+                    right = ast["right"]
+                    left_number = ast["number_left"]
+                    right_number = ast["number_right"]
+                    if left == "[":
+                        value_meets_left = value >= left_number
+                    else:
+                        value_meets_left = value > left_number
+                    if right == "]":
+                        value_meets_right = value <= right_number
+                    else:
+                        value_meets_right = value < right_number
+                    if not value_meets_left or not value_meets_right:
+                        issues.append(Issue(itype=IType.ERROR,
+                                            description=f"The value {value} specified for the parameter '{p.name}' is out of the range {p.range}",
+                                            location=IssueLocation(sheet_name=sheet_name, row=row, column=None)))
+                        retval = False
+                except:
+                    issues.append(Issue(itype=IType.ERROR,
+                                        description=f"The parameter '{p.name}' has a non numeric value '{value}', and has been constrained with a numeric range. Please, either change the Value or the Range",
+                                        location=IssueLocation(sheet_name=sheet_name, row=row, column=None)))
+                    retval = False
+            else:
+                pass  # The parameter depends on other parameters, a valid situation
+
+        except:  # A hierarchy name
+            h = glb_idx.get(Hierarchy.partial_key(p.range))
+            h = h[0]
+            if value not in h.codes.keys():
+                issues.append(Issue(itype=IType.ERROR,
+                                    description=f"The value '{value}' specified for the parameter '{p.name}' is not in the codes of the hierarchy '{p.range}': {', '.join(h.codes.keys())}",
+                                    location=IssueLocation(sheet_name=sheet_name, row=row, column=None)))
+                retval = False
+
+    return retval
 
 
 if __name__ == '__main__':
