@@ -1,10 +1,11 @@
 import json
 
 from nexinfosys.command_generators import Issue, IType
+from nexinfosys.command_generators.parser_ast_evaluators import check_parameter_value
 from nexinfosys.command_generators.spreadsheet_command_parsers_v2 import IssueLocation
 from nexinfosys.common.helper import create_dictionary, strcmp
-from nexinfosys.model_services import IExecutableCommand, get_case_study_registry_objects
-from nexinfosys.models.musiasem_concepts import Parameter, ProblemStatement
+from nexinfosys.model_services import IExecutableCommand, get_case_study_registry_objects, State
+from nexinfosys.models.musiasem_concepts import Parameter, ProblemStatement, Hierarchy
 
 
 class ProblemStatementCommand(IExecutableCommand):
@@ -23,20 +24,22 @@ class ProblemStatementCommand(IExecutableCommand):
 
         for r, param in enumerate(self._content["items"]):
             parameter = param["parameter"]
-            scenario = param["scenario_name"]
+            scenario = param.get("scenario_name")
             p = glb_idx.get(Parameter.partial_key(parameter))
-            if scenario:
-                if len(p) == 0:
-                    issues.append(Issue(itype=IType.ERROR,
-                                        description="The parameter '" + parameter + "' has not been declared previously.",
-                                        location=IssueLocation(sheet_name=sheet_name, row=r, column=None)))
-                    any_error = True
-                    continue
+            if len(p) == 0:
+                issues.append(Issue(itype=IType.ERROR,
+                                    description="The parameter '" + parameter + "' has not been declared previously.",
+                                    location=IssueLocation(sheet_name=sheet_name, row=r, column=None)))
+                any_error = True
+                continue
 
             p = p[0]
             name = parameter
 
             value = param["parameter_value"]
+
+            check_parameter_value(glb_idx, p, value, issues, sheet_name, r)
+
             description = param.get("description", None)  # For readability of the workbook. Not used for solving
             if scenario:
                 if scenario in scenarios:
@@ -47,11 +50,12 @@ class ProblemStatementCommand(IExecutableCommand):
                 sp[name] = value
             else:
                 p.current_value = value
+                p.default_value = value
 
         if not any_error:
-            solver_parameters = {p.name: p.current_value
-                                 for p in glb_idx.get(Parameter.partial_key())
-                                 if p.group and strcmp(p.group, "NISSolverParameters")}
+            solver_parameters = {}  # {p.name: p.current_value for p in glb_idx.get(Parameter.partial_key()) if p.group and strcmp(p.group, "NISSolverParameters")}
+            if len(scenarios) == 0:
+                scenarios["default"] = create_dictionary()
             ps = ProblemStatement(solver_parameters, scenarios)
             glb_idx.put(ps.key(), ps)
 

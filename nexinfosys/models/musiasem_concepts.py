@@ -258,7 +258,7 @@ class Qualifiable(Encodable):
     def __init__(self, attributes: Dict[str, Any], internal_names: FrozenSet[str] = frozenset({})):
         # Setting attributes avoiding a call to the custom __setattr__()
         object.__setattr__(self, "_internal_names", ifnull(internal_names, frozenset({})))
-        object.__setattr__(self, "_attributes", ifnull(attributes, {}))
+        object.__setattr__(self, "_attributes", ifnull(create_dictionary(data=attributes), create_dictionary()))
 
     def encode(self):
         d = self.internal_attributes()
@@ -314,15 +314,15 @@ class Qualifiable(Encodable):
 
     def custom_attributes(self) -> Dict[str, Any]:
         if self.attributes:
-            return {k: v for k, v in self.attributes.items() if k not in self.internal_names}
+            return create_dictionary(data={k: v for k, v in self.attributes.items() if k not in self.internal_names})
         else:
-            return {}
+            return create_dictionary()
 
     def internal_attributes(self) -> Dict[str, Any]:
         if self.attributes:
-            return {k: self.attributes.get(k, None) for k in self.internal_names}
+            return create_dictionary(data={k: self.attributes.get(k, None) for k in self.internal_names})
         else:
-            return {}
+            return create_dictionary()
 
     def compare_attributes(self, attrs: Dict[str, Any]) -> bool:
         return all([attrs[k] == self.get_attribute(k) for k in attrs])
@@ -2643,6 +2643,10 @@ class Parameter(Nameable, Identifiable, Encodable):
     def default_value(self):
         return self._default_value
 
+    @default_value.setter
+    def default_value(self, value):
+        self._default_value = value
+
     @property
     def current_value(self):
         return self._current_value
@@ -2650,6 +2654,10 @@ class Parameter(Nameable, Identifiable, Encodable):
     @current_value.setter
     def current_value(self, value):
         self._current_value = value
+
+    @property
+    def range(self):
+        return self._range
 
     @property
     def group(self):

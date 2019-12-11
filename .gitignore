@@ -29,3 +29,6 @@ magic_box/
 
 /nexinfosys/restful_service/tmp_nis_backend_redislite.db.settings
 /nexinfosys/restful_service/nis_metadata.db
+
+nexinfosys/restful_service/flask_session/
+
