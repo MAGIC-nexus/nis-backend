@@ -1397,6 +1397,11 @@ class FloatOrString:
 
 class UnitConversion:
     @staticmethod
+    def convert(value: FloatOrStringT, from_unit: str, to_unit: str) -> FloatOrStringT:
+        ratio = UnitConversion.ratio(from_unit, to_unit)
+        return FloatOrString.multiply_with_float(value, ratio)
+
+    @staticmethod
     def ratio(from_unit: str, to_unit: str) -> float:
         return nexinfosys.ureg(from_unit).to(nexinfosys.ureg(to_unit)).magnitude
 

@@ -7,7 +7,7 @@ from nexinfosys.command_executors import BasicCommand, subrow_issue_message
 from nexinfosys.command_field_definitions import get_command_fields_from_class
 from nexinfosys.command_generators import parser_field_parsers, IType
 from nexinfosys.command_generators.parser_ast_evaluators import dictionary_from_key_value_list, ast_to_string
-from nexinfosys.common.helper import strcmp, first, ifnull
+from nexinfosys.common.helper import strcmp, first, ifnull, UnitConversion
 from nexinfosys.models.musiasem_concepts import PedigreeMatrix, FactorType, \
     Factor, FactorInProcessorType, Observer, GeographicReference, ProvenanceReference, \
     BibliographicReference, FactorTypesRelationUnidirectionalLinearTransformObservation
@@ -237,20 +237,14 @@ class InterfacesAndQualifiedQuantitiesCommand(BasicCommand):
         if f_value:
             if f_unit != ft.unit:
                 try:
-                    conv_factor = ureg(f_unit).to(ft.unit).magnitude
+                    f_value = UnitConversion.convert(f_value, f_unit, ft.unit)
                 except DimensionalityError:
                     self._add_issue(IType.ERROR,
                                     f"Dimensions of units in InterfaceType ({ft.unit}) and specified ({f_unit}) are not convertible" + subrow_issue_message(
                                         subrow))
                     return
-            else:
-                conv_factor = 1
-            try:
-                f_value = str(float(f_value) * conv_factor)
-            except ValueError:
-                f_value = f"({f_value}) * {conv_factor}"
 
-            f_unit = ft.unit
+                f_unit = ft.unit
 
         # Search for a relative_to interface
         f_relative_to_interface: Optional[Factor] = None
