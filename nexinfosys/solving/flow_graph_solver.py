@@ -257,8 +257,7 @@ def evaluate_parameters_for_scenario(base_params: List[Parameter], scenario_para
     cycles = get_circular_dependencies(unknown_params)
     if len(cycles) > 0:
         raise SolvingException(
-            IType.ERROR, f"Parameters cannot have circular dependencies. {len(cycles)} cycles were detected: "
-                         f"{':: '.join(cycles)}")
+            f"Parameters cannot have circular dependencies. {len(cycles)} cycles were detected: {':: '.join(cycles)}")
 
     # Initialize state with known parameters
     state.update(known_params)
@@ -276,8 +275,7 @@ def evaluate_parameters_for_scenario(base_params: List[Parameter], scenario_para
                 value, _, _, issues = evaluate_numeric_expression_with_parameters(ast, state)
                 if value is None:
                     raise SolvingException(
-                        IType.ERROR, f"It should be possible to evaluate the parameter '{param}'. "
-                                     f"Issues: {', '.join(issues)}")
+                        f"It should be possible to evaluate the parameter '{param}'. Issues: {', '.join(issues)}")
                 else:
                     del unknown_params[param]
                     result_params[param] = value
@@ -286,7 +284,7 @@ def evaluate_parameters_for_scenario(base_params: List[Parameter], scenario_para
                     state.set(param, value)
 
     if len(unknown_params) > 0:
-        raise SolvingException(IType.ERROR, f"Could not evaluate the following parameters: {', '.join(unknown_params)}")
+        raise SolvingException(f"Could not evaluate the following parameters: {', '.join(unknown_params)}")
 
     return result_params
 
@@ -393,11 +391,11 @@ def check_type_consistency_from_all_time_periods(time_periods: List[str]) -> str
         period_type = "month"
         period_check = is_month
     else:
-        raise SolvingException(IType.ERROR, f"Found invalid period type '{period}'")
+        raise SolvingException(f"Found invalid period type '{period}'")
 
     for time_period in time_periods:
         if time_period != period_type and not period_check(time_period):
-            raise SolvingException(IType.ERROR,
+            raise SolvingException(
                 f"Found period type inconsistency: accepting '{period_type}' but found '{time_period}'")
 
     return period_type
@@ -462,7 +460,7 @@ def raise_error_if_conflicts(conflicts: Dict[InterfaceNode, Set[InterfaceNode]],
             conflict_strings.append(f"{param} ({round(graph_params[param], 3)}) -> {conf_params_string}")
 
     if len(conflict_strings) > 0:
-        raise SolvingException(IType.ERROR, f"There are conflicts: {', '.join(conflict_strings)}")
+        raise SolvingException(f"There are conflicts: {', '.join(conflict_strings)}")
 
 
 def split_name(processor_interface: str) -> Tuple[str, Optional[str]]:
@@ -501,7 +499,6 @@ def resolve_weight_expressions(graph_list: List[nx.DiGraph], state: State, raise
                 value, ast, params, issues = evaluate_numeric_expression_with_parameters(expression, state)
                 if raise_error and value is None:
                     raise SolvingException(
-                        IType.ERROR,
                         f"Cannot evaluate expression "
                         f"'{expression}' for weight from interface '{u}' to interface '{v}'. Params: {params}. "
                         f"Issues: {', '.join(issues)}"
@@ -594,7 +591,7 @@ def compute_scenario_evaluated_observation_results(scenario_states: Dict[str, St
             for expression, obs in observations:
                 value, _, params, issues = evaluate_numeric_expression_with_parameters(expression, scenario_state)
                 if value is None:
-                    raise SolvingException(IType.ERROR,
+                    raise SolvingException(
                         f"Scenario '{scenario_name}' - period '{time_period}'. Cannot evaluate expression "
                         f"'{expression}' for observation at interface '{obs.factor.name}'. Params: {params}. "
                         f"Issues: {', '.join(issues)}"
@@ -668,7 +665,6 @@ def compute_flow_and_scale_results(state: State, glb_idx, scenario_states: Dict[
             # Are there observations we can use to resolve the graphs? If not continue
             if observations.keys().isdisjoint(set().union(time_relations_flow.nodes, time_relations_scale.nodes,
                                                           time_relations_scale_change.nodes)):
-                # raise SolvingException(IType.ERROR, f"Scenario '{scenario_name}' - period '{time_period}'. No 'flowable' or 'scalable' observations available.")
                 print(f"WARNING: Scenario '{scenario_name}' - period '{time_period}'. No 'flowable' or 'scalable' observations available.")
                 continue
 
@@ -694,7 +690,8 @@ def compute_flow_and_scale_results(state: State, glb_idx, scenario_states: Dict[
             known_data, unknown_data = iterative_solving([comp_graph_scale, comp_graph_scale_change, comp_graph_flow],
                                                          {k: v.value for k, v in observations.items()})
 
-            print(f"Unknown data: {unknown_data}")
+            if len(unknown_data) > 0:
+                print(f"WARNING: Scenario '{scenario_name}' - period '{time_period}'. Unknown data: {unknown_data}")
 
             # Filter out results without a real processor and add Computed information
             data: NodeFloatComputedDict = {k: FloatComputedTuple(v, Computed.Yes)
@@ -724,9 +721,7 @@ def create_computation_graph_from_flows(relations_flow: nx.DiGraph, relations_sc
 
     error_issues = [e.description for e in issues if e.itype == IType.ERROR]
     if len(error_issues) > 0:
-        raise SolvingException(
-            IType.ERROR, f"The computation graph cannot be generated. Issues: {', '.join(error_issues)}"
-        )
+        raise SolvingException(f"The computation graph cannot be generated. Issues: {', '.join(error_issues)}")
 
     return comp_graph_flow
 
@@ -890,9 +885,8 @@ def compute_partof_aggregate_results(glb_idx: PartialRetrievalDictionary, scenar
                                                           ConflictingDataResolutionPolicy[policy])
 
                             if error_msg is not None:
-                                raise SolvingException(
-                                    IType.ERROR, f"System: '{system}'. Interface: '{interface.name}'. "
-                                                 f"Orientation: '{orientation}'. Error: {error_msg}")
+                                raise SolvingException(f"System: '{system}'. Interface: '{interface.name}'. "
+                                                       f"Orientation: '{orientation}'. Error: {error_msg}")
 
                             key_taken = result_key._replace(conflict=ConflictResolution.Taken)
                             key_dismissed = result_key._replace(conflict=ConflictResolution.Dismissed)
@@ -930,9 +924,7 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
         split_observations_by_relativeness(get_evaluated_observations_by_time(glb_idx))
 
     if len(absolute_observations) == 0:
-        raise SolvingException(
-            IType.WARNING, f"No absolute observations have been found. The solver has nothing to solve."
-        )
+        return [Issue(IType.WARNING, f"No absolute observations have been found. The solver has nothing to solve.")]
 
     # Get a list of scenario states, each one being a combination of the global state with a specific scenario state
     scenario_states: Dict[str, State] = \
@@ -959,7 +951,7 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
             results.setdefault(key, {}).update(value)
 
     except SolvingException as e:
-        return [Issue(e.args[0], str(e.args[1]))]
+        return [Issue(IType.ERROR, str(e.args[0]))]
 
     data = {result_key.as_string_tuple() + node.key:
                 {"RoegenType": node.roegen_type if node else "-",

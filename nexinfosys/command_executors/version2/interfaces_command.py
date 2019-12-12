@@ -7,7 +7,7 @@ from nexinfosys.command_executors import BasicCommand, subrow_issue_message
 from nexinfosys.command_field_definitions import get_command_fields_from_class
 from nexinfosys.command_generators import parser_field_parsers, IType
 from nexinfosys.command_generators.parser_ast_evaluators import dictionary_from_key_value_list, ast_to_string
-from nexinfosys.common.helper import strcmp, first, ifnull
+from nexinfosys.common.helper import strcmp, first, ifnull, UnitConversion
 from nexinfosys.models.musiasem_concepts import PedigreeMatrix, FactorType, \
     Factor, FactorInProcessorType, Observer, GeographicReference, ProvenanceReference, \
     BibliographicReference, FactorTypesRelationUnidirectionalLinearTransformObservation
@@ -164,7 +164,7 @@ class InterfacesAndQualifiedQuantitiesCommand(BasicCommand):
             if f_interface_type_name:
                 if not strcmp(ft.name, f_interface_type_name):
                     self._add_issue(IType.WARNING, f"The InterfaceType of the Interface, {ft.name} "
-                                    f"is different from the specified InterfaceType, {f_interface_type_name}. Record skipped."+subrow_issue_message(subrow))
+                                                   f"is different from the specified InterfaceType, {f_interface_type_name}. Record skipped."+subrow_issue_message(subrow))
                     return
         elif len(f_list) > 1:
             self._add_issue(IType.ERROR, f"Interface '{f_interface_name}' found {str(len(f_list))} times. "
@@ -186,7 +186,7 @@ class InterfacesAndQualifiedQuantitiesCommand(BasicCommand):
                 return
             elif len(ft_list) > 1:
                 self._add_issue(IType.ERROR, f"InterfaceType '{f_interface_type_name}' found {str(len(ft_list))} times. "
-                                       f"It must be uniquely identified."+subrow_issue_message(subrow))
+                                             f"It must be uniquely identified."+subrow_issue_message(subrow))
                 return
             else:
                 ft = ft_list[0]
@@ -197,9 +197,6 @@ class InterfacesAndQualifiedQuantitiesCommand(BasicCommand):
             "roegen_type": ft.roegen_type,
             "opposite_processor_type": ft.opposite_processor_type
         }
-
-        if not f_unit:
-            f_unit = ft.unit
 
         # Get internal and user-defined attributes in one dictionary
         attributes = {c.name: ifnull(field_values[c.name], default_values.get(c.name))
@@ -219,12 +216,13 @@ class InterfacesAndQualifiedQuantitiesCommand(BasicCommand):
                                          tags=None,
                                          attributes=attributes)
             self._glb_idx.put(f.key(), f)
-
         elif not f.compare_attributes(attributes):
             initial = ', '.join([f"{k}: {f.get_attribute(k)}" for k in attributes])
             new = ', '.join([f"{k}: {attributes[k]}" for k in attributes])
             name = f.processor.full_hierarchy_names(self._glb_idx)[0] + ":" + f.name
-            self._add_issue(IType.ERROR, f"The same interface '{name}', is being redeclared with different properties. INITIAL: {initial}; NEW: {new}."+subrow_issue_message(subrow))
+            self._add_issue(IType.ERROR, f"The same interface '{name}', is being redeclared with different properties. "
+                                         f"INITIAL: {initial}; NEW: {new}."+subrow_issue_message(subrow))
+            return
 
         # Find Observer
         oer = self._glb_idx.get(Observer.partial_key(f_source))
@@ -233,22 +231,18 @@ class InterfacesAndQualifiedQuantitiesCommand(BasicCommand):
         else:
             oer = oer[0]
 
+        if not f_unit:
+            f_unit = ft.unit
+
         # Unify unit (it must be done before considering RelativeTo -below-, because it adds a transformation to "f_unit")
-        if f_value:
-            if f_unit != ft.unit:
-                try:
-                    conv_factor = ureg(f_unit).to(ft.unit).magnitude
-                except DimensionalityError:
-                    self._add_issue(IType.ERROR,
-                                    f"Dimensions of units in InterfaceType ({ft.unit}) and specified ({f_unit}) are not convertible" + subrow_issue_message(
-                                        subrow))
-                    return
-            else:
-                conv_factor = 1
+        if f_value is not None and f_unit != ft.unit:
             try:
-                f_value = str(float(f_value) * conv_factor)
-            except ValueError:
-                f_value = f"({f_value}) * {conv_factor}"
+                f_value = UnitConversion.convert(f_value, f_unit, ft.unit)
+            except DimensionalityError:
+                self._add_issue(IType.ERROR,
+                                f"Dimensions of units in InterfaceType ({ft.unit}) and specified ({f_unit}) are not convertible" + subrow_issue_message(
+                                    subrow))
+                return
 
             f_unit = ft.unit
 
@@ -263,19 +257,19 @@ class InterfacesAndQualifiedQuantitiesCommand(BasicCommand):
 
             relative_to_interface_name = ast_to_string(ast["factor"])
 
-            rel_unit_name = ast["unparsed_unit"]
-            try:
-                f_unit = str((ureg(f_unit) / ureg(rel_unit_name)).units)
-            except (UndefinedUnitError, AttributeError) as ex:
-                self._add_issue(IType.ERROR, f"The final unit could not be computed, interface '{f_unit}' / "
-                                       f"relative_to '{rel_unit_name}': {str(ex)}"+subrow_issue_message(subrow))
-                return
+            # rel_unit_name = ast["unparsed_unit"]
+            # try:
+            #     f_unit = str((ureg(f_unit) / ureg(rel_unit_name)).units)
+            # except (UndefinedUnitError, AttributeError) as ex:
+            #     self._add_issue(IType.ERROR, f"The final unit could not be computed, interface '{f_unit}' / "
+            #                                  f"relative_to '{rel_unit_name}': {str(ex)}"+subrow_issue_message(subrow))
+            #     return
 
             f_relative_to_interface = first(f.processor.factors, lambda ifc: strcmp(ifc.name, relative_to_interface_name))
 
             if not f_relative_to_interface:
                 self._add_issue(IType.ERROR, f"Interface specified in 'relative_to' column "
-                                       f"'{relative_to_interface_name}' has not been found."+subrow_issue_message(subrow))
+                                             f"'{relative_to_interface_name}' has not been found."+subrow_issue_message(subrow))
                 return
 
         if f_value is None and f_relative_to_interface is not None:
@@ -283,6 +277,8 @@ class InterfacesAndQualifiedQuantitiesCommand(BasicCommand):
             interface_types_transforms: List[FactorTypesRelationUnidirectionalLinearTransformObservation] = \
                 find_factor_types_transform_relation(self._glb_idx, f_relative_to_interface.taxon, f.taxon, p, p)
 
+            # Overwrite any specified unit, it doesn't make sense without a value, i.e. it cannot be used for conversion
+            f_unit = f.taxon.unit
             if len(interface_types_transforms) == 1:
                 f_value = interface_types_transforms[0].scaled_weight
             else:

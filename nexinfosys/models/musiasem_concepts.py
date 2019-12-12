@@ -1157,7 +1157,7 @@ class FactorType(Identifiable, HierarchyNode, HierarchyExpression, Taggable, Qua
         return self._sphere
 
     @property
-    def unit(self):
+    def unit(self) -> str:
         return self._default_unit_str
 
     def simple_name(self):
@@ -2024,8 +2024,8 @@ class FactorTypesRelationUnidirectionalLinearTransformObservation(FactorTypesRel
     @property
     def scaled_weight(self):
         return UnitConversion.get_scaled_weight(self._weight,
-                                                self.origin.attributes.get("unit"), self._origin_unit,
-                                                self._destination_unit, self.destination.attributes.get("unit"))
+                                                self.origin.unit, self._origin_unit,
+                                                self._destination_unit, self.destination.unit)
 
     @property
     def observer(self):
