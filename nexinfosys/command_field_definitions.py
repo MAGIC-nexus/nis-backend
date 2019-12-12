@@ -11,10 +11,10 @@ from nexinfosys.command_generators.parser_field_parsers import simple_ident, unq
     time_expression, indicator_expression, code_string, simple_h_name, domain_definition, unit_name, url_parser, \
     processor_names, value, list_simple_ident, reference, processor_name, processors_selector_expression, \
     interfaces_list_expression, attributes_list_expression, indicators_list_expression, number_interval, pair_numbers, \
-    external_ds_name
+    external_ds_name, level_name
 from nexinfosys.common.helper import first, class_full_name
 from nexinfosys.model_services import IExecutableCommand
-from nexinfosys.models.musiasem_concepts import Processor, Factor, RelationClassType
+from nexinfosys.models.musiasem_concepts import Processor, Factor, RelationClassType, FactorType
 
 data_types = ["Number", "Boolean", "URL", "UUID", "Datetime", "String", "UnitName", "Code", "Geo"]
 concept_types = ["Dimension", "Measure", "Attribute"]
@@ -120,6 +120,7 @@ command_fields: Dict[str, List[CommandField]] = {
         CommandField(allowed_names=["RoegenType"], name="roegen_type", mandatory=True, allowed_values=roegen_types,
                      parser=simple_ident),
         CommandField(allowed_names=["ParentInterfaceType"], name="parent_interface_type", parser=simple_ident),
+        CommandField(allowed_names=["Level"], name="level", parser=level_name, attribute_of=FactorType),
         CommandField(allowed_names=["Formula", "Expression"], name="formula", parser=unquoted_string),
         CommandField(allowed_names=["Description"], name="description", parser=unquoted_string),
         CommandField(allowed_names=["Unit"], name="unit", mandatory=True, parser=unit_name),
@@ -147,6 +148,7 @@ command_fields: Dict[str, List[CommandField]] = {
         CommandField(allowed_names=["Accounted", "InstanceOrArchetype"], name="instance_or_archetype",
                      default_value=instance_or_archetype[0], allowed_values=instance_or_archetype, parser=simple_ident,
                      attribute_of=Processor),
+        CommandField(allowed_names=["Level"], name="level", parser=level_name, attribute_of=Processor),
         CommandField(allowed_names=["Stock"], name="stock", default_value=no_yes[0], allowed_values=no_yes,
                      parser=simple_ident, attribute_of=Processor),
         # CommandField(allowed_names=["Alias", "SpecificName"], name="alias", parser=simple_ident),
@@ -219,18 +221,19 @@ command_fields: Dict[str, List[CommandField]] = {
         CommandField(allowed_names=["Scale"], name="scale", mandatory=True, parser=expression_with_parameters),
         # BareProcessor fields
         CommandField(allowed_names=["NewProcessorName"], name="new_processor_name", allowed_values=None, parser=processor_name),
-        CommandField(allowed_names=["NewProcessorGroup"], name="processor_group", parser=simple_ident),
+        CommandField(allowed_names=["NewProcessorGroup"], name="processor_group", parser=simple_ident, attribute_of=Processor),
         CommandField(allowed_names=["NewParentProcessor"], name="parent_processor", parser=processor_name),
         CommandField(allowed_names=["NewSubsystemType"], name="subsystem_type",
                      default_value=processor_types[0], allowed_values=processor_types, parser=simple_ident,
                      attribute_of=Processor),
+        CommandField(allowed_names=["NewProcessorLevel"], name="level", parser=level_name, attribute_of=Processor),
         # DISABLED because this fields apply to processors Cloned and Scaled, so they will always have a parent,
         #          and children inherit the system of the parent.
         # CommandField(allowed_names=["NewSystem"], name="processor_system", default_value="_default_system",
         #              parser=simple_ident, attribute_of=Processor),
-        CommandField(allowed_names=["NewDescription"], name="description", parser=unquoted_string),
-        CommandField(allowed_names=["NewGeolocationRef"], name="geolocation_ref", parser=reference),
-        CommandField(allowed_names=["NewGeolocationCode"], name="geolocation_code", parser=code_string),
+        CommandField(allowed_names=["NewDescription"], name="description", parser=unquoted_string, attribute_of=Processor),
+        CommandField(allowed_names=["NewGeolocationRef"], name="geolocation_ref", parser=reference, attribute_of=Processor),
+        CommandField(allowed_names=["NewGeolocationCode"], name="geolocation_code", parser=code_string, attribute_of=Processor),
         CommandField(allowed_names=[attributeRegex], name="attributes", many_appearances=True, parser=value),
         CommandField(allowed_names=["NewAttributes"], name="attributes", parser=key_value_list)
         #CommandField(allowed_names=["UpscaleParentContext"], name="upscale_parent_context", parser=upscale_context),

@@ -33,6 +33,7 @@ class InterfaceTypesCommand(BasicCommand):
         ft_description = field_values.get("description")
         ft_unit = field_values.get("unit")
         ft_opposite_processor_type = field_values.get("opposite_processor_type")
+        ft_level = field_values.get("level")
         ft_attributes = field_values.get("attributes", {})
         print(str(type(ft_attributes)))
         if ft_attributes:
@@ -96,7 +97,7 @@ class InterfaceTypesCommand(BasicCommand):
                             parent=parent, hierarchy=hie,
                             roegen_type=roegen_type,
                             tags=None,  # No tags
-                            attributes=dict(unit=ft_unit, description=ft_description, **ft_attributes),
+                            attributes=dict(unit=ft_unit, description=ft_description, level=ft_level, **ft_attributes),
                             expression=ft_formula,
                             sphere=ft_sphere,
                             opposite_processor_type=ft_opposite_processor_type
