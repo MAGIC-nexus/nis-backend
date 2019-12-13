@@ -770,14 +770,14 @@ def compute_internal_external_results(values: NodeFloatComputedDict, comp_graph:
 def compute_interfacetype_aggregate_results(glb_idx: PartialRetrievalDictionary, existing_results: ResultDict) \
         -> ResultDict:
 
-    def get_sum(processor: Processor, children: Set[FactorType]) -> Optional[float]:
+    def get_sum(children: Set[FactorType]) -> Optional[float]:
         sum_children: Optional[float] = None
         for child in children:
             child_float_computed = values.get(InterfaceNode(child, processor, orientation))
-            child_value = child_float_computed.value if child_float_computed else None
+            child_value = child_float_computed.value if child_float_computed is not None else None
             if child_value is None:
                 if child in parent_interfaces:
-                    child_value = get_sum(processor, parent_interfaces[child])
+                    child_value = get_sum(parent_interfaces[child])
 
             if child_value is not None:
                 if sum_children is None:
@@ -788,20 +788,22 @@ def compute_interfacetype_aggregate_results(glb_idx: PartialRetrievalDictionary,
         return sum_children
 
     results: ResultDict = {}
+
+    # Get all different processors from results
     processors: Set[Processor] = {node.processor for values in existing_results.values() for node in values}
 
-    # Get all different existing interfaces types that can be computed based on children interface types
+    # Get all different existing interface types with children interface types
     parent_interfaces: Dict[FactorType, Set[FactorType]] = \
         {ft: ft.get_children() for ft in glb_idx.get(FactorType.partial_key()) if len(ft.get_children()) > 0}
 
     for key, values in existing_results.items():
         for parent_interface, children_interfaces in parent_interfaces.items():
-            for proc in processors:
+            for processor in processors:
                 for orientation in ["Input", "Output"]:
-                    interface_node = InterfaceNode(parent_interface, proc, orientation)
+                    interface_node = InterfaceNode(parent_interface, processor, orientation)
 
                     if values.get(interface_node) is None:
-                        sum_result = get_sum(proc, children_interfaces)
+                        sum_result = get_sum(children_interfaces)
                         if sum_result is not None:
                             results.setdefault(key, {}).update({
                                 interface_node: FloatComputedTuple(sum_result, Computed.Yes)
