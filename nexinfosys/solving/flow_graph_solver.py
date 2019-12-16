@@ -904,6 +904,63 @@ def compute_partof_aggregate_results(glb_idx: PartialRetrievalDictionary, scenar
     return results
 
 
+def compute_partof_aggregate_results2(glb_idx: PartialRetrievalDictionary, scenario_states: Dict[str, State],
+                                     systems: Dict[str, Set[Processor]], existing_results: ResultDict) -> ResultDict:
+    results: ResultDict = {}
+
+    # Get all different existing interfaces and their units
+    # TODO: interfaces could need a unit transformation according to interface type
+    interfaces: Set[FactorType] = glb_idx.get(FactorType.partial_key())
+
+    for system in systems:
+        print(f"********************* SYSTEM: {system}")
+
+        # proc_hierarchies = get_processor_partof_hierarchies(glb_idx, system)
+        # Just get the -PartOf- relations of the current system
+        proc_hierarchies: Dict[Processor, Set[Processor]] = {}
+        for parent, child in [(r.parent_processor, r.child_processor)
+                              for r in glb_idx.get(ProcessorsRelationPartOfObservation.partial_key())
+                              if system in [r.parent_processor.processor_system, r.child_processor.processor_system]
+                              and "Archetype" not in [r.parent_processor.instance_or_archetype, r.child_processor.instance_or_archetype]]:
+            proc_hierarchies.setdefault(parent, set()).add(child)
+
+        # Create a hierarchy of processors with each kind of interface and try to aggregate
+        for interface in interfaces:
+            print(f"********************* INTERFACE: {interface.name}")
+
+            for orientation in orientations:
+                print(f"********************* ORIENTATION: {orientation}")
+
+                interfaced_proc_hierarchy: Dict[InterfaceNode, Set[InterfaceNode]] = {}
+                for parent, children in proc_hierarchies.items():
+                    interfaced_proc_hierarchy[InterfaceNode(interface, parent, orientation)] = \
+                        {InterfaceNode(interface, child, orientation) for child in children}
+
+                # For every dimension tuple extract the results we have (observations or computed) and use them
+                # to aggregate values in the current hierarchy
+                for result_key, node_floatcomputed_dict in existing_results.items():
+
+                    policy: str = scenario_states[result_key.scenario].get(ConflictingDataResolutionPolicy.get_key())
+
+                    # Aggregate top-down, starting from root
+                    aggregations, taken_conflicts, dismissed_conflicts = \
+                        aggregate_results(interfaced_proc_hierarchy, node_floatcomputed_dict,
+                                          ConflictingDataResolutionPolicy[policy])
+
+                    key_taken = result_key._replace(conflict=ConflictResolution.Taken)
+                    key_dismissed = result_key._replace(conflict=ConflictResolution.Dismissed)
+
+                    for node, float_computed in aggregations.items():
+                        if node in taken_conflicts:
+                            del existing_results[result_key][node]
+                            results.setdefault(key_taken, {})[node] = taken_conflicts[node]
+                            results.setdefault(key_dismissed, {})[node] = dismissed_conflicts[node]
+                        else:
+                            results.setdefault(result_key, {})[node] = float_computed
+
+    return results
+
+
 def flow_graph_solver(global_parameters: List[Parameter], problem_statement: ProblemStatement,
                       input_systems: Dict[str, Set[Processor]], state: State, dynamic_scenario: bool) -> List[Issue]:
     """
@@ -942,7 +999,7 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
         for key, value in new_results.items():
             results.setdefault(key, {}).update(value)
 
-        new_results = compute_partof_aggregate_results(glb_idx, scenario_states, input_systems, results)
+        new_results = compute_partof_aggregate_results2(glb_idx, scenario_states, input_systems, results)
 
         for key, value in new_results.items():
             results.setdefault(key, {}).update(value)
@@ -1396,6 +1453,55 @@ def compute_aggregate_results(tree: nx.DiGraph, params: NodeFloatComputedDict,
     dismissed_conflicts: NodeFloatComputedDict = {}  # Dismissed values on conflicting nodes
     compute_node(root_nodes[0])
     return new_values, taken_conflicts, dismissed_conflicts, None
+
+
+def aggregate_results(tree: Dict[InterfaceNode, Set[InterfaceNode]], params: NodeFloatComputedDict,
+                      resolution_policy: ConflictingDataResolutionPolicy) \
+        -> Tuple[NodeFloatComputedDict, NodeFloatComputedDict, NodeFloatComputedDict]:
+
+    def compute_node(node: InterfaceNode) -> Optional[float]:
+        # If the node has already been computed return the value
+        if new_values.get(node) is not None:
+            return new_values[node].value
+
+        if taken_conflicts.get(node) is not None:
+            return taken_conflicts[node].value
+
+        # Make a depth-first search
+        return_value: Optional[float]
+        sum_children: Optional[float] = None
+
+        # Try to get the sum from children, if any
+        for child in tree.get(node, {}):
+            child_value = compute_node(child)
+            if child_value is not None:
+                sum_children = (0 if sum_children is None else sum_children) + child_value
+
+        if sum_children is not None:
+            # New value has been computed, add it to "new_values"
+            new_values[node] = FloatComputedTuple(sum_children, Computed.Yes)  # Computed
+
+            if params.get(node) is not None:
+                # Conflict here: applies strategy
+                taken_conflicts[node], dismissed_conflicts[node] = \
+                    ConflictingDataResolutionPolicy.resolve(new_values[node], params[node], resolution_policy)
+                return_value = taken_conflicts[node].value
+            else:
+                return_value = sum_children
+        else:
+            # No value got from children, try to search in "params"
+            return_value = params[node].value if params.get(node) is not None else None
+
+        return return_value
+
+    new_values: NodeFloatComputedDict = {}  # All computed aggregations
+    taken_conflicts: NodeFloatComputedDict = {}  # Taken values on conflicting nodes
+    dismissed_conflicts: NodeFloatComputedDict = {}  # Dismissed values on conflicting nodes
+
+    for parent_node in tree:
+        compute_node(parent_node)
+
+    return new_values, taken_conflicts, dismissed_conflicts
 
 
 def get_eum_dataset(dataframe: pd.DataFrame) -> "Dataset":
