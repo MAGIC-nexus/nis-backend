@@ -185,10 +185,11 @@ class ResultKey(NamedTuple):
     scenario: str
     period: str
     scope: Scope
-    conflict: ConflictResolution = ConflictResolution.No
+    conflict_partof: ConflictResolution = ConflictResolution.No
+    conflict_itype: ConflictResolution = ConflictResolution.No
 
-    def as_string_tuple(self) -> Tuple[str, str, str, str]:
-        return self.scenario, self.period, self.scope.name, self.conflict.name
+    def as_string_tuple(self) -> Tuple[str, str, str, str, str]:
+        return self.scenario, self.period, self.scope.name, self.conflict_partof.name, self.conflict_itype.name
 
 
 NodeFloatDict = Dict[InterfaceNode, float]
@@ -767,71 +768,56 @@ def compute_internal_external_results(values: NodeFloatComputedDict, comp_graph:
     return internal_results, external_results
 
 
-def compute_interfacetype_aggregate_results(glb_idx: PartialRetrievalDictionary, existing_results: ResultDict) \
-        -> ResultDict:
-
-    def get_sum(children: Set[FactorType]) -> Optional[float]:
-        sum_children: Optional[float] = None
-        for child in children:
-            child_float_computed = values.get(InterfaceNode(child, processor, orientation))
-            child_value = child_float_computed.value if child_float_computed is not None else None
-            if child_value is None:
-                if child in parent_interfaces:
-                    child_value = get_sum(parent_interfaces[child])
-
-            if child_value is not None:
-                if sum_children is None:
-                    sum_children = child_value
-                else:
-                    sum_children += child_value
-
-        return sum_children
+def compute_interfacetype_aggregate_results(glb_idx: PartialRetrievalDictionary,  scenario_states: Dict[str, State],
+                                            existing_results: ResultDict) -> ResultDict:
 
     results: ResultDict = {}
 
-    # Get all different processors from results
-    processors: Set[Processor] = {node.processor for values in existing_results.values() for node in values}
-
     # Get all different existing interface types with children interface types
-    parent_interfaces: Dict[FactorType, Set[FactorType]] = \
+    interface_types_parent_relations: Dict[FactorType, Set[FactorType]] = \
         {ft: ft.get_children() for ft in glb_idx.get(FactorType.partial_key()) if len(ft.get_children()) > 0}
 
-    for key, values in existing_results.items():
-        for parent_interface, children_interfaces in parent_interfaces.items():
-            for processor in processors:
-                for orientation in ["Input", "Output"]:
-                    interface_node = InterfaceNode(parent_interface, processor, orientation)
+    # Get all different processors from results
+    for processor in {node.processor for values in existing_results.values() for node in values}:
 
-                    if values.get(interface_node) is None:
-                        sum_result = get_sum(children_interfaces)
-                        if sum_result is not None:
-                            results.setdefault(key, {}).update({
-                                interface_node: FloatComputedTuple(sum_result, Computed.Yes)
-                            })
+        for orientation in ["Input", "Output"]:
+
+            hierarchy = create_interface_node_hierarchy_from_interface_types(
+                interface_types_parent_relations, processor, orientation)
+
+            for result_key, node_floatcomputed_dict in existing_results.items():
+
+                policy: str = scenario_states[result_key.scenario].get(ConflictingDataResolutionPolicy.get_key())
+
+                aggregations, taken_conflicts, dismissed_conflicts = \
+                    aggregate_results(hierarchy, node_floatcomputed_dict, ConflictingDataResolutionPolicy[policy])
+
+                key_taken = result_key._replace(conflict_itype=ConflictResolution.Taken)
+                key_dismissed = result_key._replace(conflict_itype=ConflictResolution.Dismissed)
+
+                for node, float_computed in aggregations.items():
+                    if node in taken_conflicts:
+                        del existing_results[result_key][node]
+                        results.setdefault(key_taken, {})[node] = taken_conflicts[node]
+                        results.setdefault(key_dismissed, {})[node] = dismissed_conflicts[node]
+                    else:
+                        results.setdefault(result_key, {})[node] = float_computed
 
     return results
 
 
-def get_processor_partof_hierarchies(glb_idx, system):
-    # Handle Processors -PartOf- relations
-    proc_hierarchies = nx.DiGraph()
+def get_processor_partof_relations(glb_idx: PartialRetrievalDictionary, system: str) -> Dict[Processor, Set[Processor]]:
+    """ Get in a dictionary the -PartOf- processor relations of one system, ignoring Archetype processors """
+    relations: Dict[Processor, Set[Processor]] = {}
 
-    # Just get the -PartOf- relations of the current system
-    part_of_relations = [(r.child_processor, r.parent_processor)
-                         for r in glb_idx.get(ProcessorsRelationPartOfObservation.partial_key())
-                         if system in [r.parent_processor.processor_system, r.child_processor.processor_system]]
+    for parent, child in [(r.parent_processor, r.child_processor)
+                          for r in glb_idx.get(ProcessorsRelationPartOfObservation.partial_key())
+                          if system in [r.parent_processor.processor_system, r.child_processor.processor_system]
+                          and "Archetype" not in [r.parent_processor.instance_or_archetype,
+                                                  r.child_processor.instance_or_archetype]]:
+        relations.setdefault(parent, set()).add(child)
 
-    for child_processor, parent_processor in part_of_relations:  # type: Processor, Processor
-        # Parent and child should be of the same system
-        assert (child_processor.processor_system == parent_processor.processor_system)
-
-        if "Archetype" in [parent_processor.instance_or_archetype, child_processor.instance_or_archetype]:
-            print(f"WARNING: excluding relation from '{get_processor_name(child_processor, glb_idx)}' to "
-                  f"'{get_processor_name(parent_processor, glb_idx)}' because of Archetype processor")
-        else:
-            proc_hierarchies.add_edge(child_processor, parent_processor, weight=1.0)
-
-    return proc_hierarchies
+    return relations
 
 
 def compute_partof_aggregate_results(glb_idx: PartialRetrievalDictionary, scenario_states: Dict[str, State],
@@ -843,98 +829,15 @@ def compute_partof_aggregate_results(glb_idx: PartialRetrievalDictionary, scenar
     interfaces: Set[FactorType] = glb_idx.get(FactorType.partial_key())
 
     for system in systems:
-        print(f"********************* SYSTEM: {system}")
-
-        proc_hierarchies = get_processor_partof_hierarchies(glb_idx, system)
-
-        # Iterate over all independent trees created by the PartOf relations
-        for component in nx.weakly_connected_components(proc_hierarchies):
-            proc_hierarchy: nx.DiGraph = proc_hierarchies.subgraph(component)
-            print(f"********************* HIERARCHY: {[p.name for p in proc_hierarchy.nodes]}")
-
-            # plt.figure(1, figsize=(8, 8))
-            # nx.draw_spring(proc_hierarchy, with_labels=True, font_size=8, node_size=60)
-            # plt.show()
-
-            # Create a hierarchy of processors with each kind of interface and try to aggregate
-            for interface in interfaces:
-                print(f"********************* INTERFACE: {interface.name}")
-
-                for orientation in orientations:
-                    print(f"********************* ORIENTATION: {orientation}")
-
-                    interfaced_proc_hierarchy = nx.DiGraph(
-                        incoming_graph_data=[(InterfaceNode(interface, u, orientation),
-                                              InterfaceNode(interface, v, orientation))
-                                             for u, v in proc_hierarchy.edges]
-                    )
-
-                    # For every dimension tuple extract the results we have (observations or computed) and use them
-                    # to aggregate values in the current hierarchy
-                    for result_key, node_floatcomputed_dict in existing_results.items():
-
-                        policy: str = scenario_states[result_key.scenario].get(ConflictingDataResolutionPolicy.get_key())
-
-                        # Do we have any value for the current hierarchy?
-                        filtered_values: NodeFloatComputedDict = {k: node_floatcomputed_dict[k]
-                                                                  for k in interfaced_proc_hierarchy.nodes
-                                                                  if node_floatcomputed_dict.get(k) is not None}
-
-                        if len(filtered_values) > 0:
-                            # Aggregate top-down, starting from root
-                            aggregations, taken_conflicts, dismissed_conflicts, error_msg = \
-                                compute_aggregate_results(interfaced_proc_hierarchy, filtered_values,
-                                                          ConflictingDataResolutionPolicy[policy])
-
-                            if error_msg is not None:
-                                raise SolvingException(f"System: '{system}'. Interface: '{interface.name}'. "
-                                                       f"Orientation: '{orientation}'. Error: {error_msg}")
-
-                            key_taken = result_key._replace(conflict=ConflictResolution.Taken)
-                            key_dismissed = result_key._replace(conflict=ConflictResolution.Dismissed)
-
-                            for node, float_computed in aggregations.items():
-                                if node in taken_conflicts:
-                                    del existing_results[result_key][node]
-                                    results.setdefault(key_taken, {})[node] = taken_conflicts[node]
-                                    results.setdefault(key_dismissed, {})[node] = dismissed_conflicts[node]
-                                else:
-                                    results.setdefault(result_key, {})[node] = float_computed
-
-    return results
-
-
-def compute_partof_aggregate_results2(glb_idx: PartialRetrievalDictionary, scenario_states: Dict[str, State],
-                                     systems: Dict[str, Set[Processor]], existing_results: ResultDict) -> ResultDict:
-    results: ResultDict = {}
-
-    # Get all different existing interfaces and their units
-    # TODO: interfaces could need a unit transformation according to interface type
-    interfaces: Set[FactorType] = glb_idx.get(FactorType.partial_key())
-
-    for system in systems:
-        print(f"********************* SYSTEM: {system}")
-
-        # proc_hierarchies = get_processor_partof_hierarchies(glb_idx, system)
         # Just get the -PartOf- relations of the current system
-        proc_hierarchies: Dict[Processor, Set[Processor]] = {}
-        for parent, child in [(r.parent_processor, r.child_processor)
-                              for r in glb_idx.get(ProcessorsRelationPartOfObservation.partial_key())
-                              if system in [r.parent_processor.processor_system, r.child_processor.processor_system]
-                              and "Archetype" not in [r.parent_processor.instance_or_archetype, r.child_processor.instance_or_archetype]]:
-            proc_hierarchies.setdefault(parent, set()).add(child)
+        processor_partof_relations = get_processor_partof_relations(glb_idx, system)
 
         # Create a hierarchy of processors with each kind of interface and try to aggregate
         for interface in interfaces:
-            print(f"********************* INTERFACE: {interface.name}")
 
             for orientation in orientations:
-                print(f"********************* ORIENTATION: {orientation}")
 
-                interfaced_proc_hierarchy: Dict[InterfaceNode, Set[InterfaceNode]] = {}
-                for parent, children in proc_hierarchies.items():
-                    interfaced_proc_hierarchy[InterfaceNode(interface, parent, orientation)] = \
-                        {InterfaceNode(interface, child, orientation) for child in children}
+                hierarchy = create_interface_node_hierarchy_from_processors(processor_partof_relations, interface, orientation)
 
                 # For every dimension tuple extract the results we have (observations or computed) and use them
                 # to aggregate values in the current hierarchy
@@ -942,13 +845,11 @@ def compute_partof_aggregate_results2(glb_idx: PartialRetrievalDictionary, scena
 
                     policy: str = scenario_states[result_key.scenario].get(ConflictingDataResolutionPolicy.get_key())
 
-                    # Aggregate top-down, starting from root
                     aggregations, taken_conflicts, dismissed_conflicts = \
-                        aggregate_results(interfaced_proc_hierarchy, node_floatcomputed_dict,
-                                          ConflictingDataResolutionPolicy[policy])
+                        aggregate_results(hierarchy, node_floatcomputed_dict, ConflictingDataResolutionPolicy[policy])
 
-                    key_taken = result_key._replace(conflict=ConflictResolution.Taken)
-                    key_dismissed = result_key._replace(conflict=ConflictResolution.Dismissed)
+                    key_taken = result_key._replace(conflict_partof=ConflictResolution.Taken)
+                    key_dismissed = result_key._replace(conflict_partof=ConflictResolution.Dismissed)
 
                     for node, float_computed in aggregations.items():
                         if node in taken_conflicts:
@@ -959,6 +860,34 @@ def compute_partof_aggregate_results2(glb_idx: PartialRetrievalDictionary, scena
                             results.setdefault(result_key, {})[node] = float_computed
 
     return results
+
+
+def create_interface_node_hierarchy_from_processors(
+        relations: Dict[Processor, Set[Processor]],
+        interface_or_type: Union[Factor, FactorType],
+        orientation: str) -> Dict[InterfaceNode, Set[InterfaceNode]]:
+
+    hierarchy: Dict[InterfaceNode, Set[InterfaceNode]] = {}
+
+    for parent, children in relations.items():
+        hierarchy[InterfaceNode(interface_or_type, parent, orientation)] = \
+            {InterfaceNode(interface_or_type, child, orientation) for child in children}
+
+    return hierarchy
+
+
+def create_interface_node_hierarchy_from_interface_types(
+        relations: Dict[FactorType, Set[FactorType]],
+        processor: Processor,
+        orientation: str) -> Dict[InterfaceNode, Set[InterfaceNode]]:
+
+    hierarchy: Dict[InterfaceNode, Set[InterfaceNode]] = {}
+
+    for parent, children in relations.items():
+        hierarchy[InterfaceNode(parent, processor, orientation)] = \
+            {InterfaceNode(child, processor, orientation) for child in children}
+
+    return hierarchy
 
 
 def flow_graph_solver(global_parameters: List[Parameter], problem_statement: ProblemStatement,
@@ -999,12 +928,14 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
         for key, value in new_results.items():
             results.setdefault(key, {}).update(value)
 
-        new_results = compute_partof_aggregate_results2(glb_idx, scenario_states, input_systems, results)
+        new_results = compute_partof_aggregate_results(glb_idx, scenario_states, input_systems, results)
 
         for key, value in new_results.items():
             results.setdefault(key, {}).update(value)
 
-        new_results = compute_interfacetype_aggregate_results(glb_idx, results)
+        new_results = compute_interfacetype_aggregate_results(
+            glb_idx, scenario_states,
+            {k: v for k, v in results.items() if k.conflict_partof != ConflictResolution.Dismissed})  # Ignore dismissed
 
         for key, value in new_results.items():
             results.setdefault(key, {}).update(value)
@@ -1461,11 +1392,11 @@ def aggregate_results(tree: Dict[InterfaceNode, Set[InterfaceNode]], params: Nod
 
     def compute_node(node: InterfaceNode) -> Optional[float]:
         # If the node has already been computed return the value
-        if new_values.get(node) is not None:
-            return new_values[node].value
-
         if taken_conflicts.get(node) is not None:
             return taken_conflicts[node].value
+
+        if new_values.get(node) is not None:
+            return new_values[node].value
 
         # Make a depth-first search
         return_value: Optional[float]
