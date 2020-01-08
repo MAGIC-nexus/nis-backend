@@ -144,12 +144,12 @@ class InterfaceNode:
             if isinstance(self.interface.roegen_type, str):
                 return self.interface.roegen_type
             else:
-                return self.interface.roegen_type.name
+                return self.interface.roegen_type.name.title()
         elif self.interface_type and self.interface_type.roegen_type:
             if isinstance(self.interface_type.roegen_type, str):
                 return self.interface_type.roegen_type
             else:
-                return self.interface_type.roegen_type.name
+                return self.interface_type.roegen_type.name.title()
         else:
             return ""
 
