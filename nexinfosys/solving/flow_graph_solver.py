@@ -30,7 +30,7 @@ from collections import defaultdict
 from enum import Enum
 from functools import reduce
 from itertools import chain
-from typing import Dict, List, Set, Any, Tuple, Union, Optional, NamedTuple, Generator, Type
+from typing import Dict, List, Set, Any, Tuple, Union, Optional, NamedTuple, Generator, Type, NoReturn
 
 import lxml
 import networkx as nx
@@ -769,9 +769,11 @@ def compute_internal_external_results(values: NodeFloatComputedDict, comp_graph:
 
 
 def compute_interfacetype_aggregate_results(glb_idx: PartialRetrievalDictionary,  scenario_states: Dict[str, State],
-                                            existing_results: ResultDict) -> ResultDict:
+                                            existing_results: ResultDict) -> Tuple[ResultDict, ResultDict, ResultDict]:
 
     results: ResultDict = {}
+    results_conflict_taken: ResultDict = {}
+    results_conflict_dismissed: ResultDict = {}
 
     # Get all different existing interface types with children interface types
     interface_types_parent_relations: Dict[FactorType, Set[FactorType]] = \
@@ -792,18 +794,16 @@ def compute_interfacetype_aggregate_results(glb_idx: PartialRetrievalDictionary,
                 aggregations, taken_conflicts, dismissed_conflicts = \
                     aggregate_results(hierarchy, node_floatcomputed_dict, ConflictingDataResolutionPolicy[policy])
 
-                key_taken = result_key._replace(conflict_itype=ConflictResolution.Taken)
-                key_dismissed = result_key._replace(conflict_itype=ConflictResolution.Dismissed)
-
                 for node, float_computed in aggregations.items():
-                    if node in taken_conflicts:
-                        del existing_results[result_key][node]
-                        results.setdefault(key_taken, {})[node] = taken_conflicts[node]
-                        results.setdefault(key_dismissed, {})[node] = dismissed_conflicts[node]
-                    else:
-                        results.setdefault(result_key, {})[node] = float_computed
+                    results.setdefault(result_key, {})[node] = float_computed
 
-    return results
+                for node, float_computed in taken_conflicts.items():
+                    results_conflict_taken.setdefault(result_key, {})[node] = float_computed
+
+                for node, float_computed in dismissed_conflicts.items():
+                    results_conflict_dismissed.setdefault(result_key, {})[node] = float_computed
+
+    return results, results_conflict_taken, results_conflict_dismissed
 
 
 def get_processor_partof_relations(glb_idx: PartialRetrievalDictionary, system: str) -> Dict[Processor, Set[Processor]]:
@@ -821,8 +821,12 @@ def get_processor_partof_relations(glb_idx: PartialRetrievalDictionary, system: 
 
 
 def compute_partof_aggregate_results(glb_idx: PartialRetrievalDictionary, scenario_states: Dict[str, State],
-                                     systems: Dict[str, Set[Processor]], existing_results: ResultDict) -> ResultDict:
+                                     systems: Dict[str, Set[Processor]], existing_results: ResultDict) \
+        -> Tuple[ResultDict, ResultDict, ResultDict]:
+
     results: ResultDict = {}
+    results_conflict_taken: ResultDict = {}
+    results_conflict_dismissed: ResultDict = {}
 
     # Get all different existing interfaces and their units
     # TODO: interfaces could need a unit transformation according to interface type
@@ -848,18 +852,16 @@ def compute_partof_aggregate_results(glb_idx: PartialRetrievalDictionary, scenar
                     aggregations, taken_conflicts, dismissed_conflicts = \
                         aggregate_results(hierarchy, node_floatcomputed_dict, ConflictingDataResolutionPolicy[policy])
 
-                    key_taken = result_key._replace(conflict_partof=ConflictResolution.Taken)
-                    key_dismissed = result_key._replace(conflict_partof=ConflictResolution.Dismissed)
-
                     for node, float_computed in aggregations.items():
-                        if node in taken_conflicts:
-                            del existing_results[result_key][node]
-                            results.setdefault(key_taken, {})[node] = taken_conflicts[node]
-                            results.setdefault(key_dismissed, {})[node] = dismissed_conflicts[node]
-                        else:
-                            results.setdefault(result_key, {})[node] = float_computed
+                        results.setdefault(result_key, {})[node] = float_computed
 
-    return results
+                    for node, float_computed in taken_conflicts.items():
+                        results_conflict_taken.setdefault(result_key, {})[node] = float_computed
+
+                    for node, float_computed in dismissed_conflicts.items():
+                        results_conflict_dismissed.setdefault(result_key, {})[node] = float_computed
+
+    return results, results_conflict_taken, results_conflict_dismissed
 
 
 def create_interface_node_hierarchy_from_processors(
@@ -928,20 +930,23 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
         for key, value in new_results.items():
             results.setdefault(key, {}).update(value)
 
-        new_results = compute_partof_aggregate_results(glb_idx, scenario_states, input_systems, results)
+        new_results, partof_taken_results, partof_dismissed_results = compute_partof_aggregate_results(
+            glb_idx, scenario_states, input_systems, results)
 
         for key, value in new_results.items():
             results.setdefault(key, {}).update(value)
 
-        new_results = compute_interfacetype_aggregate_results(
-            glb_idx, scenario_states,
-            {k: v for k, v in results.items() if k.conflict_partof != ConflictResolution.Dismissed})  # Ignore dismissed
+        new_results, itype_taken_results, itype_dismissed_results = compute_interfacetype_aggregate_results(
+            glb_idx, scenario_states, results)
 
         for key, value in new_results.items():
             results.setdefault(key, {}).update(value)
 
     except SolvingException as e:
         return [Issue(IType.ERROR, str(e.args[0]))]
+
+    results = add_conflicts_to_results(results, partof_taken_results, partof_dismissed_results, "conflict_partof")
+    results = add_conflicts_to_results(results, itype_taken_results, itype_dismissed_results, "conflict_itype")
 
     data = {result_key.as_string_tuple() + node.key:
                 {"RoegenType": node.roegen_type if node else "-",
@@ -1045,6 +1050,28 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
     # datasets["end_use_matrix"] = get_ eum_dataset(df)
 
     return []
+
+
+def add_conflicts_to_results(existing_results: ResultDict, taken_results: ResultDict, dismissed_results: ResultDict,
+                             conflict_type: str) -> ResultDict:
+    results: ResultDict = {}
+    for result_key, node_floatcomputed_dict in existing_results.items():
+
+        if result_key in taken_results:
+            assert result_key in dismissed_results
+            key_taken = result_key._replace(**{conflict_type: ConflictResolution.Taken})
+            key_dismissed = result_key._replace(**{conflict_type: ConflictResolution.Dismissed})
+
+            for node, float_computed in node_floatcomputed_dict.items():
+                if node in taken_results[result_key]:
+                    results.setdefault(key_taken, {})[node] = taken_results[result_key][node]
+                    results.setdefault(key_dismissed, {})[node] = dismissed_results[result_key][node]
+                else:
+                    results.setdefault(result_key, {})[node] = float_computed
+        else:
+            results[result_key] = node_floatcomputed_dict
+
+    return results
 
 
 def obtain_subset_processors(processors_selector: str, serialized_model: lxml.etree._ElementTree,
@@ -1343,47 +1370,6 @@ def calculate_global_scalar_indicators(indicators: List[Indicator],
         return pd.concat(dfs)
     else:
         return pd.DataFrame()
-
-
-def compute_aggregate_results(tree: nx.DiGraph, params: NodeFloatComputedDict,
-                              resolution_policy: ConflictingDataResolutionPolicy) \
-        -> Tuple[NodeFloatComputedDict, NodeFloatComputedDict, NodeFloatComputedDict, Optional[str]]:
-    def compute_node(node: InterfaceNode) -> Optional[float]:
-        # Depth-first search
-        return_value: Optional[float]
-        sum_children: Optional[float] = None
-
-        for pred in tree.predecessors(node):
-            pred_value = compute_node(pred)
-            if pred_value is not None:
-                sum_children = (0 if sum_children is None else sum_children) + pred_value
-
-        if sum_children is not None:
-            # New value has been computed, add it to "new_values"
-            new_values[node] = FloatComputedTuple(sum_children, Computed.Yes)  # Computed
-
-            if params.get(node) is not None:
-                # Conflict here: applies strategy
-                taken_conflicts[node], dismissed_conflicts[node] = \
-                    ConflictingDataResolutionPolicy.resolve(new_values[node], params[node], resolution_policy)
-                return_value = taken_conflicts[node].value
-            else:
-                return_value = sum_children
-        else:
-            # No value got from children, try to search in "params"
-            return_value = params[node].value if params.get(node) is not None else None
-
-        return return_value
-
-    root_nodes: List[InterfaceNode] = [node for node, degree in tree.out_degree if degree == 0]
-    if len(root_nodes) != 1 or root_nodes[0] is None:
-        return {}, {}, {}, f"Root node cannot be taken from list '{root_nodes}'"
-
-    new_values: NodeFloatComputedDict = {}  # All computed aggregations
-    taken_conflicts: NodeFloatComputedDict = {}  # Taken values on conflicting nodes
-    dismissed_conflicts: NodeFloatComputedDict = {}  # Dismissed values on conflicting nodes
-    compute_node(root_nodes[0])
-    return new_values, taken_conflicts, dismissed_conflicts, None
 
 
 def aggregate_results(tree: Dict[InterfaceNode, Set[InterfaceNode]], params: NodeFloatComputedDict,
