@@ -199,7 +199,8 @@ class InterfacesAndQualifiedQuantitiesCommand(BasicCommand):
         }
 
         # Get internal and user-defined attributes in one dictionary
-        attributes = {c.name: ifnull(field_values[c.name], default_values.get(c.name))
+        # InterfaceType value mandate over Interface specified values
+        attributes = {c.name: ifnull(default_values.get(c.name), field_values[c.name])
                       for c in self._command_fields if c.attribute_of == Factor}
 
         if not f:
