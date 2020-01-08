@@ -930,14 +930,14 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
         for key, value in new_results.items():
             results.setdefault(key, {}).update(value)
 
-        new_results, partof_taken_results, partof_dismissed_results = compute_partof_aggregate_results(
-            glb_idx, scenario_states, input_systems, results)
+        new_results, itype_taken_results, itype_dismissed_results = compute_interfacetype_aggregate_results(
+            glb_idx, scenario_states, results)
 
         for key, value in new_results.items():
             results.setdefault(key, {}).update(value)
 
-        new_results, itype_taken_results, itype_dismissed_results = compute_interfacetype_aggregate_results(
-            glb_idx, scenario_states, results)
+        new_results, partof_taken_results, partof_dismissed_results = compute_partof_aggregate_results(
+            glb_idx, scenario_states, input_systems, results)
 
         for key, value in new_results.items():
             results.setdefault(key, {}).update(value)
