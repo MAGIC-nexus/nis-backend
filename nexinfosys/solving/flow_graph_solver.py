@@ -1054,6 +1054,7 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
 
 def add_conflicts_to_results(existing_results: ResultDict, taken_results: ResultDict, dismissed_results: ResultDict,
                              conflict_type: str) -> ResultDict:
+    """ Iterate on the existing results and mark which of them have been involved into a conflict """
     results: ResultDict = {}
     for result_key, node_floatcomputed_dict in existing_results.items():
 
@@ -1378,9 +1379,6 @@ def aggregate_results(tree: Dict[InterfaceNode, Set[InterfaceNode]], params: Nod
 
     def compute_node(node: InterfaceNode) -> Optional[float]:
         # If the node has already been computed return the value
-        if taken_conflicts.get(node) is not None:
-            return taken_conflicts[node].value
-
         if new_values.get(node) is not None:
             return new_values[node].value
 
@@ -1395,16 +1393,19 @@ def aggregate_results(tree: Dict[InterfaceNode, Set[InterfaceNode]], params: Nod
                 sum_children = (0 if sum_children is None else sum_children) + child_value
 
         if sum_children is not None:
-            # New value has been computed, add it to "new_values"
-            new_values[node] = FloatComputedTuple(sum_children, Computed.Yes)  # Computed
+            # New value has been computed
+            new_computed_value = FloatComputedTuple(sum_children, Computed.Yes)
 
             if params.get(node) is not None:
                 # Conflict here: applies strategy
                 taken_conflicts[node], dismissed_conflicts[node] = \
-                    ConflictingDataResolutionPolicy.resolve(new_values[node], params[node], resolution_policy)
+                    ConflictingDataResolutionPolicy.resolve(new_computed_value, params[node], resolution_policy)
+
+                new_values[node] = taken_conflicts[node]
                 return_value = taken_conflicts[node].value
             else:
-                return_value = sum_children
+                new_values[node] = new_computed_value
+                return_value = new_computed_value.value
         else:
             # No value got from children, try to search in "params"
             return_value = params[node].value if params.get(node) is not None else None
