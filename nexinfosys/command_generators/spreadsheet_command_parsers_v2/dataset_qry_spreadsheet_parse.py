@@ -38,7 +38,7 @@ def parse_dataset_qry_command(sh: Worksheet, area: AreaTupleType, name, state) -
             value = sh.cell(row=row, column=cn).value
             if value is None:
                 continue
-            lst.append(value)
+            lst.append(value.trim())
         return lst
 
     issues = []
