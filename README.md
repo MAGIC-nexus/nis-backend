@@ -34,7 +34,7 @@ NIS is made of three components: **nis-backend**, **nis-frontend** and **nis-cli
     - [Docker image](#docker-image-lab-setup)
     - [Source code](#source-code)
   - [Models with Commands](#models-with-commands)
-  - [Basic usage - **nis-frontend**](#basic-usage-nis-frontend)
+  - [**nis-frontend** quick intro](#quick-intro-to-nis-frontend)
 - [Advanced - **nis-client**](#advanced-nis-client)
 - [Configuration](#configuration)
 - [People](#people)
@@ -106,7 +106,7 @@ The reference of commands appears when a command from the list of commands is se
 
 The next section introduces **nis-frontend** which is a tool embedded in **nis-backend** whose goal is to help in writing MuSIASEM grammars.  
  
-### Basic usage (**nis-frontend**)
+### Quick intro to **nis-frontend** 
  
 **nis-backend** embeds the compiled version of a full Angular application called **nis-frontend** which is the indicated interface to **nis-backend** for most users.
  
