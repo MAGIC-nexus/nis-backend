@@ -40,10 +40,14 @@ def elaborate_pyinstaller_command_line(system, output_name, output_type, config_
     :return: string with the command to execute
     """
 
-    lsep = "\\" if system == "linux" else "^"
-    sep = "/" if system == "linux" else "\\"
-    set_var = "export" if system == "linux" else "set"
-    two_paths_sep = ":" if system == "linux" else ";"
+    if not system:
+        import platform
+        system = "linux" if platform.system() == "Linux" else "windows" if platform.system() == "Windows" else "macosx"
+
+    lsep = "\\" if system in ["linux", "macosx"] else "^"
+    sep = "/" if system in ["linux", "macosx"] else "\\"
+    set_var = "export" if system in ["linux", "macosx"] else "set"
+    two_paths_sep = ":" if system in ["linux", "macosx"] else ";"
     pandasdmx_path = dirname(pandasdmx.__file__)
     if not output_name:
         output_name = "service_main"
@@ -61,6 +65,8 @@ pip install -r requirements.txt
 pip install pyinstaller
 
 <In Windows, execute in a normal CMD.EXE shell:>
+
+<Pack the following command in a shell file (.bat for Windows, .sh for Linux and Mac OS)>
 
 pyinstaller -n {output_name} {output_type_option} {lsep}
 --exclude-module matplotlib --exclude-module _tkinter --exclude-module PyQt4 --exclude-module PyQt5 --exclude-module IPython {lsep}
@@ -111,6 +117,6 @@ dist{sep}{output_name}{sep+output_name if output_type == "onedir" else ""}
 
 if __name__ == '__main__':
     cfg_file = "/home/rnebot/Dropbox/nis-backend-config/nis_local.conf"
-    system_type = "windows"  # "linux", "windows"
+    system_type = "macosx"  # "linux", "windows", "macosx", None (autodetect)
     dist_type = "onedir"  # "onedir", "onefile"
     print(elaborate_pyinstaller_command_line(system_type, "nis-backend", dist_type, cfg_file))
