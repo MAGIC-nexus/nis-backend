@@ -102,7 +102,7 @@ To specify MuSIASEM grammars (models), NIS proposes a syntactically simple "bloc
 
 In order to take advantage of **nis-backend**, analysts write a workbook considering that commands (worksheets) are read and executed from left to right, and inside a worksheet from the first row to the last.
 
-The reference of commands can be found at ¿ZENODO?
+The reference of commands appears when a command from the list of commands is selected in **nis-frontend**. A document with a complete reference is available at ¿ZENODO?
 
 The next section introduces **nis-frontend** which is a tool embedded in **nis-backend** whose goal is to help in writing MuSIASEM grammars.  
  
@@ -128,7 +128,15 @@ The left zone contains helpers allowing the insertion of empty Commands (workshe
 
 The URL field allows editing a workbook using Google Sheets (the application must be authorized first). **nis-backend** reads directly from the specified worksheet, so it needs access enabled to the file.
 
-For extensive documentation see the **User's Manual**. 
+For extensive documentation see the **User's Manual**. Online help for commands appears below the list of commands:
+
+<img src="https://github.com/MAGIC-nexus/nis-backend/raw/develop/docs/detail_of_help_window.png" style="border:1px solid black" title="Help in NIS frontend" alt="Help in NIS frontend" height=500>
+
+and help for each field in a command appears when clicking on the name of a field in a worksheet:
+
+<img src="https://github.com/MAGIC-nexus/nis-backend/raw/develop/docs/detail_of_field_help_popup.png" style="border:1px solid black" title="Popup help for a field, in NIS frontend" alt="Popup help for a field, in NIS frontend" height=500>
+
+When information is typed for a field in the embedded worksheet, syntactic validity is checked. 
 
 **IMPORTANT**: **nis-frontend** is closed source due to a restriction in the license of a commercial component.
 
