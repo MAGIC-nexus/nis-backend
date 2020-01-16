@@ -98,7 +98,7 @@ default_cmds = """
                             "_expandable": [],
                             "_row": 2,
                             "description": "Ordered list of consideration of observations",
-                            "domain": "[0, 3)",
+                            "domain": null,
                             "group": "NISSolverParameters",
                             "name": "NISSolverObserversPriority",
                             "type": "String",
