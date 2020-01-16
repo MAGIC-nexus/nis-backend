@@ -65,7 +65,7 @@ class BasicCommand(IExecutableCommand):
         pass
 
     def _get_command_fields_values(self, row: Dict[str, Any]) -> Dict[str, Any]:
-        return {f.name: row.get(f.name, head(f.allowed_values)) for f in self._command_fields}
+        return {f.name: row.get(f.name, f.default_value) for f in self._command_fields}
 
     def _check_all_mandatory_fields_have_values(self) -> None:
         empty_fields: List[str] = [f.name

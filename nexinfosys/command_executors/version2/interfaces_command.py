@@ -7,7 +7,7 @@ from nexinfosys.command_executors import BasicCommand, subrow_issue_message
 from nexinfosys.command_field_definitions import get_command_fields_from_class
 from nexinfosys.command_generators import parser_field_parsers, IType
 from nexinfosys.command_generators.parser_ast_evaluators import dictionary_from_key_value_list, ast_to_string
-from nexinfosys.common.helper import strcmp, first, ifnull, UnitConversion
+from nexinfosys.common.helper import strcmp, first, ifnull, UnitConversion, head
 from nexinfosys.models.musiasem_concepts import PedigreeMatrix, FactorType, \
     Factor, FactorInProcessorType, Observer, GeographicReference, ProvenanceReference, \
     BibliographicReference, FactorTypesRelationUnidirectionalLinearTransformObservation
@@ -192,15 +192,15 @@ class InterfacesAndQualifiedQuantitiesCommand(BasicCommand):
                 ft = ft_list[0]
 
         # Get attributes default values taken from Interface Type or Processor attributes
-        default_values = {
+        interface_type_values = {
             "sphere": ft.sphere,
             "roegen_type": ft.roegen_type,
             "opposite_processor_type": ft.opposite_processor_type
         }
 
         # Get internal and user-defined attributes in one dictionary
-        # InterfaceType value mandate over Interface specified values
-        attributes = {c.name: ifnull(default_values.get(c.name), field_values[c.name])
+        # Use: value specified in Interfaces ELSE value specified in InterfaceTypes ELSE first value of allowed values
+        attributes = {c.name: ifnull(field_values[c.name], ifnull(interface_type_values.get(c.name), head(c.allowed_values)))
                       for c in self._command_fields if c.attribute_of == Factor}
 
         if not f:

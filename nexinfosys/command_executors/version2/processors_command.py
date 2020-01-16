@@ -240,9 +240,6 @@ class ProcessorsCommand(BasicCommand):
         attributes.update(field_values["attributes"])
         attributes["processor_group"] = pgroup
 
-        if not attributes.get("processor_system"):
-            attributes["processor_system"] = "default"
-
         # Needed to support the new name of the field, "Accounted" (previously it was "InstanceOrArchetype")
         # (internally the values have the same meaning, "Instance" for a processor which has to be accounted,
         # "Archetype" for a processor which hasn't)

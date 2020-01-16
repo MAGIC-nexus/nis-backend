@@ -79,7 +79,8 @@ command_fields: Dict[str, List[CommandField]] = {
     "attribute_types": [
         CommandField(allowed_names=["AttributeType", "AttributeTypeName"], name="attribute_type_name", mandatory=True, parser=simple_ident),
         CommandField(allowed_names=["Type"], name="data_type", mandatory=True, allowed_values=data_types, parser=simple_ident),
-        CommandField(allowed_names=["ElementTypes"], name="element_types", allowed_values=element_types, parser=list_simple_ident),
+        CommandField(allowed_names=["ElementTypes"], name="element_types", default_value=element_types[0],
+                     allowed_values=element_types, parser=list_simple_ident),
         CommandField(allowed_names=["Domain"], name="domain", parser=domain_definition)  # "domain_definition" for Category and NUmber. Boolean is only True or False. Other data types cannot be easily constrained (URL, UUID, Datetime, Geo, String)
     ],
 
@@ -125,7 +126,7 @@ command_fields: Dict[str, List[CommandField]] = {
         CommandField(allowed_names=["Description"], name="description", parser=unquoted_string),
         CommandField(allowed_names=["Unit"], name="unit", mandatory=True, parser=unit_name),
         CommandField(allowed_names=["OppositeSubsystemType", "OppositeProcessorType"], name="opposite_processor_type",
-                     allowed_values=processor_types, parser=simple_ident),
+                     default_value=processor_types[0], allowed_values=processor_types, parser=simple_ident),
         CommandField(allowed_names=[attributeRegex], name="attributes", many_appearances=True, parser=value),
         CommandField(allowed_names=["Attributes"], name="attributes", parser=key_value_list)
     ],
@@ -140,7 +141,7 @@ command_fields: Dict[str, List[CommandField]] = {
         CommandField(allowed_names=["SubsystemType", "ProcessorContextType", "ProcessorType"], name="subsystem_type",
                      default_value=processor_types[0], allowed_values=processor_types, parser=simple_ident,
                      attribute_of=Processor),
-        CommandField(allowed_names=["System"], name="processor_system", default_value="_default_system",
+        CommandField(allowed_names=["System"], name="processor_system", default_value="default",
                      parser=simple_ident, attribute_of=Processor),
         CommandField(allowed_names=["FunctionalOrStructural"], name="functional_or_structural",
                      default_value=functional_or_structural[0], allowed_values=functional_or_structural,
@@ -207,8 +208,10 @@ command_fields: Dict[str, List[CommandField]] = {
         CommandField(allowed_names=["RelationType"], name="relation_type", mandatory=True, allowed_values=RelationClassType.relationships_command_labels(), parser=unquoted_string),
         CommandField(allowed_names=["Weight"], name="flow_weight", parser=expression_with_parameters),
         CommandField(allowed_names=["ChangeOfTypeScale"], name="change_type_scale", parser=expression_with_parameters),
-        CommandField(allowed_names=["OriginCardinality"], name="source_cardinality", allowed_values=source_cardinalities, parser=simple_ident),
-        CommandField(allowed_names=["DestinationCardinality"], name="target_cardinality", allowed_values=target_cardinalities, parser=simple_ident),
+        CommandField(allowed_names=["OriginCardinality"], name="source_cardinality", default_value=source_cardinalities[0],
+                     allowed_values=source_cardinalities, parser=simple_ident),
+        CommandField(allowed_names=["DestinationCardinality"], name="target_cardinality", default_value=target_cardinalities[0],
+                     allowed_values=target_cardinalities, parser=simple_ident),
         CommandField(allowed_names=["Attributes"], name="attributes", parser=key_value_list)
     ],
 
@@ -220,7 +223,7 @@ command_fields: Dict[str, List[CommandField]] = {
         CommandField(allowed_names=["RequestedInterface"], name="requested_interface", mandatory=True, parser=simple_ident),
         CommandField(allowed_names=["Scale"], name="scale", mandatory=True, parser=expression_with_parameters),
         # BareProcessor fields
-        CommandField(allowed_names=["NewProcessorName"], name="new_processor_name", allowed_values=None, parser=processor_name),
+        CommandField(allowed_names=["NewProcessorName"], name="new_processor_name", parser=processor_name),
         CommandField(allowed_names=["NewProcessorGroup"], name="processor_group", parser=simple_ident, attribute_of=Processor),
         CommandField(allowed_names=["NewParentProcessor"], name="parent_processor", parser=processor_name),
         CommandField(allowed_names=["NewSubsystemType"], name="subsystem_type",
@@ -282,10 +285,12 @@ command_fields: Dict[str, List[CommandField]] = {
         CommandField(allowed_names=["Title"], name="title", mandatory=True, parser=unquoted_string),
         CommandField(allowed_names=["Description", "Abstract"], name="description", parser=unquoted_string),  # Syntax??
         CommandField(allowed_names=["BoundingBox"], name="bounding_box", parser=unquoted_string),  # Syntax??
-        CommandField(allowed_names=["TopicCategory"], name="topic_category", allowed_values=geographic_topic_categories, parser=unquoted_string),  # Part D.2
+        CommandField(allowed_names=["TopicCategory"], name="topic_category", default_value=geographic_topic_categories[0],
+                     allowed_values=geographic_topic_categories, parser=unquoted_string),  # Part D.2
         CommandField(allowed_names=["TemporalExtent", "Date"], name="temporal_extent", parser=unquoted_string),  # Syntax??
         CommandField(allowed_names=["PointOfContact"], name="point_of_contact", parser=unquoted_string),
-        CommandField(allowed_names=["Type"], name="type", allowed_values=geographic_resource_types, parser=unquoted_string)  # Part D.1. JUST "Dataset"
+        CommandField(allowed_names=["Type"], name="type", default_value=geographic_resource_types[0],
+                     allowed_values=geographic_resource_types, parser=unquoted_string)  # Part D.1. JUST "Dataset"
     ],
 
     "ref_bibliographic": [
@@ -305,7 +310,7 @@ command_fields: Dict[str, List[CommandField]] = {
         CommandField(allowed_names=["Institution"], name="institution", mandatory="entry_type in ('techreport')", parser=unquoted_string),
         CommandField(allowed_names=["Journal"], name="journal", mandatory="entry_type in ('article')", parser=unquoted_string),
         CommandField(allowed_names=["Key"], name="key", parser=unquoted_string),
-        CommandField(allowed_names=["Month"], name="month", allowed_values=bib_months, parser=simple_ident),
+        CommandField(allowed_names=["Month"], name="month", default_value=bib_months[0], allowed_values=bib_months, parser=simple_ident),
         CommandField(allowed_names=["Note"], name="note", parser=unquoted_string),
         CommandField(allowed_names=["Number"], name="number", parser=unquoted_string),
         CommandField(allowed_names=["Organization"], name="organization", parser=unquoted_string),
@@ -321,7 +326,8 @@ command_fields: Dict[str, List[CommandField]] = {
     ],
 
     "scalar_indicator_benchmarks": [
-        CommandField(allowed_names=["BenchmarkGroup"], name="benchmark_group", allowed_values=benchmark_groups, parser=simple_ident),
+        CommandField(allowed_names=["BenchmarkGroup"], name="benchmark_group", default_value=benchmark_groups[0],
+                     allowed_values=benchmark_groups, parser=simple_ident),
         CommandField(allowed_names=["Stakeholders"], name="stakeholders", parser=list_simple_ident),
         CommandField(allowed_names=["Benchmark"], name="benchmark", mandatory=True, parser=simple_ident),
         CommandField(allowed_names=["Range"], name="range", mandatory=True, parser=number_interval),
@@ -343,7 +349,7 @@ command_fields: Dict[str, List[CommandField]] = {
 
     "matrix_indicators": [
         CommandField(allowed_names=["Indicator"], name="indicator_name", mandatory=True, parser=simple_ident),
-        CommandField(allowed_names=["Scope"], name="scope", allowed_values=scope_types, parser=simple_ident),
+        CommandField(allowed_names=["Scope"], name="scope", default_value=scope_types[0], allowed_values=scope_types, parser=simple_ident),
         CommandField(allowed_names=["Processors"], name="processors_selector", parser=processors_selector_expression),
         CommandField(allowed_names=["Interfaces"], name="interfaces_selector", parser=interfaces_list_expression),
         CommandField(allowed_names=["Indicators"], name="indicators_selector", parser=indicators_list_expression),
@@ -366,7 +372,8 @@ command_fields: Dict[str, List[CommandField]] = {
         CommandField(allowed_names=["EndTime"], name="endtime", parser=time_expression),
         CommandField(allowed_names=["ResultDimensions"], name="resultdimensions", parser=simple_ident),
         CommandField(allowed_names=["ResultMeasures"], name="resultmeasures", parser=simple_ident),
-        CommandField(allowed_names=["ResultMeasuresAggregation"], name="resultmeasuresaggregation", allowed_values=aggregators_list, parser=simple_ident),
+        CommandField(allowed_names=["ResultMeasuresAggregation"], name="resultmeasuresaggregation",
+                     default_value=aggregators_list[0], allowed_values=aggregators_list, parser=simple_ident),
         CommandField(allowed_names=["ResultMeasureName"], name="resultmeasurename", parser=simple_ident),
         CommandField(allowed_names=["OutputDataset"], name="outputdataset", parser=simple_ident),
     ],
