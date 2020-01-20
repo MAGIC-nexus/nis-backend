@@ -43,7 +43,8 @@ from nexinfosys.command_generators import Issue
 from nexinfosys.command_generators.parser_ast_evaluators import ast_evaluator
 from nexinfosys.command_generators.parser_field_parsers import string_to_ast, expression_with_parameters, is_year, \
     is_month, indicator_expression
-from nexinfosys.common.helper import create_dictionary, PartialRetrievalDictionary, ifnull, Memoize, istr, strcmp
+from nexinfosys.common.helper import create_dictionary, PartialRetrievalDictionary, ifnull, Memoize, istr, strcmp, \
+    FloatExp
 from nexinfosys.ie_exports.xml import export_model_to_xml
 from nexinfosys.model_services import get_case_study_registry_objects, State
 from nexinfosys.models import CodeImmutable
@@ -72,7 +73,7 @@ class Computed(Enum):
 
 
 class FloatComputedTuple(NamedTuple):
-    value: float
+    value: FloatExp
     computed: Computed
 
 
@@ -180,6 +181,9 @@ class InterfaceNode:
     def __hash__(self):
         return hash(repr(self))
 
+    def __lt__(self, other):
+        return self.name < other.name
+
 
 class ResultKey(NamedTuple):
     scenario: str
@@ -192,9 +196,12 @@ class ResultKey(NamedTuple):
         return self.scenario, self.period, self.scope.name, self.conflict_partof.name, self.conflict_itype.name
 
 
-NodeFloatDict = Dict[InterfaceNode, float]
+NodeFloatDict = Dict[InterfaceNode, FloatExp]
 NodeFloatComputedDict = Dict[InterfaceNode, FloatComputedTuple]
 ResultDict = Dict[ResultKey, NodeFloatComputedDict]
+
+AstType = Dict
+TimeObservationsType = Dict[str, List[Tuple[Optional[Union[float, AstType]], FactorQuantitativeObservation]]]
 
 
 @Memoize
@@ -290,9 +297,6 @@ def evaluate_parameters_for_scenario(base_params: List[Parameter], scenario_para
     return result_params
 
 
-TimeObservationsType = Dict[str, List[Tuple[float, FactorQuantitativeObservation]]]
-
-
 def get_evaluated_observations_by_time(prd: PartialRetrievalDictionary) -> TimeObservationsType:
     """
         Get all interface observations (intensive or extensive) by time.
@@ -338,11 +342,11 @@ def get_evaluated_observations_by_time(prd: PartialRetrievalDictionary) -> TimeO
 
 
 def evaluate_numeric_expression_with_parameters(expression: Union[float, str, dict], state: State) \
-        -> Tuple[Optional[float], Optional[Dict], Set, List[str]]:
+        -> Tuple[Optional[float], Optional[AstType], Set, List[str]]:
 
     issues: List[Tuple[int, str]] = []
-    ast = None
-    value = None
+    ast: Optional[AstType] = None
+    value: Optional[float] = None
     params = set()
 
     if expression is None:
@@ -496,7 +500,7 @@ def resolve_weight_expressions(graph_list: List[nx.DiGraph], state: State, raise
     for graph in graph_list:
         for u, v, data in graph.edges(data=True):
             expression = data["weight"]
-            if expression is not None:
+            if expression is not None and not isinstance(expression, FloatExp):
                 value, ast, params, issues = evaluate_numeric_expression_with_parameters(expression, state)
                 if raise_error and value is None:
                     raise SolvingException(
@@ -505,7 +509,7 @@ def resolve_weight_expressions(graph_list: List[nx.DiGraph], state: State, raise
                         f"Issues: {', '.join(issues)}"
                     )
 
-                data["weight"] = ifnull(value, ast)
+                data["weight"] = ifnull(FloatExp(value, None, str(expression)), ast)
 
 
 def iterative_solving(comp_graph_list: List[ComputationGraph], observations: NodeFloatDict) -> Tuple[NodeFloatDict, List[InterfaceNode]]:
@@ -598,7 +602,8 @@ def compute_scenario_evaluated_observation_results(scenario_states: Dict[str, St
                         f"Issues: {', '.join(issues)}"
                     )
 
-                resolved_observations[InterfaceNode(obs.factor)] = FloatComputedTuple(value, Computed.No)
+                node = InterfaceNode(obs.factor)
+                resolved_observations[node] = FloatComputedTuple(FloatExp(value, node.name, str(obs.value)), Computed.No)
 
             result_key = ResultKey(scenario_name, time_period, Scope.Total)
             results[result_key] = resolved_observations
@@ -741,8 +746,8 @@ def compute_internal_external_results(values: NodeFloatComputedDict, comp_graph:
                 # res = compute resulting vector based on OUTCOMING flows processor.subsystem_type
                 edges: Set[Tuple[InterfaceNode, InterfaceNode, Dict]] = comp_graph.graph.out_edges(node, data=True)
 
-            external_value: Optional[float] = None
-            internal_value: Optional[float] = None
+            external_value: Optional[FloatExp] = None
+            internal_value: Optional[FloatExp] = None
             for opposite_node, _, data in edges:
                 if data['weight'] and opposite_node in values:
                     edge_value = values[opposite_node].value * data['weight']
@@ -950,8 +955,9 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
 
     data = {result_key.as_string_tuple() + node.key:
                 {"RoegenType": node.roegen_type if node else "-",
-                 "Value": float_computed.value,
+                 "Value": float_computed.value.val,
                  "Computed": float_computed.computed.name,
+                 "Expression": float_computed.value.exp,
                  "Unit": node.unit if node else "-",
                  "Level": node.processor.attributes.get('level', '') if node else "-",
                  "System": node.system if node else "-",
@@ -1377,23 +1383,27 @@ def aggregate_results(tree: Dict[InterfaceNode, Set[InterfaceNode]], params: Nod
                       resolution_policy: ConflictingDataResolutionPolicy) \
         -> Tuple[NodeFloatComputedDict, NodeFloatComputedDict, NodeFloatComputedDict]:
 
-    def compute_node(node: InterfaceNode) -> Optional[float]:
+    def compute_node(node: InterfaceNode) -> Optional[FloatExp]:
         # If the node has already been computed return the value
         if new_values.get(node) is not None:
             return new_values[node].value
 
         # Make a depth-first search
-        return_value: Optional[float]
-        sum_children: Optional[float] = None
+        return_value: Optional[FloatExp]
+        sum_children: Optional[FloatExp] = None
 
         # Try to get the sum from children, if any
-        for child in tree.get(node, {}):
+        for child in sorted(tree.get(node, {})):
             child_value = compute_node(child)
             if child_value is not None:
-                sum_children = (0 if sum_children is None else sum_children) + child_value
+                if sum_children is None:
+                    sum_children = child_value.assignable_copy()
+                else:
+                    sum_children += child_value
 
         if sum_children is not None:
             # New value has been computed
+            sum_children.name = node.name
             new_computed_value = FloatComputedTuple(sum_children, Computed.Yes)
 
             if params.get(node) is not None:

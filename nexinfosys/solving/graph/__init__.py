@@ -1,9 +1,11 @@
 from enum import Enum
 from typing import TypeVar
 
+from nexinfosys.common.helper import FloatExp
+
 Node = TypeVar('Node')  # Generic node type
-Weight = float  # Type alias
-Value = float  # Type alias
+Weight = FloatExp  # Type alias
+Value = FloatExp  # Type alias
 
 
 class EdgeType(Enum):

@@ -183,7 +183,7 @@ class ComputationGraph:
         def solve_inputs(inputs: List[Tuple[Node, Weight]], split: bool) -> Optional[Value]:
             result = None
 
-            for n, weight in inputs:
+            for n, weight in sorted(inputs):
                 res_backward = solve_backward(n)
 
                 # If node 'n' is a 'split' only one result is needed to compute the result
@@ -192,7 +192,10 @@ class ComputationGraph:
                         return res_backward * weight
                 else:
                     if res_backward is not None and weight is not None:
-                        result = (result if result is not None else 0) + res_backward * weight
+                        if result is None:
+                            result = res_backward * weight
+                        else:
+                            result += res_backward * weight
                     else:
                         return None
 

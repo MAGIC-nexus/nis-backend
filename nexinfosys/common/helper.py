@@ -1244,24 +1244,25 @@ def ascii2uuid(s: str) -> str:
     return str(uuid.UUID(bytes=base64.a85decode(s)))
 
 
-def ifnull(var, val):
+T = TypeVar('T')
+S = TypeVar('S')
+
+
+def ifnull(var: Optional[T], val: Optional[S]) -> Union[T, Optional[S]]:
     """ Returns first value if not None, otherwise returns second value """
     if var is None:
         return val
     return var
 
 
-T = TypeVar('T')
-
-
-def head(l: List[T]) -> Optional[T]:
+def head(in_list: List[T]) -> Optional[T]:
     """
     Returns the head element of the list or None if the list is empty.
-    :param l: The input list
+    :param in_list: The input list
     :return: The head element of the list or None
     """
-    if l:
-        return l[0]
+    if in_list:
+        return in_list[0]
     else:
         return None
 
@@ -1356,6 +1357,10 @@ def split_and_strip(s: str, sep=",") -> List[str]:
     return string_list
 
 
+# #####################################################################################################################
+# >>>> CUSTOM DATA TYPES <<<<
+# #####################################################################################################################
+
 FloatOrStringT = Union[str, float]
 
 
@@ -1417,6 +1422,51 @@ class UnitConversion:
             ratio *= UnitConversion.ratio(target_from_unit, target_to_unit)
 
         return FloatOrString.multiply_with_float(weight, ratio)
+
+
+def brackets(exp: str) -> str:
+    """ Surround a string expression with brackets """
+    return "(" + exp + ")"
+
+
+def binary_exp(exp1: str, exp2: str, oper: str) -> str:
+    """ Join two string expressions with an operator """
+    return brackets(exp1) + oper + brackets(exp2)
+
+
+class FloatExp:
+    """ Wrapper of the Float data type which includes a name and a string expression that will grow
+        when operating with other objects """
+    def __init__(self, val: float, name: Optional[str], exp: Optional[str]):
+        assert(isinstance(val, float))
+        assert(name is None or isinstance(name, str))
+        assert(exp is None or isinstance(exp, str))
+
+        self.val = val
+        self.exp = str(val) if exp is None else exp
+        self.name = self.exp if name is None else name
+
+    def assignable_copy(self):
+        return FloatExp(self.val, self.name, self.name)
+
+    def __add__(self, other: 'FloatExp'):
+        exp = binary_exp(self.name, other.name, "+")
+        return FloatExp(self.val + other.val, exp, exp)
+
+    def __sub__(self, other: 'FloatExp'):
+        exp = binary_exp(self.name, other.name, "-")
+        return FloatExp(self.val - other.val, exp, exp)
+
+    def __mul__(self, other: 'FloatExp'):
+        exp = binary_exp(self.name, other.name, "*")
+        return FloatExp(self.val * other.val, exp, exp)
+
+    def __truediv__(self, other: 'FloatExp'):
+        exp = binary_exp(self.name, other.name, "/")
+        return FloatExp(self.val / other.val, exp, exp)
+
+    def __str__(self):
+        return f'Value = {self.val}, Name = "{self.name}", Expression = "{self.exp}"'
 
 
 def add_label_columns_to_dataframe(ds_name, df, prd):
