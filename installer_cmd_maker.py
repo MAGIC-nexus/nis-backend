@@ -9,20 +9,16 @@ import pandasdmx
 # * pyinstaller
 # * cx_freeze
 
-# nis-frontend (OK)
-# agencies.json (OK)
-
 # TODO
-# CYTHON files:
-# * How?
+# Cython files:
+# * How?: Just invoke "cythonize -i **/*.pyx" before the "pyinstaller" command
 #
-# configuration file. Generate one if not specified, with default data folder for windows, default DATA directory for Linux
+# configuration file. Generate one dynamically if not specified, with default data folder for windows, default DATA directory for Linux
 #  directory for database files
 #  directory for sessions
 #  directory for datasets: FAO and FADN
 #  directory for temporary: Eurostat and OECD
 # credentials files for Google Drive
-#
 #
 #
 # WINDOWS...
@@ -64,7 +60,10 @@ git clone ...
 pip install -r requirements.txt
 pip install pyinstaller
 
-<In Windows, execute in a normal CMD.EXE shell:>
+<cd to the "nis-backend" directory and execute:>
+cythonize -i **/*.pyx
+
+<In Windows, execute in a normal CMD.EXE shell (not PowerShell):>
 
 <Pack the following command in a shell file (.bat for Windows, .sh for Linux and Mac OS)>
 
@@ -103,9 +102,9 @@ pyinstaller -n {output_name} {output_type_option} {lsep}
 --hidden-import nexinfosys.command_executors.external_data.etl_external_dataset_command {lsep}
 --hidden-import nexinfosys.command_executors.external_data.mapping_command {lsep}
 --hidden-import nexinfosys.command_executors.external_data.parameters_command {lsep}
---add-data ..{sep}frontend{sep}{two_paths_sep}.{sep}nexinfosys{sep}frontend {lsep}
+--add-data nexinfosys{sep}frontend{sep}{two_paths_sep}.{sep}nexinfosys{sep}frontend {lsep}
 --add-data {pandasdmx_path}{sep}agencies.json{two_paths_sep}pandasdmx {lsep}
-service_main.py
+nexinfosys/restful_service/service_main.py
 
 <Modify config file. Different in Windows and Linux>
 
@@ -117,6 +116,6 @@ dist{sep}{output_name}{sep+output_name if output_type == "onedir" else ""}
 
 if __name__ == '__main__':
     cfg_file = "/home/rnebot/Dropbox/nis-backend-config/nis_local.conf"
-    system_type = "macosx"  # "linux", "windows", "macosx", None (autodetect)
+    system_type = "linux"  # "linux", "windows", "macosx", None (autodetect)
     dist_type = "onedir"  # "onedir", "onefile"
     print(elaborate_pyinstaller_command_line(system_type, "nis-backend", dist_type, cfg_file))
