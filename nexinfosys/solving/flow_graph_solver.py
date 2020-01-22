@@ -748,7 +748,7 @@ def compute_internal_external_results(values: NodeFloatComputedDict, comp_graph:
 
             external_value: Optional[FloatExp] = None
             internal_value: Optional[FloatExp] = None
-            for opposite_node, _, data in edges:
+            for opposite_node, _, data in sorted(edges):
                 if data['weight'] and opposite_node in values:
                     edge_value = values[opposite_node].value * data['weight']
 
