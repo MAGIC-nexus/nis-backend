@@ -60,7 +60,7 @@ default_cmds = """
                 "_row": 2,
                 "code": "TakeUpper",
                 "description": "Policy: take the value upper instead of the value coming from lower level accumulation",
-                "hierarchy_name": "PartOfConflictingDataResolutionPolicies",
+                "hierarchy_name": "AggregationConflictingDataResolutionPolicies",
                 "label": "Take value from the upper level"
             },
             {
@@ -68,8 +68,27 @@ default_cmds = """
                 "_expandable": [],
                 "_row": 3,
                 "code": "TakeLowerAggregation",
-                "hierarchy_name": "PartOfConflictingDataResolutionPolicies",
+                "description": "Policy: take the value computed by aggregation lower levels of a hierarchy",
+                "hierarchy_name": "AggregationConflictingDataResolutionPolicies",
                 "label": "Take value accumulated from lower levels"
+            },
+            {
+                "_complex": false,
+                "_expandable": [],
+                "_row": 3,
+                "code": "UseZero",
+                "description": "Policy: use the zero value when a child is missing during hierarchy aggregation",
+                "hierarchy_name": "AggregationMissingValueResolutionPolicies",
+                "label": "Use zero in aggregations"
+            },
+            {
+                "_complex": false,
+                "_expandable": [],
+                "_row": 3,
+                "code": "Invalidate",
+                "description": "Policy: invalidate the aggregation for a node in hierarchy if any of the children's value is missing",
+                "hierarchy_name": "AggregationMissingValueResolutionPolicies",
+                "label": "Invalidate aggregation"
             }
     
             ]
@@ -109,11 +128,22 @@ default_cmds = """
                             "_expandable": [],
                             "_row": 2,
                             "description": "Conflicting data resolution policy",
-                            "domain": "PartOfConflictingDataResolutionPolicies",
+                            "domain": "AggregationConflictingDataResolutionPolicies",
                             "group": "NISSolverParameters",
                             "name": "NISSolverConflictingDataResolutionPolicy",
                             "type": "Code",
                             "value": "TakeUpper"
+                        },
+                        {
+                            "_complex": false,
+                            "_expandable": [],
+                            "_row": 2,
+                            "description": "Missing value resolution policy",
+                            "domain": "AggregationMissingValueResolutionPolicies",
+                            "group": "NISSolverParameters",
+                            "name": "NISSolverMissingValueResolutionPolicy",
+                            "type": "Code",
+                            "value": "UseZero"
                         }
                     ]
         }

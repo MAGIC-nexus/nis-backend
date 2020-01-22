@@ -30,7 +30,7 @@ from collections import defaultdict
 from enum import Enum
 from functools import reduce
 from itertools import chain
-from typing import Dict, List, Set, Any, Tuple, Union, Optional, NamedTuple, Generator, Type, NoReturn
+from typing import Dict, List, Set, Any, Tuple, Union, Optional, NamedTuple, Generator, Type
 
 import lxml
 import networkx as nx
@@ -91,17 +91,24 @@ class ConflictingDataResolutionPolicy(Enum):
     def get_key():
         return "NISSolverConflictingDataResolutionPolicy"
 
-    @classmethod
-    def resolve(cls, computed_value: FloatComputedTuple, existing_value: FloatComputedTuple,
-                policy: "ConflictingDataResolutionPolicy") \
+    def resolve(self, computed_value: FloatComputedTuple, existing_value: FloatComputedTuple) \
             -> Tuple[FloatComputedTuple, FloatComputedTuple]:
 
-        if policy == cls.TakeLowerAggregation:
+        if self == self.TakeLowerAggregation:
             # Take computed aggregation over existing value
             return computed_value, existing_value
-        elif policy == cls.TakeUpper:
+        elif self == self.TakeUpper:
             # Take existing value over computed aggregation
             return existing_value, computed_value
+
+
+class MissingValueResolutionPolicy(Enum):
+    UseZero = 0
+    Invalidate = 1
+
+    @staticmethod
+    def get_key():
+        return "NISSolverMissingValueResolutionPolicy"
 
 
 class InterfaceNode:
@@ -800,10 +807,13 @@ def compute_interfacetype_aggregate_results(glb_idx: PartialRetrievalDictionary,
 
             for result_key, node_floatcomputed_dict in existing_results.items():
 
-                policy: str = scenario_states[result_key.scenario].get(ConflictingDataResolutionPolicy.get_key())
+                conflicting_data_policy: str = scenario_states[result_key.scenario].get(ConflictingDataResolutionPolicy.get_key())
+                missing_value_policy: str = scenario_states[result_key.scenario].get(MissingValueResolutionPolicy.get_key())
 
                 aggregations, taken_conflicts, dismissed_conflicts = \
-                    aggregate_results(hierarchy, node_floatcomputed_dict, ConflictingDataResolutionPolicy[policy])
+                    aggregate_results(hierarchy, node_floatcomputed_dict,
+                                      ConflictingDataResolutionPolicy[conflicting_data_policy],
+                                      MissingValueResolutionPolicy[missing_value_policy])
 
                 for node, float_computed in aggregations.items():
                     results.setdefault(result_key, {})[node] = float_computed
@@ -858,10 +868,13 @@ def compute_partof_aggregate_results(glb_idx: PartialRetrievalDictionary, scenar
                 # to aggregate values in the current hierarchy
                 for result_key, node_floatcomputed_dict in existing_results.items():
 
-                    policy: str = scenario_states[result_key.scenario].get(ConflictingDataResolutionPolicy.get_key())
+                    conflicting_data_policy: str = scenario_states[result_key.scenario].get(ConflictingDataResolutionPolicy.get_key())
+                    missing_value_policy: str = scenario_states[result_key.scenario].get(MissingValueResolutionPolicy.get_key())
 
                     aggregations, taken_conflicts, dismissed_conflicts = \
-                        aggregate_results(hierarchy, node_floatcomputed_dict, ConflictingDataResolutionPolicy[policy])
+                        aggregate_results(hierarchy, node_floatcomputed_dict,
+                                          ConflictingDataResolutionPolicy[conflicting_data_policy],
+                                          MissingValueResolutionPolicy[missing_value_policy])
 
                     for node, float_computed in aggregations.items():
                         results.setdefault(result_key, {})[node] = float_computed
@@ -1386,7 +1399,8 @@ def calculate_global_scalar_indicators(indicators: List[Indicator],
 
 
 def aggregate_results(tree: Dict[InterfaceNode, Set[InterfaceNode]], params: NodeFloatComputedDict,
-                      resolution_policy: ConflictingDataResolutionPolicy) \
+                      conflicting_data_policy: ConflictingDataResolutionPolicy,
+                      missing_values_policy: MissingValueResolutionPolicy) \
         -> Tuple[NodeFloatComputedDict, NodeFloatComputedDict, NodeFloatComputedDict]:
 
     def compute_node(node: InterfaceNode) -> Optional[FloatExp]:
@@ -1406,6 +1420,10 @@ def aggregate_results(tree: Dict[InterfaceNode, Set[InterfaceNode]], params: Nod
                     sum_children = child_value.assignable_copy()
                 else:
                     sum_children += child_value
+            elif missing_values_policy == MissingValueResolutionPolicy.Invalidate:
+                # Invalidate current children computation and stop evaluating following children
+                sum_children = None
+                break
 
         if sum_children is not None:
             # New value has been computed
@@ -1415,7 +1433,7 @@ def aggregate_results(tree: Dict[InterfaceNode, Set[InterfaceNode]], params: Nod
             if params.get(node) is not None:
                 # Conflict here: applies strategy
                 taken_conflicts[node], dismissed_conflicts[node] = \
-                    ConflictingDataResolutionPolicy.resolve(new_computed_value, params[node], resolution_policy)
+                    conflicting_data_policy.resolve(new_computed_value, params[node])
 
                 new_values[node] = taken_conflicts[node]
                 return_value = taken_conflicts[node].value
