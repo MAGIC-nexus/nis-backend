@@ -27,7 +27,7 @@ class ComputationGraph:
 
         if graph:
             for u, v, data in graph.edges(data=True):
-                reverse_weight = (1/data["weight"]) if data.get("add_reverse_weight") else None
+                reverse_weight = (Weight(1.0)/data["weight"]) if data.get("add_reverse_weight") else None
                 self.add_edge(u, v, data["weight"], reverse_weight)
 
             for n, data in graph.nodes(data=True):

@@ -753,9 +753,15 @@ def compute_internal_external_results(values: NodeFloatComputedDict, comp_graph:
                     edge_value = values[opposite_node].value * data['weight']
 
                     if opposite_node.subsystem.lower() in ["external", "externalenvironment"]:
-                        external_value = (0.0 if external_value is None else external_value) + edge_value
+                        if external_value is None:
+                            external_value = edge_value.assignable_copy()
+                        else:
+                            external_value += edge_value
                     else:
-                        internal_value = (0.0 if internal_value is None else internal_value) + edge_value
+                        if internal_value is None:
+                            internal_value = edge_value.assignable_copy()
+                        else:
+                            internal_value += edge_value
 
             if external_value is not None:
                 external_results[node] = FloatComputedTuple(external_value, Computed.Yes)

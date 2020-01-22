@@ -126,7 +126,7 @@ class FlowGraph:
                         u, v, data = edge
                         opposite_weight = opposite_graph[v][u]['weight']
                         if opposite_weight is not None:
-                            data['weight'] = 0.0 if opposite_weight == 0.0 else (1.0 / opposite_weight)
+                            data['weight'] = Weight(0.0) if opposite_weight == 0.0 else (Weight(1.0) / opposite_weight)
                             issues.append(Issue(IType.INFO,
                                                 f'The weight of single output edge "{edge}" could be inferred from '
                                                 f'opposite weight "{opposite_weight}"'))
@@ -135,7 +135,7 @@ class FlowGraph:
                                                 f'The weight of single output edge "{edge}" will not be inferred '
                                                 f'because a structural edge exist'))
                         else:
-                            data['weight'] = 1.0
+                            data['weight'] = Weight(1.0)
                             issues.append(Issue(IType.INFO,
                                                 f'The weight of single output edge "{edge}" could be inferred '
                                                 f'without opposite weight'))
@@ -147,7 +147,7 @@ class FlowGraph:
                                                 f'The weight of edge "{edges_without_weight[0]}" cannot be inferred, '
                                                 f'the sum of other weights is >= 1.0: {sum_other_weights}'))
                         else:
-                            edges_without_weight[0][2]['weight'] = 1.0 - sum_other_weights
+                            edges_without_weight[0][2]['weight'] = Weight(1.0) - sum_other_weights
                             graph.nodes[n]['split'] = True
                             issues.append(Issue(IType.INFO,
                                                 f'The weight of edge "{edges_without_weight[0]}" could be inferred '

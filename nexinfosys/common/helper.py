@@ -14,7 +14,7 @@ import urllib
 import urllib.request
 import uuid
 from functools import partial
-from typing import IO, List, Tuple, Dict, Any, Optional, Iterable, Callable, TypeVar, Type, Union
+from typing import IO, List, Tuple, Dict, Any, Optional, Iterable, Callable, TypeVar, Type, Union, SupportsFloat
 from urllib.parse import urlparse
 from uuid import UUID
 
@@ -1434,10 +1434,10 @@ def binary_exp(exp1: str, exp2: str, oper: str) -> str:
     return brackets(exp1) + oper + brackets(exp2)
 
 
-class FloatExp:
+class FloatExp(SupportsFloat):
     """ Wrapper of the Float data type which includes a name and a string expression that will grow
         when operating with other objects """
-    def __init__(self, val: float, name: Optional[str], exp: Optional[str]):
+    def __init__(self, val: float, name: Optional[str]=None, exp: Optional[str]=None):
         assert(isinstance(val, float))
         assert(name is None or isinstance(name, str))
         assert(exp is None or isinstance(exp, str))
@@ -1446,27 +1446,41 @@ class FloatExp:
         self.exp = str(val) if exp is None else exp
         self.name = self.exp if name is None else name
 
+    def __float__(self) -> float:
+        """ Needed for abc SupportsFloat used in match.isclose() """
+        return self.val
+
     def assignable_copy(self):
         return FloatExp(self.val, self.name, self.name)
 
-    def __add__(self, other: 'FloatExp'):
+    @staticmethod
+    def get_float(f: Union[float, 'FloatExp']) -> float:
+        return f.val if isinstance(f, FloatExp) else f
+
+    def __add__(self, other: 'FloatExp') -> 'FloatExp':
         exp = binary_exp(self.name, other.name, "+")
         return FloatExp(self.val + other.val, exp, exp)
 
-    def __sub__(self, other: 'FloatExp'):
+    def __sub__(self, other: 'FloatExp') -> 'FloatExp':
         exp = binary_exp(self.name, other.name, "-")
         return FloatExp(self.val - other.val, exp, exp)
 
-    def __mul__(self, other: 'FloatExp'):
+    def __mul__(self, other: 'FloatExp') -> 'FloatExp':
         exp = binary_exp(self.name, other.name, "*")
         return FloatExp(self.val * other.val, exp, exp)
 
-    def __truediv__(self, other: 'FloatExp'):
+    def __truediv__(self, other: 'FloatExp') -> 'FloatExp':
         exp = binary_exp(self.name, other.name, "/")
         return FloatExp(self.val / other.val, exp, exp)
 
-    def __str__(self):
-        return f'Value = {self.val}, Name = "{self.name}", Expression = "{self.exp}"'
+    def __eq__(self, other: Union[float, 'FloatExp']) -> bool:
+        return self.val == FloatExp.get_float(other)
+
+    def __gt__(self, other: Union[float, 'FloatExp']) -> bool:
+        return self.val > FloatExp.get_float(other)
+
+    def __str__(self) -> str:
+        return f'Value = {self.val}, Name = {self.name}, Expression = "{self.exp}"'
 
 
 def add_label_columns_to_dataframe(ds_name, df, prd):
