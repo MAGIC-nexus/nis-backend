@@ -75,6 +75,7 @@ class Computed(Enum):
 class FloatComputedTuple(NamedTuple):
     value: FloatExp
     computed: Computed
+    observer: str = None
 
 
 class ConflictResolution(Enum):
@@ -610,7 +611,7 @@ def compute_scenario_evaluated_observation_results(scenario_states: Dict[str, St
                     )
 
                 node = InterfaceNode(obs.factor)
-                resolved_observations[node] = FloatComputedTuple(FloatExp(value, node.name, str(obs.value)), Computed.No)
+                resolved_observations[node] = FloatComputedTuple(FloatExp(value, node.name, str(obs.value)), Computed.No, obs.observer.name)
 
             result_key = ResultKey(scenario_name, time_period, Scope.Total)
             results[result_key] = resolved_observations
@@ -976,6 +977,7 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
                 {"RoegenType": node.roegen_type if node else "-",
                  "Value": float_computed.value.val,
                  "Computed": float_computed.computed.name,
+                 "Observer": float_computed.observer,
                  "Expression": float_computed.value.exp,
                  "Unit": node.unit if node else "-",
                  "Level": node.processor.attributes.get('level', '') if node else "-",
