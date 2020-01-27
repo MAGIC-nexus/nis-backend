@@ -30,7 +30,10 @@ def parse_etl_external_dataset_command(sh: Worksheet, area: AreaTupleType, datas
             value = sh.cell(row=row, column=cn).value
             if value is None:
                 continue
-            lst.append(value.strip())
+            if isinstance(value, str):
+                lst.append(value.strip())
+            else:
+                lst.append(value)
         return lst
 
     issues = []
