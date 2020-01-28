@@ -42,7 +42,7 @@ from nexinfosys.command_field_definitions import orientations
 from nexinfosys.command_generators import Issue
 from nexinfosys.command_generators.parser_ast_evaluators import ast_evaluator
 from nexinfosys.command_generators.parser_field_parsers import string_to_ast, expression_with_parameters, is_year, \
-    is_month, indicator_expression
+    is_month, indicator_expression, parse_string_as_simple_ident_list
 from nexinfosys.common.helper import create_dictionary, PartialRetrievalDictionary, ifnull, Memoize, istr, strcmp, \
     FloatExp, split_and_strip, precedes_in_list
 from nexinfosys.ie_exports.xml import export_model_to_xml
@@ -599,7 +599,7 @@ def compute_scenario_evaluated_observation_results(scenario_states: Dict[str, St
     for scenario_name, scenario_state in scenario_states.items():  # type: str, State
 
         # Get scenario parameter NISSolverObserversPriority
-        observers_priority_list = split_and_strip(scenario_state.get('NISSolverObserversPriority'))
+        observers_priority_list = parse_string_as_simple_ident_list(scenario_state.get('NISSolverObserversPriority'))
 
         for time_period, observations in time_observations.items():
             resolved_observations: NodeFloatComputedDict = {}
@@ -622,7 +622,8 @@ def compute_scenario_evaluated_observation_results(scenario_states: Dict[str, St
                     if not observers_priority_list:
                         raise SolvingException(
                             f"Scenario '{scenario_name}' - period '{time_period}'. Multiple observations exist for the "
-                            f"'same interface '{node.name}' but an observers' priority list has not been defined."
+                            f"'same interface '{node.name}' but an observers' priority list has not been (correctly) "
+                            f"defined."
                         )
                     elif observer_name is None and resolved_observations[node].observer is None:
                         raise SolvingException(

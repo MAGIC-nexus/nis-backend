@@ -10,13 +10,14 @@ from functools import partial
 
 import lxml
 import pyparsing
+import typing
 from pyparsing import (ParserElement, Regex,
                        oneOf, srange, operatorPrecedence, opAssoc,
                        Forward, Regex, Suppress, Literal, Word,
                        Optional, OneOrMore, ZeroOrMore, Or, alphas, alphanums, White,
                        Combine, Group, delimitedList, nums, quotedString, NotAny,
                        Keyword, removeQuotes, CaselessKeyword, OnlyOnce)
-from typing import Dict
+from typing import Dict, List
 
 from nexinfosys import ureg
 from nexinfosys.command_generators import global_functions, global_functions_extended
@@ -488,6 +489,8 @@ expression_with_parameters = arith_boolean_expression
 #                                                  lpar=lparen.suppress(),
 #                                                  rpar=rparen.suppress())
 
+expression_with_parameters_or_list_simple_ident = Or([arith_boolean_expression, list_simple_ident])
+
 # RULES: Expression type 3. For hierarchies. Can mention only simple identifiers (codes) and numbers
 hierarchy_expression << operatorPrecedence(Or([positive_float, positive_int, simple_ident]),  # Operand types
                                            [(signop, 1, opAssoc.RIGHT, lambda _s, l, t: {'type': 'u'+t.asList()[0][0], 'terms': [0, t.asList()[0][1]], 'ops': ['u'+t.asList()[0][0]]}),
@@ -496,6 +499,7 @@ hierarchy_expression << operatorPrecedence(Or([positive_float, positive_int, sim
                                             (plusop, 2, opAssoc.LEFT, lambda _s, l, t: {'type': 'adders', 'terms': t.asList()[0][0::2], 'ops': t.asList()[0][1::2]}),
                                             ],
                                            lpar=lparen.suppress(),
+
                                            rpar=rparen.suppress())
 
 # RULES: Expression type 4. For indicators. Can mention only numbers and core concepts
@@ -704,6 +708,17 @@ def is_month(s: str) -> bool:
     return True
 
 
+def parse_string_as_simple_ident_list(in_list: str) -> typing.Optional[List[str]]:
+    if in_list:
+        try:
+            res = list_simple_ident.parseString(in_list, parseAll=True)
+            if res:
+                return res.asList()
+        except pyparsing.ParseException:
+            pass
+    return None
+
+
 if __name__ == '__main__':
     from nexinfosys.model_services import State
     from dotted.collection import DottedDict
@@ -774,6 +789,10 @@ if __name__ == '__main__':
         print(f'Is year = {is_year(example)}')
         print(f'Is month = {is_month(example)}')
         print("-------------------")
+
+    for list1 in ["this, is, a,simple_ident , list", "this,is,'NOT', a,simple_ident , list", " word ", "", " , ", None]:
+        parsed_list = parse_string_as_simple_ident_list(list1)
+        print(f'Parsing list "{list1}": {parsed_list}')
 
     s.set("HH", DottedDict({"Power": {"p": 34.5, "Price": 2.3}}))
     s.set("EN", DottedDict({"Power": {"Price": 1.5}}))

@@ -11,7 +11,7 @@ from nexinfosys.command_generators.parser_field_parsers import simple_ident, unq
     time_expression, indicator_expression, code_string, simple_h_name, domain_definition, unit_name, url_parser, \
     processor_names, value, list_simple_ident, reference, processor_name, processors_selector_expression, \
     interfaces_list_expression, attributes_list_expression, indicators_list_expression, number_interval, pair_numbers, \
-    external_ds_name, level_name
+    external_ds_name, level_name, expression_with_parameters_or_list_simple_ident
 from nexinfosys.common.helper import first, class_full_name
 from nexinfosys.model_services import IExecutableCommand
 from nexinfosys.models.musiasem_concepts import Processor, Factor, RelationClassType, FactorType
@@ -360,7 +360,7 @@ command_fields: Dict[str, List[CommandField]] = {
     "problem_statement": [
         CommandField(allowed_names=["Scenario"], name="scenario_name", parser=simple_ident),
         CommandField(allowed_names=["Parameter"], name="parameter", mandatory=True, parser=simple_ident),
-        CommandField(allowed_names=["Value"], name="parameter_value", mandatory=True, parser=expression_with_parameters),
+        CommandField(allowed_names=["Value"], name="parameter_value", mandatory=True, parser=expression_with_parameters_or_list_simple_ident), # list_simple_ident
         CommandField(allowed_names=["Description"], name="description", parser=unquoted_string)
     ],
 
