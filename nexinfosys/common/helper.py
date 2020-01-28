@@ -1357,6 +1357,10 @@ def split_and_strip(s: str, sep=",") -> List[str]:
     return string_list
 
 
+def precedes_in_list(lst: List[T], elem1: Optional[T], elem2: Optional[T]) -> bool:
+    """ Check if an element comes before another inside a list """
+    return elem1 in lst and (elem2 not in lst or lst.index(elem1) < lst.index(elem2))
+
 # #####################################################################################################################
 # >>>> CUSTOM DATA TYPES <<<<
 # #####################################################################################################################
