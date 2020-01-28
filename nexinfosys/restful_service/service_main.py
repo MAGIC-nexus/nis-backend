@@ -908,7 +908,7 @@ def reproducible_session_get_command_generator(order):  # Return one of the comm
     return r
 
 
-@app.route(nis_api_base + "/isession/rsession/save_state", methods=["PUT"])
+@app.route(nis_api_base + "/isession/rsession/state", methods=["PUT"])
 def reproducible_session_save_state():  # Save state
     def ensure_dir(file_path):
         directory = os.path.dirname(file_path)
@@ -943,7 +943,7 @@ def reproducible_session_save_state():  # Save state
     return r
 
 
-@app.route(nis_api_base + "/isession/rsession/load_state", methods=["GET"])
+@app.route(nis_api_base + "/isession/rsession/state", methods=["GET"])
 def reproducible_session_load_state():  # Load saved state
     # Recover InteractiveSession
     isess = deserialize_isession_and_prepare_db_session()
@@ -968,7 +968,7 @@ def reproducible_session_load_state():  # Load saved state
     return r
 
 
-@app.route(nis_api_base + "/isession/rsession/pyckled_state", methods=["GET"])
+@app.route(nis_api_base + "/isession/rsession/state.pickled", methods=["GET"])
 def reproducible_session_get_state():  # Return current status of ReproducibleSession
     # Recover InteractiveSession
     isess = deserialize_isession_and_prepare_db_session()
