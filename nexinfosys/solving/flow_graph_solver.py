@@ -615,20 +615,30 @@ def compute_scenario_evaluated_observation_results(scenario_states: Dict[str, St
                         f"Issues: {', '.join(issues)}"
                     )
 
+                # Get observer name
                 observer_name = obs.observer.name if obs.observer else None
+
+                if observer_name and observers_priority_list and observer_name not in observers_priority_list:
+                    raise SolvingException(
+                        f"Scenario '{scenario_name}' - period '{time_period}'. The specified observer '{observer_name}'"
+                        f" for the interface '{node.name}' has not been included in the observers' priority list: "
+                        f"{observers_priority_list}"
+                    )
+
+                # Create node from the interface
                 node = InterfaceNode(obs.factor)
 
                 if node in resolved_observations:
-                    if not observers_priority_list:
-                        raise SolvingException(
-                            f"Scenario '{scenario_name}' - period '{time_period}'. Multiple observations exist for the "
-                            f"'same interface '{node.name}' but an observers' priority list has not been (correctly) "
-                            f"defined."
-                        )
-                    elif observer_name is None and resolved_observations[node].observer is None:
+                    if observer_name is None and resolved_observations[node].observer is None:
                         raise SolvingException(
                             f"Scenario '{scenario_name}' - period '{time_period}'. Multiple observations exist for the "
                             f"'same interface '{node.name}' without a specified observer."
+                        )
+                    elif not observers_priority_list:
+                        raise SolvingException(
+                            f"Scenario '{scenario_name}' - period '{time_period}'. Multiple observations exist for the "
+                            f"'same interface '{node.name}' but an observers' priority list has not been (correctly) "
+                            f"defined: {observers_priority_list}"
                         )
                     elif not precedes_in_list(observers_priority_list, observer_name, resolved_observations[node].observer):
                         # Ignore this observation because a higher priority observations has previously been set
