@@ -547,6 +547,10 @@ class PartialRetrievalDictionary:
         else:
             return [self._objs[oid] for oid in result]
 
+    def get_one(self, key, key_and_value=False, full_key=False, just_oid=False):
+        results = self.get(key, key_and_value, full_key, just_oid)
+        return results[0] if results else None
+
     def put(self, key, value):
         """
         Insert implies the key does not exist
@@ -1356,6 +1360,10 @@ def split_and_strip(s: str, sep=",") -> List[str]:
 
     return string_list
 
+
+def precedes_in_list(lst: List[T], elem1: Optional[T], elem2: Optional[T]) -> bool:
+    """ Check if an element comes before another inside a list """
+    return elem1 in lst and (elem2 not in lst or lst.index(elem1) < lst.index(elem2))
 
 # #####################################################################################################################
 # >>>> CUSTOM DATA TYPES <<<<
