@@ -226,11 +226,11 @@ class InterfacesAndQualifiedQuantitiesCommand(BasicCommand):
             return
 
         # Find Observer
-        oer = self._glb_idx.get(Observer.partial_key(f_source))
-        if not oer:
-            self._add_issue(IType.WARNING, f"Observer '{f_source}' has not been found."+subrow_issue_message(subrow))
-        else:
-            oer = oer[0]
+        oer: Optional[Observer] = None
+        if f_source:
+            oer = self._glb_idx.get_one(Observer.partial_key(f_source))
+            if not oer:
+                self._add_issue(IType.WARNING, f"Observer '{f_source}' has not been found."+subrow_issue_message(subrow))
 
         if not f_unit:
             f_unit = ft.unit

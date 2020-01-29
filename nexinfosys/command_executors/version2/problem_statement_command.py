@@ -36,11 +36,11 @@ class ProblemStatementCommand(IExecutableCommand):
             p = p[0]
             name = parameter
 
-            value = param["parameter_value"]
+            value = param.get("parameter_value")
 
             check_parameter_value(glb_idx, p, value, issues, sheet_name, r)
 
-            description = param.get("description", None)  # For readability of the workbook. Not used for solving
+            description = param.get("description")  # For readability of the workbook. Not used for solving
             if scenario:
                 if scenario in scenarios:
                     sp = scenarios[scenario]

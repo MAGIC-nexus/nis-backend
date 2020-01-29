@@ -547,6 +547,10 @@ class PartialRetrievalDictionary:
         else:
             return [self._objs[oid] for oid in result]
 
+    def get_one(self, key, key_and_value=False, full_key=False, just_oid=False):
+        results = self.get(key, key_and_value, full_key, just_oid)
+        return results[0] if results else None
+
     def put(self, key, value):
         """
         Insert implies the key does not exist
