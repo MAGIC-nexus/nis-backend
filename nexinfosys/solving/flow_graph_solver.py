@@ -30,7 +30,7 @@ from collections import defaultdict
 from enum import Enum
 from functools import reduce
 from itertools import chain
-from typing import Dict, List, Set, Any, Tuple, Union, Optional, NamedTuple, Generator, Type
+from typing import Dict, List, Set, Any, Tuple, Union, Optional, NamedTuple, Generator, Type, NoReturn
 
 import lxml
 import networkx as nx
@@ -1023,29 +1023,32 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
             for result_key, node_floatcomputed_dict in results.items()
             for node, float_computed in node_floatcomputed_dict.items()}
 
+    export_solver_data(datasets, data, dynamic_scenario, glb_idx, global_parameters, problem_statement)
+
+    return []
+
+
+def export_solver_data(datasets, data, dynamic_scenario, glb_idx, global_parameters, problem_statement) -> NoReturn:
     df = pd.DataFrame.from_dict(data, orient='index')
 
     # Round all values to 3 decimals
     df = df.round(3)
-
     # Give a name to the dataframe indexes
-    index_names = [f.title() for f in ResultKey._fields] + InterfaceNode.key_labels()  # "Processor", "Interface", "Orientation"
+    index_names = [f.title() for f in
+                   ResultKey._fields] + InterfaceNode.key_labels()  # "Processor", "Interface", "Orientation"
     df.index.names = index_names
-
     # Sort the dataframe based on indexes. Not necessary, only done for debugging purposes.
     df = df.sort_index(level=index_names)
-
     print(df)
-
     # Convert model to XML and to DOM tree
     xml, p_map = export_model_to_xml(glb_idx)
     dom_tree = etree.fromstring(xml).getroottree()
-
     # Calculate ScalarIndicators
     indicators = glb_idx.get(Indicator.partial_key())
-    df_local_indicators = calculate_local_scalar_indicators(indicators, dom_tree, p_map, df, global_parameters, problem_statement)
-    df_global_indicators = calculate_global_scalar_indicators(indicators, dom_tree, p_map, df, df_local_indicators, global_parameters, problem_statement)
-
+    df_local_indicators = calculate_local_scalar_indicators(indicators, dom_tree, p_map, df, global_parameters,
+                                                            problem_statement)
+    df_global_indicators = calculate_global_scalar_indicators(indicators, dom_tree, p_map, df, df_local_indicators,
+                                                              global_parameters, problem_statement)
     # Create datasets and store in State
     if not dynamic_scenario:
         ds_name = "flow_graph_solution"
@@ -1055,63 +1058,64 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
         ds_name = "dyn_flow_graph_solution"
         ds_indicators_name = "dyn_flow_graph_solution_indicators"
         df_global_indicators_name = "dyn_flow_graph_global_indicators"
-
     datasets[ds_name] = get_dataset(df, ds_name, "Flow Graph Solver - Interfaces")
-
     if not df_local_indicators.empty:
         # Register dataset
-        datasets[ds_indicators_name] = get_dataset(df_local_indicators, ds_indicators_name, "Flow Graph Solver - Local Indicators")
-
+        datasets[ds_indicators_name] = get_dataset(df_local_indicators, ds_indicators_name,
+                                                   "Flow Graph Solver - Local Indicators")
     if not df_global_indicators.empty:
         # Register dataset
-        datasets[df_global_indicators_name] = get_dataset(df_global_indicators, df_global_indicators_name, "Flow Graph Solver - Global Indicators")
-
-    #Create Matrix to Sanskey graph
-
+        datasets[df_global_indicators_name] = get_dataset(df_global_indicators, df_global_indicators_name,
+                                                          "Flow Graph Solver - Global Indicators")
+    # Create Matrix to Sanskey graph
     FactorsRelationDirectedFlowObservation_list = glb_idx.get(FactorsRelationDirectedFlowObservation.partial_key())
-
     ds_flows = pd.DataFrame({'source': [i._source.full_name for i in FactorsRelationDirectedFlowObservation_list],
-                              'source_processor': [i._source._processor._name for i in FactorsRelationDirectedFlowObservation_list],
-                          'source_level':[ i._source._processor._attributes['level']  if ('level' in i._source._processor._attributes) else None  for i in FactorsRelationDirectedFlowObservation_list],
-                              'target': [i._target.full_name for i in FactorsRelationDirectedFlowObservation_list],
-                          'target_processor': [i._target._processor._name for i in FactorsRelationDirectedFlowObservation_list],
-                              'target_level': [i._target._processor._attributes['level'] if 'level' in i._target._processor._attributes else None for i in FactorsRelationDirectedFlowObservation_list ],
+                             'source_processor': [i._source._processor._name for i in
+                                                  FactorsRelationDirectedFlowObservation_list],
+                             'source_level': [i._source._processor._attributes['level'] if (
+                                         'level' in i._source._processor._attributes) else None for i in
+                                              FactorsRelationDirectedFlowObservation_list],
+                             'target': [i._target.full_name for i in FactorsRelationDirectedFlowObservation_list],
+                             'target_processor': [i._target._processor._name for i in
+                                                  FactorsRelationDirectedFlowObservation_list],
+                             'target_level': [i._target._processor._attributes[
+                                                  'level'] if 'level' in i._target._processor._attributes else None for
+                                              i in FactorsRelationDirectedFlowObservation_list],
                              # 'RoegenType_target': [i.target_factor._attributes['roegen_type']for i in FactorsRelationDirectedFlowObservation_list],
                              'Sphere_target': [i.target_factor._attributes['sphere'] for i in
-                                                   FactorsRelationDirectedFlowObservation_list],
-                             'Subsystem_target': [i._target._processor._attributes['subsystem_type'] for i in
                                                FactorsRelationDirectedFlowObservation_list],
+                             'Subsystem_target': [i._target._processor._attributes['subsystem_type'] for i in
+                                                  FactorsRelationDirectedFlowObservation_list],
                              'System_target': [i._target._processor._attributes['processor_system'] for i in
-                                                  FactorsRelationDirectedFlowObservation_list]
-                              }
-                             )
-
-
+                                               FactorsRelationDirectedFlowObservation_list]
+                             }
+                            )
     # I suppose that relations between processors (source-target) doesn't change between different scenarios.
     df2 = df.reset_index()
     processor = df2["Processor"].apply(lambda x: x.split("."))
     df2["lastprocessor"] = [i[-1] for i in processor]
     df2["source"] = df2["lastprocessor"] + ":" + df2["Interface"]
-   # df2 = df2[df2["Orientation"]=="Output"] It is not necessary?
-    ds_flow_values = pd.merge(df2,ds_flows, on="source")
-    ds_flow_values = ds_flow_values.drop(columns = ["Orientation","lastprocessor","Processor", "Interface", 'RoegenType'], axis = 1)
-    ds_flow_values = ds_flow_values.rename(columns = {'Sphere':'Sphere_source', 'System' : 'System_source', 'Subsystem': 'Subsystem_source' })
+    # df2 = df2[df2["Orientation"]=="Output"] It is not necessary?
+    ds_flow_values = pd.merge(df2, ds_flows, on="source")
+    ds_flow_values = ds_flow_values.drop(
+        columns=["Orientation", "lastprocessor", "Processor", "Interface", 'RoegenType'], axis=1)
+    ds_flow_values = ds_flow_values.rename(
+        columns={'Sphere': 'Sphere_source', 'System': 'System_source', 'Subsystem': 'Subsystem_source'})
     # ds_flow_values.reset_index()
     ds_flows_name = "flow_graph_matrix"
     # if not ds_flows.empty:
     # Register flow dataset
     datasets[ds_flows_name] = get_dataset(ds_flow_values, ds_flows_name, "Flow Graph Matrix - Interfaces")
-
     # Calculate and publish MatrixIndicators
     indicators = glb_idx.get(MatrixIndicator.partial_key())
-    matrices = prepare_matrix_indicators(indicators, glb_idx, dom_tree, p_map, df, df_local_indicators, dynamic_scenario)
+    matrices = prepare_matrix_indicators(indicators, glb_idx, dom_tree, p_map, df, df_local_indicators,
+                                         dynamic_scenario)
     for n, ds in matrices.items():
         datasets[n] = ds
 
     # Create dataset and store in State (specific of "Biofuel case study")
     # datasets["end_use_matrix"] = get_ eum_dataset(df)
 
-    return []
 
 
 def add_conflicts_to_results(existing_results: ResultDict, taken_results: ResultDict, dismissed_results: ResultDict,
