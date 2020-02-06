@@ -654,7 +654,7 @@ def compute_flow_and_scale_results(state: State,
                                    relations_flow: nx.DiGraph,
                                    relations_scale: nx.DiGraph,
                                    relations_scale_change: nx.DiGraph
-                                   ) -> NodeFloatComputedDict:
+                                   ) -> Tuple[NodeFloatComputedDict, NodeFloatComputedDict, NodeFloatComputedDict]:
 
     # Create a copy of the main relations structures that are modified with time-dependent values
     time_relations_flow = relations_flow.copy()
@@ -672,7 +672,7 @@ def compute_flow_and_scale_results(state: State,
     if existing_results.keys().isdisjoint(set().union(time_relations_flow.nodes, time_relations_scale.nodes,
                                                       time_relations_scale_change.nodes)):
         print(f"WARNING: No 'flowable' or 'scalable' observations available.")
-        return {}
+        return {}, {}, {}
 
     # Last pass to resolve weight expressions: expressions with parameters can be solved
     resolve_weight_expressions([time_relations_flow, time_relations_scale, time_relations_scale_change],
@@ -702,19 +702,11 @@ def compute_flow_and_scale_results(state: State,
     results: NodeFloatComputedDict = {k: FloatComputedTuple(v, Computed.Yes)
                                       for k, v in known_data.items() if k.processor}
 
-    # result_key = ResultKey(scenario_name, time_period, Scope.Total)
-    # results[result_key] = data
-    #
-    # # TODO INDICATORS
-    #
-    # internal_data, external_data = compute_internal_external_results(data, comp_graph_flow)
-    # if len(external_data) > 0:
-    #     results[result_key._replace(scope=Scope.External)] = external_data
-    #
-    # if len(internal_data) > 0:
-    #     results[result_key._replace(scope=Scope.Internal)] = internal_data
+    # TODO INDICATORS
 
-    return results
+    internal_results, external_results = compute_internal_external_results(results, comp_graph_flow)
+
+    return results, internal_results, external_results
 
 
 def create_computation_graph_from_flows(relations_flow: nx.DiGraph, relations_scale: Optional[nx.DiGraph] = None) -> ComputationGraph:
@@ -731,13 +723,14 @@ def create_computation_graph_from_flows(relations_flow: nx.DiGraph, relations_sc
     return comp_graph_flow
 
 
-def compute_internal_external_results(values: NodeFloatComputedDict, comp_graph: Optional[ComputationGraph] = None) \
+def compute_internal_external_results(values: NodeFloatComputedDict, comp_graph: ComputationGraph) \
         -> Tuple[NodeFloatComputedDict, NodeFloatComputedDict]:
+    assert(comp_graph is not None)
+
     internal_results: NodeFloatComputedDict = {}
     external_results: NodeFloatComputedDict = {}
-    for node, value in values.items():
-
-        if comp_graph is not None and node in comp_graph.graph:
+    for node in comp_graph.graph:
+        if node in values:
             if node.orientation.lower() == 'input':
                 # res = compute resulting vector based on INCOMING flows processor.subsystem_type
                 edges: Set[Tuple[InterfaceNode, InterfaceNode, Dict]] = comp_graph.graph.in_edges(node, data=True)
@@ -748,7 +741,7 @@ def compute_internal_external_results(values: NodeFloatComputedDict, comp_graph:
             external_value: Optional[FloatExp] = None
             internal_value: Optional[FloatExp] = None
             for opposite_node, _, data in sorted(edges):
-                if data['weight'] and opposite_node in values:
+                if data['weight'] is not None and opposite_node in values:
                     edge_value = values[opposite_node].value * data['weight']
 
                     if opposite_node.subsystem.lower() in ["external", "externalenvironment"]:
@@ -767,13 +760,6 @@ def compute_internal_external_results(values: NodeFloatComputedDict, comp_graph:
 
             if internal_value is not None:
                 internal_results[node] = FloatComputedTuple(internal_value, Computed.Yes)
-
-        if node not in chain(external_results, internal_results):
-            # res = compute resulting vector based on containing PROCESSOR
-            if node.subsystem.lower() in ["external", "externalenvironment"]:
-                external_results[node] = value
-            else:
-                internal_results[node] = value
 
     return internal_results, external_results
 
@@ -960,9 +946,9 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
                                                                observers_priority_list)
 
                 # START ITERATIVE SOLVING
-                new_results = compute_flow_and_scale_results(scenario_state, results,
-                                                             time_relative_observations[time_period],
-                                                             relations_flow, relations_scale, relations_scale_change)
+                new_results, flow_internal_results, flow_external_results = compute_flow_and_scale_results(
+                    scenario_state, results, time_relative_observations[time_period],
+                    relations_flow, relations_scale, relations_scale_change)
 
                 results.update(new_results)
 
@@ -977,21 +963,46 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
 
                 results.update(new_results)
 
+                current_results: ResultDict = {}
                 result_key = ResultKey(scenario_name, time_period, Scope.Total)
 
-                if len(itype_taken_results) > 0:
-                    for node in itype_taken_results:
-                        del results[node]
-                    total_results[result_key._replace(conflict_itype=ConflictResolution.Taken)] = itype_taken_results
-                    total_results[result_key._replace(conflict_itype=ConflictResolution.Dismissed)] = itype_dismissed_results
+                # Filter out conflicted results from TOTAL results
+                current_results[result_key] = {k: v for k, v in results.items()
+                                               if k not in itype_taken_results and k not in partof_taken_results}
 
-                if len(partof_taken_results) > 0:
-                    for node in partof_taken_results:
-                        del results[node]
-                    total_results[result_key._replace(conflict_partof=ConflictResolution.Taken)] = partof_taken_results
-                    total_results[result_key._replace(conflict_partof=ConflictResolution.Dismissed)] = partof_dismissed_results
+                if itype_taken_results:
+                    current_results[result_key._replace(conflict_itype=ConflictResolution.Taken)] = itype_taken_results
+                    current_results[result_key._replace(conflict_itype=ConflictResolution.Dismissed)] = itype_dismissed_results
 
-                total_results[result_key] = results
+                if partof_taken_results:
+                    current_results[result_key._replace(conflict_partof=ConflictResolution.Taken)] = partof_taken_results
+                    current_results[result_key._replace(conflict_partof=ConflictResolution.Dismissed)] = partof_dismissed_results
+
+                int_ext_results: ResultDict = {}
+                for key, res in current_results.items():
+                    internal_results: NodeFloatComputedDict = {}
+                    external_results: NodeFloatComputedDict = {}
+                    for node, value in res.items():
+                        if node not in flow_external_results and node not in flow_internal_results:
+                            if node.subsystem.lower() in ["external", "externalenvironment"]:
+                                external_results[node] = value
+                            else:
+                                internal_results[node] = value
+
+                    if internal_results:
+                        int_ext_results[key._replace(scope=Scope.Internal)] = internal_results
+
+                    if external_results:
+                        int_ext_results[key._replace(scope=Scope.External)] = external_results
+
+                if flow_internal_results:
+                    int_ext_results[result_key._replace(scope=Scope.Internal)].update(flow_internal_results)
+
+                if flow_external_results:
+                    int_ext_results[result_key._replace(scope=Scope.External)].update(flow_external_results)
+
+                total_results.update(current_results)
+                total_results.update(int_ext_results)
 
             except SolvingException as e:
                 return [Issue(IType.ERROR, f"Scenario '{scenario_name}' - period '{time_period}'. {e.args[0]}")]
