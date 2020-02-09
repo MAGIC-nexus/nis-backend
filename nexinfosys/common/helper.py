@@ -30,6 +30,7 @@ import nexinfosys
 from nexinfosys import case_sensitive, SDMXConcept, get_global_configuration_variable
 from nexinfosys.ie_imports.google_drive import download_xlsx_file_id
 from nexinfosys.models import log_level
+import os
 
 logger = logging.getLogger(__name__)
 logger.setLevel(log_level)
@@ -1593,3 +1594,52 @@ if __name__ == '__main__':
     print(stop-start)
 
     print("Finished!!")
+
+
+# #####################################################################################################################
+# >>>> CREATE DEFAULT CONFIGURATION FILE AND DIRECTORIES <<<<
+# #####################################################################################################################
+
+def prepare_default_configuration(create_directories):
+    def default_directories(path, tmp_path):
+        return {
+            "DB_CONNECTION_STRING": f"sqlite:///{path}/nis_metadata.db",
+            "DATA_CONNECTION_STRING": f"sqlite:///{path}/nis_cached_datasets.db",
+            "CASE_STUDIES_DIR": f"{path}/data/cs/",
+            "FAO_DATASETS_DIR": f"{path}/data/faostat/",
+            "FADN_FILES_LOCATION": f"{path}/data/fadn",
+            "CACHE_FILE_LOCATION": f"{tmp_path}/sdmx_datasets_cache",
+            "REDIS_HOST_FILESYSTEM_DIR": f"{tmp_path}/sessions",
+            "SSP_FILES_DIR": "",
+        }
+
+    from appdirs import AppDirs
+    app_dirs = AppDirs("nis-backend")
+
+    # Default directories, multi-platform
+    data_path = app_dirs.user_data_dir
+    cache_path = app_dirs.user_cache_dir
+    if create_directories:
+        os.makedirs(data_path, exist_ok=True)
+        os.makedirs(cache_path, exist_ok=True)
+
+    # Obtain and create directories
+    dirs = default_directories(data_path, cache_path)
+    for v in dirs.values():
+        if v:
+            if create_directories:
+                os.makedirs(v, exist_ok=True)
+
+    # Default configuration
+    return f"""{os.linesep.join([f'{k}="{v}"' for k, v in dirs.items()])}
+# Flask Session (server side session)
+REDIS_HOST="filesystem:local_session"
+TESTING="True"
+FS_TYPE=""
+FS_SERVER=""
+FS_USER=""
+FS_PASSWORD=""
+# Google Drive API
+GAPI_CREDENTIALS_FILE="{data_path}/credentials.json"
+GAPI_TOKEN_FILE="{data_path}/token.pickle"    
+""", data_path + os.sep + "nis_local.conf"

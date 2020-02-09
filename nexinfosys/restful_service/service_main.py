@@ -30,7 +30,7 @@ from nexinfosys.ie_exports.back_to_nis_format import nis_format_spreadsheet
 pyximport.install(reload_support=True, language_level=3)
 
 # >>>>>>>>>> IMPORTANT <<<<<<<<<
-# For debugging in local mode, prepare an environment variable "MAGIC_NIS_SERVICE_CONFIG_FILE", with value "./nis_local.conf"
+# To debug in local mode, prepare an environment variable "MAGIC_NIS_SERVICE_CONFIG_FILE", with value "./nis_local.conf"
 # >>>>>>>>>> IMPORTANT <<<<<<<<<
 from nexinfosys.command_definitions import commands
 from nexinfosys.command_descriptions import c_descriptions
@@ -42,18 +42,8 @@ from nexinfosys.command_generators.parser_field_parsers import string_to_ast, ar
 from nexinfosys.command_generators.parser_spreadsheet_utils_accel import rewrite_xlsx_file
 from nexinfosys.ie_exports.json import export_model_to_json, model_to_json
 from nexinfosys.models.musiasem_concepts import Parameter
-
-
-if __name__ == '__main__':
-    print("Executing locally!")
-    if not os.environ.get("MAGIC_NIS_SERVICE_CONFIG_FILE"):
-        for f in ["../../../nis-backend-config/nis_local.conf", "../nis_local_dist.conf"]:
-            if os.path.isfile(f):
-                os.environ["MAGIC_NIS_SERVICE_CONFIG_FILE"] = f
-                break
-
 from nexinfosys.common.helper import generate_json, gzipped, str2bool, \
-    add_label_columns_to_dataframe, download_file, create_dictionary, any_error_issue
+    add_label_columns_to_dataframe, download_file, create_dictionary, any_error_issue, prepare_default_configuration
 from nexinfosys.models.musiasem_methodology_support import *
 from nexinfosys.common.create_database import create_pg_database_engine, create_monet_database_engine
 from nexinfosys.restful_service import app, register_external_datasources, default_cmds
@@ -171,7 +161,8 @@ def construct_session_persistence_backend():
             # d["PERMANENT_SESSION_LIFETIME"] = 3600
         elif r_host.startswith("filesystem:"):
             d["SESSION_TYPE"] = "filesystem"
-            # d["SESSION_FILE_DIR"] = r_host[len("filesystem:"):]
+            if app.config.get("REDIS_HOST_FILESYSTEM_DIR"):
+                d["SESSION_FILE_DIR"] = app.config.get("REDIS_HOST_FILESYSTEM_DIR")
             d["SESSION_FILE_THRESHOLD"] = 100
             # d["SESSION_FILE_MODE"] = 666
         else:

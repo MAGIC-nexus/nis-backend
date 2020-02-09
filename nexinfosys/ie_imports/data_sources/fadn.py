@@ -187,21 +187,24 @@ def load_dataset(code, date, ds_lst, directory, base_url=base_url):
             d = ds
             break
 
+    # Dir name
+    dname = directory + os.sep + version_date
     # File name
-    fname = directory + "/" + version_date + "/" + d["fname"] + ".zip"
+    fname = dname + os.sep + d["fname"] + ".zip"
 
     # Check if the file exists
     if not os.path.isfile(fname):
         # If it is the latest version
         if version_date == versions[-1] and "MED" not in code:
+            os.makedirs(dname)
             # Download directly the file
             download(base_url+d["fname"]+".zip", fname)
         else:
             # Download the full package
-            zip_name = directory+"/fadn"+version_date+".zip"
-            download(base_url+"/archives/fadn"+version_date+".zip", zip_name)
+            zip_name = directory+f"{os.sep}fadn"+version_date+".zip"
+            download(base_url+f"{os.sep}archives{os.sep}fadn"+version_date+".zip", zip_name)
             # Create directory
-            target_name = directory + "/" + version_date
+            target_name = directory + os.sep + version_date
             os.makedirs(target_name)
             # Uncompress it into the version directory
             z = zipfile.ZipFile(zip_name)
@@ -218,7 +221,7 @@ def load_dataset(code, date, ds_lst, directory, base_url=base_url):
         path = "SO"
     else:
         path = "SGM"
-    b = z.open(path + "/" + d["fname"] + ".csv").read().decode("utf-8")
+    b = z.open(path + os.sep + d["fname"] + ".csv").read().decode("utf-8")
     df = pd.read_csv(StringIO(b), sep=";")
 
     # Split dimension columns in two (except Year)

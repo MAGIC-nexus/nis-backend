@@ -1,8 +1,8 @@
 import os
-
 from flask import Flask
 
 import nexinfosys
+from nexinfosys.common.helper import prepare_default_configuration
 from nexinfosys.ie_imports.data_source_manager import DataSourceManager
 from nexinfosys.ie_imports.data_sources.eurostat_bulk import Eurostat
 from nexinfosys.ie_imports.data_sources.eurostats_comext import COMEXT
@@ -21,13 +21,21 @@ UPLOAD_FOLDER = '/tmp/'
 app.config['UPLOAD_FOLDER'] = UPLOAD_FOLDER
 # Initialize configuration
 try:
+    _, file_name = prepare_default_configuration(False)
     if not os.environ.get("MAGIC_NIS_SERVICE_CONFIG_FILE"):
-        cfg_path = f"{nexinfosys.__path__[0]}/restful_service/nis_local_dist.conf"
-        print(f"Path: {cfg_path}")
-        for f in [cfg_path]:
+        found = False
+        for f in [file_name]:  # f"{nexinfosys.__path__[0]}/restful_service/nis_local_dist.conf"
             if os.path.isfile(f):
+                print(f"Assuming {f} as configuration file")
+                found = True
                 os.environ["MAGIC_NIS_SERVICE_CONFIG_FILE"] = f
                 break
+        if not found:
+            cfg, file_name = prepare_default_configuration(True)
+            print(f"Generating {file_name} as configuration file:\n{cfg}")
+            with open(file_name, "wt") as f:
+                f.write(cfg)
+            os.environ["MAGIC_NIS_SERVICE_CONFIG_FILE"] = file_name
 
     app.config.from_envvar('MAGIC_NIS_SERVICE_CONFIG_FILE')
 except Exception as e:

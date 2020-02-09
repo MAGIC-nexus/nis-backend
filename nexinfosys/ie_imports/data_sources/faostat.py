@@ -32,7 +32,7 @@ Also, create full code lists for the different concepts
 
 dataset_csv = """
 Code,File,Label
-AE,ASTI_Research_Spending,ASTI-Expenditures
+AE,ASTI_Expenditures,ASTI-Expenditures
 AF,ASTI_Researchers,ASTI-Researchers
 BC,CommodityBalances_Crops,Commodity Balances – Crops Primary Equivalent
 BL,CommodityBalances_LivestockFish,Commodity Balances – Livestock and Fish Primary Equivalent
@@ -312,8 +312,9 @@ class FAOSTAT(IDataSourceManager):  # FAOStat (not AquaStat)
         def get_file_sample(fi):
             # Open the file, get the header
             try:
-                fname = ZipFile(fi, "r").namelist()[0]
-                tmp = pd.read_csv(fi, nrows=5, encoding="cp1252")
+                zip_file = ZipFile(fi, "r")
+                fname = zip_file.namelist()[0]
+                tmp = pd.read_csv(zip_file.open(fname), nrows=5, encoding="cp1252")
             except NotImplementedError:
                 new_file = datasets_directory + "/" + fname
                 if not os.path.exists(new_file):
@@ -374,7 +375,9 @@ class FAOSTAT(IDataSourceManager):  # FAOStat (not AquaStat)
 
         # A pass through ALL the file, gather a DICT for each DIMENSION -> CodeList
         count2 = 0
-        for data in pd.read_csv(file, chunksize=100000, encoding="cp1252"):
+        zip_file = ZipFile(file, "r")
+        fname = zip_file.namelist()[0]
+        for data in pd.read_csv(zip_file.open(fname), chunksize=100000, encoding="cp1252"):
             logger.debug(f"Chunk: {count2+1}")
             print("Chunk "+str(count2+1))
             if add_year_code_column:

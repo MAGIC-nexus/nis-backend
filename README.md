@@ -69,10 +69,6 @@ NIS is made of three components: **nis-backend**, **nis-frontend** and **nis-cli
 
 **nis-backend** is a Python package. There are several options to have it installed.
 
-#### Windows, Mac OS X and Linux installers
-
-TO-DO - (PyInstaller output for each platform in both directory and single file forms, giving six possibilities)
-
 #### pip
 
 <!-- Prepare package to upload it to pypi -->
@@ -90,11 +86,23 @@ TO-DO `pip install nexinfosys`
 
 For a lab setup, this option allows to configure and run nis-backend inside a Docker environment.
  
-<!-- Upload image to docker hub -->
+The instructions are at Docker Hub, please follow the link:
+
+https://hub.docker.com/r/magicnexush2020/magic-nis-backend
 
 #### Source code
 
-Just clone this repository and execute "service_main.py"
+Just clone this repository and execute "service_main.py":
+
+git clone https://github.com/MAGIC-nexus/nis-backend
+cd nis-backend
+git checkout develop
+pip install -r requirements.txt
+python3 nexinfosys.restful_service.service_main.py
+
+#### Windows, Mac OS X and Linux installers
+
+TO-DO - (PyInstaller output for each platform in both directory and single file forms, giving six possibilities)
 
 ### Models with Commands
 

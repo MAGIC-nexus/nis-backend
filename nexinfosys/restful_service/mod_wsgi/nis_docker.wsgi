@@ -8,8 +8,9 @@ if "MAGIC_NIS_SERVICE_CONFIG_FILE" in os.environ and os.environ["MAGIC_NIS_SERVI
     conf_file_name = os.environ["MAGIC_NIS_SERVICE_CONFIG_FILE"]
     print("Configuration file name from Environment: " + conf_file_name)
 else:
-    conf_file_name = 'nis_docker_naples.conf'
-    print("Literal configuration file name")
+    raise Exception("A configuration file path must be specified in environment variable MAGIC_NIS_SERVICE_CONFIG_FILE"
+#    conf_file_name = 'nis_docker_naples.conf'
+#    print("Literal configuration file name")
 
 os.environ["MAGIC_NIS_SERVICE_CONFIG_FILE"] = code_path + "backend/restful_service/" + conf_file_name
 print("Resulting config file name: "+os.environ["MAGIC_NIS_SERVICE_CONFIG_FILE"])
