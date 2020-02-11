@@ -12,6 +12,8 @@ NIS is made of three components: **nis-backend**, **nis-frontend** and **nis-cli
 
 **nis-backend** "runs" MuSIASEM models by **interpreting** (lexically, syntactically and semantically) and **resolving** (quantitatively) a representation of a MuSIASEM grammar (an open model), using a **tabular syntax** ("dataframe" compatible), and producing a set of outputs **exportable** for further use by external, complementary tools.
 
+It is an open system as it can be used to integrate MuSIASEM as a formalism in analytic/scientific workflows thanks to the RESTful API (and the easier to use [nis-client](https://github.com/MAGIC-nexus/nis-python-client), for Python and R scripts).
+
 **Disclaimer**: this README is still under elaboration, details may be missing or innacurate.
 
 <!-- Badges
@@ -29,13 +31,13 @@ NIS is made of three components: **nis-backend**, **nis-frontend** and **nis-cli
 - [Getting started](#getting-started)
   - [Features](#features)
   - [Installing and executing **nis-backend**](#installing-and-executing-nis-backend)
-    - [Windows and Linux installers](#windows-and-linux-installers)
     - [pip](#pip)
     - [Docker image](#docker-image-lab-setup)
     - [Source code](#source-code)
+    - [Windows executable](#windows-executable)
   - [Models with Commands](#models-with-commands)
   - [**nis-frontend** quick intro](#quick-intro-to-nis-frontend)
-- [Advanced - **nis-client**](#advanced-nis-client)
+- [Accessing **nis-backend** in Python and R scripts with **nis-client**](#accessing-nis-backend-in-python-and-r-scripts-with-nis-client)
 - [Configuration](#configuration)
 - [People](#people)
 - [License](#license)
@@ -84,15 +86,17 @@ TO-DO `pip install nexinfosys`
  
 #### Docker image
 
-For a lab setup, this option allows to configure and run nis-backend inside a Docker environment.
+For a lab setup, this option allows to configure and run nis-backend inside a Docker environment (Docker must be installed in the target computer).
  
-The instructions are at Docker Hub, please follow the link:
+The instructions are at "Docker Hub" site, please follow the link:
 
 https://hub.docker.com/r/magicnexush2020/magic-nis-backend
 
 #### Source code
 
-Just clone this repository and execute "service_main.py":
+**NOTE**: Python3 and git required.
+
+Clone this repository and execute "service_main.py":
 
 git clone https://github.com/MAGIC-nexus/nis-backend
 cd nis-backend
@@ -100,9 +104,9 @@ git checkout develop
 pip install -r requirements.txt
 python3 nexinfosys.restful_service.service_main.py
 
-#### Windows, Mac OS X and Linux installers
+#### Windows executable
 
-TO-DO - (PyInstaller output for each platform in both directory and single file forms, giving six possibilities)
+TO-DO - (PyInstaller executable, in single file form)
 
 ### Models with Commands
 
@@ -148,7 +152,7 @@ When information is typed for a field in the embedded worksheet, syntactic valid
 
 **IMPORTANT**: **nis-frontend** is closed source due to a restriction in the license of a commercial component.
 
-## Advanced (**nis-client**)
+## Accessing **nis-backend** in Python and R scripts with nis-client
 
 **nis-backend** is, from a software engineering point-of-view, a RESTful service. All its functionality is accessed through this interface.
 
@@ -166,13 +170,13 @@ TO-DO explain the configuration variables in a configuration file and how to spe
 
 ## People
 
-The following is an enumeration of people who have contributed in different manners to the elaboration of NIS.
+An enumeration of people who have contributed in different manners to the elaboration of NIS.
 
-* [Rafael Nebot](mailto:rnebot@itccanarias.org). ITC-DCCT (Instituto Tecnológico de Canarias, SA - Departamento de Computación).
+* [Rafael Nebot](mailto:rnebot@itccanarias.org). ITC-DCCT (Instituto Tecnológico de Canarias - Departamento de Computación).
 * Marco Galluzzi.
-* Michele Staiano. UniNa (Università degli Studi di Napoli Federico II).
+* Michele Staiano. UniNa (Università degli Studi di Napoli Federico II). NIS supervisor, mentor, catalyzer...
 * Paula Moreno. ITC-DCCT.
-* MuSIASEM creators and analysts at ICTA-UAB (Institut de Ciència i Tecnologia Ambientals - Universitat Autònoma de Barcelona): Mario Giampietro, Ansel Renner, Violeta Cabello, Cristina Madrid, Maddalena Rippa, Juan Cadillo, Raúl Velasco, Louisa di Felice.
+* MuSIASEM creators and analysts at ICTA-UAB (Institut de Ciència i Tecnologia Ambientals - Universitat Autònoma de Barcelona): Mario Giampietro, Ansel Renner, Violeta Cabello, Cristina Madrid, Maddalena Rippa, Juan Cadillo, Raúl Velasco, Louisa di Felice, Sandra Bukkens.
 * Ignacio López.
 * Internship students at ITC-DCCT. Alberto Sosa, Francisco Socorro, María Artiles, Carlos Caraballo, Ivet Cabrera.
 
