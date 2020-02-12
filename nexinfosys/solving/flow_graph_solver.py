@@ -521,7 +521,7 @@ def resolve_weight_expressions(graph_list: List[nx.DiGraph], state: State, raise
                 data["weight"] = ifnull(FloatExp(value, None, str(expression)), ast)
 
 
-def iterative_solving(comp_graph_list: List[ComputationGraph], observations: NodeFloatDict) -> Tuple[NodeFloatDict, List[InterfaceNode]]:
+def iterative_solving(comp_graph_list: List[ComputationGraph], observations: NodeFloatDict) -> Tuple[NodeFloatDict, Set[InterfaceNode]]:
     num_unknown_nodes: int = reduce(add, [len(g.nodes) for g in comp_graph_list])
     prev_num_unknown_nodes: int = num_unknown_nodes + 1
     params: List[Optional[NodeFloatDict]] = [None] * len(comp_graph_list)
@@ -544,7 +544,7 @@ def iterative_solving(comp_graph_list: List[ComputationGraph], observations: Nod
 
         num_unknown_nodes = reduce(add, [len(l) for l in unknown_nodes])
 
-    all_unknown_nodes = [node for node_list in unknown_nodes for node in node_list]
+    all_unknown_nodes = {node for node_list in unknown_nodes for node in node_list}
 
     return all_data, all_unknown_nodes
 
@@ -653,8 +653,8 @@ def compute_flow_and_scale_results(state: State,
                                    relative_observations: ObservationListType,
                                    relations_flow: nx.DiGraph,
                                    relations_scale: nx.DiGraph,
-                                   relations_scale_change: nx.DiGraph
-                                   ) -> Tuple[NodeFloatComputedDict, NodeFloatComputedDict, NodeFloatComputedDict]:
+                                   relations_scale_change: nx.DiGraph) \
+        -> Tuple[NodeFloatComputedDict, NodeFloatComputedDict, NodeFloatComputedDict, Set[InterfaceNode]]:
 
     # Create a copy of the main relations structures that are modified with time-dependent values
     time_relations_flow = relations_flow.copy()
@@ -668,11 +668,17 @@ def compute_flow_and_scale_results(state: State,
                                       InterfaceNode(obs.factor),
                                       weight=expression)
 
+    relations_nodes: Set[InterfaceNode] = set().union(relations_flow.nodes, relations_scale.nodes,
+                                                      relations_scale_change.nodes)
+
+    if not relations_nodes:
+        print(f"INFO: No 'flows' or 'scales' to compute.")
+        return {}, {}, {}, set()
+
     # Are there observations we can use to resolve the graphs? If not continue
-    if existing_results.keys().isdisjoint(set().union(time_relations_flow.nodes, time_relations_scale.nodes,
-                                                      time_relations_scale_change.nodes)):
+    if existing_results.keys().isdisjoint(relations_nodes):
         print(f"WARNING: No 'flowable' or 'scalable' observations available.")
-        return {}, {}, {}
+        return {}, {}, {}, relations_nodes
 
     # Last pass to resolve weight expressions: expressions with parameters can be solved
     resolve_weight_expressions([time_relations_flow, time_relations_scale, time_relations_scale_change],
@@ -706,7 +712,7 @@ def compute_flow_and_scale_results(state: State,
 
     internal_results, external_results = compute_internal_external_results(results, comp_graph_flow)
 
-    return results, internal_results, external_results
+    return results, internal_results, external_results, unknown_data
 
 
 def create_computation_graph_from_flows(relations_flow: nx.DiGraph, relations_scale: Optional[nx.DiGraph] = None) -> ComputationGraph:
@@ -945,45 +951,66 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
                 results = resolve_observations_with_parameters(scenario_state, absolute_observations,
                                                                observers_priority_list)
 
+                total_itype_taken_results: NodeFloatComputedDict = {}
+                total_itype_dismissed_results: NodeFloatComputedDict = {}
+                total_partof_taken_results: NodeFloatComputedDict = {}
+                total_partof_dismissed_results: NodeFloatComputedDict = {}
+                total_flow_internal_results: NodeFloatComputedDict = {}
+                total_flow_external_results: NodeFloatComputedDict = {}
+
                 # START ITERATIVE SOLVING
-                new_results, flow_internal_results, flow_external_results = compute_flow_and_scale_results(
-                    scenario_state, results, time_relative_observations[time_period],
-                    relations_flow, relations_scale, relations_scale_change)
+                previous_unknown_nodes = set()
+                unknown_nodes: Set[InterfaceNode] = set()
+                first_iteration = True
+                # Iterate while the number of unknown nodes is decreasing
+                while first_iteration or (unknown_nodes and previous_unknown_nodes.isdisjoint(unknown_nodes)):
+                    first_iteration = False
+                    previous_unknown_nodes = unknown_nodes.copy()
 
-                results.update(new_results)
+                    new_results, flow_internal_results, flow_external_results, unknown_nodes = compute_flow_and_scale_results(
+                        scenario_state, results, time_relative_observations[time_period],
+                        relations_flow, relations_scale, relations_scale_change)
 
-                new_results, itype_taken_results, itype_dismissed_results = compute_interfacetype_aggregate_results(
-                    interface_types_parent_relations, results, conflicting_data_policy, missing_value_policy)
+                    results.update(new_results)
+                    total_flow_internal_results.update(flow_internal_results)
+                    total_flow_external_results.update(flow_external_results)
 
-                results.update(new_results)
+                    new_results, itype_taken_results, itype_dismissed_results = compute_interfacetype_aggregate_results(
+                        interface_types_parent_relations, results, conflicting_data_policy, missing_value_policy)
 
-                new_results, partof_taken_results, partof_dismissed_results = compute_partof_aggregate_results(
-                    interfaces, system_processor_partof_relations, results,
-                    conflicting_data_policy, missing_value_policy)
+                    results.update(new_results)
+                    total_itype_taken_results.update(itype_taken_results)
+                    total_itype_dismissed_results.update(itype_dismissed_results)
 
-                results.update(new_results)
+                    new_results, partof_taken_results, partof_dismissed_results = compute_partof_aggregate_results(
+                        interfaces, system_processor_partof_relations, results,
+                        conflicting_data_policy, missing_value_policy)
+
+                    results.update(new_results)
+                    total_partof_taken_results.update(partof_taken_results)
+                    total_partof_dismissed_results.update(partof_dismissed_results)
 
                 current_results: ResultDict = {}
                 result_key = ResultKey(scenario_name, time_period, Scope.Total)
 
                 # Filter out conflicted results from TOTAL results
                 current_results[result_key] = {k: v for k, v in results.items()
-                                               if k not in itype_taken_results and k not in partof_taken_results}
+                                               if k not in total_itype_taken_results and k not in total_partof_taken_results}
 
-                if itype_taken_results:
-                    current_results[result_key._replace(conflict_itype=ConflictResolution.Taken)] = itype_taken_results
-                    current_results[result_key._replace(conflict_itype=ConflictResolution.Dismissed)] = itype_dismissed_results
+                if total_itype_taken_results:
+                    current_results[result_key._replace(conflict_itype=ConflictResolution.Taken)] = total_itype_taken_results
+                    current_results[result_key._replace(conflict_itype=ConflictResolution.Dismissed)] = total_itype_dismissed_results
 
-                if partof_taken_results:
-                    current_results[result_key._replace(conflict_partof=ConflictResolution.Taken)] = partof_taken_results
-                    current_results[result_key._replace(conflict_partof=ConflictResolution.Dismissed)] = partof_dismissed_results
+                if total_partof_taken_results:
+                    current_results[result_key._replace(conflict_partof=ConflictResolution.Taken)] = total_partof_taken_results
+                    current_results[result_key._replace(conflict_partof=ConflictResolution.Dismissed)] = total_partof_dismissed_results
 
                 int_ext_results: ResultDict = {}
                 for key, res in current_results.items():
                     internal_results: NodeFloatComputedDict = {}
                     external_results: NodeFloatComputedDict = {}
                     for node, value in res.items():
-                        if node not in flow_external_results and node not in flow_internal_results:
+                        if node not in total_flow_external_results and node not in total_flow_internal_results:
                             if node.subsystem.lower() in ["external", "externalenvironment"]:
                                 external_results[node] = value
                             else:
@@ -995,11 +1022,11 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
                     if external_results:
                         int_ext_results[key._replace(scope=Scope.External)] = external_results
 
-                if flow_internal_results:
-                    int_ext_results[result_key._replace(scope=Scope.Internal)].update(flow_internal_results)
+                if total_flow_internal_results:
+                    int_ext_results[result_key._replace(scope=Scope.Internal)].update(total_flow_internal_results)
 
-                if flow_external_results:
-                    int_ext_results[result_key._replace(scope=Scope.External)].update(flow_external_results)
+                if total_flow_external_results:
+                    int_ext_results[result_key._replace(scope=Scope.External)].update(total_flow_external_results)
 
                 total_results.update(current_results)
                 total_results.update(int_ext_results)
