@@ -517,7 +517,7 @@ def resolve_weight_expressions(graph_list: List[nx.DiGraph], state: State, raise
                         f"Issues: {', '.join(issues)}"
                     )
 
-                data["weight"] = ifnull(FloatExp(value, None, str(expression)), ast)
+                data["weight"] = ast if value is None else FloatExp(value, None, str(expression))
 
 
 def iterative_solving(comp_graph_list: List[ComputationGraph], observations: NodeFloatDict) -> Tuple[NodeFloatDict, List[InterfaceNode]]:
