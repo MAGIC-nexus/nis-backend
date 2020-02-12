@@ -1458,6 +1458,10 @@ class FloatExp(SupportsFloat):
         """ Needed for abc SupportsFloat used in match.isclose() """
         return self.val
 
+    def __round__(self, n=None):
+        exp = f"round({self.name}{'' if n is None else ','+str(n)})"
+        return FloatExp(float(round(self.val, n)), exp, exp)
+
     def assignable_copy(self):
         return FloatExp(self.val, self.name, self.name)
 
