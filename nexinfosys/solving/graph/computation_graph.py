@@ -39,6 +39,11 @@ class ComputationGraph:
         """ Return the nodes of the flow graph """
         return self.graph.nodes
 
+    def nodes_not_in_dict(self, d: Dict[Node, Value]) -> List[Node]:
+        """ Return the nodes not present in a dictionary """
+        return [n for n in self.graph.nodes if n not in d]
+        # return [n for n in self.graph.nodes if d.get(n) is None]
+
     def _inputs(self, n: Node, edge_type: EdgeType) -> List[Tuple[Node, Optional[Weight]]]:
         """ Return the predecessors of a node in the specified direction """
         return [(e[0], e[2]['weight']) for e in self.graph.in_edges(n, data=True) if e[2]['type'] == edge_type]
@@ -105,8 +110,11 @@ class ComputationGraph:
             return result
 
         all_conflicts: Dict[Node, Set[Node]] = {}
-        for param in params:
-            sub_params: Set[Node] = params - {param}
+        # Filter out params not in nodes
+        filtered_params = {n for n in params if n in self.nodes}
+
+        for param in filtered_params:
+            sub_params: Set[Node] = filtered_params - {param}
             visited_nodes: Set[Node] = set()
             conflicts = visit_forward(param)
             all_conflicts[param] = conflicts
