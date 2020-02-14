@@ -777,33 +777,51 @@ def compute_internal_external_results(values: NodeFloatComputedDict, comp_graph:
     return internal_results, external_results
 
 
-def compute_interfacetype_aggregate_results(interface_types_parent_relations: Dict[FactorType, Set[FactorType]],
-                                            existing_results: NodeFloatComputedDict,
-                                            conflicting_data_policy: ConflictingDataResolutionPolicy,
-                                            missing_value_policy: MissingValueResolutionPolicy) \
-        -> Tuple[NodeFloatComputedDict, NodeFloatComputedDict, NodeFloatComputedDict]:
+def compute_interfacetype_hierarchies(registry) -> List[Dict[InterfaceNode, Set[InterfaceNode]]]:
 
-    results: NodeFloatComputedDict = {}
-    results_conflict_taken: NodeFloatComputedDict = {}
-    results_conflict_dismissed: NodeFloatComputedDict = {}
+    hierarchies: List[Dict[InterfaceNode, Set[InterfaceNode]]] = []
 
-    # Get all different processors from results
-    for processor in {node.processor for node in existing_results}:
+    # Get all different existing interface types with children interface types
+    interface_types_parent_relations: Dict[FactorType, Set[FactorType]] = \
+        {ft: ft.get_children() for ft in registry.get(FactorType.partial_key()) if len(ft.get_children()) > 0}
 
-        for orientation in orientations:
+    for processor in registry.get(Processor.partial_key()):  # type: Processor
 
-            hierarchy = create_interface_node_hierarchy_from_interface_types(interface_types_parent_relations,
-                                                                             processor, orientation)
+        if processor.instance_or_archetype != "Archetype":
 
-            aggregations, taken_conflicts, dismissed_conflicts = aggregate_results(hierarchy, existing_results,
-                                                                                   conflicting_data_policy,
-                                                                                   missing_value_policy)
+            for orientation in orientations:
 
-            results.update(aggregations)
-            results_conflict_taken.update(taken_conflicts)
-            results_conflict_dismissed.update(dismissed_conflicts)
+                hierarchies.append(
+                    create_interface_node_hierarchy_from_interface_types(interface_types_parent_relations,
+                                                                         processor,
+                                                                         orientation)
+                )
 
-    return results, results_conflict_taken, results_conflict_dismissed
+    return hierarchies
+
+
+def compute_partof_hierarchies(registry, input_systems: Dict[str, Set[Processor]]) \
+        -> List[Dict[InterfaceNode, Set[InterfaceNode]]]:
+
+    hierarchies: List[Dict[InterfaceNode, Set[InterfaceNode]]] = []
+
+    for system in input_systems:
+
+        # Get the -PartOf- processor relations of the system
+        processor_partof_relations = get_processor_partof_relations(registry, system)
+
+        # Get all different existing interfaces
+        for interface_type in registry.get(FactorType.partial_key()):
+
+            for orientation in orientations:
+
+                hierarchies.append(
+                    create_interface_node_hierarchy_from_processors(processor_partof_relations,
+                                                                    interface_type,
+                                                                    orientation)
+                )
+
+    return hierarchies
 
 
 def get_processor_partof_relations(glb_idx: PartialRetrievalDictionary, system: str) -> Dict[Processor, Set[Processor]]:
@@ -820,34 +838,25 @@ def get_processor_partof_relations(glb_idx: PartialRetrievalDictionary, system: 
     return relations
 
 
-def compute_partof_aggregate_results(interfaces: Set[FactorType],
-                                     system_processor_partof_relations: Dict[str, Dict[Processor, Set[Processor]]],
-                                     existing_results: NodeFloatComputedDict,
-                                     conflicting_data_policy: ConflictingDataResolutionPolicy,
-                                     missing_value_policy: MissingValueResolutionPolicy) \
+def compute_hierarchy_aggregate_results(hierarchies: List[Dict[InterfaceNode, Set[InterfaceNode]]],
+                                        existing_results: NodeFloatComputedDict,
+                                        conflicting_data_policy: ConflictingDataResolutionPolicy,
+                                        missing_value_policy: MissingValueResolutionPolicy) \
         -> Tuple[NodeFloatComputedDict, NodeFloatComputedDict, NodeFloatComputedDict]:
 
     results: NodeFloatComputedDict = {}
     results_conflict_taken: NodeFloatComputedDict = {}
     results_conflict_dismissed: NodeFloatComputedDict = {}
 
-    for system, processor_partof_relations in system_processor_partof_relations.items():
+    for hierarchy in hierarchies:
 
-        for interface in interfaces:
+        aggregations, taken_conflicts, dismissed_conflicts = aggregate_results(hierarchy, existing_results,
+                                                                               conflicting_data_policy,
+                                                                               missing_value_policy)
 
-            for orientation in orientations:
-
-                # Create a hierarchy of processors with each kind of interface and try to aggregate
-                hierarchy = create_interface_node_hierarchy_from_processors(processor_partof_relations, interface,
-                                                                            orientation)
-
-                aggregations, taken_conflicts, dismissed_conflicts = aggregate_results(hierarchy, existing_results,
-                                                                                       conflicting_data_policy,
-                                                                                       missing_value_policy)
-
-                results.update(aggregations)
-                results_conflict_taken.update(taken_conflicts)
-                results_conflict_dismissed.update(dismissed_conflicts)
+        results.update(aggregations)
+        results_conflict_taken.update(taken_conflicts)
+        results_conflict_dismissed.update(dismissed_conflicts)
 
     return results, results_conflict_taken, results_conflict_dismissed
 
@@ -904,39 +913,12 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
     if len(time_absolute_observations) == 0:
         return [Issue(IType.WARNING, f"No absolute observations have been found. The solver has nothing to solve.")]
 
-    # Add Interfaces -Flow- relations (time independent)
-    relations_flow = nx.DiGraph(
-        incoming_graph_data=create_interface_edges(
-            [(r.source_factor, r.target_factor, r.weight)
-             for r in glb_idx.get(FactorsRelationDirectedFlowObservation.partial_key())
-             if r.scale_change_weight is None and r.back_factor is None]
-        )
-    )
+    relations_flow, relations_scale, relations_scale_change = compute_flow_and_scale_relation_graphs(glb_idx,
+                                                                                                     global_state)
 
-    # Add Processors -Scale- relations (time independent)
-    relations_scale = nx.DiGraph(
-        incoming_graph_data=create_interface_edges(
-            [(r.origin, r.destination, r.quantity)
-             for r in glb_idx.get(FactorsRelationScaleObservation.partial_key())]
-        )
-    )
+    interfacetype_hierarchies = compute_interfacetype_hierarchies(glb_idx)
 
-    # Add Interfaces -Scale Change- relations (time independent). Also update Flow relations.
-    relations_scale_change = create_scale_change_relations_and_update_flow_relations(relations_flow, glb_idx)
-
-    # First pass to resolve weight expressions: only expressions without parameters can be solved
-    resolve_weight_expressions([relations_flow, relations_scale, relations_scale_change], global_state)
-
-    # Get the -PartOf- processor relations of each system
-    system_processor_partof_relations: Dict[str, Dict[Processor, Set[Processor]]] = \
-        {system: get_processor_partof_relations(glb_idx, system) for system in input_systems}
-
-    # Get all different existing interface types with children interface types
-    interface_types_parent_relations: Dict[FactorType, Set[FactorType]] = \
-        {ft: ft.get_children() for ft in glb_idx.get(FactorType.partial_key()) if len(ft.get_children()) > 0}
-
-    # Get all different existing interfaces and their units
-    interfaces: Set[FactorType] = glb_idx.get(FactorType.partial_key())
+    partof_hierarchies = compute_partof_hierarchies(glb_idx, input_systems)
 
     total_results: ResultDict = {}
 
@@ -971,13 +953,6 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
                 results = resolve_observations_with_parameters(scenario_state, absolute_observations,
                                                                observers_priority_list)
 
-                total_itype_taken_results: NodeFloatComputedDict = {}
-                total_itype_dismissed_results: NodeFloatComputedDict = {}
-                total_partof_taken_results: NodeFloatComputedDict = {}
-                total_partof_dismissed_results: NodeFloatComputedDict = {}
-                total_flow_internal_results: NodeFloatComputedDict = {}
-                total_flow_external_results: NodeFloatComputedDict = {}
-
                 # START ITERATIVE SOLVING
                 previous_len_results = len(results) - 1
 
@@ -1004,9 +979,8 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
                     total_itype_taken_results.update(itype_taken_results)
                     total_itype_dismissed_results.update(itype_dismissed_results)
 
-                    new_results, partof_taken_results, partof_dismissed_results = compute_partof_aggregate_results(
-                        interfaces, system_processor_partof_relations, results,
-                        conflicting_data_policy, missing_value_policy)
+                    new_results, partof_taken_results, partof_dismissed_results = compute_hierarchy_aggregate_results(
+                        partof_hierarchies, results, conflicting_data_policy, missing_value_policy)
 
                     results.update(new_results)
                     total_partof_taken_results.update(partof_taken_results)
@@ -1074,6 +1048,33 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
     export_solver_data(datasets, data, dynamic_scenario, glb_idx, global_parameters, problem_statement)
 
     return []
+
+
+def compute_flow_and_scale_relation_graphs(registry, state: State):
+
+    # Add Interfaces -Flow- relations (time independent)
+    relations_flow = nx.DiGraph(
+        incoming_graph_data=create_interface_edges(
+            [(r.source_factor, r.target_factor, r.weight)
+             for r in registry.get(FactorsRelationDirectedFlowObservation.partial_key())
+             if r.scale_change_weight is None and r.back_factor is None]
+        )
+    )
+    # Add Processors -Scale- relations (time independent)
+    relations_scale = nx.DiGraph(
+        incoming_graph_data=create_interface_edges(
+            [(r.origin, r.destination, r.quantity)
+             for r in registry.get(FactorsRelationScaleObservation.partial_key())]
+        )
+    )
+
+    # Add Interfaces -Scale Change- relations (time independent). Also update Flow relations.
+    relations_scale_change = create_scale_change_relations_and_update_flow_relations(relations_flow, registry)
+
+    # First pass to resolve weight expressions: only expressions without parameters can be solved
+    resolve_weight_expressions([relations_flow, relations_scale, relations_scale_change], state)
+
+    return relations_flow, relations_scale, relations_scale_change
 
 
 def export_solver_data(datasets, data, dynamic_scenario, glb_idx, global_parameters, problem_statement) -> NoReturn:
