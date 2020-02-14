@@ -840,6 +840,7 @@ def get_processor_partof_relations(glb_idx: PartialRetrievalDictionary, system: 
 
 def compute_hierarchy_aggregate_results(hierarchies: List[Dict[InterfaceNode, Set[InterfaceNode]]],
                                         existing_results: NodeFloatComputedDict,
+                                        previous_results: NodeFloatComputedDict,
                                         conflicting_data_policy: ConflictingDataResolutionPolicy,
                                         missing_value_policy: MissingValueResolutionPolicy) \
         -> Tuple[NodeFloatComputedDict, NodeFloatComputedDict, NodeFloatComputedDict]:
@@ -851,6 +852,7 @@ def compute_hierarchy_aggregate_results(hierarchies: List[Dict[InterfaceNode, Se
     for hierarchy in hierarchies:
 
         aggregations, taken_conflicts, dismissed_conflicts = aggregate_results(hierarchy, existing_results,
+                                                                               previous_results,
                                                                                conflicting_data_policy,
                                                                                missing_value_policy)
 
@@ -935,6 +937,8 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
         for time_period, absolute_observations in time_absolute_observations.items():
             print(f"********************* TIME PERIOD: {time_period}")
 
+            itype_aggregations: NodeFloatComputedDict = {}
+            partof_aggregations: NodeFloatComputedDict = {}
             total_itype_taken_results: NodeFloatComputedDict = {}
             total_itype_dismissed_results: NodeFloatComputedDict = {}
             total_partof_taken_results: NodeFloatComputedDict = {}
@@ -973,15 +977,17 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
                     results.update(new_results)
 
                     new_results, itype_taken_results, itype_dismissed_results = compute_hierarchy_aggregate_results(
-                        interfacetype_hierarchies, results, conflicting_data_policy, missing_value_policy)
+                        interfacetype_hierarchies, results, itype_aggregations, conflicting_data_policy, missing_value_policy)
 
+                    itype_aggregations.update(new_results)
                     results.update(new_results)
                     total_itype_taken_results.update(itype_taken_results)
                     total_itype_dismissed_results.update(itype_dismissed_results)
 
                     new_results, partof_taken_results, partof_dismissed_results = compute_hierarchy_aggregate_results(
-                        partof_hierarchies, results, conflicting_data_policy, missing_value_policy)
+                        partof_hierarchies, results, partof_aggregations, conflicting_data_policy, missing_value_policy)
 
+                    partof_aggregations.update(new_results)
                     results.update(new_results)
                     total_partof_taken_results.update(partof_taken_results)
                     total_partof_dismissed_results.update(partof_dismissed_results)
@@ -1465,6 +1471,7 @@ def calculate_global_scalar_indicators(indicators: List[Indicator],
 
 
 def aggregate_results(tree: Dict[InterfaceNode, Set[InterfaceNode]], params: NodeFloatComputedDict,
+                      prev_computed_values: NodeFloatComputedDict,
                       conflicting_data_policy: ConflictingDataResolutionPolicy,
                       missing_values_policy: MissingValueResolutionPolicy) \
         -> Tuple[NodeFloatComputedDict, NodeFloatComputedDict, NodeFloatComputedDict]:
@@ -1512,7 +1519,7 @@ def aggregate_results(tree: Dict[InterfaceNode, Set[InterfaceNode]], params: Nod
 
         return return_value
 
-    new_values: NodeFloatComputedDict = {}  # All computed aggregations
+    new_values: NodeFloatComputedDict = {**prev_computed_values}  # All computed aggregations
     taken_conflicts: NodeFloatComputedDict = {}  # Taken values on conflicting nodes
     dismissed_conflicts: NodeFloatComputedDict = {}  # Dismissed values on conflicting nodes
 
