@@ -544,7 +544,7 @@ def resolve_weight_expressions(graph_list: List[nx.DiGraph], state: State, raise
                         f"Issues: {', '.join(issues)}"
                     )
 
-                data["weight"] = ifnull(FloatExp(value, None, str(expression)), ast)
+                data["weight"] = ast if value is None else FloatExp(value, None, str(expression))
 
 
 def iterative_solving2(comp_graph_list: List[ComputationGraph], observations: NodeFloatDict) -> Tuple[NodeFloatDict, Set[InterfaceNode]]:
@@ -934,6 +934,10 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
         conflicting_data_policy = ConflictingDataResolutionPolicy[scenario_state.get(ConflictingDataResolutionPolicy.get_key())]
         missing_value_policy = MissingValueResolutionPolicy[scenario_state.get(MissingValueResolutionPolicy.get_key())]
 
+        missing_value_policies: List[MissingValueResolutionPolicy] = [MissingValueResolutionPolicy.Invalidate]
+        if missing_value_policy == MissingValueResolutionPolicy.UseZero:
+            missing_value_policies.append(MissingValueResolutionPolicy.UseZero)
+
         for time_period, absolute_observations in time_absolute_observations.items():
             print(f"********************* TIME PERIOD: {time_period}")
 
@@ -957,39 +961,40 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
                                                                observers_priority_list)
 
                 # START ITERATIVE SOLVING
-                previous_len_results = len(results) - 1
+                for missing_value_policy in missing_value_policies:
+                    previous_len_results = len(results) - 1
 
-                # Iterate while the number of results is increasing
-                while len(results) > previous_len_results:
-                    previous_len_results = len(results)
+                    # Iterate while the number of results is increasing
+                    while len(results) > previous_len_results:
+                        previous_len_results = len(results)
 
-                    new_results = compute_graph_results(comp_graph_flow, results)
-                    results.update(new_results)
+                        new_results = compute_graph_results(comp_graph_flow, results)
+                        results.update(new_results)
 
-                    # total_flow_internal_results.update(flow_internal_results)
-                    # total_flow_external_results.update(flow_external_results)
+                        # total_flow_internal_results.update(flow_internal_results)
+                        # total_flow_external_results.update(flow_external_results)
 
-                    new_results = compute_graph_results(comp_graph_scale, results)
-                    results.update(new_results)
+                        new_results = compute_graph_results(comp_graph_scale, results)
+                        results.update(new_results)
 
-                    new_results = compute_graph_results(comp_graph_scale_change, results)
-                    results.update(new_results)
+                        new_results = compute_graph_results(comp_graph_scale_change, results)
+                        results.update(new_results)
 
-                    new_results, itype_taken_results, itype_dismissed_results = compute_hierarchy_aggregate_results(
-                        interfacetype_hierarchies, results, aggregations, conflicting_data_policy, missing_value_policy)
+                        new_results, itype_taken_results, itype_dismissed_results = compute_hierarchy_aggregate_results(
+                            interfacetype_hierarchies, results, aggregations, conflicting_data_policy, missing_value_policy)
 
-                    aggregations.update(new_results)
-                    results.update(new_results)
-                    total_itype_taken_results.update(itype_taken_results)
-                    total_itype_dismissed_results.update(itype_dismissed_results)
+                        aggregations.update(new_results)
+                        results.update(new_results)
+                        total_itype_taken_results.update(itype_taken_results)
+                        total_itype_dismissed_results.update(itype_dismissed_results)
 
-                    new_results, partof_taken_results, partof_dismissed_results = compute_hierarchy_aggregate_results(
-                        partof_hierarchies, results, aggregations, conflicting_data_policy, missing_value_policy)
+                        new_results, partof_taken_results, partof_dismissed_results = compute_hierarchy_aggregate_results(
+                            partof_hierarchies, results, aggregations, conflicting_data_policy, missing_value_policy)
 
-                    aggregations.update(new_results)
-                    results.update(new_results)
-                    total_partof_taken_results.update(partof_taken_results)
-                    total_partof_dismissed_results.update(partof_dismissed_results)
+                        aggregations.update(new_results)
+                        results.update(new_results)
+                        total_partof_taken_results.update(partof_taken_results)
+                        total_partof_dismissed_results.update(partof_dismissed_results)
 
                 current_results: ResultDict = {}
                 result_key = ResultKey(scenario_name, time_period, Scope.Total)
