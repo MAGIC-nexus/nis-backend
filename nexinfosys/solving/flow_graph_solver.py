@@ -937,8 +937,7 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
         for time_period, absolute_observations in time_absolute_observations.items():
             print(f"********************* TIME PERIOD: {time_period}")
 
-            itype_aggregations: NodeFloatComputedDict = {}
-            partof_aggregations: NodeFloatComputedDict = {}
+            aggregations: NodeFloatComputedDict = {}
             total_itype_taken_results: NodeFloatComputedDict = {}
             total_itype_dismissed_results: NodeFloatComputedDict = {}
             total_partof_taken_results: NodeFloatComputedDict = {}
@@ -977,17 +976,17 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
                     results.update(new_results)
 
                     new_results, itype_taken_results, itype_dismissed_results = compute_hierarchy_aggregate_results(
-                        interfacetype_hierarchies, results, itype_aggregations, conflicting_data_policy, missing_value_policy)
+                        interfacetype_hierarchies, results, aggregations, conflicting_data_policy, missing_value_policy)
 
-                    itype_aggregations.update(new_results)
+                    aggregations.update(new_results)
                     results.update(new_results)
                     total_itype_taken_results.update(itype_taken_results)
                     total_itype_dismissed_results.update(itype_dismissed_results)
 
                     new_results, partof_taken_results, partof_dismissed_results = compute_hierarchy_aggregate_results(
-                        partof_hierarchies, results, partof_aggregations, conflicting_data_policy, missing_value_policy)
+                        partof_hierarchies, results, aggregations, conflicting_data_policy, missing_value_policy)
 
-                    partof_aggregations.update(new_results)
+                    aggregations.update(new_results)
                     results.update(new_results)
                     total_partof_taken_results.update(partof_taken_results)
                     total_partof_dismissed_results.update(partof_dismissed_results)
