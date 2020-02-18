@@ -19,19 +19,22 @@
 #
 # INSTALL   ------------------------------------------------------------------------------
 #
-# PyPI test: pip install --index-url https://test.pypi.org/simple/ --upgrade nexinfosys-backend
-# PyPI     : pip install --upgrade nexinfosys-backend
+# PyPI test: pip install --index-url https://test.pypi.org/simple/ --upgrade nexinfosys
+# PyPI     : pip install --upgrade nexinfosys
 # No PyPI  : pip install -e <local path where "setup.py" (this file) is located>
 #
 # EXECUTE (example. "gunicorn" must be installed: "pip install gunicorn")
 # (IT WORKS WITH ONLY 1 WORKER!!!)
 # gunicorn --workers=1 --log-level=debug --timeout=2000 --bind 0.0.0.0:8081 nexinfosys.restful_service.service_main:app
 #
-
-from pkg_resources import yield_lines
 from setuptools import setup
-package_name = 'nexinfosys-backend'
-version = '0.33'
+from pkg_resources import yield_lines
+# from distutils.extension import Extension
+from Cython.Build import cythonize
+# from Cython.Distutils import build_ext
+
+package_name = 'nexinfosys'
+version = '0.36'
 
 
 def parse_requirements(strs):
@@ -65,6 +68,11 @@ with open('requirements.txt') as f:
 install_reqs = parse_requirements(required)
 print(install_reqs)
 
+# ext_modules = [
+#     Extension("helper_accel", ["nexinfosys/common/helper_accel.pyx"]),
+#     Extension("parser_spreadsheet_utils_accel", ["nexinfosys/command_generators/parser_spreadsheet_utils_accel.pyx"])
+# ]
+
 setup(
     name=package_name,
     version=version,
@@ -83,9 +91,11 @@ setup(
               'nexinfosys.command_generators.spreadsheet_command_parsers.specification',
               'nexinfosys.command_generators.spreadsheet_command_parsers_v2', 'nexinfosys.magic_specific_integrations'],
     include_package_data=True,
+    # cmdclass={'build_ext': build_ext},
+    ext_modules=cythonize(["nexinfosys/common/helper_accel.pyx", "nexinfosys/command_generators/parser_spreadsheet_utils_accel.pyx"], language_level="3"),
     url='https://github.com/MAGIC-nexus/nis-backend',
     license='BSD-3',
     author='rnebot',
     author_email='rnebot@itccanarias.org',
-    description='A package supporting MuSIASEM formalism and methodology'
+    description='Formal and executable MuSIASEM multi-system Nexus models for Sustainable Development Analysis'
 )

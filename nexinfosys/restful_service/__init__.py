@@ -38,6 +38,9 @@ try:
             os.environ["MAGIC_NIS_SERVICE_CONFIG_FILE"] = file_name
 
     app.config.from_envvar('MAGIC_NIS_SERVICE_CONFIG_FILE')
+    print("-----------------------------------------------")
+    print(f'Configuration file at: {os.environ["MAGIC_NIS_SERVICE_CONFIG_FILE"]}')
+    print("-----------------------------------------------")
 except Exception as e:
     print("MAGIC_NIS_SERVICE_CONFIG_FILE environment variable not defined!")
     print(e)
