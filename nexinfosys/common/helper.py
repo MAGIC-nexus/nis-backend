@@ -1064,14 +1064,107 @@ def to_str(v):
 # #####################################################################################################################
 
 
-def download_file(location):
+def wv_create_client_and_resource_name(location, wv_user=None, wv_password=None, wv_host_name=None):
+    if not wv_host_name:
+        wv_host_name = get_global_configuration_variable("FS_SERVER") \
+            if get_global_configuration_variable("FS_SERVER") else "nextcloud.data.magic-nexus.eu"
+
+    parts = location.split("/")
+    for i, p in enumerate(parts):
+        if p == wv_host_name:
+            url = "/".join(parts[:i + 1])
+            fname = "/" + "/".join(parts[i + 1:])
+            break
+
+    options = {
+        "webdav_hostname": url,
+        "webdav_login": wv_user if wv_user else get_global_configuration_variable("FS_USER"),
+        "webdav_password": wv_password if wv_password else get_global_configuration_variable("FS_PASSWORD")
+    }
+    client = wc.Client(options)
+    return client, fname
+
+
+def wv_check_path(location, wv_user=None, wv_password=None, wv_host_name=None):
+    """
+    Check if the location exists, and if it is a directory or a file
+
+    :param location:
+    :param user:
+    :param password:
+    :return: 0 -> does not exist; 1 -> directory; 2 -> file
+    """
+    client, fname = wv_create_client_and_resource_name(location, wv_user, wv_password, wv_host_name)
+    if client.check(fname):
+        retval = 1 if client.is_dir(fname) else 2
+    else:
+        retval = 0
+    client.free()
+    return retval
+
+
+def wv_create_directory(location, wv_user=None, wv_password=None, wv_host_name=None):
+    """
+    Create directory (if it exists do nothing)
+
+    :param location:
+    :param wv_user:
+    :param wv_password:
+    :param wv_host_name:
+    :return:
+
+    """
+    client, fname = wv_create_client_and_resource_name(location, wv_user, wv_password, wv_host_name)
+    client.mkdir(fname)
+    client.free()
+
+
+def wv_upload_file(data: io.BytesIO, location: str, wv_user=None, wv_password=None, wv_host_name=None):
+    """
+    Uploads a bytes array into a location on a WebDAV server
+    Directory must exist
+    :param data: The data to upload
+    :param location:
+    :param wv_user:
+    :param wv_password:
+    :param wv_host_name:
+    :return:
+    """
+    client, fname = wv_create_client_and_resource_name(location, wv_user, wv_password, wv_host_name)
+    client.upload_from(data, fname)
+    client.free()
+
+
+def wv_download_file(location, wv_user=None, wv_password=None, wv_host_name=None):
+    """
+    WebDAV download a file
+
+    :param location:
+    :param wv_user:
+    :param wv_password:
+    :param wv_host_name:
+    :return:
+    """
+    client, fname = wv_create_client_and_resource_name(location, wv_user, wv_password, wv_host_name)
+    with tempfile.NamedTemporaryFile(delete=True) as temp:
+        client.download_sync(remote_path=fname, local_path=temp.name)
+        f = open(temp.name, "rb")
+        data = io.BytesIO(f.read())
+        f.close()
+    client.free()
+    return data
+
+
+def download_file(location, wv_user=None, wv_password=None, wv_host_name=None):
     """
     Download a file from the specified URL location.
 
-    It recognizes MAGIC's Nextcloud instance AND Google Drive URL's
+    It recognizes MAGIC's Nextcloud (WebDAV) instance AND Google Drive URL's
+    Of course, it should work with Zenodo.
     Google Drive URL's are assumed to be Spreadsheets (both XLSX and Google Calc are considered)
 
     :param location:
+    :param wv_host_name: WebDav host name part. Example: "nextcloud.data.magic-nexus.eu"
     :return: A BytesIO object with the contents of the file
     """
     pr = urlparse(location)
@@ -1082,26 +1175,11 @@ def download_file(location):
             pos = location.find("#")
             fragment = location[pos + 1:]
             location = location[:pos]
-        if pr.netloc.lower() == "nextcloud.data.magic-nexus.eu":
-            # WebDAV
-            parts = location.split("/")
-            for i, p in enumerate(parts):
-                if p == "nextcloud.data.magic-nexus.eu":
-                    url = "/".join(parts[:i + 1])
-                    fname = "/" + "/".join(parts[i + 1:])
-                    break
-
-            options = {
-                "webdav_hostname": url,
-                "webdav_login": get_global_configuration_variable("FS_USER"),
-                "webdav_password": get_global_configuration_variable("FS_PASSWORD")
-            }
-            client = wc.Client(options)
-            with tempfile.NamedTemporaryFile(delete=True) as temp:
-                client.download_sync(remote_path=fname, local_path=temp.name)
-                f = open(temp.name, "rb")
-                data = io.BytesIO(f.read())
-                f.close()
+        if not wv_host_name:
+            wv_host_name = get_global_configuration_variable("FS_SERVER")\
+                if get_global_configuration_variable("FS_SERVER") else "nextcloud.data.magic-nexus.eu"
+        if pr.netloc.lower() == wv_host_name:
+            data = wv_download_file(location, wv_user, wv_password, wv_host_name)
         elif pr.netloc.lower() == "docs.google.com" or pr.netloc.lower() == "drive.google.com":
             # Google Drive. Only XLSX files supported (if Google Calc, an Export to XLSX is done)
             # Extract file id from the URL
@@ -1537,63 +1615,63 @@ def change_tuple_value(t: Tuple, index: int, value: Any) -> Tuple:
     return tuple(lst)
 
 
-if __name__ == '__main__':
-    import random
-    import string
-    from timeit import default_timer as timer
-
-    class Dummy:
-        def __init__(self, a):
-            self._a = a
-
-    def rndstr(n):
-        return random.choices(string.ascii_uppercase + string.digits, k=n)
-
-    prd = PartialRetrievalDictionary2()
-    ktypes = [("a", "b", "c"), ("a", "b"), ("a", "d"), ("a", "f", "g")]
-    # Generate a set of keys and empty objects
-    vals = []
-    print("Generating sample")
-    for i in range(30000):
-        # Choose random key
-        ktype = ktypes[random.randrange(len(ktypes))]
-        # Generate the element
-        vals.append(({k: ''.join(rndstr(6)) for k in ktype}, Dummy(rndstr(12))))
-
-    print("Insertion started")
-    df = pd.DataFrame()
-    start = timer()
-    # Insert each element
-    for v in vals:
-        prd.put(v[0], v[1])
-    stop = timer()
-    print(stop-start)
-
-    print("Reading started")
-
-    # Select all elements
-    start = timer()
-    # Insert each element
-    for v in vals:
-        r = prd.get(v[0], False)
-        if len(r) == 0:
-            raise Exception("Unexpected!")
-    stop = timer()
-    print(stop-start)
-
-    print("Deleting started")
-
-    # Select all elements
-    start = timer()
-    # Insert each element
-    for v in vals:
-        r = prd.delete(v[0])
-        if r == 0:
-            raise Exception("Unexpected!")
-    stop = timer()
-    print(stop-start)
-
-    print("Finished!!")
+# if __name__ == '__main__':
+#     import random
+#     import string
+#     from timeit import default_timer as timer
+#
+#     class Dummy:
+#         def __init__(self, a):
+#             self._a = a
+#
+#     def rndstr(n):
+#         return random.choices(string.ascii_uppercase + string.digits, k=n)
+#
+#     prd = PartialRetrievalDictionary2()
+#     ktypes = [("a", "b", "c"), ("a", "b"), ("a", "d"), ("a", "f", "g")]
+#     # Generate a set of keys and empty objects
+#     vals = []
+#     print("Generating sample")
+#     for i in range(30000):
+#         # Choose random key
+#         ktype = ktypes[random.randrange(len(ktypes))]
+#         # Generate the element
+#         vals.append(({k: ''.join(rndstr(6)) for k in ktype}, Dummy(rndstr(12))))
+#
+#     print("Insertion started")
+#     df = pd.DataFrame()
+#     start = timer()
+#     # Insert each element
+#     for v in vals:
+#         prd.put(v[0], v[1])
+#     stop = timer()
+#     print(stop-start)
+#
+#     print("Reading started")
+#
+#     # Select all elements
+#     start = timer()
+#     # Insert each element
+#     for v in vals:
+#         r = prd.get(v[0], False)
+#         if len(r) == 0:
+#             raise Exception("Unexpected!")
+#     stop = timer()
+#     print(stop-start)
+#
+#     print("Deleting started")
+#
+#     # Select all elements
+#     start = timer()
+#     # Insert each element
+#     for v in vals:
+#         r = prd.delete(v[0])
+#         if r == 0:
+#             raise Exception("Unexpected!")
+#     stop = timer()
+#     print(stop-start)
+#
+#     print("Finished!!")
 
 
 # #####################################################################################################################
@@ -1635,7 +1713,8 @@ def prepare_default_configuration(create_directories):
 # Flask Session (server side session)
 REDIS_HOST="filesystem:local_session"
 TESTING="True"
-FS_TYPE=""
+SELF_SCHEMA=""
+FS_TYPE="WebDAV"
 FS_SERVER=""
 FS_USER=""
 FS_PASSWORD=""
@@ -1643,3 +1722,12 @@ FS_PASSWORD=""
 GAPI_CREDENTIALS_FILE="{data_path}/credentials.json"
 GAPI_TOKEN_FILE="{data_path}/token.pickle"    
 """, data_path + os.sep + "nis_local.conf"
+
+
+if __name__ == '__main__':
+    # f = open("/home/rnebot/GoogleDrive/AA_MAGIC/FAOSTAT_analysis.xlsx", "rb")
+    # data = io.BytesIO(f.read())
+    # f.close()
+    # wv_upload_file(data, "https://nextcloud.data.magic-nexus.eu/remote.php/webdav/NIS_beta/CS_format_examples/FAOSTAT_analysis.xlsx", "NIS_agent", "NIS_agent@1", "nextcloud.data.magic-nexus.eu")
+    ret = download_file("https://nextcloud.data.magic-nexus.eu/remote.php/webdav/NIS_beta/CS_format_examples/08_caso_energia_eu_new_commands.xlsx", "NIS_agent", "NIS_agent@1")
+    print(f"Longit: {len(ret.getvalue())}")

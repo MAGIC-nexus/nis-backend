@@ -41,9 +41,10 @@ from nexinfosys.command_generators.parser_field_examples import generic_field_ex
 from nexinfosys.command_generators.parser_field_parsers import string_to_ast, arith_boolean_expression
 from nexinfosys.command_generators.parser_spreadsheet_utils_accel import rewrite_xlsx_file
 from nexinfosys.ie_exports.json import export_model_to_json, model_to_json
-from nexinfosys.models.musiasem_concepts import Parameter
+from nexinfosys.models.musiasem_concepts import Parameter, Hierarchy, ProblemStatement
 from nexinfosys.common.helper import generate_json, gzipped, str2bool, \
-    add_label_columns_to_dataframe, download_file, create_dictionary, any_error_issue, prepare_default_configuration
+    add_label_columns_to_dataframe, download_file, create_dictionary, any_error_issue, prepare_default_configuration, \
+    strcmp, wv_upload_file
 from nexinfosys.models.musiasem_methodology_support import *
 from nexinfosys.common.create_database import create_pg_database_engine, create_monet_database_engine
 from nexinfosys.restful_service import app, register_external_datasources, default_cmds
@@ -154,11 +155,16 @@ def construct_session_persistence_backend():
         d["SESSION_PERMANENT"] = False
         rs2 = None
         if r_host == "redis_lite":
-            import redislite
-            rs2 = redislite.Redis("tmp_nis_backend_redislite.db")  # serverconfig={'port': '6379'}
-            d["SESSION_TYPE"] = "redis"
-            d["SESSION_REDIS"] = rs2
-            # d["PERMANENT_SESSION_LIFETIME"] = 3600
+            try:
+                import redislite
+                rs2 = redislite.Redis("tmp_nis_backend_redislite.db")  # serverconfig={'port': '6379'}
+                d["SESSION_TYPE"] = "redis"
+                d["SESSION_REDIS"] = rs2
+                # d["PERMANENT_SESSION_LIFETIME"] = 3600
+            except ImportError as e:
+                print("Package 'redislite' not found. Please, either change REDIS_HOST configuration variable to "
+                      "'filesystem' or 'redis', or execute 'pip install redislite' and retry")
+                sys.exit(1)
         elif r_host.startswith("filesystem:"):
             d["SESSION_TYPE"] = "filesystem"
             if app.config.get("REDIS_HOST_FILESYSTEM_DIR"):
@@ -1146,6 +1152,48 @@ def reproducible_session_query_state_list_results():  # Query list of outputs (n
     return r
 
 
+@app.route(nis_api_base + "/isession/rsession/state_query/webdav", methods=["PUT"])
+def copy_resource_to_webdav():
+    """
+    Read a resource and put the result into WebDAV server
+    PROBABLY REQUIRES MULTIPLE WORKERS because datasets are obtained via a recursive "RESTful call"
+
+    :return:
+    """
+    # Recover InteractiveSession
+    isess = deserialize_isession_and_prepare_db_session()
+    if isess and isinstance(isess, Response):
+        return isess
+    tmp = request.get_json()
+    source_url = tmp["sourceURL"]
+    target_url = tmp["targetURL"]
+
+    from urllib.parse import urlparse
+    pr = urlparse(target_url)
+    # Check host
+    wv_host_name = nexinfosys.get_global_configuration_variable("FS_SERVER") \
+        if nexinfosys.get_global_configuration_variable("FS_SERVER") else "nextcloud.data.magic-nexus.eu"
+    if wv_host_name.lower() != pr.netloc:
+        return build_json_response({"error": f"Cannot save the file in the requested server location, {pr.netloc}, which is different from the configured one, {wv_host_name}"}, 401)
+    # Modify URL
+    target_url = f"{pr.scheme}://{pr.netloc}{os.path.split(pr.path)[0]}"
+    pr = urlparse(source_url)
+    target_url += f"/{os.path.split(pr.path)[1]}"
+
+    # READ (reentrant)
+    self_schema = nexinfosys.get_global_configuration_variable("SELF_SCHEMA") \
+        if nexinfosys.get_global_configuration_variable("SELF_SCHEMA") else request.host_url
+    import requests
+    requested_resource = f"{self_schema}{source_url[1:]}"
+    print(f"REENTRANT REQUEST: {requested_resource}")
+    r = requests.get(requested_resource, cookies=request.cookies, verify=False)
+    # WRITE
+    wv_upload_file(io.BytesIO(r.content), target_url)
+    print(f"REQUESTED RESOURCE UPLOADED TO NEXTCLOUD at {target_url}")
+
+    return build_json_response([], 204)
+
+
 # -- DYNAMIC PARAMETERS --
 @app.route(nis_api_base + "/isession/rsession/state_query/parameters", methods=["GET"])
 def get_parameter_definitions():
@@ -1160,10 +1208,24 @@ def get_parameter_definitions():
     if isess and isinstance(isess, Response):
         return isess
 
-    j = model_to_json(isess.state, structure=OrderedDict({"Parameters": Parameter}))
-    j = model_to_json(isess.state, structure=OrderedDict({"Parameters": Parameter}))
+    res = []
+    query = BasicQuery(isess.state)
+    for p in query.execute([Parameter], filt=""):
+        p_name = p.name
+        p_type = p.type
+        if p.range:
+            if strcmp(p_type, "Number"):
+                p_range = p.range
+            else:
+                glb_idx, _, _, _, _ = get_case_study_registry_objects(isess.state)
+                h = glb_idx.get(Hierarchy.partial_key(p.range))
+                h = h[0]
+                p_range = ', '.join(h.codes.keys())
+        else:
+            p_range = ""
+        res.append(dict(name=p_name, type=p_type, range=p_range))
 
-    return Response(j, mimetype="text/json", status=200)
+    return build_json_response(res, 200)
 
 
 @app.route(nis_api_base + "/isession/rsession/state_query/parameters", methods=["PUT"])
@@ -1183,10 +1245,41 @@ def set_parameters_and_solve():
     parameters = request.get_json()
     issues2 = prepare_and_solve_model(isess.state, parameters)
 
-    # TODO Serialize??
+    # Return "issues2", issues found during the solving
+    isess.state.set("_issues", issues2)
 
-    # TODO Return "issues2", issues found during the solving
-    return Response("", mimetype="text/json", status=200)
+    # Return outputs (could be a list of binary files)
+    r = build_json_response({"issues": convert_issues(issues2), "outputs": None}, 200)
+
+    # Must serialize in order to later recover the datasets
+    serialize_isession_and_close_db_session(isess)
+
+    return r
+
+
+@app.route(nis_api_base + "/isession/rsession/state_query/scenarios", methods=["GET"])
+def get_scenarios():
+    """
+    Return a list scenarios and values for parameters in each of them
+
+    :return:
+    """
+    # Recover InteractiveSession
+    isess = deserialize_isession_and_prepare_db_session()
+    if isess and isinstance(isess, Response):
+        return isess
+
+    glb_idx, _, _, _, _ = get_case_study_registry_objects(isess.state)
+
+    ps = glb_idx.get(ProblemStatement.partial_key())
+    if len(ps) == 0:
+        ps = [ProblemStatement()]
+
+    scenarios = []
+    for scenario, params in ps[0].scenarios.items():
+        scenarios.append(dict(name=scenario, parameters=params.items()))
+
+    return build_json_response(scenarios, 200)
 
 
 @app.route(nis_api_base + "/isession/rsession/state_query/geolayer.<format>", methods=["GET"])
@@ -1686,28 +1779,31 @@ def reset_state_and_reproducible_session(isess: InteractiveSession):
                                     allow_saving=True
                                     )
 
+
 # #################################################################################################################### #
 # MAIN POINT OF EXECUTION BY THE GENERIC CLIENT ("ANGULAR FRONTEND")                                                   #
 # #################################################################################################################### #
+def convert_issues(iss_lst):
+    """
+    Convert issues generated by the backend into a list of dictionaries as expected by the frontend
+    :param iss_lst: Issues list
+    :return: Issue list in frontend compatible format
+    """
+    out = []
+    for i in iss_lst:
+        location = dict(sheet_name="", row=None, col=None)
+        i_type = "Error" if i.itype.value == 3 else ("Warning" if i.itype.value == 2 else "Info")
+        if isinstance(i, Issue):
+            if i.location is not None:
+                location = dict(sheet_name=i.location.sheet_name, row=str(i.location.row), col=str(i.location.column))
+            out.append(dict(**location, message=i_type + ": " +i.description, type=i.itype.value))
+        else:
+            out.append(dict(**location, message="Issue type unknown", type=3))
+    return out
+
+
 @app.route(nis_api_base + "/isession/rsession/generator", methods=["POST"])
 def reproducible_session_append_command_generator():  # Receive a command_executors generator, like a Spreadsheet file, an R script, or a full JSON command_executors list (or other)
-    def convert_issues(iss_lst):
-        """
-        Convert issues generated by the backend into a list of dictionaries as expected by the frontend
-        :param iss_lst: Issues list
-        :return: Issue list in frontend compatible format
-        """
-        out = []
-        for i in iss_lst:
-            location = dict(sheet_name="", row=None, col=None)
-            i_type = "Error" if i.itype.value == 3 else ("Warning" if i.itype.value == 2 else "Info")
-            if isinstance(i, Issue):
-                if i.location is not None:
-                    location = dict(sheet_name=i.location.sheet_name, row=str(i.location.row), col=str(i.location.column))
-                out.append(dict(**location, message=i_type + ": " +i.description, type=i.itype.value))
-            else:
-                out.append(dict(**location, message="Issue type unknown", type=3))
-        return out
 
     import time
     print("### SUBMISSION STARTS ###")
@@ -1845,8 +1941,29 @@ def reproducible_session_execute_not_executed_command_generators():  # Executes 
 
     return r
 
+
 # -- Reproducible Session Query --
 # - INSTEAD OF COMMANDS, DIRECT EXECUTION (NOT REGISTERED)
+
+# -----
+@app.route(nis_api_base + '/nis_files.json', methods=['GET'])
+def list_of_registered_nis_files():
+    """
+    Return a list of either importable or example NIS files
+
+    :return:
+    """
+    files = [
+        dict(name="MuSIASEM hierarchies", url="https://nextcloud.data.magic-nexus.eu/remote.php/webdav/NIS_internal/WP4/D4.3%20global%20food%20supply%20and%20diets/README.md", example=False, description=""),
+        dict(name="Water grammar", url="https://nextcloud.data.magic-nexus.eu/remote.php/webdav/NIS_internal/WP4/D4.3%20global%20food%20supply%20and%20diets/README.md", example=False, description=""),
+        dict(name="Energy grammar", url="https://nextcloud.data.magic-nexus.eu/remote.php/webdav/NIS_internal/WP4/D4.3%20global%20food%20supply%20and%20diets/README.md", example=False, description=""),
+        dict(name="Food grammar", url="https://nextcloud.data.magic-nexus.eu/remote.php/webdav/NIS_internal/WP4/D4.3%20global%20food%20supply%20and%20diets/README.md", example=False, description=""),
+        dict(name="Biofuel", url="https://nextcloud.data.magic-nexus.eu/remote.php/webdav/NIS_internal/WP6/CS6_2_Biofuels/README.md", example=True, description=""),
+        dict(name="Gran Canaria", url="https://nextcloud.data.magic-nexus.eu/remote.php/webdav/NIS_internal/WP6/CS6_6_Alternative_water_sources/README.md", example=True, description=""),
+        dict(name="Tenerife", url="https://nextcloud.data.magic-nexus.eu/remote.php/webdav/NIS_internal/WP6/CS6_6_Alternative_water_sources/README.md", example=True, description=""),
+    ]
+    return build_json_response(files, 200)
+
 
 # -- Case studies --
 
@@ -3928,4 +4045,5 @@ if __name__ == '__main__':
     app.run(host='0.0.0.0',
             debug=True,
             use_reloader=False,  # Avoid loading twice the application
-            threaded=True)  # Default port, 5000
+            processes=3,
+            threaded=False)  # Default port, 5000
