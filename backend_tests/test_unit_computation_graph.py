@@ -3,12 +3,12 @@ from typing import List, Set, Dict, Tuple, Optional, Callable
 
 from nexinfosys.solving.graph.computation_graph import ComputationGraph
 from nexinfosys.solving.graph.flow_graph import FlowGraph
-from nexinfosys.solving.graph import EdgeType
+from nexinfosys.solving.graph import EdgeType, Weight, Node, Value
 
 
 class SubTestCase:
-    def __init__(self, params: Dict[str, float], conflicts: Dict[str, Set[str]],
-                 combinations: Set[frozenset], results: Dict[Tuple[str, frozenset], Optional[float]]):
+    def __init__(self, params: Dict[str, Value], conflicts: Dict[str, Set[str]],
+                 combinations: Set[frozenset], results: Dict[Tuple[str, frozenset], Optional[Value]]):
         self.params = params
         self.conflicts = conflicts
         self.combinations = combinations
@@ -23,8 +23,8 @@ def create_test_data_flow_cycle() -> Tuple[FlowGraph, ComputationGraph, List[Sub
 
     comp_graph = ComputationGraph()
 
-    comp_graph.add_edge('A', 'B', 2.0, 0.5)
-    comp_graph.add_edge('B', 'A', 0.7, 0.1)
+    comp_graph.add_edge('A', 'B', Weight(2.0), Weight(0.5))
+    comp_graph.add_edge('B', 'A', Weight(0.7), Weight(0.1))
     # NOTE: the reverse weight is ignored for this computation
 
     # Set split info
@@ -33,7 +33,7 @@ def create_test_data_flow_cycle() -> Tuple[FlowGraph, ComputationGraph, List[Sub
     subtest_cases: List[SubTestCase] = []
 
     # Case 0
-    params = {'B': 5}
+    params = {'B': Weight(5)}
     conflicts = {
         'B': set()
     }
@@ -41,7 +41,7 @@ def create_test_data_flow_cycle() -> Tuple[FlowGraph, ComputationGraph, List[Sub
         frozenset({'B'})
     }
     results = {
-        ('A', frozenset({'B'})): 3.5
+        ('A', frozenset({'B'})): Value(3.5)
     }
     subtest_cases.append(SubTestCase(params, conflicts, combinations, results))
 
@@ -51,25 +51,25 @@ def create_test_data_flow_cycle() -> Tuple[FlowGraph, ComputationGraph, List[Sub
 def create_test_data_flow() -> Tuple[FlowGraph, ComputationGraph, List[SubTestCase]]:
     flow_graph = FlowGraph()
 
-    flow_graph.add_edge('D', 'A', 1.0, None)
-    flow_graph.add_edge('E', 'A', 1.0, None)
-    flow_graph.add_edge('A', 'B', 2.0, None)
-    flow_graph.add_edge('B', 'C', 0.7, 0.1)
-    flow_graph.add_edge('F', 'C', 1.0, None)
+    flow_graph.add_edge('D', 'A', Weight(1.0), None)
+    flow_graph.add_edge('E', 'A', Weight(1.0), None)
+    flow_graph.add_edge('A', 'B', Weight(2.0), None)
+    flow_graph.add_edge('B', 'C', Weight(0.7), Weight(0.1))
+    flow_graph.add_edge('F', 'C', Weight(1.0), None)
     flow_graph.add_edge('C', 'G', None, None)
-    flow_graph.add_edge('H', 'G', 0.5, 0.9)
-    flow_graph.add_edge('I', 'G', 0.4, 0.1)
+    flow_graph.add_edge('H', 'G', Weight(0.5), Weight(0.9))
+    flow_graph.add_edge('I', 'G', Weight(0.4), Weight(0.1))
 
     comp_graph = ComputationGraph()
 
-    comp_graph.add_edge('D', 'A', 1.0, None)
-    comp_graph.add_edge('E', 'A', 1.0, None)
-    comp_graph.add_edge('A', 'B', 2.0, 0.5)
-    comp_graph.add_edge('B', 'C', 0.7, 0.1)
-    comp_graph.add_edge('F', 'C', 1.0, 0.9)
-    comp_graph.add_edge('C', 'G', 1.0, 0.0)
-    comp_graph.add_edge('H', 'G', 0.5, 0.9)
-    comp_graph.add_edge('I', 'G', 0.4, 0.1)
+    comp_graph.add_edge('D', 'A', Weight(1.0), None)
+    comp_graph.add_edge('E', 'A', Weight(1.0), None)
+    comp_graph.add_edge('A', 'B', Weight(2.0), Weight(0.5))
+    comp_graph.add_edge('B', 'C', Weight(0.7), Weight(0.1))
+    comp_graph.add_edge('F', 'C', Weight(1.0), Weight(0.9))
+    comp_graph.add_edge('C', 'G', Weight(1.0), Weight(0.0))
+    comp_graph.add_edge('H', 'G', Weight(0.5), Weight(0.9))
+    comp_graph.add_edge('I', 'G', Weight(0.4), Weight(0.1))
 
     # Set split info
     comp_graph.mark_node_split('C', EdgeType.REVERSE)
@@ -81,23 +81,23 @@ def create_test_data_flow() -> Tuple[FlowGraph, ComputationGraph, List[SubTestCa
 def create_test_data_reverse() -> Tuple[FlowGraph, ComputationGraph, List[SubTestCase]]:
     flow_graph = FlowGraph()
 
-    flow_graph.add_edge('A', 'B', 2.0, 0.5)
-    flow_graph.add_edge('B', 'C', 0.7, 0.1)
-    flow_graph.add_edge('C', 'D', 0.7, 0.1)
-    flow_graph.add_edge('C', 'E', 0.3, 0.1)
-    flow_graph.add_edge('F', 'G', 0.7, 0.1)
-    flow_graph.add_edge('G', 'E', 0.7, 0.1)
-    flow_graph.add_edge('B', 'G', 0.7, 0.1)
+    flow_graph.add_edge('A', 'B', Weight(2.0), Weight(0.5))
+    flow_graph.add_edge('B', 'C', Weight(0.7), Weight(0.1))
+    flow_graph.add_edge('C', 'D', Weight(0.7), Weight(0.1))
+    flow_graph.add_edge('C', 'E', Weight(0.3), Weight(0.1))
+    flow_graph.add_edge('F', 'G', Weight(0.7), Weight(0.1))
+    flow_graph.add_edge('G', 'E', Weight(0.7), Weight(0.1))
+    flow_graph.add_edge('B', 'G', Weight(0.7), Weight(0.1))
 
     comp_graph = ComputationGraph()
 
-    comp_graph.add_edge('A', 'B', 2.0, 0.5)
-    comp_graph.add_edge('B', 'C', 0.7, 0.1)
-    comp_graph.add_edge('C', 'D', 0.7, 0.1)
-    comp_graph.add_edge('C', 'E', 0.3, 0.1)
-    comp_graph.add_edge('F', 'G', 0.7, 0.1)
-    comp_graph.add_edge('G', 'E', 0.7, 0.1)
-    comp_graph.add_edge('B', 'G', 0.7, 0.1)
+    comp_graph.add_edge('A', 'B', Weight(2.0), Weight(0.5))
+    comp_graph.add_edge('B', 'C', Weight(0.7), Weight(0.1))
+    comp_graph.add_edge('C', 'D', Weight(0.7), Weight(0.1))
+    comp_graph.add_edge('C', 'E', Weight(0.3), Weight(0.1))
+    comp_graph.add_edge('F', 'G', Weight(0.7), Weight(0.1))
+    comp_graph.add_edge('G', 'E', Weight(0.7), Weight(0.1))
+    comp_graph.add_edge('B', 'G', Weight(0.7), Weight(0.1))
 
     # Set split info
     comp_graph.mark_node_split('C', EdgeType.DIRECT)
@@ -105,7 +105,7 @@ def create_test_data_reverse() -> Tuple[FlowGraph, ComputationGraph, List[SubTes
     subtest_cases: List[SubTestCase] = []
 
     # Case 0
-    params = {'B': 5, 'C': 10}
+    params = {'B': Value(5), 'C': Value(10)}
     conflicts = {
         'B': {'C'},
         'C': {'B'}
@@ -115,7 +115,7 @@ def create_test_data_reverse() -> Tuple[FlowGraph, ComputationGraph, List[SubTes
         frozenset({'C'})
     }
     results = {
-        ('A', frozenset({'B'})): 2.5,
+        ('A', frozenset({'B'})): Value(2.5),
         ('A', frozenset({'C'})): None
     }
     subtest_cases.append(SubTestCase(params, conflicts, combinations, results))
@@ -126,13 +126,13 @@ def create_test_data_reverse() -> Tuple[FlowGraph, ComputationGraph, List[SubTes
 def create_test_data_conflict_cycle() -> Tuple[FlowGraph, ComputationGraph, List[SubTestCase]]:
     flow_graph = FlowGraph()
 
-    flow_graph.add_edge('A', 'B', 2.0, 0.5)
-    flow_graph.add_edge('B', 'C', 0.7, 0.1)
+    flow_graph.add_edge('A', 'B', Weight(2.0), Weight(0.5))
+    flow_graph.add_edge('B', 'C', Weight(0.7), Weight(0.1))
 
     comp_graph = ComputationGraph()
 
-    comp_graph.add_edge('A', 'B', 2.0, 0.5)
-    comp_graph.add_edge('B', 'C', 0.7, 0.1)
+    comp_graph.add_edge('A', 'B', Weight(2.0), Weight(0.5))
+    comp_graph.add_edge('B', 'C', Weight(0.7), Weight(0.1))
 
     # Set split info
     #
@@ -140,7 +140,7 @@ def create_test_data_conflict_cycle() -> Tuple[FlowGraph, ComputationGraph, List
     subtest_cases: List[SubTestCase] = []
 
     # Case 0
-    params = {'B': 5, 'C': 10}
+    params = {'B': Value(5), 'C': Value(10)}
     conflicts = {
         'B': {'C'},
         'C': {'B'}
@@ -150,8 +150,8 @@ def create_test_data_conflict_cycle() -> Tuple[FlowGraph, ComputationGraph, List
         frozenset({'C'})
     }
     results = {
-        ('A', frozenset({'B'})): 2.5,
-        ('A', frozenset({'C'})): 0.5
+        ('A', frozenset({'B'})): Value(2.5),
+        ('A', frozenset({'C'})): Value(0.5)
     }
     subtest_cases.append(SubTestCase(params, conflicts, combinations, results))
 
@@ -161,17 +161,17 @@ def create_test_data_conflict_cycle() -> Tuple[FlowGraph, ComputationGraph, List
 def create_test_data_simple() -> Tuple[FlowGraph, ComputationGraph, List[SubTestCase]]:
     flow_graph = FlowGraph()
 
-    flow_graph.add_edge('A', 'B', 2.0, None)
-    flow_graph.add_edge('B', 'C', 0.7, None)
-    flow_graph.add_edge('C', 'D', 0.1, None)
-    flow_graph.add_edge('E', 'D', 0.1, None)
+    flow_graph.add_edge('A', 'B', Weight(2.0), None)
+    flow_graph.add_edge('B', 'C', Weight(0.7), None)
+    flow_graph.add_edge('C', 'D', Weight(0.1), None)
+    flow_graph.add_edge('E', 'D', Weight(0.1), None)
 
     comp_graph = ComputationGraph()
 
-    comp_graph.add_edge('A', 'B', 2.0, 0.5)
-    comp_graph.add_edge('B', 'C', 0.7, 1.4285714)
-    comp_graph.add_edge('C', 'D', 0.1, None)
-    comp_graph.add_edge('E', 'D', 0.1, None)
+    comp_graph.add_edge('A', 'B', Weight(2.0), Weight(0.5))
+    comp_graph.add_edge('B', 'C', Weight(0.7), Weight(1.4285714))
+    comp_graph.add_edge('C', 'D', Weight(0.1), None)
+    comp_graph.add_edge('E', 'D', Weight(0.1), None)
 
     # Set split info
     #
@@ -179,7 +179,7 @@ def create_test_data_simple() -> Tuple[FlowGraph, ComputationGraph, List[SubTest
     subtest_cases: List[SubTestCase] = []
 
     # Case 0
-    params = {'A': 5, 'B': 10, 'C': 4, 'E': 8}
+    params = {'A': Value(5), 'B': Value(10), 'C': Value(4), 'E': Value(8)}
     conflicts = {
         'A': {'B', 'C'},
         'B': {'C', 'A'},
@@ -192,9 +192,9 @@ def create_test_data_simple() -> Tuple[FlowGraph, ComputationGraph, List[SubTest
         frozenset({'C', 'E'})
     }
     results = {
-        ('D', frozenset({'A', 'E'})): 1.5,
-        ('D', frozenset({'B', 'E'})): 1.5,
-        ('D', frozenset({'C', 'E'})): 1.2
+        ('D', frozenset({'A', 'E'})): Value(1.5),
+        ('D', frozenset({'B', 'E'})): Value(1.5),
+        ('D', frozenset({'C', 'E'})): Value(1.2)
     }
     subtest_cases.append(SubTestCase(params, conflicts, combinations, results))
 
@@ -204,17 +204,17 @@ def create_test_data_simple() -> Tuple[FlowGraph, ComputationGraph, List[SubTest
 def create_test_data_star() -> Tuple[FlowGraph, ComputationGraph, List[SubTestCase]]:
     flow_graph = FlowGraph()
 
-    flow_graph.add_edge('A', 'B', 0.05, None)
-    flow_graph.add_edge('A', 'C', 0.7, None)
-    flow_graph.add_edge('A', 'D', 0.1, None)
-    flow_graph.add_edge('A', 'E', 0.15, None)
+    flow_graph.add_edge('A', 'B', Weight(0.05), None)
+    flow_graph.add_edge('A', 'C', Weight(0.7), None)
+    flow_graph.add_edge('A', 'D', Weight(0.1), None)
+    flow_graph.add_edge('A', 'E', Weight(0.15), None)
 
     comp_graph = ComputationGraph()
 
-    comp_graph.add_edge('A', 'B', 0.05, 20.0)
-    comp_graph.add_edge('A', 'C', 0.7, 1.4285714)
-    comp_graph.add_edge('A', 'D', 0.1, 10.0)
-    comp_graph.add_edge('A', 'E', 0.15, 6.66666667)
+    comp_graph.add_edge('A', 'B', Weight(0.05), Weight(20.0))
+    comp_graph.add_edge('A', 'C', Weight(0.7), Weight(1.4285714))
+    comp_graph.add_edge('A', 'D', Weight(0.1), Weight(10.0))
+    comp_graph.add_edge('A', 'E', Weight(0.15), Weight(6.66666667))
 
     # Set split info
     comp_graph.mark_node_split('A', EdgeType.DIRECT)
@@ -222,7 +222,7 @@ def create_test_data_star() -> Tuple[FlowGraph, ComputationGraph, List[SubTestCa
     subtest_cases: List[SubTestCase] = []
 
     # Case 0
-    params = {'B': 5, 'C': 10, 'D': 8, 'E': 12}
+    params = {'B': Value(5), 'C': Value(10), 'D': Value(8), 'E': Value(12)}
     conflicts = {
         'B': {'C', 'D', 'E'},
         'C': {'B', 'D', 'E'},
@@ -236,15 +236,15 @@ def create_test_data_star() -> Tuple[FlowGraph, ComputationGraph, List[SubTestCa
         frozenset({'E'})
     }
     results = {
-        ('A', frozenset({'B'})): 100,
-        ('A', frozenset({'C'})): 14.285714,
-        ('A', frozenset({'D'})): 80,
-        ('A', frozenset({'E'})): 80
+        ('A', frozenset({'B'})): Value(100),
+        ('A', frozenset({'C'})): Value(14.285714),
+        ('A', frozenset({'D'})): Value(80),
+        ('A', frozenset({'E'})): Value(80)
     }
     subtest_cases.append(SubTestCase(params, conflicts, combinations, results))
 
     # Case 1
-    params = {'A': 5, 'B': 10}
+    params = {'A': Value(5), 'B': Value(10)}
     conflicts = {
         'A': {'B'},
         'B': {'A'}
@@ -254,12 +254,12 @@ def create_test_data_star() -> Tuple[FlowGraph, ComputationGraph, List[SubTestCa
         frozenset({'B'})
     }
     results = {
-        ('A', frozenset({'B'})): 200,
-        ('A', frozenset({'A'})): 5,
-        ('B', frozenset({'B'})): 10,
-        ('B', frozenset({'A'})): 0.25,
-        ('C', frozenset({'B'})): 140,
-        ('C', frozenset({'A'})): 3.5
+        ('A', frozenset({'B'})): Value(200),
+        ('A', frozenset({'A'})): Value(5),
+        ('B', frozenset({'B'})): Value(10),
+        ('B', frozenset({'A'})): Value(0.25),
+        ('C', frozenset({'B'})): Value(140),
+        ('C', frozenset({'A'})): Value(3.5)
     }
     subtest_cases.append(SubTestCase(params, conflicts, combinations, results))
 
@@ -276,10 +276,10 @@ def create_test_data_star2() -> Tuple[FlowGraph, ComputationGraph, List[SubTestC
 
     comp_graph = ComputationGraph()
 
-    comp_graph.add_edge('A', 'B', None, 1.0)
-    comp_graph.add_edge('A', 'C', None, 1.0)
-    comp_graph.add_edge('A', 'D', None, 1.0)
-    comp_graph.add_edge('A', 'E', None, 1.0)
+    comp_graph.add_edge('A', 'B', None, Weight(1.0))
+    comp_graph.add_edge('A', 'C', None, Weight(1.0))
+    comp_graph.add_edge('A', 'D', None, Weight(1.0))
+    comp_graph.add_edge('A', 'E', None, Weight(1.0))
 
     # Set split info
     #
@@ -287,7 +287,7 @@ def create_test_data_star2() -> Tuple[FlowGraph, ComputationGraph, List[SubTestC
     subtest_cases: List[SubTestCase] = []
 
     # Case 0
-    params = {'B': 5, 'C': 10, 'D': 8, 'E': 12}
+    params = {'B': Value(5), 'C': Value(10), 'D': Value(8), 'E': Value(12)}
     conflicts = {
         'B': set(),
         'C': set(),
@@ -298,7 +298,7 @@ def create_test_data_star2() -> Tuple[FlowGraph, ComputationGraph, List[SubTestC
         frozenset({'B', 'C', 'D', 'E'})
     }
     results = {
-        ('A', frozenset({'B', 'C', 'D', 'E'})): 35
+        ('A', frozenset({'B', 'C', 'D', 'E'})): Value(35)
     }
     subtest_cases.append(SubTestCase(params, conflicts, combinations, results))
 
