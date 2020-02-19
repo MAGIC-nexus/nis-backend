@@ -34,6 +34,8 @@ class ComputationGraph:
                 if data.get("add_split"):
                     self.mark_node_split(n, EdgeType.DIRECT)
 
+        self.descendants: Optional[Dict[Node, Set[Node]]] = None
+
     @property
     def nodes(self):
         """ Return the nodes of the flow graph """
@@ -76,12 +78,48 @@ class ComputationGraph:
         """ Set the attribute 'split' to a node """
         self.graph.nodes[n]["split"][graph_type.value] = split
 
+    def compute_descendants(self):
+        def visit_forward(node: Node) -> None:
+            visited_nodes.add(node)
+
+            if node in self.descendants:
+                visited_nodes.update(self.descendants[node])
+                return
+
+            for successor in self.weighted_successors(node):
+                if successor not in visited_nodes:
+                    visit_forward(successor)
+
+        self.descendants = {}
+
+        for n in self.graph.nodes:  # type: Node
+            visited_nodes: Set[Node] = set()
+            visit_forward(n)
+            self.descendants[n] = visited_nodes - {n}
+
+    def compute_conflicts(self, new_computed_nodes: Set[Node], prev_computed_nodes: Set[Node]) -> Dict[Node, Set[Node]]:
+        assert self.descendants
+        conflicts: Dict[Node, Set[Node]] = {}
+        computed_nodes = prev_computed_nodes | new_computed_nodes
+
+        for node in prev_computed_nodes:
+            intersection = self.descendants[node] & new_computed_nodes
+            if intersection:
+                conflicts[node] = intersection
+
+        for node in new_computed_nodes:
+            intersection = self.descendants[node] & computed_nodes
+            if intersection:
+                conflicts[node] = intersection
+
+        return conflicts
+
     def compute_param_conflicts(self, params: Set[Node]) -> Dict[Node, Set[Node]]:
         """ Calculate the conflicts between nodes with values - the parameters - in a computation graph.
             If node A has a conflict with node B, means that B can be entirely or partially computed from node A,
             so both nodes cannot have input values at the same time (unless these values are consistent).
 
-            Example
+            Example]
             - Given the graph: a -> b -> c -> e <- d
             - Given the parameters: a, b, c, d
             - The conflicts are:
