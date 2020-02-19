@@ -1,4 +1,4 @@
-from typing import Dict, List, Tuple, Set, Optional
+from typing import Dict, List, Tuple, Set, Optional, Container
 
 import networkx as nx
 
@@ -22,8 +22,11 @@ class ComputationGraph:
      - Split rule: If the node value is split entirely (100%) into the successors nodes, its value can be computed in
                    the opposite direction (from successors) only by computing one of the input nodes.
     """
-    def __init__(self, graph: Optional[nx.DiGraph] = None):
+    def __init__(self, graph: Optional[nx.DiGraph] = None, name: str = None):
         self.graph = nx.DiGraph()
+        self.name = name
+
+        self.descendants: Optional[Dict[Node, Set[Node]]] = None
 
         if graph:
             for u, v, data in graph.edges(data=True):
@@ -34,17 +37,20 @@ class ComputationGraph:
                 if data.get("add_split"):
                     self.mark_node_split(n, EdgeType.DIRECT)
 
-        self.descendants: Optional[Dict[Node, Set[Node]]] = None
+            self.compute_descendants()
 
     @property
     def nodes(self):
         """ Return the nodes of the flow graph """
         return self.graph.nodes
 
-    def nodes_not_in_dict(self, d: Dict[Node, Value]) -> List[Node]:
-        """ Return the nodes not present in a dictionary """
-        return [n for n in self.graph.nodes if n not in d]
-        # return [n for n in self.graph.nodes if d.get(n) is None]
+    def nodes_not_in_container(self, container: Container[Node]) -> List[Node]:
+        """ Return the nodes of the graph not present in a container """
+        return [n for n in self.graph.nodes if n not in container]
+
+    def nodes_in_container(self, container: Container[Node]) -> List[Node]:
+        """ Return the nodes of the graph present in a container """
+        return [n for n in self.graph.nodes if n in container]
 
     def _inputs(self, n: Node, edge_type: EdgeType) -> List[Tuple[Node, Optional[Weight]]]:
         """ Return the predecessors of a node in the specified direction """
@@ -68,6 +74,9 @@ class ComputationGraph:
         self.graph.add_edge(v, u, weight=reverse_weight, type=EdgeType.REVERSE)
         self.init_node_split(u)
         self.init_node_split(v)
+
+        # Invalidate descendants, it must be recomputed
+        self.descendants = None
 
     def init_node_split(self, n: Node) -> None:
         """ Set the default value for attribute 'split' to a node """
@@ -98,6 +107,17 @@ class ComputationGraph:
             self.descendants[n] = visited_nodes - {n}
 
     def compute_conflicts(self, new_computed_nodes: Set[Node], prev_computed_nodes: Set[Node]) -> Dict[Node, Set[Node]]:
+        _new_computed_nodes = self.nodes_in_container(new_computed_nodes)
+        if not _new_computed_nodes:
+            return {}  # Nothing new to compute
+
+        if not self.descendants:
+            self.compute_descendants()
+
+        _prev_computed_nodes = self.nodes_in_container(prev_computed_nodes)
+        return self._compute_conflicts(set(_new_computed_nodes), set(_prev_computed_nodes))
+
+    def _compute_conflicts(self, new_computed_nodes: Set[Node], prev_computed_nodes: Set[Node]) -> Dict[Node, Set[Node]]:
         assert self.descendants
         conflicts: Dict[Node, Set[Node]] = {}
         computed_nodes = prev_computed_nodes | new_computed_nodes
@@ -127,6 +147,8 @@ class ComputationGraph:
                 b: {c} (c can be computed from b)
                 c: none
                 d: none
+
+            **DEPRECATED METHOD**
 
             :param params: the set of parameters of a computation graph, i.e. the nodes that have values and we use
                            to compute the values in the remaining nodes of the graph.

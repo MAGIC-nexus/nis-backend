@@ -428,50 +428,14 @@ def split_observations_by_relativeness(observations_by_time: TimeObservationsTyp
     return observations_by_time_norelative, observations_by_time_relative
 
 
-def compute_graph_values(comp_graph: ComputationGraph, params: NodeFloatDict, other_values: NodeFloatDict) \
-        -> Tuple[NodeFloatDict, List[InterfaceNode]]:
-    print(f"****** NODES: {comp_graph.nodes}")
-
-    # Filter params in graph
-    graph_params: NodeFloatDict = {k: v for k, v in params.items() if k in comp_graph.nodes}
-    print("Missing values: ", [k for k, v in graph_params.items() if v is None])
-
-    conflicts: Dict[InterfaceNode, Set[InterfaceNode]] = comp_graph.compute_param_conflicts(set(graph_params.keys()))
-
-    raise_error_if_conflicts(conflicts, graph_params)
-
-    graph_params = {**graph_params, **other_values}
-
-    # Obtain nodes without a value
-    compute_nodes = comp_graph.nodes_not_in_dict(graph_params)
-
-    # Compute the missing information with the computation graph
-    if len(compute_nodes) == 0:
-        print("All nodes have a value. Nothing to solve.")
-        return {}, []
-
-    print(f"****** UNKNOWN NODES: {compute_nodes}")
-    print(f"****** PARAMS: {graph_params}")
-
-    results, _ = comp_graph.compute_values(compute_nodes, graph_params)
-
-    results_with_values: NodeFloatDict = {}
-    unknown_nodes: List[InterfaceNode] = []
-    for k, v in results.items():
-        if v is not None:
-            results_with_values[k] = v
-        else:
-            unknown_nodes.append(k)
-
-    return results_with_values, unknown_nodes
-
-
-def compute_graph_results(comp_graph: ComputationGraph, existing_results: NodeFloatComputedDict) -> NodeFloatComputedDict:
+def compute_graph_results(comp_graph: ComputationGraph,
+                          existing_results: NodeFloatComputedDict,
+                          previous_known_nodes: Set[InterfaceNode]) -> NodeFloatComputedDict:
     # Filter results in graph
     graph_params: NodeFloatDict = {k: v.value for k, v in existing_results.items() if k in comp_graph.nodes}
 
     # Obtain nodes without a value
-    compute_nodes = comp_graph.nodes_not_in_dict(graph_params)
+    compute_nodes = comp_graph.nodes_not_in_container(graph_params)
 
     if len(compute_nodes) == 0:
         print("All nodes have a value. Nothing to solve.")
@@ -480,11 +444,10 @@ def compute_graph_results(comp_graph: ComputationGraph, existing_results: NodeFl
     print(f"****** NODES: {comp_graph.nodes}")
     print(f"****** UNKNOWN NODES: {compute_nodes}")
 
-    # conflicts: Dict[InterfaceNode, Set[InterfaceNode]] = comp_graph.compute_param_conflicts(set(graph_params.keys()))
-    #
-    # raise_error_if_conflicts(conflicts, graph_params)
-    #
-    # print(f"****** PARAMS: {graph_params}")
+    new_computed_nodes: Set[InterfaceNode] = {k for k in existing_results if k not in previous_known_nodes}
+    conflicts = comp_graph.compute_conflicts(new_computed_nodes, previous_known_nodes)
+
+    raise_error_if_conflicts(conflicts, graph_params, comp_graph.name)
 
     results, _ = comp_graph.compute_values(compute_nodes, graph_params)
 
@@ -492,15 +455,15 @@ def compute_graph_results(comp_graph: ComputationGraph, existing_results: NodeFl
     return {k: FloatComputedTuple(v, Computed.Yes) for k, v in results.items() if v is not None}
 
 
-def raise_error_if_conflicts(conflicts: Dict[InterfaceNode, Set[InterfaceNode]], graph_params: NodeFloatDict):
+def raise_error_if_conflicts(conflicts: Dict[InterfaceNode, Set[InterfaceNode]], graph_params: NodeFloatDict, graph_name: str):
     conflict_strings: List[str] = []
     for param, conf_params in conflicts.items():
-        if len(conf_params) > 0:
-            conf_params_string = "{" + ', '.join([f"{p} ({round(graph_params[p], 3)})" for p in conf_params]) + "}"
-            conflict_strings.append(f"{param} ({round(graph_params[param], 3)}) -> {conf_params_string}")
+        if conf_params:
+            conf_params_string = "{" + ', '.join([f"{p} ({graph_params[p]})" for p in conf_params]) + "}"
+            conflict_strings.append(f"{param} ({graph_params[param]}) -> {conf_params_string}")
 
-    if len(conflict_strings) > 0:
-        raise SolvingException(f"There are conflicts: {', '.join(conflict_strings)}")
+    if conflict_strings:
+        raise SolvingException(f"There are conflicts in the '{graph_name}' computation graph: {', '.join(conflict_strings)}")
 
 
 def split_name(processor_interface: str) -> Tuple[str, Optional[str]]:
@@ -545,39 +508,6 @@ def resolve_weight_expressions(graph_list: List[nx.DiGraph], state: State, raise
                     )
 
                 data["weight"] = ast if value is None else FloatExp(value, None, str(expression))
-
-
-def iterative_solving2(comp_graph_list: List[ComputationGraph], observations: NodeFloatDict) -> Tuple[NodeFloatDict, Set[InterfaceNode]]:
-    num_unknown_nodes: List[int] = [len(g.nodes) for g in comp_graph_list]
-    prev_num_unknown_nodes: List[int] = [n + 1 for n in num_unknown_nodes]
-
-
-def iterative_solving(comp_graph_list: List[ComputationGraph], observations: NodeFloatDict) -> Tuple[NodeFloatDict, Set[InterfaceNode]]:
-    num_unknown_nodes: int = reduce(add, [len(g.nodes) for g in comp_graph_list])
-    prev_num_unknown_nodes: int = num_unknown_nodes + 1
-    params: List[Optional[NodeFloatDict]] = [None] * len(comp_graph_list)
-    other_values: List[NodeFloatDict] = [{}] * len(comp_graph_list)
-    unknown_nodes: List[List[InterfaceNode]] = [[]] * len(comp_graph_list)
-    data: NodeFloatDict = {}
-    all_data: NodeFloatDict = {}
-
-    while prev_num_unknown_nodes > num_unknown_nodes > 0:
-        prev_num_unknown_nodes = num_unknown_nodes
-
-        for i, comp_graph in enumerate(comp_graph_list):
-            if params[i] is None:
-                params[i] = {**data, **observations}
-            else:
-                params[i] = {**data}
-            data, unknown_nodes[i] = compute_graph_values(comp_graph, params[i], other_values[i])
-            all_data.update(data)
-            other_values[i].update({**data, **params[i]})
-
-        num_unknown_nodes = reduce(add, [len(l) for l in unknown_nodes])
-
-    all_unknown_nodes = {node for node_list in unknown_nodes for node in node_list}
-
-    return all_data, all_unknown_nodes
 
 
 def create_scale_change_relations_and_update_flow_relations(relations_flow: nx.DiGraph, registry) -> nx.DiGraph:
@@ -669,28 +599,6 @@ def resolve_observations_with_parameters(state: State, observations: Observation
     return resolved_observations
 
 
-def compute_flow_and_scale_results(comp_graph_flow: ComputationGraph,
-                                   comp_graph_scale: ComputationGraph,
-                                   comp_graph_scale_change: ComputationGraph,
-                                   existing_results: NodeFloatComputedDict) \
-        -> Tuple[NodeFloatComputedDict, NodeFloatComputedDict, NodeFloatComputedDict, Set[InterfaceNode]]:
-
-    # Solve computation graphs
-    known_data, unknown_data = iterative_solving([comp_graph_scale, comp_graph_scale_change, comp_graph_flow],
-                                                 {k: v.value for k, v in existing_results.items()})
-
-    if len(unknown_data) > 0:
-        print(f"WARNING: Unknown data: {unknown_data}")
-
-    # Filter out results without a real processor and add Computed information
-    results: NodeFloatComputedDict = {k: FloatComputedTuple(v, Computed.Yes)
-                                      for k, v in known_data.items() if k.processor}
-
-    internal_results, external_results = compute_internal_external_results(results, comp_graph_flow)
-
-    return results, internal_results, external_results, unknown_data
-
-
 def compute_flow_and_scale_computation_graphs(state: State,
                                               relative_observations: ObservationListType,
                                               relations_flow: nx.DiGraph,
@@ -716,8 +624,9 @@ def compute_flow_and_scale_computation_graphs(state: State,
 
     # Create computation graphs
     comp_graph_flow = create_computation_graph_from_flows(time_relations_flow, time_relations_scale)
-    comp_graph_scale = ComputationGraph(time_relations_scale)
-    comp_graph_scale_change = ComputationGraph(time_relations_scale_change)
+    comp_graph_flow.name = "Flow"
+    comp_graph_scale = ComputationGraph(time_relations_scale, "Scale")
+    comp_graph_scale_change = ComputationGraph(time_relations_scale_change, "Scale Change")
 
     return comp_graph_flow, comp_graph_scale, comp_graph_scale_change
 
@@ -961,24 +870,35 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
                                                                observers_priority_list)
 
                 # START ITERATIVE SOLVING
+
+                # We first iterate with policy MissingValueResolutionPolicy.Invalidate trying to get as many results
+                # we can without supposing zero for missing values.
+                # Second, if specified in paramater "NISSolverMissingValueResolutionPolicy" we try to get further
+                # results with policy MissingValueResolutionPolicy.UseZero.
                 for missing_value_policy in missing_value_policies:
                     previous_len_results = len(results) - 1
+                    flow_last_known_nodes = set()
+                    scale_last_known_nodes = set()
+                    scale_change_last_known_nodes = set()
 
                     # Iterate while the number of results is increasing
                     while len(results) > previous_len_results:
                         previous_len_results = len(results)
 
-                        new_results = compute_graph_results(comp_graph_flow, results)
+                        new_results = compute_graph_results(comp_graph_flow, results, flow_last_known_nodes)
                         results.update(new_results)
+                        flow_last_known_nodes = set(results.keys())
 
                         # total_flow_internal_results.update(flow_internal_results)
                         # total_flow_external_results.update(flow_external_results)
 
-                        new_results = compute_graph_results(comp_graph_scale, results)
+                        new_results = compute_graph_results(comp_graph_scale, results, scale_last_known_nodes)
                         results.update(new_results)
+                        scale_last_known_nodes = set(results.keys())
 
-                        new_results = compute_graph_results(comp_graph_scale_change, results)
+                        new_results = compute_graph_results(comp_graph_scale_change, results, scale_change_last_known_nodes)
                         results.update(new_results)
+                        scale_change_last_known_nodes = set(results.keys())
 
                         new_results, itype_taken_results, itype_dismissed_results = compute_hierarchy_aggregate_results(
                             interfacetype_hierarchies, results, aggregations, conflicting_data_policy, missing_value_policy)
