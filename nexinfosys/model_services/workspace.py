@@ -22,7 +22,7 @@ from nexinfosys.command_generators.parser_ast_evaluators import ast_evaluator
 from nexinfosys.command_generators.parser_field_parsers import string_to_ast, expression_with_parameters
 from nexinfosys.command_generators.parsers_factory import commands_container_parser_factory
 from nexinfosys.common.helper import create_dictionary, strcmp, istr
-from nexinfosys.ie_exports.xml import export_model_to_xml
+from nexinfosys.ie_exports.xml_export import export_model_to_xml
 from nexinfosys.model_services import IExecutableCommand, get_case_study_registry_objects
 from nexinfosys.model_services import State
 from nexinfosys.models.musiasem_concepts import ProblemStatement, FactorsRelationDirectedFlowObservation, Processor, \

@@ -45,7 +45,7 @@ from nexinfosys.command_generators.parser_field_parsers import string_to_ast, ex
     is_month, indicator_expression, parse_string_as_simple_ident_list
 from nexinfosys.common.helper import create_dictionary, PartialRetrievalDictionary, ifnull, Memoize, istr, strcmp, \
     FloatExp, split_and_strip, precedes_in_list
-from nexinfosys.ie_exports.xml import export_model_to_xml
+from nexinfosys.ie_exports.xml_export import export_model_to_xml
 from nexinfosys.model_services import get_case_study_registry_objects, State
 from nexinfosys.models import CodeImmutable
 from nexinfosys.models.musiasem_concepts import ProblemStatement, Parameter, FactorsRelationDirectedFlowObservation, \
