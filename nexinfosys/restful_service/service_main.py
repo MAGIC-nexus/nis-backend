@@ -10,6 +10,8 @@ import redis
 import logging
 from pathlib import Path
 import sqlalchemy.schema
+
+from nexinfosys.ie_exports.geolayer import generate_geojson
 from nexinfosys.ie_exports.jupyter_notebook import generate_jupyter_notebook_python, generate_jupyter_notebook_r
 from openpyxl.writer.excel import save_virtual_workbook
 from sqlalchemy.pool import StaticPool
@@ -68,6 +70,16 @@ from nexinfosys.ie_exports.processors_graph import construct_processors_graph_2
 # #####################################################################################################################
 # >>>> BOOT TIME. FUNCTIONS AND CODE <<<<
 # #####################################################################################################################
+
+def printNProcessors(s, state):
+    from nexinfosys.models.musiasem_concepts import Processor
+    glb_idx, p_sets, hh, datasets, mappings = get_case_study_registry_objects(state)
+    print("--------------------------------------------------------")
+    print(f"--- {s} -----------------------------------------")
+    print(f"Number of processors: {len(glb_idx.get(Processor.partial_key()))}")
+    print("--------------------------------------------------------")
+    print("--------------------------------------------------------")
+    print("--------------------------------------------------------")
 
 
 def initialize_database_data():
@@ -954,7 +966,7 @@ def reproducible_session_load_state():  # Load saved state
             r = build_json_response({"error": "Query parameter 'code' is mandatory"}, 401)
         else:
             cs_path = nexinfosys.get_global_configuration_variable("CASE_STUDIES_DIR")
-            with open(cs_path + os.sep + code + ".state_serialized", "wt") as f:
+            with open(cs_path + os.sep + code + ".state_serialized", "rt") as f:
                 s = f.read()
                 isess.state = deserialize_state(s)
 
@@ -1055,7 +1067,7 @@ def query_state_list_results(isess):
     dataset_formats = ["CSV", "XLSX"] #, "XLSXwithPivotTable", "NISembedded", "NISdetached"]
     graph_formats = ["VisJS", "GML"] #, "GraphML"]
     ontology_formats = ["OWL"]
-    geo_formats = ["KMZ", "KML", "GeoJSON"]
+    geo_formats = ["GeoJSON"]
     # A reproducible session must be open, signal about it if not
     if isess.reproducible_session_opened():
         if isess.state:
@@ -1148,6 +1160,8 @@ def reproducible_session_query_state_list_results():  # Query list of outputs (n
             r = build_json_response([], 204)
     else:
         r = build_json_response({"error": "Cannot return list of results, no reproducible session open"}, 401)
+
+    printNProcessors("LIST OF OUTPUTS", isess.state)
 
     return r
 
@@ -1296,9 +1310,12 @@ def get_geolayer(format):
         #      Go to general matrix and obtain values for interfaces, different scenarios, times and observers
         # TODO Extract geometry of processors into a new layer
         # TODO  Elaborate a new layer where each processor
+        printNProcessors("GEOLAYER", isess.state)
+
         if format == "geojson":
             # TODO Prepare GeoJSON file
-            output = io.StringIO()
+            output = generate_geojson(isess.state)
+            output = io.StringIO(generate_json(output))
             mimetype = "application/geo+json"
         elif format == "kmz" or format == "kml":
             # TODO Prepare KML file
@@ -1872,6 +1889,8 @@ def reproducible_session_append_command_generator():  # Receive a command_execut
         # TODO Important!!! The R script generator can be executed remotely and locally. In the first case, it
         # TODO could be desired to store commands. But the library, when executed at the server, will be passed a flag
         # TODO to perform every call with the registering disabled.
+        printNProcessors("SUBMISSION", isess.state)
+
         serialize_isession_and_close_db_session(isess)
     else:
         r = build_json_response({"error": "A reproducible session must be open in order to submit a generator"}, 400)
@@ -4045,5 +4064,5 @@ if __name__ == '__main__':
     app.run(host='0.0.0.0',
             debug=True,
             use_reloader=False,  # Avoid loading twice the application
-            processes=3,
+            processes=1,
             threaded=False)  # Default port, 5000
