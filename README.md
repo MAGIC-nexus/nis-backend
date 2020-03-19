@@ -166,19 +166,50 @@ Thanks to R capabilities to use Python packages, the component can be used from 
 
 ## Configuration
 
-TO-DO explain the configuration variables in a configuration file and how to specify the name of the configuration file before execution of the server
+If no configuration file is provided (environment variable MAGIC_NIS_SERVICE_CONFIG_FILE not specified), a default configuration file is generated which can be later modified with a text editor.
+
+To specify a custom configuration, a text file with the typical syntax of a **Variable** and its **Value** per line must be created:
+
+`VAR1="VALUE"`
+
+`VAR2="VALUE"`
+
+Variable name | Value | Example
+--- | --- | --- |
+DB_CONNECTION_STRING | Metadata database, SQLAlchemy compliant connection string | "sqlite:///nis_metadata.db" |
+DATA_CONNECTION_STRING | Dataset cache database, SQLAlchemy compliant connection string | "sqlite:///nis_cached_data.db" |
+CASE_STUDIES_DIR | Directory where case studies would be stored | "/srv/nis_data/cs/" |
+FAO_DATASETS_DIR | Directory where FAO datasets are downloaded and cached | "/srv/faostat/" |
+FADN_FILES_LOCATION | Directory where FADN datasets are downloaded and cached | "/srv/fadn" |
+CACHE_FILE_LOCATION | Directory where SDMX datasets are downloaded and cached | "/srv/sdmx_datasets_cache" |
+REDIS_HOST_FILESYSTEM_DIR | If REDIS_HOST='filesystem:local_session', directory where sessions are stored | "/srv/sessions" |
+SSP_FILES_DIR | Not used | "" |
+REDIS_HOST | "localhost" expects a REDIS server available at localhost:6379; "redis-local" creates a local REDIS instance; "filesystem:local_session" uses filesystem to store sessions (a good option for execution in PC/laptop) | "" |
+TESTING | "True"| "True" |
+SELF_SCHEMA | Name of the host where Backend RESTful service responds, preceded by the protocol (http or https) | "https://one.nis.magic-nexus.eu/" |
+FS_TYPE | "Webdav" | "Webdav" |
+FS_SERVER | Host name of the WebDAV server | "nextcloud.data.magic-nexus.eu" |
+FS_USER | User name used. Files and folders must be readable and writeable by this user | "<webdav user>" |
+FS_PASSWORD | Password for the previous user | "<password in clear>" |
+GAPI_CREDENTIALS_FILE | Path to a file obtained from Google API management web, to directly access a NIS workbook file in Google Sheets | "/srv/credentials.json" |
+GAPI_TOKEN_FILE | Path to a file used to stored authorization token | "/srv/tocken.pickle" |
+
 
 ## People
 
 An enumeration of people who have contributed in different manners to the elaboration of NIS.
 
-* [Rafael Nebot](mailto:rnebot@itccanarias.org). ITC-DCCT (Instituto Tecnológico de Canarias - Departamento de Computación).
+* Rafael Nebot. ITC-DCCT (Instituto Tecnológico de Canarias - Departamento de Computación).
 * Marco Galluzzi.
-* Michele Staiano. UniNa (Università degli Studi di Napoli Federico II). NIS supervisor, mentor, catalyzer...
+* Michele Staiano. UniNa (Università degli Studi di Napoli Federico II). NIS supervisor, mentor, catalyzer.
 * Paula Moreno. ITC-DCCT.
-* MuSIASEM creators and analysts at ICTA-UAB (Institut de Ciència i Tecnologia Ambientals - Universitat Autònoma de Barcelona): Mario Giampietro, Ansel Renner, Violeta Cabello, Cristina Madrid, Maddalena Rippa, Juan Cadillo, Raúl Velasco, Louisa di Felice, Sandra Bukkens.
+* Mario Giampietro, Ansel Renner, Violeta Cabello, Cristina Madrid, Maddalena Rippa, Juan Cadillo, Raúl Velasco, Louisa di Felice, Sandra Bukkens. ICTA-UAB (Institut de Ciència i Tecnologia Ambientals - Universitat Autònoma de Barcelona). MuSIASEM creators and mentors, analysts.
 * Ignacio López.
-* Internship students at ITC-DCCT. Alberto Sosa, Francisco Socorro, María Artiles, Carlos Caraballo, Ivet Cabrera.
+* Alberto Sosa, Francisco Socorro, María Artiles, Carlos Caraballo, Ivet Cabrera. Internship students at ITC-DCCT.
+
+## Contact
+
+Please send any question regarding this repository to [rnebot@itccanarias.org](mailto:rnebot@itccanarias.org).
 
 <!--
 ## FAQ
