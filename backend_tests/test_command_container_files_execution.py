@@ -2,7 +2,7 @@ import os
 import unittest
 
 import nexinfosys
-from nexinfosys.ie_exports.json import export_model_to_json
+from nexinfosys.ie_exports.json_export import export_model_to_json
 from nexinfosys.model_services import get_case_study_registry_objects
 from nexinfosys.model_services.workspace import execute_file, prepare_and_reset_database_for_tests, \
     prepare_and_solve_model, execute_file_return_issues

@@ -42,7 +42,7 @@ from nexinfosys.command_generators import Issue, IType
 from nexinfosys.command_generators.parser_field_examples import generic_field_examples, generic_field_syntax
 from nexinfosys.command_generators.parser_field_parsers import string_to_ast, arith_boolean_expression
 from nexinfosys.command_generators.parser_spreadsheet_utils_accel import rewrite_xlsx_file
-from nexinfosys.ie_exports.json import export_model_to_json, model_to_json
+from nexinfosys.ie_exports.json_export import export_model_to_json, model_to_json
 from nexinfosys.models.musiasem_concepts import Parameter, Hierarchy, ProblemStatement
 from nexinfosys.common.helper import generate_json, gzipped, str2bool, \
     add_label_columns_to_dataframe, download_file, create_dictionary, any_error_issue, prepare_default_configuration, \
