@@ -2,7 +2,9 @@ from nexinfosys.command_generators.parser_field_parsers import simple_h_name, si
     code_string, \
     unquoted_string, time_expression, reference, key_value_list, arith_boolean_expression, \
     value, expression_with_parameters, list_simple_ident, domain_definition, unit_name, key_value, processor_names, \
-    url_parser, processor_name, number_interval, pair_numbers, level_name
+    url_parser, processor_name, number_interval, pair_numbers, level_name, hierarchy_expression_v2, external_ds_name, \
+    indicator_expression, processors_selector_expression, interfaces_list_expression, indicators_list_expression, \
+    attributes_list_expression, expression_with_parameters_or_list_simple_ident
 
 generic_field_examples = {
     simple_ident: ["p1", "wind_farm", "WF1"],
@@ -36,7 +38,6 @@ generic_field_syntax = {
     alphanums_string: "Alphanumeric string. A sequence of letters and/or numbers",
     code_string: "Code string. A sequence of letters, numbers and/or '_' '-'",
     unquoted_string: "Unquoted string. Any string",
-    # hierarchy_expression_v2: ["3*(5-2)", ],
     time_expression: "Time expression. Serves to specify a year or a month, or an interval from year to year, or from "
                      "month to month when the value is the accumulation for the period. It allows the generic 'Year' "
                      "or 'Month' when the information is valid",
@@ -55,9 +56,18 @@ generic_field_syntax = {
     domain_definition: "Domain definition. Either the name of a Code Hierarchy or a numeric interval, using [] for "
                        "closed and () for open",
     unit_name: "Unit name. The abbreviation of a valid unit name.",
-    processor_names: "Processors. An expression allowing the specification of several processors in a row. ",
+    processor_names: "Processors. An expression allowing the specification of several processors in a row (. or .. separated list of processor simple names)",
     url_parser: "URL. A valid URL (search for URL syntax elsewhere)",
     number_interval: "A numeric range, with left and right limit, using [] for closed and () for open.",
     pair_numbers: "A pair of decimal numbers, separated by a comma ','",
-    level_name: "A letter and optionally a + or - sign with an integer"
+    level_name: "A letter and optionally a + or - sign with an integer",
+
+    hierarchy_expression_v2: "Expression for hierarchies",
+    external_ds_name: "External dataset name",
+    indicator_expression: "Expression for scalar local or global indicators",
+    processors_selector_expression: "Processors selector expression",
+    interfaces_list_expression: "Interfaces selector expression",
+    indicators_list_expression: "Indicators list expression",
+    attributes_list_expression: "Attributes list expression",
+    expression_with_parameters_or_list_simple_ident: "Expression, or list of simple names"
 }

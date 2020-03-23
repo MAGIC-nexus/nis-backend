@@ -29,6 +29,13 @@ c_descriptions = {
     ("datasetdef", "description"): "It is quite usual that people involved in elaborating case studies need to customize a dataset initially provided by a statistical agency because either data are not available or they are considered incorrect. Also, exists the possibility of integrating the information of multiple sources or even not having any information at all. Whatever the case, this command allows defining the structure of a custom dataset which can be integrated into different commands as a full-fledged dataset, by a specifying the concepts (a term borrowed from SDMX) composing it, and the location of data.",
     ("datasetdef", "semantics"): "A Dataset Definition defines the structure of the Dataset with the aim of making it usable in later commands.",
     ("datasetdef", "examples"): [],
+    # DatasetData
+    ("datasetdata", "title"): "Dataset Data",
+    ("datasetdata",
+     "description"): "Custom datasets need the means to specify the data contained in it. As it was mentioned in the Dataset Definition command (DatasetDataLocation field), they can store its data in a CSV file, out of the spreadsheet or in the same spreadsheet, using this command.",
+    ("datasetdata",
+     "semantics"): "Data in this command is attached to a dataset whose structure has been declared previously. The completed dataset can now be used in different ways: Dataset Query command, Dataset Exports or Dataset Expansion in core MuSIASEM commands (Processors, Interfaces mainly).",
+    ("datasetdata", "examples"): [],
     # Parameters
     ("parameters", "title"): "Parameters",
     ("parameters", "description"): "Specify numeric values which can change. These values have a name which can be used in expressions assigned to factors in processors.",
@@ -41,7 +48,7 @@ c_descriptions = {
     ("interface_types", "examples"): [],
     # Processors
     ("processors", "title"): "Processors (bare or 'still without interfaces')",
-    ("processors", "description"): "The first MuSIASEM primitive concept to be instantiated into a case study is the Processor. Bare Processors command serves that purpose, bringing into the model unadorned Processors. Initially without Interfaces, there are fields allowing to dress Processors with the same Interfaces the parent Processor has. And also it is possible to completely copy already declared Processors. Using previously defined Datasets, “Bare Processors” can use data in them by using the dataset expansion notation, consisting in writing a dataset name and the name of a dimension in this dataset. Please see “Dataset expansion” in the section “Syntactic elements”.",
+    ("processors", "description"): "The first MuSIASEM primitive concept to be instantiated into a case study is the Processor. Bare Processors command serves that purpose, bringing into the model unadorned Processors (thus the use of 'Bare'). Using previously defined Datasets, “Bare Processors” can use data in them by using the dataset expansion notation, consisting in writing a dataset name and the name of a dimension in this dataset. Please see “Dataset expansion” in the section “Syntactic elements”.",
     ("processors", "semantics"): "When the command finishes its execution, a set of Processors, potentially organized in hierarchies and in different groups, can be decorated with Interfaces and connected to other Processors.",
     ("processors", "examples"): [],
     # Interfaces

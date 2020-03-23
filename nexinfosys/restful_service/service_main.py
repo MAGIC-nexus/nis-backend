@@ -28,6 +28,7 @@ import json
 import pyximport
 
 from nexinfosys.ie_exports.back_to_nis_format import nis_format_spreadsheet
+from nexinfosys.ie_exports.reference_of_commands import obtain_commands_help
 from nexinfosys.ie_exports.sdmx import get_dataset_metadata
 
 pyximport.install(reload_support=True, language_level=3)
@@ -1101,7 +1102,7 @@ def query_state_list_results(isess):
                       ] +
                      [dict(name="Sankey_Graph",
                            type="Graph",
-                           description="Dictionary of sanskey Graph for every scenario for implementation in JupyterLab using plotly",
+                           description="Dictionary of Sankey Graph for every scenario for implementation in JupyterLab using plotly",
                            formats=[
                                dict(format=f, url=nis_api_base + F"/isession/rsession/state_query/sankey_graph.{f.lower()}")
                                for f in ["JSON"]]),
@@ -1139,6 +1140,14 @@ def query_state_list_results(isess):
                            formats=[
                                dict(format=f, url=nis_api_base + F"/isession/rsession/state_query/r_script.{f.lower()}")
                                for f in ["R", "JupyterNotebook"]]),
+                      ] +
+                     [dict(name="Commands reference",
+                           type="document",
+                           description="Reference of all commands and their fields",
+                           formats=[
+                               dict(format=f,
+                                    url=nis_api_base + F"/isession/rsession/state_query/commands_reference_document.{f}")
+                               for f in ["html"]]),
                       ]
                  }
 
@@ -1414,6 +1423,13 @@ def get_r_script(format):
         return Response(output, mimetype=mimetype, status=200)
     else:
         return build_json_response({"error": F"Cannot return R script, format '{format}' not recognized"}, 401)
+
+
+@app.route(nis_api_base + "/isession/rsession/state_query/commands_reference_document.<format>", methods=["GET"])
+def get_commands_reference_document(format):
+    if format=="html":
+        mimetype = "text/html"
+    return Response(obtain_commands_help(format.lower()), mimetype)
 
 
 @app.route(nis_api_base + "/isession/rsession/state_query/model.<format>", methods=["GET"])
@@ -3860,6 +3876,7 @@ def command_help():
             description = c_descriptions[(match[0], "description")]
             semantics = c_descriptions[(match[0], "semantics")]
             examples = c_descriptions[(match[0], "examples")]
+            fields = command_fields_help
             result = dict(title=title, description=description, semantics=semantics, examples=examples)
         else:
             result = dict(title=f"Title {command}", description=f"Description {command}", semantics=f"Semantics {command}")
@@ -3935,6 +3952,8 @@ def command_fields_help():
             if fld:  # If found, can elaborate help
                 mandatoriness = "Mandatory" if fld.mandatory else "Optional"
                 description = cf_descriptions.get((match[0], fld.name), f"Text for field {f} in command {match[0]}")
+                if isinstance(description, list):
+                    description = description[0]  # Short version for online. Index 1 contains the long version
                 examples = ("<br><b>Examples:</b><br>&nbsp;&nbsp;"+"<br>&nbsp;&nbsp;".join(generic_field_examples[fld.parser])) if generic_field_examples.get(fld.parser) else ""
                 syntax = ", ".join(fld.allowed_values) if fld.allowed_values else generic_field_syntax.get(fld.parser, "<>")
                 if fld.allowed_values:
