@@ -28,6 +28,7 @@ import json
 import pyximport
 
 from nexinfosys.ie_exports.back_to_nis_format import nis_format_spreadsheet
+from nexinfosys.ie_exports.sdmx import get_dataset_metadata
 
 pyximport.install(reload_support=True, language_level=3)
 
@@ -1064,7 +1065,7 @@ def reproducible_session_query_state_everything_executed():  # Query if all comm
 
 # Obtain list of ALL possible outputs (not only datasets) IN the current state. output datasets outputs datasets.
 def query_state_list_results(isess):
-    dataset_formats = ["CSV", "XLSX"] #, "XLSXwithPivotTable", "NISembedded", "NISdetached"]
+    dataset_formats = ["CSV", "XLSX", "SDMX.json"] #, "XLSXwithPivotTable", "NISembedded", "NISdetached"]
     graph_formats = ["VisJS", "GML"] #, "GraphML"]
     ontology_formats = ["OWL"]
     geo_formats = ["GeoJSON"]
@@ -1580,6 +1581,10 @@ def reproducible_session_query_state_get_dataset(name, format):  # Query list of
     if isess.reproducible_session_opened():
         if isess.state:
             glb_idx, p_sets, hh, datasets, mappings = get_case_study_registry_objects(isess.state)
+            if "." in name:
+                pos = name.find(".")
+                format = name[pos+1:] + "." + format
+                name = name[:pos]
             if name in datasets:
                 # Obtain the data and the metadata
                 ds = datasets[name]  # type: Dataset
@@ -1595,7 +1600,7 @@ def reproducible_session_query_state_get_dataset(name, format):  # Query list of
                 else:
                     export_index = True
 
-                # TODO Elaborate "meta-workbook" (workbook capable of reproducing dataset)
+                # TODO Elaborate "meta-workbook" (NIS workbook capable of reproducing the dataset)
                 if format == "json":
                     tmp = json.loads('{"data": '+ds2.to_json(orient='split', date_format='iso', date_unit='s')+', "metadata": {}}')
                     del tmp["data"]["index"]
@@ -1622,6 +1627,9 @@ def reproducible_session_query_state_get_dataset(name, format):  # Query list of
                             measures["Avg " + c] = dict(field=c, format="{0:c}", aggregate="average")
                     schema = dict(model=dict(fields=fields), cube=dict(dimensions=dimensions, measures=measures))
                     r = build_json_response(dict(data=data, schema=schema), 200)
+                elif format == "sdmx.json":
+                    md = get_dataset_metadata(name, ds)
+                    r = build_json_response(md, 200)
                 elif format == "xlsx":
                     # Generate XLSX from data & return it
                     output = io.BytesIO()
