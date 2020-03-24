@@ -135,6 +135,7 @@ command_fields: Dict[str, List[CommandField]] = {
         CommandField(allowed_names=["ProcessorGroup"], name="processor_group", parser=simple_ident),
         CommandField(allowed_names=["Processor"], name="processor", mandatory=True, parser=processor_name),
         CommandField(allowed_names=["ParentProcessor"], name="parent_processor", parser=processor_name),
+        CommandField(allowed_names=["BehaveAs"], name="behave_as_processor", parser=processor_name),
         # CommandField(allowed_names=["CopyInterfaces"], name="copy_interfaces_mode",
         #              default_value=copy_interfaces_mode[0], allowed_values=copy_interfaces_mode, parser=simple_ident),
         # CommandField(allowed_names=["CloneProcessor"], name="clone_processor", parser=simple_ident),
@@ -179,6 +180,8 @@ command_fields: Dict[str, List[CommandField]] = {
         # CommandField(allowed_names=["Alias", "SpecificName"], name="alias", parser=simple_ident),
         CommandField(allowed_names=["I"+attributeRegex], name="interface_attributes", many_appearances=True,
                      parser=value),
+        CommandField(allowed_names=["Range"], name="range", parser=number_interval),
+        CommandField(allowed_names=["RangeUnit"], name="range_unit", parser=unit_name),
         CommandField(allowed_names=["InterfaceAttributes"], name="interface_attributes", parser=key_value_list),
         # Qualified Quantification
         CommandField(allowed_names=["Value"], name="value", parser=expression_with_parameters),

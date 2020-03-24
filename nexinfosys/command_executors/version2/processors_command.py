@@ -230,6 +230,15 @@ class ProcessorsCommand(BasicCommand):
         else:
             parent_processor = None
 
+        if field_values.get("behave_as_processor"):
+            try:
+                behave_as_processor = self._get_processor_from_field("behave_as_processor")
+            except CommandExecutionError:
+                self._add_issue(IType.ERROR, f"Specified 'behave as' processor, '{field_values.get('behave_as_processor')}', does not exist"+subrow_issue_message(subrow))
+                return
+        else:
+            behave_as_processor = None
+
         # Find or create processor and REGISTER it in "glb_idx"
         # TODO Now, only Simple name allowed
         # TODO Improve allowing hierarchical names, and hierarchical names with wildcards
