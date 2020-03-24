@@ -151,6 +151,7 @@ command_fields: Dict[str, List[CommandField]] = {
                      attribute_of=Processor),
         CommandField(allowed_names=["Level"], name="level", parser=level_name, attribute_of=Processor),
         CommandField(allowed_names=["Stock"], name="stock", default_value=no_yes[0], allowed_values=no_yes,
+                     deprecated=True,
                      parser=simple_ident, attribute_of=Processor),
         # CommandField(allowed_names=["Alias", "SpecificName"], name="alias", parser=simple_ident),
         CommandField(allowed_names=["Description"], name="description", parser=unquoted_string),

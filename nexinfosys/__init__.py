@@ -222,6 +222,7 @@ class CommandField:
     # regex_allowed_names = attrib(default=None)
     # Is it directly an attribute of a Musiasem type? Which one?
     attribute_of = attrib(default=None)  # type: Type
+    deprecated = attrib(default=False)  # type: bool
 
     @property
     def regex_allowed_names(self):

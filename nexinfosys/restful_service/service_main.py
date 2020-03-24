@@ -3572,7 +3572,7 @@ def get_regular_cmd_help(cmd: nexinfosys.Command):
     files = cmd.files
     return dict(type=ctype,
                 name=cmd.allowed_names[0],
-                template="\t".join([f.allowed_names[0] for f in cmdflds if "@" not in f.allowed_names[0]]),
+                template="\t".join([f.allowed_names[0] for f in cmdflds if "@" not in f.allowed_names[0] and not f.deprecated]),
                 examples=[]
                 )
 
