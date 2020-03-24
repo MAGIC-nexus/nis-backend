@@ -12,10 +12,11 @@ from nexinfosys.command_generators import Issue, IssueLocation, IType
 from nexinfosys.command_generators.parser_ast_evaluators import dictionary_from_key_value_list
 from nexinfosys.command_generators.parser_field_parsers import string_to_ast, processor_names
 from nexinfosys.common.helper import head, strcmp, ifnull
+from nexinfosys.ie_exports.geolayer import read_geojson
 from nexinfosys.model_services import IExecutableCommand, get_case_study_registry_objects
 from nexinfosys.models.musiasem_concepts import ProcessorsSet, ProcessorsRelationPartOfObservation, Parameter, \
     Processor, \
-    Geolocation, Observer
+    Geolocation, Observer, GeographicReference
 from nexinfosys.models.musiasem_concepts_helper import find_or_create_processor, find_processor_by_name, \
     obtain_name_parts, find_processors_matching_name
 from nexinfosys.solving import get_processor_names_to_processors_dictionary
@@ -308,6 +309,31 @@ class ProcessorsCommand(BasicCommand):
             self._p_sets[pgroup] = p_set
             if p_set.append(p, self._glb_idx):  # Appends codes to the pset if the processor was not member of the pset
                 p_set.append_attributes_codes(field_values["attributes"])
+
+        # If geolocation specified, check if it exists
+        # Inside it, check it the code exists
+        if p.geolocation and p.geolocation.reference:
+            # Geographical reference
+            gr = self._glb_idx.get(GeographicReference.partial_key(name=p.geolocation.reference))
+            if len(gr) == 0:
+                self._add_issue(IType.ERROR, f"Geographical reference {p.geolocation.reference} not found "+subrow_issue_message(subrow))
+                return
+            if p.geolocation.reference and not p.geolocation.code:
+                self._add_issue(IType.ERROR, f"Geographical reference was specified but not the code in it "+subrow_issue_message(subrow))
+                return
+            geo_id = p.geolocation.code
+            try:
+                url = gr[0].attributes["data_location"]
+            except:
+                self._add_issue(IType.ERROR, f"URL not found in geographical reference {p.geolocation.reference} "+subrow_issue_message(subrow))
+                return
+            try:
+                j, ids = read_geojson(url)  # READ the file!! (or get it from cache). Could take some time...
+            except:
+                self._add_issue(IType.ERROR, f"URL {url} in reference {p.geolocation.reference} could not be read "+subrow_issue_message(subrow))
+                return
+            if geo_id not in ids:
+                self._add_issue(IType.WARNING, f"Could not find code {geo_id} in file {url}, geographical reference {p.geolocation.reference} "+subrow_issue_message(subrow))
 
         # Add Relationship "part-of" if parent was specified
         # The processor may have previously other parent processors that will keep its parentship
