@@ -12,62 +12,80 @@ from nexinfosys.model_services import State, get_case_study_registry_objects
 from nexinfosys.models.musiasem_concepts import ProcessorsRelationPartOfObservation, Processor, Factor
 
 
-def xml_interface(iface: Factor):
-    """
-
-    :param iface:
-    :return:
-    """
-    s = f'<{iface.name} type="{iface.taxon.name}" sphere="{iface.sphere}" ' \
-        f'roegen_type="{iface.roegen_type}" orientation="{iface.orientation}" ' \
-        f'opposite_processor_type="{iface.opposite_processor_type}" />'
-    if case_sensitive:
-        return s
-    else:
-        return s.lower()
-
-
-def xml_processor(p: Processor, registry: PartialRetrievalDictionary, p_map: Dict[str, Processor]):
-    """
-    Return the XML of a processor
-    Recursive into children
-
-    :param p:
-    :return:
-    """
-    children = p.children(registry)
-    full_name = p.full_hierarchy_names(registry)[0]
-    if case_sensitive:
-        p_map[full_name] = p
-    else:
-        p_map[full_name.lower()] = p
-
-    s = f"""
-<{p.name} fullname="{full_name}" system="{p.processor_system}" subsystem="{p.subsystem_type}" functional="{"true" if strcmp(p.functional_or_structural, "Functional") else "false"}" >
-    <interfaces>
-    {chr(10).join([xml_interface(f) for f in p.factors])}
-    </interfaces>
-    {chr(10).join([xml_processor(c, registry, p_map) for c in children])}    
-</{p.name}>     
-    """
-    if case_sensitive:
-        return s
-    else:
-        return s.lower()
-
-
 def export_model_to_xml(registry: PartialRetrievalDictionary) -> Tuple[str, Dict[str, Processor]]:
     """
     Elaborate an XML string containing the nested processors and their attributes.
     Also the interfaces inside processors
+    <processors>
+      <root_p1 fullname="" level="" system="" subsystem="" functional="true|false">
+        <interfaces>
+          <i1 type="" sphere="" roegen_type="" orientation="" opposite_processor_type="" />
+          ...
+        </interfaces>
+        <child_p2>
+          ...
+        </child_p2>
+      </root_p1>
+      ...
+    </processors>
+
+    Example (abstract):
+
+    '/processors//[level="n"]'
+
     :param registry:
     :return:
     """
 
+    def xml_processor(p: Processor, registry: PartialRetrievalDictionary, p_map: Dict[str, Processor]):
+        """
+        Return the XML of a processor
+        Recursive into children
+
+        :param p:
+        :return:
+        """
+
+        def xml_interface(iface: Factor):
+            """
+
+            :param iface:
+            :return:
+            """
+            s = f'<{iface.name} type="{iface.taxon.name}" sphere="{iface.sphere}" ' \
+                f'roegen_type="{iface.roegen_type}" orientation="{iface.orientation}" ' \
+                f'opposite_processor_type="{iface.opposite_processor_type}" />'
+            if case_sensitive:
+                return s
+            else:
+                return s.lower()
+
+        children = p.children(registry)
+        full_name = p.full_hierarchy_names(registry)[0]
+        if case_sensitive:
+            p_map[full_name] = p
+        else:
+            p_map[full_name.lower()] = p
+
+        s = f"""
+    <{p.name} fullname="{full_name}" level="{p.level}" system="{p.processor_system}" subsystem="{p.subsystem_type}" functional="{"true" if strcmp(p.functional_or_structural, "Functional") else "false"}" >
+        <interfaces>
+        {chr(10).join([xml_interface(f) for f in p.factors])}
+        </interfaces>
+        {chr(10).join([xml_processor(c, registry, p_map) for c in children])}    
+    </{p.name}>     
+        """
+        if case_sensitive:
+            return s
+        else:
+            return s.lower()
+
     # Part of relationships
     por = registry.get(ProcessorsRelationPartOfObservation.partial_key())
+
     # Keep those affecting Instance processors
     por = [po for po in por if strcmp(po.parent_processor.instance_or_archetype, "Instance")]
+
     # Get root processors (set of processors not appearing as child_processor)
     parents = set([po.parent_processor for po in por])
     children = set([po.child_processor for po in por])
