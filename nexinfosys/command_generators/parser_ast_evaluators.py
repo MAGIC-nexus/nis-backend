@@ -8,7 +8,8 @@ https://gist.github.com/cynici/5865326
 import importlib
 import re
 from typing import Dict, Tuple, Union, List
-
+import pandas as pd
+import numpy as np
 import lxml
 from nexinfosys import case_sensitive
 from pyparsing import quotedString
@@ -121,24 +122,80 @@ def obtain_processors(xquery: str=None, processors_dom=None, processors_map=None
         return set(processors_map.values())
 
 
-def aggregator_sum(field: str, xquery: str=None, processors_dom=None, processors_map=None):
+def get_adapted_case_dataframe_filter(df, column, values):
+    i_names = df.index.unique(level=column).values
+    i_names_case = [_ if case_sensitive else _.lower() for _ in i_names]
+    i_names_corr = dict(zip(i_names_case, i_names))
+    # https://stackoverflow.com/questions/18453566/python-dictionary-get-list-of-values-for-list-of-keys
+    return [i_names_corr[_] for _ in values.intersection(i_names_case)]
+
+
+def obtain_subset_of_processors(processors_selector: str, serialized_model: lxml.etree._ElementTree,
+                                registry: PartialRetrievalDictionary,
+                                p_map: Dict[str, Processor], df: pd.DataFrame) -> pd.DataFrame:
+    processors = obtain_processors(processors_selector, serialized_model, p_map)
+    if len(p_map) == len(processors):
+        processors = set()
+
+    # Filter Processors
+    if len(processors) > 0:
+        # Obtain names of processor to KEEP
+        processor_names = set([_.full_hierarchy_names(registry)[0] for _ in processors])
+        if not case_sensitive:
+            processor_names = set([_.lower() for _ in processor_names])
+
+        p_names = get_adapted_case_dataframe_filter(df, "Processor", processor_names)
+        # p_names = df.index.unique(level="Processor").values
+        # p_names_case = [_ if case_sensitive else _.lower() for _ in p_names]
+        # p_names_corr = dict(zip(p_names_case, p_names))
+        # # https://stackoverflow.com/questions/18453566/python-dictionary-get-list-of-values-for-list-of-keys
+        # p_names = [p_names_corr[_] for _ in processor_names.intersection(p_names_case)]
+        # Filter dataframe to only the desired Processors
+        df2 = df.query('Processor in [' + ', '.join(['"' + p + '"' for p in p_names]) + ']')
+    else:
+        df2 = df
+        processors = p_map
+
+    return df2, processors
+
+
+def aggregator_generic(funct, field: str, xquery: str=None, scope: str='Total', processors_dom=None, processors_map=None, df_group=None, df_indicators_group=None):
     """
-    SUM "field" for all processors meeting the XQuery
+    SUM "field" for all processors meeting the XQuery and scope
     :param field:
     :param xquery:
     :param processors_dom:
     :param processors_map:
+    :param df_group:
     :return:
     """
+    inv_map = {v: k for k, v in processors_map.items()}
     processors = obtain_processors(xquery, processors_dom, processors_map)
-    accum = 0
-    for p in processors:
-        try:
-            accum += getattr(p, field, 0)
-        except AttributeError as e:
-            pass
+    processor_names = set([inv_map[p] for p in processors])
+    # Only one Interface(and its Orientation) allowed
+    # Filter the passed group by processor and scope, by Interface and Orientation
+    # Aggregate the Value column according of remaining rows
+    f = field.lower()
+    orient = ["Input", "Output"]
+    if field.lower().endswith("_input"):
+        f = f[:-len("_input")]
+        orient = ["Input"]
+    elif field.lower().endswith("_output"):
+        f = f[:-len("_output")]
+        orient = ["Output"]
+    filt = df_group.index.get_level_values("Processor").isin(processor_names) & \
+           df_group.index.get_level_values("Scope").isin([scope]) & \
+           df_group.index.get_level_values("Interface").isin([f]) & \
+           df_group.index.get_level_values("Orientation").isin(orient)
+    values = df_group[filt]["Value"].values
+    if len(values) > 0:
+        return funct(values)
+    else:
+        return None
 
-    return accum
+
+def aggregator_sum(field: str, xquery: str=None, scope: str='Total', processors_dom=None, processors_map=None, df_group=None, df_indicators_group=None):
+    return aggregator_generic(np.sum, field, xquery, scope, processors_dom, processors_map, df_group, df_indicators_group)
 
 
 # Comparison operators
@@ -154,7 +211,7 @@ opMap = {
         }
 
 
-def ast_evaluator(exp: Dict, state: State, obj, issue_lst, evaluation_type="numeric", atomic_h_names=False) -> Union[Tuple[float, List[str]], Tuple[str, float, List[str]]]:
+def ast_evaluator(exp: Dict, state: State, obj, issue_lst, evaluation_type="numeric", atomic_h_names=False, allowed_functions=global_functions) -> Union[Tuple[float, List[str]], Tuple[str, float, List[str]]]:
     """
     Numerically evaluate the result of the parse of "expression" rule (not valid for the other "expression" rules)
 
@@ -184,13 +241,13 @@ def ast_evaluator(exp: Dict, state: State, obj, issue_lst, evaluation_type="nume
         elif t == "key_value_list":
             d = create_dictionary()
             for k, v in exp["parts"].items():
-                d[k], tmp = ast_evaluator(v, state, obj, issue_lst, evaluation_type, atomic_h_names)
+                d[k], tmp = ast_evaluator(v, state, obj, issue_lst, evaluation_type, atomic_h_names, allowed_functions)
                 unresolved_vars.update(tmp)
             return d, unresolved_vars
         elif t == "dataset":
             # Function parameters and Slice parameters
-            func_params = [ast_evaluator(p, state, obj, issue_lst, evaluation_type, atomic_h_names) for p in exp["func_params"]]
-            slice_params = [ast_evaluator(p, state, obj, issue_lst, evaluation_type, atomic_h_names) for p in exp["slice_params"]]
+            func_params = [ast_evaluator(p, state, obj, issue_lst, evaluation_type, atomic_h_names, allowed_functions) for p in exp["func_params"]]
+            slice_params = [ast_evaluator(p, state, obj, issue_lst, evaluation_type, atomic_h_names, allowed_functions) for p in exp["slice_params"]]
 
             if evaluation_type == "numeric":
                 # Find dataset named "exp["name"]"
@@ -230,7 +287,7 @@ def ast_evaluator(exp: Dict, state: State, obj, issue_lst, evaluation_type="nume
             args = []
             kwargs = {}
             can_resolve = True
-            for p in [ast_evaluator(p, state, obj, issue_lst, evaluation_type, atomic_h_names) for p in exp["params"]]:
+            for p in [ast_evaluator(p, state, obj, issue_lst, evaluation_type, atomic_h_names, allowed_functions) for p in exp["params"]]:
                 if len(p) == 3:
                     kwargs[p[0]] = p[1]
                     tmp = p[2]
@@ -245,8 +302,8 @@ def ast_evaluator(exp: Dict, state: State, obj, issue_lst, evaluation_type="nume
                 if obj is None:
                     # Check if it can be resolved (all variables specified)
                     # Check if global function exists, then call it. There are no function namespaces (at least for now)
-                    if can_resolve and exp["name"] in global_functions:
-                        _f = global_functions[exp["name"]]
+                    if can_resolve and exp["name"] in allowed_functions:
+                        _f = allowed_functions[exp["name"]]
                         mod_name, func_name = _f["full_name"].rsplit('.', 1)
                         mod = importlib.import_module(mod_name)
                         func = getattr(mod, func_name)
@@ -260,6 +317,10 @@ def ast_evaluator(exp: Dict, state: State, obj, issue_lst, evaluation_type="nume
                                     kwargs[name] = state.get("_processors_dom")
                                 elif sp_kwarg == "ProcessorsMap":
                                     kwargs[name] = state.get("_processors_map")
+                                elif sp_kwarg == "DataFrameGroup":
+                                    kwargs[name] = state.get("_df_group")
+                                elif sp_kwarg == "IndicatorsDataFrameGroup":
+                                    kwargs[name] = state.get("_df_indicators_group")
 
                         # CALL FUNCTION!!
                         try:
@@ -279,8 +340,8 @@ def ast_evaluator(exp: Dict, state: State, obj, issue_lst, evaluation_type="nume
             elif evaluation_type == "static":
                 if obj is None:
                     # Check if global function exists, then call it. There are no function namespaces (at least for now)
-                    if exp["name"] in global_functions:
-                        _f = global_functions[exp["name"]]
+                    if exp["name"] in allowed_functions:
+                        _f = allowed_functions[exp["name"]]
                         mod_name, func_name = _f["full_name"].rsplit('.', 1)
                         mod = importlib.import_module(mod_name)
                         func = getattr(mod, func_name)
@@ -325,7 +386,7 @@ def ast_evaluator(exp: Dict, state: State, obj, issue_lst, evaluation_type="nume
                     # Dictionary: function call or dataset access
                     if obj is None:
                         o["ns"] = _namespace
-                    obj = ast_evaluator(o, state, obj, issue_lst, evaluation_type, atomic_h_names)
+                    obj = ast_evaluator(o, state, obj, issue_lst, evaluation_type, atomic_h_names, allowed_functions)
             if obj is None or isinstance(obj, (str, int, float, bool)):
                 return obj, unresolved_vars
             # TODO elif isinstance(obj, ...) depending on core object types, invoke a default method, or
@@ -333,11 +394,11 @@ def ast_evaluator(exp: Dict, state: State, obj, issue_lst, evaluation_type="nume
             else:
                 return obj, unresolved_vars
         elif t == "condition":  # Evaluate IF part to a Boolean. If True, return the evaluation of the THEN part; if False, return None
-            if_result, tmp = ast_evaluator(exp["if"], state, obj, issue_lst, evaluation_type, atomic_h_names)
+            if_result, tmp = ast_evaluator(exp["if"], state, obj, issue_lst, evaluation_type, atomic_h_names, allowed_functions)
             unresolved_vars.update(tmp)
             if len(tmp) == 0:
                 if if_result:
-                    then_result, tmp = ast_evaluator(exp["then"], state, obj, issue_lst, evaluation_type, atomic_h_names)
+                    then_result, tmp = ast_evaluator(exp["then"], state, obj, issue_lst, evaluation_type, atomic_h_names, allowed_functions)
                     unresolved_vars.update(tmp)
                     if len(tmp) > 0:
                         then_result = None
@@ -346,7 +407,7 @@ def ast_evaluator(exp: Dict, state: State, obj, issue_lst, evaluation_type="nume
                 return None, unresolved_vars
         elif t == "conditions":
             for c in exp["parts"]:
-                cond_result, tmp = ast_evaluator(c, state, obj, issue_lst, evaluation_type, atomic_h_names)
+                cond_result, tmp = ast_evaluator(c, state, obj, issue_lst, evaluation_type, atomic_h_names, allowed_functions)
                 unresolved_vars.update(tmp)
                 if len(tmp) == 0:
                     if cond_result:
@@ -363,11 +424,11 @@ def ast_evaluator(exp: Dict, state: State, obj, issue_lst, evaluation_type="nume
                     current = True
                 tmp1 = []  # Unary operators do not have "left" side. So empty list for unresolved vars
             else:
-                current, tmp1 = ast_evaluator(exp["terms"][0], state, obj, issue_lst, evaluation_type, atomic_h_names)
+                current, tmp1 = ast_evaluator(exp["terms"][0], state, obj, issue_lst, evaluation_type, atomic_h_names, allowed_functions)
                 unresolved_vars.update(tmp1)
 
             for i, e in enumerate(exp["terms"][1:]):
-                following, tmp2 = ast_evaluator(e, state, obj, issue_lst, evaluation_type, atomic_h_names)
+                following, tmp2 = ast_evaluator(e, state, obj, issue_lst, evaluation_type, atomic_h_names, allowed_functions)
                 unresolved_vars.update(tmp2)
 
                 if len(tmp1) == 0 and len(tmp2) == 0:

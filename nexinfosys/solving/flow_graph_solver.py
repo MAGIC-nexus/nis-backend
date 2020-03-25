@@ -39,10 +39,11 @@ from lxml import etree
 
 from nexinfosys import case_sensitive
 from nexinfosys.command_field_definitions import orientations
-from nexinfosys.command_generators import Issue
-from nexinfosys.command_generators.parser_ast_evaluators import ast_evaluator
+from nexinfosys.command_generators import Issue, global_functions_extended
+from nexinfosys.command_generators.parser_ast_evaluators import ast_evaluator, obtain_subset_of_processors, \
+    get_adapted_case_dataframe_filter
 from nexinfosys.command_generators.parser_field_parsers import string_to_ast, expression_with_parameters, is_year, \
-    is_month, indicator_expression, parse_string_as_simple_ident_list
+    is_month, indicator_expression, parse_string_as_simple_ident_list, number_interval
 from nexinfosys.common.helper import create_dictionary, PartialRetrievalDictionary, ifnull, Memoize, istr, strcmp, \
     FloatExp, split_and_strip, precedes_in_list
 from nexinfosys.ie_exports.xml_export import export_model_to_xml
@@ -50,7 +51,7 @@ from nexinfosys.model_services import get_case_study_registry_objects, State
 from nexinfosys.models import CodeImmutable
 from nexinfosys.models.musiasem_concepts import ProblemStatement, Parameter, FactorsRelationDirectedFlowObservation, \
     FactorsRelationScaleObservation, Processor, FactorQuantitativeObservation, Factor, \
-    ProcessorsRelationPartOfObservation, FactorType, Indicator, MatrixIndicator, IndicatorCategories
+    ProcessorsRelationPartOfObservation, FactorType, Indicator, MatrixIndicator, IndicatorCategories, Benchmark
 from nexinfosys.models.musiasem_concepts_helper import find_quantitative_observations
 from nexinfosys.models.statistical_datasets import Dataset, Dimension, CodeList
 from nexinfosys.solving.graph.computation_graph import ComputationGraph
@@ -1008,6 +1009,10 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
     results = add_conflicts_to_results(results, partof_taken_results, partof_dismissed_results, "conflict_partof")
     results = add_conflicts_to_results(results, itype_taken_results, itype_dismissed_results, "conflict_itype")
 
+    #
+    # ---------------------- CREATE PD.DATAFRAMES PREVIOUS TO OUTPUT DATASETS  ----------------------
+    #
+
     data = {result_key.as_string_tuple() + node.key:
                 {"RoegenType": node.roegen_type if node else "-",
                  "Value": float_computed.value.val,
@@ -1035,83 +1040,90 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
     # Sort the dataframe based on indexes. Not necessary, only done for debugging purposes.
     df = df.sort_index(level=index_names)
 
-    print(df)
+    # print(df)
 
-    # Convert model to XML and to DOM tree
-    xml, p_map = export_model_to_xml(glb_idx)
-    dom_tree = etree.fromstring(xml).getroottree()
+    # Create Matrix to Sankey graph
+    ds_flow_values = prepare_sankey_dataset(glb_idx, df)
 
-    # Calculate ScalarIndicators
+    # Convert model to XML and to DOM tree. Used by XPath expressions (Matrices and Global Indicators)
+    _, p_map = export_model_to_xml(glb_idx)  # p_map: {(processor_full_path_name, Processor), ...}
+    dom_tree = etree.fromstring(_).getroottree()  # dom_tree: DOM against which an XQuery can be executed
+
+    # Obtain Analysis objects: Indicators and Benchmarks
     indicators = glb_idx.get(Indicator.partial_key())
-    df_local_indicators = calculate_local_scalar_indicators(indicators, dom_tree, p_map, df, global_parameters, problem_statement)
-    df_global_indicators = calculate_global_scalar_indicators(indicators, dom_tree, p_map, df, df_local_indicators, global_parameters, problem_statement)
+    matrix_indicators = glb_idx.get(MatrixIndicator.partial_key())
+    benchmarks = glb_idx.get(Benchmark.partial_key())
 
-    # Create datasets and store in State
+    # Filter out conflicts and prepare for case insensitiveness
+    # Filter: Conflict_Partof!='Dismissed', Conflic_iType!='Dismissed', and remove the two columns
+    df_without_conflicts = get_conflicts_filtered_dataframe(df)
+    inplace_case_sensitiveness_dataframe(df_without_conflicts)
+
+    # Calculate ScalarIndicators (Local and Global)
+    df_local_indicators = calculate_local_scalar_indicators(indicators, dom_tree, p_map, df_without_conflicts, global_parameters, problem_statement)
+    df_global_indicators = calculate_global_scalar_indicators(indicators, dom_tree, p_map, df_without_conflicts, df_local_indicators, global_parameters, problem_statement)
+
+    # Calculate benchmarks
+    ds_benchmarks = calculate_local_benchmarks(df_local_indicators, indicators)  # Find local indicators, and related benchmarks (indic_to_benchmarks). For each group (scenario, time, scope, processor): for each indicator, frame the related benchmark and add the framing result
+    ds_global_benchmarks = calculate_global_benchmarks(df_global_indicators, indicators)  # Find global indicators, and related benchmarks (indic_to_benchmarks). For each group (scenario, time, scope, processor): for each indicator, frame the related benchmark and add the framing result
+
+    # Prepare Benchmarks to Stakeholders DataFrame
+    ds_stakeholders = prepare_benchmarks_to_stakeholders(benchmarks)  # Find all benchmarks. For each benchmark, create a row per stakeholder -> return the dataframe
+
+    # Prepare Matrices
+    matrices = prepare_matrix_indicators(matrix_indicators, glb_idx, dom_tree, p_map, df, df_local_indicators, dynamic_scenario)
+
+    #
+    # ---------------------- CREATE DATASETS AND STORE IN STATE ----------------------
+    #
+
     if not dynamic_scenario:
         ds_name = "flow_graph_solution"
+        ds_flows_name = "flow_graph_edges_matrix"
         ds_indicators_name = "flow_graph_solution_indicators"
         df_global_indicators_name = "flow_graph_global_indicators"
+        ds_benchmarks_name = "flow_graph_solution_benchmarks"
+        ds_global_benchmarks_name = "flow_graph_solution_global_benchmarks"
+        ds_stakeholders_name = "benchmarks_and_stakeholders"
     else:
         ds_name = "dyn_flow_graph_solution"
+        ds_flows_name = "dyn_flow_graph_edges_matrix"
         ds_indicators_name = "dyn_flow_graph_solution_indicators"
         df_global_indicators_name = "dyn_flow_graph_global_indicators"
+        ds_benchmarks_name = "dyn_flow_graph_solution_benchmarks"
+        ds_global_benchmarks_name = "dyn_flow_graph_solution_global_benchmarks"
+        ds_stakeholders_name = "benchmarks_and_stakeholders"
 
-    datasets[ds_name] = get_dataset(df, ds_name, "Flow Graph Solver - Interfaces")
+    for d, name, label in [(df, ds_name, "Flow Graph Solver - Interfaces"),
+                           (df_local_indicators, ds_indicators_name, "Flow Graph Solver - Local Indicators"),
+                           (df_global_indicators, df_global_indicators_name, "Flow Graph Solver - Global Indicators"),
+                           (ds_flow_values, ds_flows_name, "Flow Graph Edges Matrix - Interfaces"),
+                           (ds_benchmarks, ds_benchmarks_name, "Flow Graph Solver - Local Benchmarks"),
+                           (ds_global_benchmarks, ds_global_benchmarks_name, "Flow Graph Solver - Global Benchmarks"),
+                           (ds_stakeholders, ds_stakeholders_name, "Benchmarks - Stakeholders")
+                           ]:
+        if not d.empty:
+            datasets[name] = get_dataset(d, name, label)
 
-    if not df_local_indicators.empty:
-        # Register dataset
-        datasets[ds_indicators_name] = get_dataset(df_local_indicators, ds_indicators_name, "Flow Graph Solver - Local Indicators")
-
-    if not df_global_indicators.empty:
-        # Register dataset
-        datasets[df_global_indicators_name] = get_dataset(df_global_indicators, df_global_indicators_name, "Flow Graph Solver - Global Indicators")
-
-    #Create Matrix to Sanskey graph
-
-    FactorsRelationDirectedFlowObservation_list = glb_idx.get(FactorsRelationDirectedFlowObservation.partial_key())
-
-    ds_flows = pd.DataFrame({'source': [i._source.full_name for i in FactorsRelationDirectedFlowObservation_list],
-                              'source_processor': [i._source._processor._name for i in FactorsRelationDirectedFlowObservation_list],
-                          'source_level':[ i._source._processor._attributes['level']  if ('level' in i._source._processor._attributes) else None  for i in FactorsRelationDirectedFlowObservation_list],
-                              'target': [i._target.full_name for i in FactorsRelationDirectedFlowObservation_list],
-                          'target_processor': [i._target._processor._name for i in FactorsRelationDirectedFlowObservation_list],
-                              'target_level': [i._target._processor._attributes['level'] if 'level' in i._target._processor._attributes else None for i in FactorsRelationDirectedFlowObservation_list ],
-                             # 'RoegenType_target': [i.target_factor._attributes['roegen_type']for i in FactorsRelationDirectedFlowObservation_list],
-                             'Sphere_target': [i.target_factor._attributes['sphere'] for i in
-                                                   FactorsRelationDirectedFlowObservation_list],
-                             'Subsystem_target': [i._target._processor._attributes['subsystem_type'] for i in
-                                               FactorsRelationDirectedFlowObservation_list],
-                             'System_target': [i._target._processor._attributes['processor_system'] for i in
-                                                  FactorsRelationDirectedFlowObservation_list]
-                              }
-                             )
-
-
-    # I suppose that relations between processors (source-target) doesn't change between different scenarios.
-    df2 = df.reset_index()
-    processor = df2["Processor"].apply(lambda x: x.split("."))
-    df2["lastprocessor"] = [i[-1] for i in processor]
-    df2["source"] = df2["lastprocessor"] + ":" + df2["Interface"]
-   # df2 = df2[df2["Orientation"]=="Output"] It is not necessary?
-    ds_flow_values = pd.merge(df2,ds_flows, on="source")
-    ds_flow_values = ds_flow_values.drop(columns = ["Orientation","lastprocessor","Processor", "Interface", 'RoegenType'], axis = 1)
-    ds_flow_values = ds_flow_values.rename(columns = {'Sphere':'Sphere_source', 'System' : 'System_source', 'Subsystem': 'Subsystem_source' })
-    # ds_flow_values.reset_index()
-    ds_flows_name = "flow_graph_matrix"
-    # if not ds_flows.empty:
-    # Register flow dataset
-    datasets[ds_flows_name] = get_dataset(ds_flow_values, ds_flows_name, "Flow Graph Matrix - Interfaces")
-
-    # Calculate and publish MatrixIndicators
-    indicators = glb_idx.get(MatrixIndicator.partial_key())
-    matrices = prepare_matrix_indicators(indicators, glb_idx, dom_tree, p_map, df, df_local_indicators, dynamic_scenario)
+    # Register matrices
     for n, ds in matrices.items():
         datasets[n] = ds
 
     # Create dataset and store in State (specific of "Biofuel case study")
-    # datasets["end_use_matrix"] = get_ eum_dataset(df)
+    # datasets["end_use_matrix"] = get_eum_dataset(df)
 
     return []
+
+
+def prepare_benchmarks_to_stakeholders(benchmarks: List[Benchmark]):
+    rows = []
+    for b in benchmarks:
+        for s in b.stakeholders:
+            rows.append((b.name, s))
+
+    df = pd.DataFrame(data=rows, columns=["Benchmark", "Stakeholder"])
+    df.set_index("Benchmark", inplace=True)
+    return df
 
 
 def add_conflicts_to_results(existing_results: ResultDict, taken_results: ResultDict, dismissed_results: ResultDict,
@@ -1137,46 +1149,370 @@ def add_conflicts_to_results(existing_results: ResultDict, taken_results: Result
     return results
 
 
-def obtain_subset_processors(processors_selector: str, serialized_model: lxml.etree._ElementTree,
-                             registry: PartialRetrievalDictionary,
-                             p_map: Dict[str, Processor], df: pd.DataFrame) -> pd.DataFrame:
-    # TODO Processor names can be accompanied by: Level, System, Subsystem, Sphere
-    processors = set()
-    if processors_selector:
-        try:
-            r = serialized_model.xpath(processors_selector if case_sensitive else processors_selector.lower())
-            for e in r:
-                fname = e.get("fullname")
-                if fname:
-                    processors.add(p_map[fname])
-                else:
-                    pass  # Interfaces...
-        except lxml.etree.XPathEvalError:
-            # TODO Try CSSSelector syntax
-            # TODO Generate Issue
-            pass
+def prepare_sankey_dataset(registry: PartialRetrievalDictionary, df: pd.DataFrame):
+    # Create Matrix to Sankey graph
+
+    FactorsRelationDirectedFlowObservation_list = registry.get(FactorsRelationDirectedFlowObservation.partial_key())
+
+    ds_flows = pd.DataFrame({'source': [i._source.full_name for i in FactorsRelationDirectedFlowObservation_list],
+                             'source_processor': [i._source._processor._name for i in
+                                                  FactorsRelationDirectedFlowObservation_list],
+                             'source_level': [i._source._processor._attributes['level'] if (
+                                         'level' in i._source._processor._attributes) else None for i in
+                                              FactorsRelationDirectedFlowObservation_list],
+                             'target': [i._target.full_name for i in FactorsRelationDirectedFlowObservation_list],
+                             'target_processor': [i._target._processor._name for i in
+                                                  FactorsRelationDirectedFlowObservation_list],
+                             'target_level': [i._target._processor._attributes[
+                                                  'level'] if 'level' in i._target._processor._attributes else None for
+                                              i in FactorsRelationDirectedFlowObservation_list],
+                             # 'RoegenType_target': [i.target_factor._attributes['roegen_type']for i in FactorsRelationDirectedFlowObservation_list],
+                             'Sphere_target': [i.target_factor._attributes['sphere'] for i in
+                                               FactorsRelationDirectedFlowObservation_list],
+                             'Subsystem_target': [i._target._processor._attributes['subsystem_type'] for i in
+                                                  FactorsRelationDirectedFlowObservation_list],
+                             'System_target': [i._target._processor._attributes['processor_system'] for i in
+                                               FactorsRelationDirectedFlowObservation_list]
+                             }
+                            )
+
+    # I suppose that relations between processors (source-target) doesn't change between different scenarios.
+    df2 = df.reset_index()
+    processor = df2["Processor"].apply(lambda x: x.split("."))
+    df2["lastprocessor"] = [i[-1] for i in processor]
+    df2["source"] = df2["lastprocessor"] + ":" + df2["Interface"]
+    # df2 = df2[df2["Orientation"]=="Output"] It is not necessary?
+
+    ds_flow_values = pd.merge(df2, ds_flows, on="source")
+    ds_flow_values = ds_flow_values.drop(
+        columns=["Orientation", "lastprocessor", "Processor", "Interface", 'RoegenType'], axis=1)
+    ds_flow_values = ds_flow_values.rename(
+        columns={'Sphere': 'Sphere_source', 'System': 'System_source', 'Subsystem': 'Subsystem_source'})
+    # ds_flow_values.reset_index()
+    # if not ds_flows.empty:
+
+    return ds_flow_values
+
+
+def get_conflicts_filtered_dataframe(in_df: pd.DataFrame) -> pd.DataFrame:
+    filt = in_df.index.get_level_values("Conflict_Partof").isin(["No", "Taken"]) & in_df.index.get_level_values(
+        "Conflict_Itype").isin(["No", "Taken"])
+    df = in_df[filt]
+    df = df.droplevel("Conflict_Partof")
+    df = df.droplevel("Conflict_Itype")
+    return df
+
+
+def inplace_case_sensitiveness_dataframe(df: pd.DataFrame):
+    if not case_sensitive:
+        level_processor = df.index._get_level_number("Processor")
+        level_interface = df.index._get_level_number("Interface")
+        df.index.set_levels([df.index.levels[level_processor].str.lower(),
+                             df.index.levels[level_interface].str.lower()],
+                            level=[level_processor, level_interface],
+                            inplace=True)
+
+
+def calculate_local_scalar_indicators(indicators: List[Indicator],
+                                      serialized_model: lxml.etree._ElementTree,
+                                      p_map: Dict[str, Processor],
+                                      results: pd.DataFrame,
+                                      global_parameters: List[Parameter], problem_statement: ProblemStatement) -> pd.DataFrame:
+    """
+    Compute local scalar indicators using data from "results", and return a pd.DataFrame
+
+    :param indicators: List of indicators to compute
+    :param serialized_model:
+    :param p_map:
+    :param results: Result of the graph solving process ("flow_graph_solution")
+    :param global_parameters: List of parameter definitions
+    :param problem_statement: Object with a list of scenarios (defining Parameter sets)
+    :return: pd.DataFrame with all the local indicators
+    """
+
+    # The "columns" in the index of "results" are:
+    # 'Scenario', 'Period', 'Scope', 'Processor', 'Interface', 'Orientation'
+    # Group by: 'Scenario', 'Period', 'Scope', 'Processor'
+    # Rearrange: 'Interface' and 'Orientation'
+    idx_names = ["Scenario", "Period", "Scope", "Processor"]  # Changing factors
+
+    def calculate_local_scalar_indicator(indicator: Indicator) -> pd.DataFrame:
+        """
+
+        :param indicator:
+        :return:
+        """
+
+        df = results
+
+        # Parse the expression
+        ast = string_to_ast(indicator_expression, indicator.formula if case_sensitive else indicator.formula.lower())
+
+        # Scenario parameters
+        scenario_params = create_dictionary()
+        for scenario_name, scenario_exp_params in problem_statement.scenarios.items():  # type: str, dict
+            scenario_params[scenario_name] = evaluate_parameters_for_scenario(global_parameters, scenario_exp_params)
+
+        issues = []
+        new_df_rows_idx = []
+        new_df_rows_data = []
+        for t, g in df.groupby(idx_names):  # "t", the current tuple; "g", the values of the group
+            params = scenario_params[t[0]]
+            # Elaborate a dictionary with: <interface>_<orientation>: <Value>
+            d = {}
+            # Iterate through available values in a single processor
+            for row, sdf in g.iterrows():
+                iface = sdf["Interface"]
+                iface_orientation = iface + "_" + sdf["Orientation"]
+                if iface_orientation in d:
+                    print(f"{iface_orientation} found to already exist!")
+                d[iface_orientation] = sdf["Value"]
+                if iface not in d:
+                    d[iface] = sdf["Value"]  # First appearance allowed, insert, others ignored
+            # Include parameters (with priority)
+            d.update(params)
+            if not case_sensitive:
+                d = {k.lower(): v for k, v in d.items()}
+
+            state = State(d)
+            val, variables = ast_evaluator(ast, state, None, issues)
+            if val is not None:  # If it was possible to evaluate ... append a new row
+                new_df_rows_idx.append(t)  # (scenario, period, scope, processor)
+                new_df_rows_data.append((indicator.name, val, None))  # (indicator, value, unit)
+        # print(issues)
+        # Construct pd.DataFrame with the result of the scalar indicator calculation
+        df2 = pd.DataFrame(data=new_df_rows_data,
+                           index=pd.MultiIndex.from_tuples(new_df_rows_idx, names=idx_names),
+                           columns=["Indicator", "Value", "Unit"])
+        return df2
+
+    # -- calculate_local_scalar_indicators --
+    idx_to_change = ["Interface", "Orientation"]
+    results.reset_index(idx_to_change, inplace=True)
+
+    # For each ScalarIndicator...
+    dfs = []
+    for si in indicators:
+        if si._indicator_category == IndicatorCategories.factors_expression:
+            dfi = calculate_local_scalar_indicator(si)
+            if not dfi.empty:
+                dfs.append(dfi)
+
+    # Restore index
+    results.set_index(idx_to_change, append=True, inplace=True)
+
+    if dfs:
+        return pd.concat(dfs)
     else:
-        # If empty, ALL processors (do not filter)
-        pass
+        return pd.DataFrame()
 
-    # Filter Processors
-    if len(processors) > 0:
-        # Obtain names of processor to KEEP
-        processor_names = set([_.full_hierarchy_names(registry)[0] for _ in processors])
-        if not case_sensitive:
-            processor_names = set([_.lower() for _ in processor_names])
 
-        p_names = df.index.unique(level="Processor").values
-        p_names_case = [_ if case_sensitive else _.lower() for _ in p_names]
-        p_names_corr = dict(zip(p_names_case, p_names))
-        # https://stackoverflow.com/questions/18453566/python-dictionary-get-list-of-values-for-list-of-keys
-        p_names = [p_names_corr[_] for _ in processor_names.intersection(p_names_case)]
-        # Filter dataframe to only the desired Processors
-        df2 = df.query('Processor in [' + ', '.join(['"' + p + '"' for p in p_names]) + ']')
+def calculate_global_scalar_indicators(indicators: List[Indicator],
+                                      serialized_model: lxml.etree._ElementTree, p_map: Dict[str, Processor],
+                                      results: pd.DataFrame, local_indicators: pd.DataFrame,
+                                      global_parameters: List[Parameter], problem_statement: ProblemStatement) -> pd.DataFrame:
+    """
+    Compute global scalar indicators using data from "results", and return a pd.DataFrame
+
+    :param indicators: List of indicators to compute
+    :param serialized_model:
+    :param p_map:
+    :param results: Result of the graph solving process
+    :param global_parameters: List of parameter definitions
+    :param problem_statement: Object with a list of scenarios (defining Parameter sets)
+    :return: pd.DataFrame with all the local indicators
+    """
+
+    # The "columns" in the index of "results" are:
+    # 'Scenario', 'Period', 'Scope', 'Processor', 'Interface', 'Orientation'
+    # Group by: 'Scenario', 'Period'
+    # Aggregator function uses a "Processors selector" and a "Scope parameter"
+    # Then, only one Interface(and its Orientation) allowed
+    # Filter the passed group by processor and scope, by Interface and Orientation
+    # Aggregate the Value column according of remaining rows
+    idx_names = ["Scenario", "Period"]  # , "Scope"
+
+    def calculate_global_scalar_indicator(indicator: Indicator) -> pd.DataFrame:
+        """
+
+        :param indicator:
+        :return:
+        """
+
+        df = results
+
+        # Parse the expression
+        ast = string_to_ast(indicator_expression, indicator.formula if case_sensitive else indicator.formula.lower())
+
+        # Scenario parameters
+        scenario_params = create_dictionary()
+        for scenario_name, scenario_exp_params in problem_statement.scenarios.items():  # type: str, dict
+            scenario_params[scenario_name] = evaluate_parameters_for_scenario(global_parameters, scenario_exp_params)
+
+        issues = []
+        new_df_rows_idx = []
+        new_df_rows_data = []
+        for t, g in df.groupby(idx_names):  # GROUP BY Scenario, Period
+            params = scenario_params[t[0]]  # Obtain parameter values from scenario, in t[0]
+            # TODO Local indicators from the selected processors, for the selected Scenario, Period, Scope
+            local_indicators_extract = pd.DataFrame()
+            # TODO If a specific indicator or interface from a processor is mentioned, put it as a variable
+            # Variables for aggregator functions (which should be present in the AST)
+            d = dict(_processors_map=p_map,
+                     _processors_dom=serialized_model,
+                     _df_group=g,
+                     _df_indicators_group=local_indicators_extract)
+            # Include parameters (with priority)
+            d.update(params)
+            if not case_sensitive:
+                d = {k.lower(): v for k, v in d.items()}
+
+            state = State(d)
+            val, variables = ast_evaluator(ast, state, None, issues, allowed_functions=global_functions_extended)
+
+            if val is not None:
+                new_df_rows_idx.append(t)  # (scenario, period)
+                new_df_rows_data.append((indicator.name, val, None))
+        print(issues)
+        # Construct pd.DataFrame with the result of the scalar indicator calculation
+        df2 = pd.DataFrame(data=new_df_rows_data,
+                           index=pd.MultiIndex.from_tuples(new_df_rows_idx, names=idx_names),
+                           columns=["Indicator", "Value", "Unit"])
+        return df2
+
+    # -- calculate_global_scalar_indicators --
+    idx_to_change = []
+    results.reset_index(idx_to_change, inplace=True)
+
+    # For each ScalarIndicator...
+    dfs = []
+    for si in indicators:
+        if si._indicator_category == IndicatorCategories.case_study:
+            dfi = calculate_global_scalar_indicator(si)
+            if not dfi.empty:
+                dfs.append(dfi)
+
+    # Restore index
+    results.set_index(idx_to_change, append=True, inplace=True)
+
+    if dfs:
+        return pd.concat(dfs)
     else:
-        df2 = df
+        return pd.DataFrame()
 
-    return df2  # , processors
+
+range_ast = {}
+
+
+def get_benchmark_category(b: Benchmark, v):
+    c = None
+    for r in b.ranges.values():
+        cat = r["category"]
+        range = r["range"]
+        if range in range_ast:
+            ast = range_ast[range]
+        else:
+            ast = string_to_ast(number_interval, range)
+            range_ast[range] = ast
+        in_left = (ast["left"] == "[" and ast["number_left"] <= v) or (ast["left"] == "(" and ast["number_left"] < v)
+        in_right = (ast["right"] == "]" and ast["number_right"] >= v) or (ast["right"] == ")" and ast["number_right"] > v)
+        if in_left and in_right:
+            c = cat
+            break
+
+    return c
+
+
+def calculate_local_benchmarks(df_local_indicators, indicators: List[Indicator]):
+    """
+    From the dataframe of local indicators: scenario, period, scope, processor, indicator, value
+    Prepare a dataframe with columns: scenario, period, scope, processor, indicator, benchmark, value
+
+    :param df_local_indicators:
+    :param indicators: List of all Indicators (inside it is filtered to process only Local Indicators)
+    :return:
+    """
+    if df_local_indicators.empty:
+        return pd.DataFrame()
+
+    ind_map = create_dictionary()
+    for si in indicators:
+        if si._indicator_category == IndicatorCategories.factors_expression:
+            if len(si.benchmarks) > 0:
+                ind_map[si.name] = si
+
+    idx_names = ["Scenario", "Period", "Scope", "Processor"]  # Changing factors
+
+    new_df_rows_idx = []
+    new_df_rows_data = []
+    indicator_column_idx = df_local_indicators.columns.get_loc("Indicator")
+    value_column_idx = df_local_indicators.columns.get_loc("Value")
+    unit_column_idx = df_local_indicators.columns.get_loc("Unit")
+    for r in df_local_indicators.itertuples():
+        indic = r[1+indicator_column_idx]
+        ind = ind_map[indic]
+        val = r[1+value_column_idx]
+        unit = r[1+unit_column_idx]
+        for b in ind.benchmarks:
+            c = get_benchmark_category(b, val)
+            if not c:
+                c = f"<out ({val})>"
+
+            new_df_rows_idx.append(r[0])  # (scenario, period, scope, processor)
+            new_df_rows_data.append((indic, val, b.name, c))
+
+    # Construct pd.DataFrame with the result of the scalar indicator calculation
+    df2 = pd.DataFrame(data=new_df_rows_data,
+                       index=pd.MultiIndex.from_tuples(new_df_rows_idx, names=idx_names),
+                       columns=["Indicator", "Value", "Benchmark", "Category"])
+
+    return df2
+
+
+def calculate_global_benchmarks(df_global_indicators, indicators: List[Indicator]):
+    """
+    From the dataframe of global indicators: scenario, period, indicator, value
+    Prepare a dataframe with columns: scenario, period, indicator, benchmark, value
+
+    :param df_local_indicators:
+    :param glb_idx:
+    :return:
+    """
+    if df_global_indicators.empty:
+        return pd.DataFrame()
+
+    ind_map = create_dictionary()
+    for si in indicators:
+        if si._indicator_category == IndicatorCategories.case_study:
+            if len(si.benchmarks) > 0:
+                ind_map[si.name] = si
+
+    idx_names = ["Scenario", "Period"]  # Changing factors
+
+    new_df_rows_idx = []
+    new_df_rows_data = []
+    indicator_column_idx = df_global_indicators.columns.get_loc("Indicator")
+    value_column_idx = df_global_indicators.columns.get_loc("Value")
+    unit_column_idx = df_global_indicators.columns.get_loc("Unit")
+    for r in df_global_indicators.itertuples():
+        indic = r[1+indicator_column_idx]
+        ind = ind_map[indic]
+        val = r[1+value_column_idx]
+        unit = r[1+unit_column_idx]
+        for b in ind.benchmarks:
+            c = get_benchmark_category(b, val)
+            if not c:
+                c = f"<out ({val})>"
+
+            new_df_rows_idx.append(r[0])  # (scenario, period, scope, processor)
+            new_df_rows_data.append((indic, val, b.name, c))
+
+    # Construct pd.DataFrame with the result of the scalar indicator calculation
+    df2 = pd.DataFrame(data=new_df_rows_data,
+                       index=pd.MultiIndex.from_tuples(new_df_rows_idx, names=idx_names),
+                       columns=["Indicator", "Value", "Benchmark", "Category"])
+
+    return df2
 
 
 def prepare_matrix_indicators(indicators: List[MatrixIndicator],
@@ -1196,6 +1532,7 @@ def prepare_matrix_indicators(indicators: List[MatrixIndicator],
     :param dynamic_scenario: True if the matrices have to be prepared for a dynamic scenario
     :return: A dictionary <dataset_name> -> <dataset>
     """
+
     def prepare_matrix_indicator(indicator: MatrixIndicator) -> pd.DataFrame:
         """
         Compute a Matrix Indicator
@@ -1213,7 +1550,7 @@ def prepare_matrix_indicators(indicators: List[MatrixIndicator],
             df = results
 
         # Apply XPath to obtain the dataframe filtered by the desired set of processors
-        df = obtain_subset_processors(indicator.processors_selector, serialized_model, registry, p_map, df)
+        df, selected_processors = obtain_subset_of_processors(indicator.processors_selector, serialized_model, registry, p_map, df)
 
         # Filter Interfaces
         if indicator.interfaces_selector:
@@ -1221,15 +1558,17 @@ def prepare_matrix_indicators(indicators: List[MatrixIndicator],
             if not case_sensitive:
                 ifaces = set([_.lower() for _ in ifaces])
 
-            i_names = results.index.unique(level="Interface").values
-            i_names_case = [_ if case_sensitive else _.lower() for _ in i_names]
-            i_names_corr = dict(zip(i_names_case, i_names))
-            i_names = [i_names_corr[_] for _ in ifaces]
+            i_names = get_adapted_case_dataframe_filter(results, "Interface", ifaces)
+            # i_names = results.index.unique(level="Interface").values
+            # i_names_case = [_ if case_sensitive else _.lower() for _ in i_names]
+            # i_names_corr = dict(zip(i_names_case, i_names))
+            # i_names = [i_names_corr[_] for _ in ifaces]
             # Filter dataframe to only the desired Interfaces.
             df = df.query('Interface in [' + ', '.join(['"' + _ + '"' for _ in i_names]) + ']')
 
         # TODO Filter ScalarIndicators
-        # TODO Indicator (scalar) names are accompanied by: Unit
+        #   Indicator (scalar) names are accompanied by: Unit
+        #   indicator_results
 
         # Pivot Table: Dimensions (rows) are (Scenario, Period, Processor[, Scope])
         #              Dimensions (columns) are (Interface, Orientation -of Interface-)
@@ -1258,181 +1597,6 @@ def prepare_matrix_indicators(indicators: List[MatrixIndicator],
         result[ds_name] = ds
 
     return result
-
-
-def calculate_local_scalar_indicators(indicators: List[Indicator],
-                                      serialized_model: lxml.etree._ElementTree, p_map: Dict[str, Processor],
-                                      results: pd.DataFrame,
-                                      global_parameters: List[Parameter], problem_statement: ProblemStatement) -> pd.DataFrame:
-    """
-    Compute local scalar indicators using data from "results", and return a pd.DataFrame
-
-    :param indicators: List of indicators to compute
-    :param serialized_model:
-    :param p_map:
-    :param results: Result of the graph solving process
-    :param global_parameters: List of parameter definitions
-    :param problem_statement: Object with a list of scenarios (defining Parameter sets)
-    :return: pd.DataFrame with all the local indicators
-    """
-
-    def prepare_scalar_indicator(indicator: Indicator) -> pd.DataFrame:
-        """
-
-        :param indicator:
-        :return:
-        """
-
-        # TODO Ignore "processors_selector". Considering it complicates the algorithm to
-        #  append a new column (a Join is required)
-        #  df = obtain_subset_processors(indicator.processors_selector, serialized_model, registry, p_map, results)
-        df = results
-
-        # Parse the expression
-        ast = string_to_ast(indicator_expression, indicator.formula if case_sensitive else indicator.formula.lower())
-
-        # Scenario parameters
-        scenario_params = create_dictionary()
-        for scenario_name, scenario_exp_params in problem_statement.scenarios.items():  # type: str, dict
-            scenario_params[scenario_name] = evaluate_parameters_for_scenario(global_parameters, scenario_exp_params)
-
-        issues = []
-        new_df_rows_idx = []
-        new_df_rows_data = []
-        for t, g in df.groupby(idx_names):
-            params = scenario_params[t[0]]
-            # Elaborate a dictionary with dictionary values
-            d = {}
-            for row, sdf in g.iterrows():
-                iface = sdf["Interface"]
-                d[iface+"_"+sdf["Orientation"]] = sdf["Value"]
-                if iface in d:
-                    del d[iface]  # If exists, delete (only one appearance permitted, to avoid ambiguity)
-                else:
-                    d[iface] = sdf["Value"]  # First appearance allowed, insert
-            d.update(params)
-            # Variables for aggregator functions
-            d["_processors_map"] = p_map
-            d["_processors_dom"] = serialized_model
-            if not case_sensitive:
-                d = {k.lower(): v for k, v in d.items()}
-
-            state = State(d)
-            val, variables = ast_evaluator(ast, state, None, issues)
-            if val:
-                new_df_rows_idx.append(t)
-                new_df_rows_data.append((indicator.name, val, None))
-        df2 = pd.DataFrame(data=new_df_rows_data,
-                           index=pd.MultiIndex.from_tuples(new_df_rows_idx, names=idx_names),
-                           columns=["Indicator", "Value", "Unit"])
-        return df2
-
-    idx_names = ["Scenario", "Period", "Scope", "Processor"]
-    idx_to_change = ["Interface", "Orientation"]
-    results.reset_index(idx_to_change, inplace=True)
-    # For each ScalarIndicator...
-    dfs = []
-    for si in indicators:
-        if si._indicator_category == IndicatorCategories.factors_expression:
-            dfi = prepare_scalar_indicator(si)
-            if not dfi.empty:
-                dfs.append(dfi)
-    # Restore index
-    results.set_index(idx_to_change, append=True, inplace=True)
-
-    if dfs:
-        return pd.concat(dfs)
-    else:
-        return pd.DataFrame()
-
-
-def calculate_global_scalar_indicators(indicators: List[Indicator],
-                                      serialized_model: lxml.etree._ElementTree, p_map: Dict[str, Processor],
-                                      results: pd.DataFrame, local_indicators: pd.DataFrame,
-                                      global_parameters: List[Parameter], problem_statement: ProblemStatement) -> pd.DataFrame:
-    """
-    Compute global scalar indicators using data from "results", and return a pd.DataFrame
-
-    :param indicators: List of indicators to compute
-    :param serialized_model:
-    :param p_map:
-    :param results: Result of the graph solving process
-    :param global_parameters: List of parameter definitions
-    :param problem_statement: Object with a list of scenarios (defining Parameter sets)
-    :return: pd.DataFrame with all the local indicators
-    """
-
-    def prepare_global_scalar_indicator(indicator: Indicator) -> pd.DataFrame:
-        """
-
-        :param indicator:
-        :return:
-        """
-        df = results
-
-        # Parse the expression
-        ast = string_to_ast(indicator_expression, indicator.formula if case_sensitive else indicator.formula.lower())
-
-        # Scenario parameters
-        scenario_params = create_dictionary()
-        for scenario_name, scenario_exp_params in problem_statement.scenarios.items():  # type: str, dict
-            scenario_params[scenario_name] = evaluate_parameters_for_scenario(global_parameters, scenario_exp_params)
-
-        issues = []
-        new_df_rows_idx = []
-        new_df_rows_data = []
-        for t, g in df.groupby(idx_names):  # GROUP BY Scenario, Period
-            params = scenario_params[t[0]]  # Obtain parameter values from scenario, in t[0]
-            # TODO ALL interfaces and local indicators from the selected processors, for the selected Scenario, Period, Scope should go to a DataFrame: rows->Processors, columns->(interfaces and indicators)
-            extract = pd.DataFrame()
-            # TODO If a specific indicator or interface from a processor is mentioned, put it as a variable
-            # Elaborate a dictionary with dictionary values
-            d = {}
-            for row, sdf in g.iterrows():
-                iface = sdf["Interface"]
-                d[iface+"_"+sdf["Orientation"]] = sdf["Value"]
-                if iface in d:
-                    del d[iface]  # If exists, delete (only one appearance permitted, to avoid ambiguity)
-                else:
-                    d[iface] = sdf["Value"]  # First appearance allowed, insert
-            d.update(params)
-            # Variables for aggregator functions
-            d["_processors_map"] = p_map
-            d["_processors_dom"] = serialized_model
-            d["_results"] = extract
-            # d["_indicators"] = local_indicators
-            if not case_sensitive:
-                d = {k.lower(): v for k, v in d.items()}
-
-            state = State(d)
-            val, variables = ast_evaluator(ast, state, None, issues)
-
-            if val:
-                new_df_rows_idx.append(t)
-                new_df_rows_data.append((indicator.name, val, None))
-        df2 = pd.DataFrame(data=new_df_rows_data,
-                           index=pd.MultiIndex.from_tuples(new_df_rows_idx, names=idx_names),
-                           columns=["Indicator", "Value", "Unit"])
-        return df2
-
-    idx_names = ["Scenario", "Period", "Scope"]
-    idx_to_change = []
-    results.reset_index(idx_to_change, inplace=True)
-    # For each ScalarIndicator...
-    dfs = []
-    if False:  # DISABLED, "prepare_global_scalar_indicator" STILL NOT FINISHED
-        for si in indicators:
-            if si._indicator_category == IndicatorCategories.case_study:
-                dfi = prepare_global_scalar_indicator(si)
-                if not dfi.empty:
-                    dfs.append(dfi)
-    # Restore index
-    results.set_index(idx_to_change, append=True, inplace=True)
-
-    if dfs:
-        return pd.concat(dfs)
-    else:
-        return pd.DataFrame()
 
 
 def aggregate_results(tree: Dict[InterfaceNode, Set[InterfaceNode]], params: NodeFloatComputedDict,

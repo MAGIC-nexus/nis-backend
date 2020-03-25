@@ -111,6 +111,7 @@ string = quotedString.setParseAction(
 
 
 # RULES - XQuery/XPath string - used in aggregator expressions potentially involving several processors
+# -- NOT USED --
 def xquery_validation(s, l, tt):
     """
     Function to elaborate a node for evaluation of processor name (definition of processor name) or

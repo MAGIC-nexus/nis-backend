@@ -1096,6 +1096,16 @@ class FactorType(Identifiable, HierarchyNode, HierarchyExpression, Taggable, Qua
         self._roegen_type = roegen_type
         self._sphere = sphere
         self._opposite_processor_type = opposite_processor_type
+        if "range" in self.attributes:
+            self._range = self.attributes.get["range"]
+            del self.attributes["range"]
+        else:
+            self._range = None
+        if "range_unit" in self.attributes:
+            self._range_unit = self.attributes.get["range_unit"]
+            del self.attributes["range_unit"]
+        else:
+            self._range_unit = None
         if "unit" in self.attributes:
             self._default_unit_str = self.attributes["unit"]
             del self.attributes["unit"]
@@ -1113,6 +1123,10 @@ class FactorType(Identifiable, HierarchyNode, HierarchyExpression, Taggable, Qua
             'sphere': self.sphere,
             'opposite_processor_type': self.opposite_processor_type
         })
+        if self._range:
+            d["range"] = self._range
+        if self._range_unit:
+            d["range_unit"] = self._range_unit
 
         # Remove property inherited from HierarchyNode because it is always "null" for FactorType
         d.pop("referred_node", None)
@@ -2810,6 +2824,10 @@ class Indicator(Nameable, Identifiable, Encodable):
     @property
     def formula(self):
         return self._formula
+
+    @property
+    def benchmarks(self):
+        return self._benchmarks
 
     @staticmethod
     def partial_key(name: str=None):
