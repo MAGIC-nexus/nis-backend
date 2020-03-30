@@ -1,4 +1,4 @@
-from typing import Dict, List, Tuple, Set, Optional
+from typing import Dict, List, Tuple, Set, Optional, Container
 
 import networkx as nx
 
@@ -22,8 +22,11 @@ class ComputationGraph:
      - Split rule: If the node value is split entirely (100%) into the successors nodes, its value can be computed in
                    the opposite direction (from successors) only by computing one of the input nodes.
     """
-    def __init__(self, graph: Optional[nx.DiGraph] = None):
+    def __init__(self, graph: Optional[nx.DiGraph] = None, name: str = None):
         self.graph = nx.DiGraph()
+        self.name = name
+
+        self.descendants: Optional[Dict[Node, Set[Node]]] = None
 
         if graph:
             for u, v, data in graph.edges(data=True):
@@ -34,10 +37,20 @@ class ComputationGraph:
                 if data.get("add_split"):
                     self.mark_node_split(n, EdgeType.DIRECT)
 
+            self.compute_descendants()
+
     @property
     def nodes(self):
         """ Return the nodes of the flow graph """
         return self.graph.nodes
+
+    def nodes_not_in_container(self, container: Container[Node]) -> List[Node]:
+        """ Return the nodes of the graph not present in a container """
+        return [n for n in self.graph.nodes if n not in container]
+
+    def nodes_in_container(self, container: Container[Node]) -> List[Node]:
+        """ Return the nodes of the graph present in a container """
+        return [n for n in self.graph.nodes if n in container]
 
     def _inputs(self, n: Node, edge_type: EdgeType) -> List[Tuple[Node, Optional[Weight]]]:
         """ Return the predecessors of a node in the specified direction """
@@ -62,6 +75,9 @@ class ComputationGraph:
         self.init_node_split(u)
         self.init_node_split(v)
 
+        # Invalidate descendants, it must be recomputed
+        self.descendants = None
+
     def init_node_split(self, n: Node) -> None:
         """ Set the default value for attribute 'split' to a node """
         if not self.graph.nodes[n].get("split"):
@@ -71,12 +87,59 @@ class ComputationGraph:
         """ Set the attribute 'split' to a node """
         self.graph.nodes[n]["split"][graph_type.value] = split
 
+    def compute_descendants(self):
+        def visit_forward(node: Node) -> None:
+            visited_nodes.add(node)
+
+            if node in self.descendants:
+                visited_nodes.update(self.descendants[node])
+                return
+
+            for successor in self.weighted_successors(node):
+                if successor not in visited_nodes:
+                    visit_forward(successor)
+
+        self.descendants = {}
+
+        for n in self.graph.nodes:  # type: Node
+            visited_nodes: Set[Node] = set()
+            visit_forward(n)
+            self.descendants[n] = visited_nodes - {n}
+
+    def compute_conflicts(self, new_computed_nodes: Set[Node], prev_computed_nodes: Set[Node]) -> Dict[Node, Set[Node]]:
+        _new_computed_nodes = self.nodes_in_container(new_computed_nodes)
+        if not _new_computed_nodes:
+            return {}  # Nothing new to compute
+
+        if not self.descendants:
+            self.compute_descendants()
+
+        _prev_computed_nodes = self.nodes_in_container(prev_computed_nodes)
+        return self._compute_conflicts(set(_new_computed_nodes), set(_prev_computed_nodes))
+
+    def _compute_conflicts(self, new_computed_nodes: Set[Node], prev_computed_nodes: Set[Node]) -> Dict[Node, Set[Node]]:
+        assert self.descendants
+        conflicts: Dict[Node, Set[Node]] = {}
+        computed_nodes = prev_computed_nodes | new_computed_nodes
+
+        for node in prev_computed_nodes:
+            intersection = self.descendants[node] & new_computed_nodes
+            if intersection:
+                conflicts[node] = intersection
+
+        for node in new_computed_nodes:
+            intersection = self.descendants[node] & computed_nodes
+            if intersection:
+                conflicts[node] = intersection
+
+        return conflicts
+
     def compute_param_conflicts(self, params: Set[Node]) -> Dict[Node, Set[Node]]:
         """ Calculate the conflicts between nodes with values - the parameters - in a computation graph.
             If node A has a conflict with node B, means that B can be entirely or partially computed from node A,
             so both nodes cannot have input values at the same time (unless these values are consistent).
 
-            Example
+            Example]
             - Given the graph: a -> b -> c -> e <- d
             - Given the parameters: a, b, c, d
             - The conflicts are:
@@ -84,6 +147,8 @@ class ComputationGraph:
                 b: {c} (c can be computed from b)
                 c: none
                 d: none
+
+            **DEPRECATED METHOD**
 
             :param params: the set of parameters of a computation graph, i.e. the nodes that have values and we use
                            to compute the values in the remaining nodes of the graph.
@@ -105,8 +170,11 @@ class ComputationGraph:
             return result
 
         all_conflicts: Dict[Node, Set[Node]] = {}
-        for param in params:
-            sub_params: Set[Node] = params - {param}
+        # Filter out params not in nodes
+        filtered_params = {n for n in params if n in self.nodes}
+
+        for param in filtered_params:
+            sub_params: Set[Node] = filtered_params - {param}
             visited_nodes: Set[Node] = set()
             conflicts = visit_forward(param)
             all_conflicts[param] = conflicts
