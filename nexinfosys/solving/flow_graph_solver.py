@@ -1210,6 +1210,7 @@ def inplace_case_sensitiveness_dataframe(df: pd.DataFrame):
         df.index.set_levels([df.index.levels[level_processor].str.lower(),
                              df.index.levels[level_interface].str.lower()],
                             level=[level_processor, level_interface],
+                            verify_integrity=False,
                             inplace=True)
 
 
