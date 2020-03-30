@@ -25,11 +25,8 @@ Before the elaboration of flow graphs, several preparatory steps:
 * Observers (different versions). Take average always
 
 """
-from _operator import add
 from collections import defaultdict
 from enum import Enum
-from functools import reduce
-from itertools import chain
 from typing import Dict, List, Set, Any, Tuple, Union, Optional, NamedTuple, Generator, Type, NoReturn
 
 import lxml
@@ -45,7 +42,7 @@ from nexinfosys.command_generators.parser_ast_evaluators import ast_evaluator, o
 from nexinfosys.command_generators.parser_field_parsers import string_to_ast, expression_with_parameters, is_year, \
     is_month, indicator_expression, parse_string_as_simple_ident_list, number_interval
 from nexinfosys.common.helper import create_dictionary, PartialRetrievalDictionary, ifnull, Memoize, istr, strcmp, \
-    FloatExp, split_and_strip, precedes_in_list
+    FloatExp, precedes_in_list
 from nexinfosys.ie_exports.xml_export import export_model_to_xml
 from nexinfosys.model_services import get_case_study_registry_objects, State
 from nexinfosys.models import CodeImmutable
@@ -375,9 +372,9 @@ def evaluate_numeric_expression_with_parameters(expression: Union[float, str, di
         try:
             value = float(expression)
         except ValueError:
-            print(f"{expression} before")
+            # print(f"{expression} before")
             ast = string_to_ast(expression_with_parameters, expression)
-            print(f"{expression} after")
+            # print(f"{expression} after")
             value, params = ast_evaluator(ast, state, None, issues)
             if value is not None:
                 ast = None
