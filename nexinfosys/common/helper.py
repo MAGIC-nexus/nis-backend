@@ -1524,18 +1524,26 @@ def binary_exp(exp1: str, exp2: str, oper: str) -> str:
 class FloatExp(SupportsFloat):
     """ Wrapper of the Float data type which includes a name and a string expression that will grow
         when operating with other objects """
-    def __init__(self, val: float, name: Optional[str]=None, exp: Optional[str]=None):
-        assert(isinstance(val, float))
+    def __init__(self, val: Union[float, int], name: Optional[str] = None, exp: Optional[str] = None):
+        assert(isinstance(val, float) or isinstance(val, int))
         assert(name is None or isinstance(name, str))
         assert(exp is None or isinstance(exp, str))
 
-        self.val = val
-        self.exp = str(val) if exp is None else exp
+        self.val = float(val)
+        self.exp = str(self.val) if exp is None else exp
         self.name = self.exp if name is None else name
 
     def __float__(self) -> float:
         """ Needed for abc SupportsFloat used in match.isclose() """
         return self.val
+
+    def __round__(self, n=None):
+        exp = f"round({self.name}{'' if n is None else ','+str(n)})"
+        return FloatExp(float(round(self.val, n)), exp, exp)
+
+    def __abs__(self):
+        exp = f"abs({self.name})"
+        return FloatExp(abs(self.val), exp, exp)
 
     def assignable_copy(self):
         return FloatExp(self.val, self.name, self.name)
