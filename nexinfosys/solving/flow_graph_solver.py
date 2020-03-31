@@ -707,39 +707,35 @@ def compute_interfacetype_hierarchies(registry) -> List[Dict[InterfaceNode, Set[
     return hierarchies
 
 
-def compute_partof_hierarchies(registry, input_systems: Dict[str, Set[Processor]]) \
-        -> List[Dict[InterfaceNode, Set[InterfaceNode]]]:
+def compute_partof_hierarchies(registry) -> List[Dict[InterfaceNode, Set[InterfaceNode]]]:
 
     hierarchies: List[Dict[InterfaceNode, Set[InterfaceNode]]] = []
 
-    for system in input_systems:
+    # Get the -PartOf- processor relations of the system
+    processor_partof_relations = get_processor_partof_relations(registry)
 
-        # Get the -PartOf- processor relations of the system
-        processor_partof_relations = get_processor_partof_relations(registry, system)
+    # Get all different existing interfaces
+    for interface_type in registry.get(FactorType.partial_key()):
 
-        # Get all different existing interfaces
-        for interface_type in registry.get(FactorType.partial_key()):
+        for orientation in orientations:
 
-            for orientation in orientations:
-
-                hierarchies.append(
-                    create_interface_node_hierarchy_from_processors(processor_partof_relations,
-                                                                    interface_type,
-                                                                    orientation)
-                )
+            hierarchies.append(
+                create_interface_node_hierarchy_from_processors(processor_partof_relations,
+                                                                interface_type,
+                                                                orientation)
+            )
 
     return hierarchies
 
 
-def get_processor_partof_relations(glb_idx: PartialRetrievalDictionary, system: str) -> Dict[Processor, Set[Processor]]:
-    """ Get in a dictionary the -PartOf- processor relations of one system, ignoring Archetype processors """
+def get_processor_partof_relations(glb_idx: PartialRetrievalDictionary) -> Dict[Processor, Set[Processor]]:
+    """ Get in a dictionary the -PartOf- processor relations, ignoring Archetype processors """
     relations: Dict[Processor, Set[Processor]] = {}
 
     for parent, child in [(r.parent_processor, r.child_processor)
                           for r in glb_idx.get(ProcessorsRelationPartOfObservation.partial_key())
-                          if system in [r.parent_processor.processor_system, r.child_processor.processor_system]
-                          and "Archetype" not in [r.parent_processor.instance_or_archetype,
-                                                  r.child_processor.instance_or_archetype]]:
+                          if "Archetype" not in [r.parent_processor.instance_or_archetype,
+                                                 r.child_processor.instance_or_archetype]]:
         relations.setdefault(parent, set()).add(child)
 
     return relations
@@ -799,7 +795,7 @@ def create_interface_node_hierarchy_from_interface_types(
 
 
 def flow_graph_solver(global_parameters: List[Parameter], problem_statement: ProblemStatement,
-                      input_systems: Dict[str, Set[Processor]], global_state: State, dynamic_scenario: bool) -> List[Issue]:
+                      global_state: State, dynamic_scenario: bool) -> List[Issue]:
     """
     A solver using the graph composed by the interfaces and the relationships (flows, part-of, scale, change-of-scale and relative-to)
 
@@ -807,7 +803,6 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
     :param problem_statement: ProblemStatement object, with scenarios (parameters changing the default)
                               and parameters for the solver
     :param global_state:      All variables available: object model, registry, datasets (inputs and outputs), ...
-    :param input_systems:     A dictionary of the different systems to be solved
     :param dynamic_scenario:  If "True" store results in datasets separated from "fixed" scenarios.
                               Also "problem_statement" MUST have only one scenario with the parameters.
     :return: List of Issues
@@ -827,7 +822,7 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
 
     interfacetype_hierarchies = compute_interfacetype_hierarchies(glb_idx)
 
-    partof_hierarchies = compute_partof_hierarchies(glb_idx, input_systems)
+    partof_hierarchies = compute_partof_hierarchies(glb_idx)
 
     total_results: ResultDict = {}
 

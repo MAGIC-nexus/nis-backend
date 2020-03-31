@@ -9,20 +9,15 @@ import json
 import logging
 import uuid
 from enum import Enum
-from typing import List, Union, Dict, Set, Tuple, Optional, Any
-import pandas as pd
+from typing import List, Union, Dict, NoReturn
 
-import networkx as nx
+import pandas as pd
 import sqlalchemy
 
 import nexinfosys
-from lxml import etree
 from nexinfosys.command_generators import Issue, IssueLocation, IType
-from nexinfosys.command_generators.parser_ast_evaluators import ast_evaluator
-from nexinfosys.command_generators.parser_field_parsers import string_to_ast, expression_with_parameters
 from nexinfosys.command_generators.parsers_factory import commands_container_parser_factory
-from nexinfosys.common.helper import create_dictionary, strcmp, istr
-from nexinfosys.ie_exports.xml_export import export_model_to_xml
+from nexinfosys.common.helper import create_dictionary, strcmp
 from nexinfosys.model_services import IExecutableCommand, get_case_study_registry_objects
 from nexinfosys.model_services import State
 from nexinfosys.models.musiasem_concepts import ProblemStatement, FactorsRelationDirectedFlowObservation, Processor, \
@@ -33,7 +28,8 @@ from nexinfosys.models.musiasem_methodology_support import (User,
                                                             CaseStudyVersionSession,
                                                             CommandsContainer,
                                                             force_load,
-                                                            DBSession, ORMBase, load_table, Authenticator, CaseStudyStatus,
+                                                            DBSession, ORMBase, load_table, Authenticator,
+                                                            CaseStudyStatus,
                                                             ObjectType, PermissionType)
 from nexinfosys.restful_service import tm_default_users, tm_authenticators, tm_case_study_version_statuses, \
     tm_object_types, tm_permissions, default_cmds
@@ -314,13 +310,13 @@ def prepare_and_solve_model(state: State, dynamic_scenario_parameters: Dict = No
     :param dynamic_scenario_parameters:
     :return:
     """
-    systems = prepare_model(state)
-    issues = call_solver(state, systems, dynamic_scenario_parameters)
+    prepare_model(state)
+    issues = call_solver(state, dynamic_scenario_parameters)
 
     return issues
 
 
-def call_solver(state: State, systems: Dict[str, Set[Processor]], dynamic_scenario_parameters: Dict) -> List[Issue]:
+def call_solver(state: State, dynamic_scenario_parameters: Dict) -> List[Issue]:
     """
     Solve the problem
 
@@ -381,12 +377,12 @@ def call_solver(state: State, systems: Dict[str, Set[Processor]], dynamic_scenar
 
     issues: List[Issue] = []
     if solver_type == "FlowGraph":
-        issues = flow_graph_solver(global_parameters, problem_statement, systems, state, dynamic_scenario)
+        issues = flow_graph_solver(global_parameters, problem_statement, state, dynamic_scenario)
 
     return issues
 
 
-def prepare_model(state) -> Dict[str, Set[Processor]]:
+def prepare_model(state) -> NoReturn:
     """
     Modify the state so that:
     * Implicit references of Interfaces to subcontexts are materialized
@@ -395,7 +391,6 @@ def prepare_model(state) -> Dict[str, Set[Processor]]:
       * Creating relationships in these processors
 
     :param state:
-    :return: A dictionary of systems each containing a set of the Processors inside it ("local" and "environment")
     """
     # Registry and the other objects also
     glb_idx, _, _, _, _ = get_case_study_registry_objects(state)
@@ -403,19 +398,9 @@ def prepare_model(state) -> Dict[str, Set[Processor]]:
     query = BasicQuery(state)
     filt = {}
     objs = query.execute([Factor], filt)
-    processors_by_system = create_dictionary()
     for iface in objs[Factor]:  # type: Factor
         if strcmp(iface.processor.instance_or_archetype, 'Archetype') or strcmp(iface.processor.instance_or_archetype, 'No'):
             continue
-
-        system = iface.processor.processor_system
-
-        processors = processors_by_system.get(system, set())
-        if system not in processors_by_system:
-            processors_by_system[system] = processors
-
-        if iface.processor not in processors:
-            processors.add(iface.processor)
 
         # If the Interface is connected to a "Subcontext" different than the owning Processor
         if iface.opposite_processor_type and \
@@ -436,7 +421,7 @@ def prepare_model(state) -> Dict[str, Set[Processor]]:
             # Then create an Interface and a Relationship
             if len(relations) == 0:
                 # Define the name of a Processor in the same context but in different subcontext
-                p_name = system + "_" + iface.opposite_processor_type
+                p_name = iface.processor.processor_system + "_" + iface.opposite_processor_type
                 p = glb_idx.get(Processor.partial_key(p_name))
                 if len(p) == 0:
                     attributes = {
@@ -449,9 +434,6 @@ def prepare_model(state) -> Dict[str, Set[Processor]]:
 
                     p = Processor(p_name, attributes=attributes)
                     glb_idx.put(p.key(), p)
-
-                    if p.subsystem_type.lower() in ["local", "environment"]:
-                        processors.add(p)
                 else:
                     p = p[0]
 
@@ -482,7 +464,6 @@ def prepare_model(state) -> Dict[str, Set[Processor]]:
                 fr = FactorsRelationDirectedFlowObservation.create_and_append(source=source, target=target, observer=None)
                 glb_idx.put(fr.key(), fr)
 
-    return processors_by_system
 
 # #####################################################################################################################
 # >>>> INTERACTIVE SESSION <<<<
