@@ -55,6 +55,7 @@ cf_descriptions = {
     ("processors", "processor_group"): "A group to which the Processor will be a member of.",
     ("processors", "processor"): "Name of the Processor.",
     ("processors", "parent_processor"): "Name of the parent Processor regarding “part-of” relation. It is a quick way of specifying a hierarchy of functional composition. Another way is through the command “Relationships”.",
+    ("processors", "parent_processor_weight"): "Contribution of the processor to its parent when aggregating. 1 by default, it may be useful for multifunctional processors.",
     ("processors", "behave_as_processor"): "Make current processor to seem as the named processor when aggregating 'part-of' to the current ParentProcessor. A different processor could be used for another parent.",
     ("processors", "subsystem_type"): "The main context of the Processor. Default value 'Local'.",
     ("processors", "processor_system"): "The system to which the processor is member of. It is allowed to connect processors from multiple systems (the initial intent is to label a system as a country, like “ES”, “NL”, “IT”). Default value: 'default'.",

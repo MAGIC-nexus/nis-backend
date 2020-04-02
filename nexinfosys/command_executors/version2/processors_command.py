@@ -235,8 +235,7 @@ class ProcessorsCommand(BasicCommand):
             try:
                 behave_as_processor = self._get_processor_from_field("behave_as_processor")
             except CommandExecutionError:
-                self._add_issue(IType.ERROR, f"Specified 'behave as' processor, '{field_values.get('behave_as_processor')}', does not exist"+subrow_issue_message(subrow))
-                return
+                self._add_issue(IType.WARNING, f"Specified 'behave as' processor, '{field_values.get('behave_as_processor')}', does not exist, value ignored"+subrow_issue_message(subrow))
         else:
             behave_as_processor = None
 
@@ -343,7 +342,8 @@ class ProcessorsCommand(BasicCommand):
                 self._add_issue(IType.WARNING,
                                 f"{p.name} is already part-of {parent_processor.name}. Skipped." + subrow_issue_message(subrow))
                 return
-            o1 = ProcessorsRelationPartOfObservation.create_and_append(parent_processor, p, None)  # Part-of
+
+            o1 = ProcessorsRelationPartOfObservation.create_and_append(parent_processor, p, None, behave_as_processor=behave_as_processor, weight=field_values.get("parent_processor_weight"))  # Part-of
             self._glb_idx.put(o1.key(), o1)
             for hname in parent_processor.full_hierarchy_names(self._glb_idx):
                 p_key = Processor.partial_key(f"{hname}.{p.name}", p.ident)

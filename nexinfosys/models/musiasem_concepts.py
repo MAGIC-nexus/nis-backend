@@ -2103,7 +2103,7 @@ class ProcessorsRelationIsAObservation(ProcessorsRelationObservation, Encodable)
 
     @staticmethod
     def create_and_append(parent: Processor, child: Processor, observer: Observer, tags=None, attributes=None):
-        o = ProcessorsRelationPartOfObservation(parent, child, observer, tags, attributes)
+        o = ProcessorsRelationIsAObservation(parent, child, observer, tags, attributes)
         if parent:
             parent.observations_append(o)
         if child:
@@ -2147,13 +2147,15 @@ class ProcessorsRelationIsAObservation(ProcessorsRelationObservation, Encodable)
 
 
 class ProcessorsRelationPartOfObservation(ProcessorsRelationObservation, Encodable):
-    def __init__(self, parent: Processor, child: Processor, observer: Observer=None, tags=None, attributes=None):
+    def __init__(self, parent: Processor, child: Processor, observer: Observer=None, behave_as: Processor=None, weight=None, tags=None, attributes=None):
         Taggable.__init__(self, tags)
         Qualifiable.__init__(self, attributes)
         Automatable.__init__(self)
         self._parent = parent
         self._child = child
         self._observer = observer
+        self._weight = "1" if weight is None else weight
+        self._behave_as = behave_as
 
     def encode(self):
         d = Encodable.parents_encode(self, __class__)
@@ -2167,8 +2169,8 @@ class ProcessorsRelationPartOfObservation(ProcessorsRelationObservation, Encodab
         return d
 
     @staticmethod
-    def create_and_append(parent: Processor, child: Processor, observer: Optional[Observer] = None, tags=None, attributes=None):
-        o = ProcessorsRelationPartOfObservation(parent, child, observer, tags, attributes)
+    def create_and_append(parent: Processor, child: Processor, observer: Optional[Observer] = None, behave_as: Processor=None, weight=None, tags=None, attributes=None):
+        o = ProcessorsRelationPartOfObservation(parent, child, observer, behave_as, weight, tags, attributes)
         if parent:
             parent.observations_append(o)
         if child:
@@ -2189,6 +2191,14 @@ class ProcessorsRelationPartOfObservation(ProcessorsRelationObservation, Encodab
     @property
     def observer(self):
         return self._observer
+
+    @property
+    def weight(self):
+        return self._weight
+
+    @property
+    def behave_as(self):
+        return self._behave_as
 
     @staticmethod
     def partial_key(parent: Processor=None, child: Processor=None, observer: Observer=None):
