@@ -343,7 +343,7 @@ class ProcessorsCommand(BasicCommand):
                                 f"{p.name} is already part-of {parent_processor.name}. Skipped." + subrow_issue_message(subrow))
                 return
 
-            o1 = ProcessorsRelationPartOfObservation.create_and_append(parent_processor, p, None, behave_as_processor=behave_as_processor, weight=field_values.get("parent_processor_weight"))  # Part-of
+            o1 = ProcessorsRelationPartOfObservation.create_and_append(parent_processor, p, None, behave_as=behave_as_processor, weight=field_values.get("parent_processor_weight"))  # Part-of
             self._glb_idx.put(o1.key(), o1)
             for hname in parent_processor.full_hierarchy_names(self._glb_idx):
                 p_key = Processor.partial_key(f"{hname}.{p.name}", p.ident)
