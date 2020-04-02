@@ -30,6 +30,7 @@ import pyximport
 from nexinfosys.ie_exports.back_to_nis_format import nis_format_spreadsheet
 from nexinfosys.ie_exports.reference_of_commands import obtain_commands_help
 from nexinfosys.ie_exports.sdmx import get_dataset_metadata
+from nexinfosys.ie_exports.xml_export import export_model_to_xml
 
 pyximport.install(reload_support=True, language_level=3)
 
@@ -1119,7 +1120,7 @@ def query_state_list_results(isess):
                            description="Model",
                            formats=[
                                dict(format=f, url=nis_api_base + F"/isession/rsession/state_query/model.{f.lower()}")
-                               for f in ["JSON", "XLSX"]]),
+                               for f in ["JSON", "XLSX", "XML"]]),
                       ] +
                      [dict(name="Ontology",
                            type="ontology",
@@ -1455,6 +1456,14 @@ def get_model(format):
                     # Prepare a XLSX binary
                     output = nis_format_spreadsheet(isess.state)
             mimetype = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+        elif format == "xml":
+            # A reproducible session must be open, signal about it if not
+            if isess.reproducible_session_opened():
+                if isess.state:
+                    # Prepare a XML string
+                    glb_idx, _, _, _, _ = get_case_study_registry_objects(isess.state)
+                    output, _ = export_model_to_xml(glb_idx)
+            mimetype = "text/xml"
 
     if output:
         return Response(output, mimetype=mimetype, status=200)

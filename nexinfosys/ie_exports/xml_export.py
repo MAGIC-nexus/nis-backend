@@ -73,8 +73,7 @@ def export_model_to_xml(registry: PartialRetrievalDictionary) -> Tuple[str, Dict
         {chr(10).join([xml_interface(f) for f in p.factors])}
         </interfaces>
         {chr(10).join([xml_processor(c, registry, p_map) for c in children])}    
-    </{p.name}>     
-        """
+    </{p.name}>"""
         if case_sensitive:
             return s
         else:
@@ -83,19 +82,30 @@ def export_model_to_xml(registry: PartialRetrievalDictionary) -> Tuple[str, Dict
     # Part of relationships
     por = registry.get(ProcessorsRelationPartOfObservation.partial_key())
 
+    # Set of all instance processors NOT touched by part-of relationships
+    unaffected_procs = set([p for p in registry.get(Processor.partial_key()) if strcmp(p.instance_or_archetype, "Instance")])
+    for po in por:
+        try:
+            unaffected_procs.remove(po.parent_processor)
+        except ValueError:
+            pass
+        try:
+            unaffected_procs.remove(po.child_processor)
+        except ValueError:
+            pass
+
     # Keep those affecting Instance processors
     por = [po for po in por if strcmp(po.parent_processor.instance_or_archetype, "Instance")]
 
     # Get root processors (set of processors not appearing as child_processor)
     parents = set([po.parent_processor for po in por])
     children = set([po.child_processor for po in por])
-    roots = parents.difference(children)
+    roots = parents.difference(children).union(unaffected_procs)
     # leaves = children.difference(parents)
     result = '<processors>'  # <?xml version="1.0" encoding="utf-8"?>\n
     p_map = {}
     for p in roots:
         result += xml_processor(p, registry, p_map)
-    result += "</processors>"
+    result += "\n</processors>"
 
     return result, p_map
-
