@@ -511,7 +511,10 @@ def resolve_weight_expressions(graph_list: List[nx.DiGraph], state: State, raise
                 data["weight"] = ast if value is None else FloatExp(value, None, str(expression))
 
 
-def resolve_partof_weight_expressions(weights: ProcessorsRelationWeights, state: State, raise_error=False) -> None:
+def resolve_partof_weight_expressions(weights: ProcessorsRelationWeights, state: State, raise_error=False) \
+        -> ProcessorsRelationWeights:
+    evaluated_weights: ProcessorsRelationWeights = {}
+
     for (parent, child), expression in weights.items():
         if expression is not None and not isinstance(expression, FloatExp):
             value, ast, params, issues = evaluate_numeric_expression_with_parameters(expression, state)
@@ -521,7 +524,9 @@ def resolve_partof_weight_expressions(weights: ProcessorsRelationWeights, state:
                     f"to parent processor '{child}'. Params: {params}. Issues: {', '.join(issues)}"
                 )
 
-            weights[(parent, child)] = ast if value is None else FloatExp(value, None, str(expression))
+            evaluated_weights[(parent, child)] = ast if value is None else FloatExp(value, None, str(expression))
+
+    return evaluated_weights
 
 
 def create_scale_change_relations_and_update_flow_relations(relations_flow: nx.DiGraph, registry) -> nx.DiGraph:
@@ -844,7 +849,6 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
     interfacetype_hierarchies = compute_interfacetype_hierarchies(glb_idx)
 
     partof_hierarchies, partof_weights = compute_partof_hierarchies(glb_idx)
-    resolve_partof_weight_expressions(partof_weights, global_state)
 
     total_results: ResultDict = {}
 
@@ -853,7 +857,7 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
 
         scenario_state = State(evaluate_parameters_for_scenario(global_parameters, scenario_params))
 
-        resolve_partof_weight_expressions(partof_weights, scenario_state)
+        scenario_partof_weights = resolve_partof_weight_expressions(partof_weights, scenario_state, raise_error=True)
 
         # Get scenario parameters
         observers_priority_list = parse_string_as_simple_ident_list(scenario_state.get('NISSolverObserversPriority'))
@@ -927,7 +931,7 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
 
                         new_results, partof_taken_results, partof_dismissed_results = compute_hierarchy_aggregate_results(
                             partof_hierarchies, results, aggregations, conflicting_data_policy, missing_value_policy,
-                            partof_weights)
+                            scenario_partof_weights)
 
                         aggregations.update(new_results)
                         results.update(new_results)
