@@ -87,11 +87,11 @@ def export_model_to_xml(registry: PartialRetrievalDictionary) -> Tuple[str, Dict
     for po in por:
         try:
             unaffected_procs.remove(po.parent_processor)
-        except ValueError:
+        except KeyError:
             pass
         try:
             unaffected_procs.remove(po.child_processor)
-        except ValueError:
+        except KeyError:
             pass
 
     # Keep those affecting Instance processors
