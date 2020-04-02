@@ -202,6 +202,9 @@ class ResultKey(NamedTuple):
         return self.scenario, self.period, self.scope.name, self.conflict_partof.name, self.conflict_itype.name
 
 
+ProcessorsRelationWeights = Dict[Tuple[Processor, Processor], Any]
+InterfaceNodeHierarchy = Dict[InterfaceNode, Set[InterfaceNode]]
+
 NodeFloatDict = Dict[InterfaceNode, FloatExp]
 NodeFloatComputedDict = Dict[InterfaceNode, FloatComputedTuple]
 ResultDict = Dict[ResultKey, NodeFloatComputedDict]
@@ -508,6 +511,19 @@ def resolve_weight_expressions(graph_list: List[nx.DiGraph], state: State, raise
                 data["weight"] = ast if value is None else FloatExp(value, None, str(expression))
 
 
+def resolve_partof_weight_expressions(weights: ProcessorsRelationWeights, state: State, raise_error=False) -> None:
+    for (parent, child), expression in weights.items():
+        if expression is not None and not isinstance(expression, FloatExp):
+            value, ast, params, issues = evaluate_numeric_expression_with_parameters(expression, state)
+            if raise_error and value is None:
+                raise SolvingException(
+                    f"Cannot evaluate expression '{expression}' for weight from child processor '{parent}' "
+                    f"to parent processor '{child}'. Params: {params}. Issues: {', '.join(issues)}"
+                )
+
+            weights[(parent, child)] = ast if value is None else FloatExp(value, None, str(expression))
+
+
 def create_scale_change_relations_and_update_flow_relations(relations_flow: nx.DiGraph, registry) -> nx.DiGraph:
     relations_scale_change = nx.DiGraph()
 
@@ -684,9 +700,9 @@ def compute_internal_external_results(values: NodeFloatComputedDict, comp_graph:
     return internal_results, external_results
 
 
-def compute_interfacetype_hierarchies(registry) -> List[Dict[InterfaceNode, Set[InterfaceNode]]]:
+def compute_interfacetype_hierarchies(registry) -> List[InterfaceNodeHierarchy]:
 
-    hierarchies: List[Dict[InterfaceNode, Set[InterfaceNode]]] = []
+    hierarchies: List[InterfaceNodeHierarchy] = []
 
     # Get all different existing interface types with children interface types
     interface_types_parent_relations: Dict[FactorType, Set[FactorType]] = \
@@ -707,12 +723,12 @@ def compute_interfacetype_hierarchies(registry) -> List[Dict[InterfaceNode, Set[
     return hierarchies
 
 
-def compute_partof_hierarchies(registry) -> List[Dict[InterfaceNode, Set[InterfaceNode]]]:
+def compute_partof_hierarchies(registry) -> Tuple[List[InterfaceNodeHierarchy], ProcessorsRelationWeights]:
 
-    hierarchies: List[Dict[InterfaceNode, Set[InterfaceNode]]] = []
+    hierarchies: List[InterfaceNodeHierarchy] = []
 
     # Get the -PartOf- processor relations of the system
-    processor_partof_relations = get_processor_partof_relations(registry)
+    processor_partof_relations, weights = get_processor_partof_relations(registry)
 
     # Get all different existing interfaces
     for interface_type in registry.get(FactorType.partial_key()):
@@ -725,27 +741,31 @@ def compute_partof_hierarchies(registry) -> List[Dict[InterfaceNode, Set[Interfa
                                                                 orientation)
             )
 
-    return hierarchies
+    return hierarchies, weights
 
 
-def get_processor_partof_relations(glb_idx: PartialRetrievalDictionary) -> Dict[Processor, Set[Processor]]:
+def get_processor_partof_relations(glb_idx: PartialRetrievalDictionary) \
+        -> Tuple[Dict[Processor, Set[Processor]], ProcessorsRelationWeights]:
     """ Get in a dictionary the -PartOf- processor relations, ignoring Archetype processors """
     relations: Dict[Processor, Set[Processor]] = {}
+    weights: ProcessorsRelationWeights = {}
 
-    for parent, child in [(r.parent_processor, r.child_processor)
-                          for r in glb_idx.get(ProcessorsRelationPartOfObservation.partial_key())
-                          if "Archetype" not in [r.parent_processor.instance_or_archetype,
-                                                 r.child_processor.instance_or_archetype]]:
+    for parent, child, weight in [(r.parent_processor, r.child_processor, r.weight)
+                                  for r in glb_idx.get(ProcessorsRelationPartOfObservation.partial_key())
+                                  if "Archetype" not in [r.parent_processor.instance_or_archetype,
+                                                         r.child_processor.instance_or_archetype]]:
         relations.setdefault(parent, set()).add(child)
+        weights[(parent, child)] = weight
 
-    return relations
+    return relations, weights
 
 
-def compute_hierarchy_aggregate_results(hierarchies: List[Dict[InterfaceNode, Set[InterfaceNode]]],
+def compute_hierarchy_aggregate_results(hierarchies: List[InterfaceNodeHierarchy],
                                         existing_results: NodeFloatComputedDict,
                                         previous_results: NodeFloatComputedDict,
                                         conflicting_data_policy: ConflictingDataResolutionPolicy,
-                                        missing_value_policy: MissingValueResolutionPolicy) \
+                                        missing_value_policy: MissingValueResolutionPolicy,
+                                        processors_relation_weights: ProcessorsRelationWeights = None) \
         -> Tuple[NodeFloatComputedDict, NodeFloatComputedDict, NodeFloatComputedDict]:
 
     results: NodeFloatComputedDict = {}
@@ -757,7 +777,8 @@ def compute_hierarchy_aggregate_results(hierarchies: List[Dict[InterfaceNode, Se
         aggregations, taken_conflicts, dismissed_conflicts = aggregate_results(hierarchy, existing_results,
                                                                                previous_results,
                                                                                conflicting_data_policy,
-                                                                               missing_value_policy)
+                                                                               missing_value_policy,
+                                                                               processors_relation_weights)
 
         results.update(aggregations)
         results_conflict_taken.update(taken_conflicts)
@@ -769,9 +790,9 @@ def compute_hierarchy_aggregate_results(hierarchies: List[Dict[InterfaceNode, Se
 def create_interface_node_hierarchy_from_processors(
         relations: Dict[Processor, Set[Processor]],
         interface_or_type: Union[Factor, FactorType],
-        orientation: str) -> Dict[InterfaceNode, Set[InterfaceNode]]:
+        orientation: str) -> InterfaceNodeHierarchy:
 
-    hierarchy: Dict[InterfaceNode, Set[InterfaceNode]] = {}
+    hierarchy: InterfaceNodeHierarchy = {}
 
     for parent, children in relations.items():
         hierarchy[InterfaceNode(interface_or_type, parent, orientation)] = \
@@ -783,9 +804,9 @@ def create_interface_node_hierarchy_from_processors(
 def create_interface_node_hierarchy_from_interface_types(
         relations: Dict[FactorType, Set[FactorType]],
         processor: Processor,
-        orientation: str) -> Dict[InterfaceNode, Set[InterfaceNode]]:
+        orientation: str) -> InterfaceNodeHierarchy:
 
-    hierarchy: Dict[InterfaceNode, Set[InterfaceNode]] = {}
+    hierarchy: InterfaceNodeHierarchy = {}
 
     for parent, children in relations.items():
         hierarchy[InterfaceNode(parent, processor, orientation)] = \
@@ -817,12 +838,13 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
     if len(time_absolute_observations) == 0:
         return [Issue(IType.WARNING, f"No absolute observations have been found. The solver has nothing to solve.")]
 
-    relations_flow, relations_scale, relations_scale_change = compute_flow_and_scale_relation_graphs(glb_idx,
-                                                                                                     global_state)
+    relations_flow, relations_scale, relations_scale_change = \
+        compute_flow_and_scale_relation_graphs(glb_idx, global_state)
 
     interfacetype_hierarchies = compute_interfacetype_hierarchies(glb_idx)
 
-    partof_hierarchies = compute_partof_hierarchies(glb_idx)
+    partof_hierarchies, partof_weights = compute_partof_hierarchies(glb_idx)
+    resolve_partof_weight_expressions(partof_weights, global_state)
 
     total_results: ResultDict = {}
 
@@ -830,6 +852,8 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
         print(f"********************* SCENARIO: {scenario_name}")
 
         scenario_state = State(evaluate_parameters_for_scenario(global_parameters, scenario_params))
+
+        resolve_partof_weight_expressions(partof_weights, scenario_state)
 
         # Get scenario parameters
         observers_priority_list = parse_string_as_simple_ident_list(scenario_state.get('NISSolverObserversPriority'))
@@ -902,7 +926,8 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
                         total_itype_dismissed_results.update(itype_dismissed_results)
 
                         new_results, partof_taken_results, partof_dismissed_results = compute_hierarchy_aggregate_results(
-                            partof_hierarchies, results, aggregations, conflicting_data_policy, missing_value_policy)
+                            partof_hierarchies, results, aggregations, conflicting_data_policy, missing_value_policy,
+                            partof_weights)
 
                         aggregations.update(new_results)
                         results.update(new_results)
@@ -1576,10 +1601,11 @@ def prepare_matrix_indicators(indicators: List[MatrixIndicator],
     return result
 
 
-def aggregate_results(tree: Dict[InterfaceNode, Set[InterfaceNode]], params: NodeFloatComputedDict,
+def aggregate_results(tree: InterfaceNodeHierarchy, params: NodeFloatComputedDict,
                       prev_computed_values: NodeFloatComputedDict,
                       conflicting_data_policy: ConflictingDataResolutionPolicy,
-                      missing_values_policy: MissingValueResolutionPolicy) \
+                      missing_values_policy: MissingValueResolutionPolicy,
+                      processors_relation_weights: ProcessorsRelationWeights) \
         -> Tuple[NodeFloatComputedDict, NodeFloatComputedDict, NodeFloatComputedDict]:
 
     def compute_node(node: InterfaceNode) -> Optional[FloatExp]:
@@ -1595,10 +1621,20 @@ def aggregate_results(tree: Dict[InterfaceNode, Set[InterfaceNode]], params: Nod
         for child in sorted(tree.get(node, {})):
             child_value = compute_node(child)
             if child_value is not None:
+                weight: FloatExp = None if processors_relation_weights is None \
+                                        else processors_relation_weights[(node.processor, child.processor)]
+                add_weight: bool = weight is not None and weight != 1.0
+
                 if sum_children is None:
-                    sum_children = child_value.assignable_copy()
+                    if add_weight:
+                        sum_children = child_value.assignable_copy() * weight
+                    else:
+                        sum_children = child_value.assignable_copy()
                 else:
-                    sum_children += child_value
+                    if add_weight:
+                        sum_children += child_value * weight
+                    else:
+                        sum_children += child_value
             elif missing_values_policy == MissingValueResolutionPolicy.Invalidate:
                 # Invalidate current children computation and stop evaluating following children
                 sum_children = None
