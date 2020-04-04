@@ -890,6 +890,11 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
                 results = resolve_observations_with_parameters(scenario_state, absolute_observations,
                                                                observers_priority_list)
 
+                # Initializations
+                flow_last_known_nodes = set()
+                scale_last_known_nodes = set()
+                scale_change_last_known_nodes = set()
+
                 # START ITERATIVE SOLVING
 
                 # We first iterate with policy MissingValueResolutionPolicy.Invalidate trying to get as many results
@@ -898,9 +903,6 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
                 # results with policy MissingValueResolutionPolicy.UseZero.
                 for missing_value_policy in missing_value_policies:
                     previous_len_results = len(results) - 1
-                    flow_last_known_nodes = set()
-                    scale_last_known_nodes = set()
-                    scale_change_last_known_nodes = set()
 
                     # Iterate while the number of results is increasing
                     while len(results) > previous_len_results:
