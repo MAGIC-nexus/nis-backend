@@ -1030,7 +1030,10 @@ def compute_flow_and_scale_relation_graphs(registry, state: State):
     relations_scale_change = create_scale_change_relations_and_update_flow_relations(relations_flow, registry)
 
     # First pass to resolve weight expressions: only expressions without parameters can be solved
-    resolve_weight_expressions([relations_flow, relations_scale, relations_scale_change], state)
+    # NOT WORKING:
+    # 1) the method ast_evaluator() doesn't get global Parameters,
+    # 2) the expression for the FloatExp() is not correctly computed on a second pass
+    # resolve_weight_expressions([relations_flow, relations_scale, relations_scale_change], state)
 
     return relations_flow, relations_scale, relations_scale_change
 
