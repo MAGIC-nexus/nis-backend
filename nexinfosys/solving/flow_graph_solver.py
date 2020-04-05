@@ -452,8 +452,14 @@ def compute_graph_results(comp_graph: ComputationGraph,
 
     results, _ = comp_graph.compute_values(compute_nodes, graph_params)
 
-    # Return only entries with a valid value
-    return {k: FloatComputedTuple(v, Computed.Yes) for k, v in results.items() if v is not None}
+    # Return only entries with a valid value and set the name
+    return_values: NodeFloatComputedDict = {}
+    for k, v in results.items():
+        if v is not None:
+            v.name = k.name
+            return_values[k] = FloatComputedTuple(v, Computed.Yes)
+
+    return return_values
 
 
 def raise_error_if_conflicts(conflicts: Dict[InterfaceNode, Set[InterfaceNode]], graph_params: NodeFloatDict, graph_name: str):
