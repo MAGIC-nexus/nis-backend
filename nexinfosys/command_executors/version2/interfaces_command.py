@@ -178,14 +178,20 @@ class InterfacesAndQualifiedQuantitiesCommand(BasicCommand):
 
         # InterfaceType still not found
         if not ft:
+            interface_type_name = ifnull(f_interface_type_name, f_interface_name)
+            if not interface_type_name:
+                self._add_issue(IType.ERROR, "Either the Interface or the InterfaceType must be specified in order to "
+                                             "find the correct InterfaceType."+subrow_issue_message(subrow))
+                return
+
             # Find FactorType
             # TODO Allow creating a basic FactorType if it is not found?
-            ft_list: Sequence[FactorType] = self._glb_idx.get(FactorType.partial_key(f_interface_type_name))
+            ft_list: Sequence[FactorType] = self._glb_idx.get(FactorType.partial_key(interface_type_name))
             if len(ft_list) == 0:
-                self._add_issue(IType.ERROR, f"InterfaceType '{f_interface_type_name}' not declared previously"+subrow_issue_message(subrow))
+                self._add_issue(IType.ERROR, f"InterfaceType '{interface_type_name}' not declared previously"+subrow_issue_message(subrow))
                 return
             elif len(ft_list) > 1:
-                self._add_issue(IType.ERROR, f"InterfaceType '{f_interface_type_name}' found {str(len(ft_list))} times. "
+                self._add_issue(IType.ERROR, f"InterfaceType '{interface_type_name}' found {str(len(ft_list))} times. "
                                              f"It must be uniquely identified."+subrow_issue_message(subrow))
                 return
             else:
