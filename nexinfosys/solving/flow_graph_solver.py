@@ -26,6 +26,7 @@ Before the elaboration of flow graphs, several preparatory steps:
 
 """
 from collections import defaultdict
+from copy import deepcopy
 from enum import Enum
 from typing import Dict, List, Set, Any, Tuple, Union, Optional, NamedTuple, Generator, Type, NoReturn
 
@@ -212,6 +213,7 @@ ResultDict = Dict[ResultKey, NodeFloatComputedDict]
 AstType = Dict
 ObservationListType = List[Tuple[Optional[Union[float, AstType]], FactorQuantitativeObservation]]
 TimeObservationsType = Dict[str, ObservationListType]
+InterfaceNodeAstDict = Dict[InterfaceNode, Tuple[AstType, FactorQuantitativeObservation]]
 
 
 @Memoize
@@ -579,24 +581,55 @@ def create_scale_change_relations_and_update_flow_relations(relations_flow: nx.D
     return relations_scale_change
 
 
+def convert_params_to_extended_interface_names(params: Set[str], obs: FactorQuantitativeObservation, registry) -> Dict[str, str]:
+    processor_name = get_processor_name(obs.factor.processor, registry)
+    extended_interface_names: Dict[str, str] = {}
+
+    for param in params:
+        # Check if param is valid interface name
+        assert registry.get_one(Factor.partial_key(processor=obs.factor.processor, name=param))
+        extended_interface_names[param] = f"{processor_name}:{param}:{obs.factor.orientation}"
+
+    return extended_interface_names
+
+
+def replace_ast_variable_parts(ast: AstType, variable_conversion: Dict[str, str]) -> AstType:
+    new_ast = deepcopy(ast)
+
+    for term in new_ast['terms']:
+        if term['type'] == 'h_var':
+            variable = term['parts'][0]
+            if variable in variable_conversion:
+                term['parts'] = [variable_conversion[variable]]
+
+    return new_ast
+
+
 def resolve_observations_with_parameters(state: State, observations: ObservationListType,
-                                         observers_priority_list: Optional[List[str]]) -> NodeFloatComputedDict:
+                                         observers_priority_list: Optional[List[str]], registry) \
+        -> Tuple[NodeFloatComputedDict, InterfaceNodeAstDict]:
     resolved_observations: NodeFloatComputedDict = {}
+    unresolved_observations_with_interfaces: InterfaceNodeAstDict = {}
 
     for expression, obs in observations:
-        value, _, params, issues = evaluate_numeric_expression_with_parameters(expression, state)
+        interface_params: Dict[str, str] = {}
+        value, ast, params, issues = evaluate_numeric_expression_with_parameters(expression, state)
         if value is None:
-            raise SolvingException(
-                f"Cannot evaluate expression '{expression}' for observation at interface '{obs.factor.name}'. "
-                f"Params: {params}. Issues: {', '.join(issues)}"
-            )
+            interface_params = convert_params_to_extended_interface_names(params, obs, registry)
+            if interface_params:
+                ast = replace_ast_variable_parts(ast, interface_params)
+            else:
+                raise SolvingException(
+                    f"Cannot evaluate expression '{expression}' for observation at interface '{obs.factor.name}'. "
+                    f"Params: {params}. Issues: {', '.join(issues)}"
+                )
 
         # Get observer name
         observer_name = obs.observer.name if obs.observer else None
 
         if observer_name and observers_priority_list and observer_name not in observers_priority_list:
             raise SolvingException(
-                f"The specified observer '{observer_name}' for the interface '{node.name}' has not been included "
+                f"The specified observer '{observer_name}' for the interface '{obs.factor.name}' has not been included "
                 f"in the observers' priority list: {observers_priority_list}"
             )
 
@@ -617,11 +650,33 @@ def resolve_observations_with_parameters(state: State, observations: Observation
                 # Ignore this observation because a higher priority observations has previously been set
                 continue
 
-        resolved_observations[node] = FloatComputedTuple(FloatExp(value, node.name, str(obs.value)),
-                                                         Computed.No,
-                                                         observer_name)
+        if interface_params:
+            unresolved_observations_with_interfaces[node] = (ast, obs)
+            resolved_observations.pop(node, None)
+        else:
+            resolved_observations[node] = FloatComputedTuple(FloatExp(value, node.name, str(obs.value)),
+                                                             Computed.No, observer_name)
+            unresolved_observations_with_interfaces.pop(node, None)
 
-    return resolved_observations
+    return resolved_observations, unresolved_observations_with_interfaces
+
+
+def resolve_observations_with_interfaces(
+        state: State, existing_unresolved_observations: InterfaceNodeAstDict, existing_results: NodeFloatComputedDict) \
+        -> Tuple[NodeFloatComputedDict, InterfaceNodeAstDict]:
+    state.update({k.name: v.value.val for k, v in existing_results.items()})
+    results: NodeFloatComputedDict = {}
+    unresolved_observations: InterfaceNodeAstDict = {}
+
+    for node, (ast, obs) in existing_unresolved_observations.items():
+        value, ast, params, issues = evaluate_numeric_expression_with_parameters(ast, state)
+        if value is not None:
+            observer_name = obs.observer.name if obs.observer else None
+            results[node] = FloatComputedTuple(FloatExp(value, node.name, str(obs.value)), Computed.Yes, observer_name)
+        else:
+            unresolved_observations[node] = (ast, obs)
+
+    return results, unresolved_observations
 
 
 def compute_flow_and_scale_computation_graphs(state: State,
@@ -893,8 +948,9 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
                                                               relations_scale_change)
 
                 # Get final results from the absolute observations
-                results = resolve_observations_with_parameters(scenario_state, absolute_observations,
-                                                               observers_priority_list)
+                results, unresolved_observations_with_interfaces = \
+                    resolve_observations_with_parameters(scenario_state, absolute_observations,
+                                                         observers_priority_list, glb_idx)
 
                 # Initializations
                 flow_last_known_nodes = set()
@@ -945,6 +1001,13 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
                         results.update(new_results)
                         total_partof_taken_results.update(partof_taken_results)
                         total_partof_dismissed_results.update(partof_dismissed_results)
+
+                        if unresolved_observations_with_interfaces:
+                            new_results, unresolved_observations_with_interfaces = \
+                                resolve_observations_with_interfaces(
+                                    scenario_state, unresolved_observations_with_interfaces, results
+                                )
+                            results.update(new_results)
 
                 current_results: ResultDict = {}
                 result_key = ResultKey(scenario_name, time_period, Scope.Total)
