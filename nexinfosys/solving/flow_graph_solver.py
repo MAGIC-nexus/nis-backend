@@ -894,6 +894,7 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
                               Also "problem_statement" MUST have only one scenario with the parameters.
     :return: List of Issues
     """
+    issues: List[Issue] = []
     glb_idx, _, _, datasets, _ = get_case_study_registry_objects(global_state)
     InterfaceNode.registry = glb_idx
 
@@ -1009,6 +1010,11 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
                                 )
                             results.update(new_results)
 
+                if unresolved_observations_with_interfaces:
+                    issues.append(Issue(IType.WARNING, f"Scenario '{scenario_name}' - period '{time_period}'."
+                                                       f"The following observations could not be evaluated: "
+                                                       f"{[k for k in unresolved_observations_with_interfaces.keys()]}"))
+
                 current_results: ResultDict = {}
                 result_key = ResultKey(scenario_name, time_period, Scope.Total)
 
@@ -1074,7 +1080,7 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
 
     export_solver_data(datasets, data, dynamic_scenario, glb_idx, global_parameters, problem_statement)
 
-    return []
+    return issues
 
 
 def compute_flow_and_scale_relation_graphs(registry, state: State):
