@@ -440,7 +440,8 @@ def ast_evaluator(exp: Dict, state: State, obj, issue_lst, evaluation_type="nume
                                 (isinstance(current, str) and isinstance(following, str)):
                             pass  # Do nothing
                         else:  # In others cases, CAST to the operand of the left. This may result in an Exception
-                            following = type(current)(following)
+                            if current is not None:
+                                following = type(current)(following)
 
                         op = exp["ops"][i].lower()
                         if op in ("+", "-", "u+", "u-"):
@@ -480,6 +481,9 @@ def ast_evaluator(exp: Dict, state: State, obj, issue_lst, evaluation_type="nume
                         current = current and following
                 else:
                     current = None  # Could not evaluate because there are missing variables
+
+            if len(unresolved_vars) > 0:
+                current = None
 
             return current, unresolved_vars
         else:

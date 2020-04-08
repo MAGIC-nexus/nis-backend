@@ -98,11 +98,13 @@ https://hub.docker.com/r/magicnexush2020/magic-nis-backend
 
 Clone this repository and execute "service_main.py":
 
+```
 git clone https://github.com/MAGIC-nexus/nis-backend
 cd nis-backend
 git checkout develop
 pip install -r requirements.txt
 python3 nexinfosys.restful_service.service_main.py
+```
 
 #### Windows executable
 
