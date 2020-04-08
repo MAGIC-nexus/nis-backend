@@ -28,7 +28,7 @@ Before the elaboration of flow graphs, several preparatory steps:
 from collections import defaultdict
 from copy import deepcopy
 from enum import Enum
-from typing import Dict, List, Set, Any, Tuple, Union, Optional, NamedTuple, Generator, Type, NoReturn
+from typing import Dict, List, Set, Any, Tuple, Union, Optional, NamedTuple, Generator, Type, NoReturn, Sequence
 
 import lxml
 import networkx as nx
@@ -581,16 +581,27 @@ def create_scale_change_relations_and_update_flow_relations(relations_flow: nx.D
     return relations_scale_change
 
 
-def convert_params_to_extended_interface_names(params: Set[str], obs: FactorQuantitativeObservation, registry) -> Dict[str, str]:
-    processor_name = get_processor_name(obs.factor.processor, registry)
+def convert_params_to_extended_interface_names(params: Set[str], obs: FactorQuantitativeObservation, registry) \
+        -> Tuple[Dict[str, str], List[str], List[str]]:
     extended_interface_names: Dict[str, str] = {}
+    unresolved_params: List[str] = []
+    issues: List[str] = []
 
     for param in params:
         # Check if param is valid interface name
-        assert registry.get_one(Factor.partial_key(processor=obs.factor.processor, name=param))
-        extended_interface_names[param] = f"{processor_name}:{param}:{obs.factor.orientation}"
+        interfaces: Sequence[Factor] = registry.get(Factor.partial_key(processor=obs.factor.processor, name=param))
+        if len(interfaces) == 1:
+            node = InterfaceNode(interfaces[0])
+            extended_interface_names[param] = node.name
+        else:
+            unresolved_params.append(param)
+            if len(interfaces) > 1:
+                issues.append(f"Multiple interfaces with name '{param}' exist, "
+                              f"rename them to uniquely identify the desired one.")
+            else:  # len(interfaces) == 0
+                issues.append(f"No global parameter or interface exist with name '{param}'.")
 
-    return extended_interface_names
+    return extended_interface_names, unresolved_params, issues
 
 
 def replace_ast_variable_parts(ast: AstType, variable_conversion: Dict[str, str]) -> AstType:
@@ -615,8 +626,8 @@ def resolve_observations_with_parameters(state: State, observations: Observation
         interface_params: Dict[str, str] = {}
         value, ast, params, issues = evaluate_numeric_expression_with_parameters(expression, state)
         if value is None:
-            interface_params = convert_params_to_extended_interface_names(params, obs, registry)
-            if interface_params:
+            interface_params, params, issues = convert_params_to_extended_interface_names(params, obs, registry)
+            if interface_params and not issues:
                 ast = replace_ast_variable_parts(ast, interface_params)
             else:
                 raise SolvingException(
