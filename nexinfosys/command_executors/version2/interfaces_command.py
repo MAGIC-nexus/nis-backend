@@ -1,8 +1,7 @@
 from typing import Dict, Any, Optional, Sequence, List
 
-from pint import UndefinedUnitError, DimensionalityError
+from pint import DimensionalityError
 
-from nexinfosys import ureg
 from nexinfosys.command_executors import BasicCommand, subrow_issue_message
 from nexinfosys.command_field_definitions import get_command_fields_from_class
 from nexinfosys.command_generators import parser_field_parsers, IType
@@ -85,10 +84,7 @@ class InterfacesAndQualifiedQuantitiesCommand(BasicCommand):
                 self._add_issue(IType.ERROR, "At least one of InterfaceType or Interface must be defined"+subrow_issue_message(subrow))
                 return
 
-            possibly_local_interface_name = None
             f_interface_name = f_interface_type_name
-        else:
-            possibly_local_interface_name = f_interface_name
 
         # Check existence of PedigreeMatrix, if used
         if f_pedigree_matrix and f_pedigree:
@@ -161,11 +157,10 @@ class InterfacesAndQualifiedQuantitiesCommand(BasicCommand):
         if len(f_list) == 1:
             f = f_list[0]
             ft = f.taxon
-            if f_interface_type_name:
-                if not strcmp(ft.name, f_interface_type_name):
-                    self._add_issue(IType.WARNING, f"The InterfaceType of the Interface, {ft.name} "
-                                                   f"is different from the specified InterfaceType, {f_interface_type_name}. Record skipped."+subrow_issue_message(subrow))
-                    return
+            if f_interface_type_name and not strcmp(ft.name, f_interface_type_name):
+                self._add_issue(IType.WARNING, f"The InterfaceType of the Interface, {ft.name} "
+                                               f"is different from the specified InterfaceType, {f_interface_type_name}. Record skipped."+subrow_issue_message(subrow))
+                return
         elif len(f_list) > 1:
             self._add_issue(IType.ERROR, f"Interface '{f_interface_name}' found {str(len(f_list))} times. "
                                          f"It must be uniquely identified."+subrow_issue_message(subrow))
