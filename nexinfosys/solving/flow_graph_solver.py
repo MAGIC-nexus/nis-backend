@@ -647,8 +647,11 @@ def resolve_observations_with_parameters(state: State, observations: Observation
         # Create node from the interface
         node = InterfaceNode(obs.factor)
 
-        if node in resolved_observations:
-            if observer_name is None and resolved_observations[node].observer is None:
+        if node in resolved_observations or node in unresolved_observations_with_interfaces:
+            previous_observer_name: str = resolved_observations[node].observer \
+                if node in resolved_observations else unresolved_observations_with_interfaces[node][1].observer.name
+
+            if observer_name is None and previous_observer_name is None:
                 raise SolvingException(
                     f"Multiple observations exist for the 'same interface '{node.name}' without a specified observer."
                 )
@@ -657,7 +660,7 @@ def resolve_observations_with_parameters(state: State, observations: Observation
                     f"Multiple observations exist for the same interface '{node.name}' but an observers' priority list "
                     f"has not been (correctly) defined: {observers_priority_list}"
                 )
-            elif not precedes_in_list(observers_priority_list, observer_name, resolved_observations[node].observer):
+            elif not precedes_in_list(observers_priority_list, observer_name, previous_observer_name):
                 # Ignore this observation because a higher priority observations has previously been set
                 continue
 
