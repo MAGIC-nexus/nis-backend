@@ -212,9 +212,9 @@ def commands_generator_from_ooxml_file(input, state, sublist, stack) -> nexinfos
                 else:
                     cmd = None
                     issues = []
-            except:
+            except Exception as e:
                 cmd = None
-                issues = [(3, "Could not create command of type '"+c_type+"'")]
+                issues = [(3, f"Could not create command of type '{c_type}': {e}")]
             if issues:
                 for i in issues:
                     if isinstance(i, nexinfosys.command_generators.Issue):

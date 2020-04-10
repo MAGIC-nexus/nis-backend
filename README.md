@@ -8,7 +8,7 @@ NIS (Nexus Information System) is a software system being developed inside MAGIC
 
 NIS enables accounting the biophysical flows in complex bioeconomic systems according to MuSIASEM concepts and methodology, as a way to assess the sustainability of current -or future- scenarios in socio-ecologic systems.
 
-NIS is made of three components: **nis-backend**, **nis-frontend** and **nis-client**. **nis-backend** is the backend component of NIS, which is deployed embedding another NIS component, **nis-frontend** and it is (programmatically) actionable through a third, <a href="https://github.com/MAGIC-nexus/nis-python-client">nis-client</a>, using Python or R.
+NIS is made of four components: **nis-backend**, **nis-frontend**, [nis-client](https://github.com/MAGIC-nexus/nis-python-client) and [nis-eda](https://github.com/MAGIC-nexus/nis-eda). **nis-backend** is the backend component of NIS, which is deployed embedding another NIS component, **nis-frontend** (an Angular web application) and it is (programmatically) actionable through a third, <a href="https://github.com/MAGIC-nexus/nis-python-client">nis-client</a>, using Python or R. **nis-eda** is an exploratory data analysis tool written in R and Shiny which connects to a **nis-backend**.
 
 **nis-backend** "runs" MuSIASEM models by **interpreting** (lexically, syntactically and semantically) and **resolving** (quantitatively) a representation of a MuSIASEM grammar (an open model), using a **tabular syntax** ("dataframe" compatible), and producing a set of outputs **exportable** for further use by external, complementary tools.
 
@@ -32,7 +32,7 @@ It is an open system as it can be used to integrate MuSIASEM as a formalism in a
   - [Features](#features)
   - [Installing and executing **nis-backend**](#installing-and-executing-nis-backend)
     - [pip](#pip)
-    - [Docker image](#docker-image-lab-setup)
+    - [Docker image](#docker-image)
     - [Source code](#source-code)
     - [Windows executable](#windows-executable)
   - [Models with Commands](#models-with-commands)
@@ -40,6 +40,7 @@ It is an open system as it can be used to integrate MuSIASEM as a formalism in a
 - [Accessing **nis-backend** in Python and R scripts with **nis-client**](#accessing-nis-backend-in-python-and-r-scripts-with-nis-client)
 - [Configuration](#configuration)
 - [People](#people)
+- [Contact](#contact)
 - [License](#license)
 - [Acknowledgements](#acknowledgements)
 - [Keywords](#keywords)
@@ -116,7 +117,7 @@ To specify MuSIASEM grammars (models), NIS proposes a syntactically simple "bloc
 
 In order to take advantage of **nis-backend**, analysts write a workbook considering that commands (worksheets) are read and executed from left to right, and inside a worksheet from the first row to the last.
 
-The reference of commands appears when a command from the list of commands is selected in **nis-frontend**. A document with a complete reference is available at ¿ZENODO?
+The reference of a command appears when a command from the "Commands" tab is selected in **nis-frontend**. A document with a complete reference is available at ¿ZENODO?. An HTML called "Commands reference" can be obtained from "Exportable datasets" tab, containing an up-to-date reference.
 
 The next section introduces **nis-frontend** which is a tool embedded in **nis-backend** whose goal is to help in writing MuSIASEM grammars.  
  
@@ -124,11 +125,11 @@ The next section introduces **nis-frontend** which is a tool embedded in **nis-b
  
 **nis-backend** embeds the compiled version of a full Angular application called **nis-frontend** which is the indicated interface to **nis-backend** for most users.
  
-Once **nis-backend** is executing, open a browser a go to the address:
+Once **nis-backend** is executing in your computer, open a browser a go to the address:
  
 <a href="http://localhost:5000/nis_client/">http://localhost:5000/nis_client</a>
  
-A screen similar to the following will open:
+A screen similar to the following should open:
 
 <img src="https://github.com/MAGIC-nexus/nis-backend/raw/develop/docs/initial_screen.png" style="border:1px solid black" title="NIS frontend initial screen" alt="NIS frontend initial screen">
  
@@ -199,7 +200,7 @@ GAPI_TOKEN_FILE | Path to a file used to stored authorization token | "/srv/tock
 
 ## People
 
-An enumeration of people who have contributed in different manners to the elaboration of NIS.
+An enumeration of people who have contributed in different manners to the elaboration of NIS during MAGIC project lifetime:
 
 * Rafael Nebot. ITC-DCCT (Instituto Tecnológico de Canarias - Departamento de Computación).
 * Marco Galluzzi.
