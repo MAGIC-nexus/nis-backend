@@ -132,7 +132,6 @@ class InterfaceNode:
 
         self.interface_name: str = interface_or_type.name
         self.processor_name: str = get_processor_name(self.processor, self.registry) if self.processor else processor_name
-        self.name: str = self.processor_name + ":" + self.interface_name + ":" + self.orientation
 
     @property
     def key(self) -> Tuple:
@@ -141,6 +140,10 @@ class InterfaceNode:
     @staticmethod
     def key_labels() -> List[str]:
         return ["Processor", "Interface", "Orientation"]
+
+    @property
+    def name(self) -> str:
+        return ":".join(self.key)
 
     @property
     def unit(self):
