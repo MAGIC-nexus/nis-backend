@@ -1,16 +1,15 @@
-from typing import Dict, Any, Optional, Sequence, List
+from typing import Dict, Any, Optional, Sequence, List, Tuple, NoReturn
 
-from pint import UndefinedUnitError, DimensionalityError
+from pint import DimensionalityError
 
-from nexinfosys import ureg
-from nexinfosys.command_executors import BasicCommand, subrow_issue_message
+from nexinfosys.command_executors import BasicCommand, subrow_issue_message, CommandExecutionError
 from nexinfosys.command_field_definitions import get_command_fields_from_class
 from nexinfosys.command_generators import parser_field_parsers, IType
 from nexinfosys.command_generators.parser_ast_evaluators import dictionary_from_key_value_list, ast_to_string
 from nexinfosys.common.helper import strcmp, first, ifnull, UnitConversion, head
 from nexinfosys.models.musiasem_concepts import PedigreeMatrix, FactorType, \
     Factor, FactorInProcessorType, Observer, GeographicReference, ProvenanceReference, \
-    BibliographicReference, FactorTypesRelationUnidirectionalLinearTransformObservation
+    BibliographicReference, FactorTypesRelationUnidirectionalLinearTransformObservation, Processor
 from nexinfosys.models.musiasem_concepts_helper import _create_or_append_quantitative_observation, \
     find_processors_matching_name, find_factor_types_transform_relation
 
@@ -26,53 +25,6 @@ class InterfacesAndQualifiedQuantitiesCommand(BasicCommand):
 
         :param field_values: dictionary
         """
-
-        # Interface
-        f_processor_name = field_values.get("processor")
-        f_interface_type_name = field_values.get("interface_type")
-        f_interface_name = field_values.get("interface")  # A "simple_ident", optional
-        f_location = field_values.get("location")
-        f_orientation = field_values.get("orientation")
-        # f_roegen_type = fields_value.get("roegen_type")
-        # f_sphere = fields_value.get("sphere")
-        # f_opposite_processor_type = fields_value.get("opposite_processor_type")
-        # f_geolocation_ref = fields_value.get("geolocation_ref")
-        # f_geolocation_code = fields_value.get("geolocation_code")
-
-        # Qualified Quantity
-        f_value = field_values.get("value")
-        f_unit = field_values.get("unit")
-        f_uncertainty = field_values.get("uncertainty")
-        f_assessment = field_values.get("assessment")
-        f_pedigree_matrix = field_values.get("pedigree_matrix")
-        f_pedigree = field_values.get("pedigree")
-        f_relative_to = field_values.get("relative_to")
-        f_time = field_values.get("time")
-        f_source = field_values.get("qq_source")
-        f_number_attributes = field_values.get("number_attributes", {})
-        f_comments = field_values.get("comments")
-
-        # Transform text of "interface_attributes" into a dictionary
-        field_val = field_values.get("interface_attributes")
-        if field_val:
-            try:
-                field_values["interface_attributes"] = dictionary_from_key_value_list(field_val, self._glb_idx)
-            except Exception as e:
-                self._add_issue(IType.ERROR, str(e)+subrow_issue_message(subrow))
-                return
-        else:
-            field_values["interface_attributes"] = {}
-
-        # Transform text of "number_attributes" into a dictionary
-        if f_number_attributes:
-            try:
-                number_attributes = dictionary_from_key_value_list(f_number_attributes, self._glb_idx)
-            except Exception as e:
-                self._add_issue(IType.ERROR, str(e)+subrow_issue_message(subrow))
-                return
-        else:
-            number_attributes = {}
-
         # f_processor_name -> p
         # f_interface_type_name -> it
         # f_interface_name -> i
@@ -80,128 +32,62 @@ class InterfacesAndQualifiedQuantitiesCommand(BasicCommand):
         # IF NOT i AND it AND p => i_name = it.name => get or create "i"
         # IF i AND it AND p => get or create "i", IF "i" exists, i.it MUST BE equal to "it" (IF NOT, error)
         # IF i AND p AND NOT it => get "i" (MUST EXIST)
+        f_interface_type_name = field_values.get("interface_type")
+        f_interface_name = field_values.get("interface")
+
         if not f_interface_name:
             if not f_interface_type_name:
-                self._add_issue(IType.ERROR, "At least one of InterfaceType or Interface must be defined"+subrow_issue_message(subrow))
-                return
+                raise CommandExecutionError("At least one of InterfaceType or Interface must be defined"+subrow_issue_message(subrow))
 
-            possibly_local_interface_name = None
             f_interface_name = f_interface_type_name
-        else:
-            possibly_local_interface_name = f_interface_name
 
-        # Check existence of PedigreeMatrix, if used
-        if f_pedigree_matrix and f_pedigree:
-            pm = self._glb_idx.get(PedigreeMatrix.partial_key(name=f_pedigree_matrix))
-            if len(pm) == 0:
-                self._add_issue(IType.ERROR, "Could not find Pedigree Matrix '" + f_pedigree_matrix + "'"+subrow_issue_message(subrow))
-                return
-            else:
-                try:
-                    lst = pm[0].get_modes_for_code(f_pedigree)
-                except:
-                    self._add_issue(IType.ERROR, "Could not decode Pedigree '" + f_pedigree + "' for Pedigree Matrix '" + f_pedigree_matrix + "'"+subrow_issue_message(subrow))
-                    return
-        elif f_pedigree and not f_pedigree_matrix:
-            self._add_issue(IType.ERROR, "Pedigree specified without accompanying Pedigree Matrix"+subrow_issue_message(subrow))
-            return
+        f_source = field_values.get("qq_source")
+        # TODO: source is not being used
+        source = self.get_source(f_source, subrow)
 
-        # Source
-        if f_source:
-            try:
-                ast = parser_field_parsers.string_to_ast(parser_field_parsers.reference, f_source)
-                ref_id = ast["ref_id"]
-                references = self._glb_idx.get(ProvenanceReference.partial_key(ref_id))
-                if len(references) == 1:
-                    source = references[0]
-                else:
-                    references = self._glb_idx.get(BibliographicReference.partial_key(ref_id))
-                    if len(references) == 1:
-                        source = references[0]
-                    else:
-                        self._add_issue(IType.ERROR, f"Reference '{f_source}' not found"+subrow_issue_message(subrow))
-            except:
-                # TODO Change when Ref* are implemented
-                source = f_source + " (not found)"
-        else:
-            source = None
-
-        # Geolocation
-        if f_location:
-            try:
-                # TODO Change to parser for Location (includes references, but also Codes)
-                ast = parser_field_parsers.string_to_ast(parser_field_parsers.reference, f_location)
-                ref_id = ast["ref_id"]
-                references = self._glb_idx.get(GeographicReference.partial_key(ref_id))
-                if len(references) == 1:
-                    geolocation = references[0]
-            except:
-                geolocation = f_location
-        else:
-            geolocation = None
-
-        # Find Processor
-        # TODO Allow creating a basic Processor if it is not found?
-        p = find_processors_matching_name(f_processor_name, self._glb_idx)
-        # p = find_observable_by_name(f_processor_name, self._glb_idx)
-        # p = self._glb_idx.get(Processor.partial_key(f_processor_name))
-        if len(p) == 0:
-            self._add_issue(IType.ERROR, "Processor '" + f_processor_name + "' not declared previously"+subrow_issue_message(subrow))
-            return
-        elif len(p) > 1:
-            self._add_issue(IType.ERROR, f"Processor '{f_processor_name}' declared previously {len(p)} times"+subrow_issue_message(subrow))
-            return
-
-        p = p[0]
+        processor = self.find_processor(field_values.get("processor"), subrow)
 
         # Try to find Interface
-        ft: Optional[FactorType] = None
-        f: Optional[Factor] = None
-        f_list: Sequence[Factor] = self._glb_idx.get(Factor.partial_key(processor=p, name=f_interface_name))
-        if len(f_list) == 1:
-            f = f_list[0]
-            ft = f.taxon
-            if f_interface_type_name:
-                if not strcmp(ft.name, f_interface_type_name):
-                    self._add_issue(IType.WARNING, f"The InterfaceType of the Interface, {ft.name} "
-                                                   f"is different from the specified InterfaceType, {f_interface_type_name}. Record skipped."+subrow_issue_message(subrow))
-                    return
-        elif len(f_list) > 1:
-            self._add_issue(IType.ERROR, f"Interface '{f_interface_name}' found {str(len(f_list))} times. "
-                                         f"It must be uniquely identified."+subrow_issue_message(subrow))
-            return
-        elif len(f_list) == 0:
+        f_orientation = field_values.get("orientation")
+        interface_type: Optional[FactorType] = None
+        interface: Optional[Factor] = None
+        interfaces: Sequence[Factor] = self._glb_idx.get(Factor.partial_key(processor=processor, name=f_interface_name))
+        if len(interfaces) == 1:
+            interface = interfaces[0]
+            interface_type = interface.taxon
+            if f_interface_type_name and not strcmp(interface_type.name, f_interface_type_name):
+                self._add_issue(IType.WARNING, f"The InterfaceType of the Interface, {interface_type.name} "
+                                               f"is different from the specified InterfaceType, {f_interface_type_name}. "
+                                               f"Record skipped."+subrow_issue_message(subrow))
+                return
+        elif len(interfaces) > 1:
+            raise CommandExecutionError(f"Interface '{f_interface_name}' found {str(len(interfaces))} times. "
+                                        f"It must be uniquely identified."+subrow_issue_message(subrow))
+        elif len(interfaces) == 0:
             # The interface does not exist, create it below
             if not f_orientation:
-                self._add_issue(IType.ERROR, f"Orientation must be defined for new Interfaces."+subrow_issue_message(subrow))
-                return
+                raise CommandExecutionError(f"Orientation must be defined for new Interfaces."+subrow_issue_message(subrow))
 
         # InterfaceType still not found
-        if not ft:
+        if not interface_type:
             interface_type_name = ifnull(f_interface_type_name, f_interface_name)
-            if not interface_type_name:
-                self._add_issue(IType.ERROR, "Either the Interface or the InterfaceType must be specified in order to "
-                                             "find the correct InterfaceType."+subrow_issue_message(subrow))
-                return
 
             # Find FactorType
             # TODO Allow creating a basic FactorType if it is not found?
-            ft_list: Sequence[FactorType] = self._glb_idx.get(FactorType.partial_key(interface_type_name))
-            if len(ft_list) == 0:
-                self._add_issue(IType.ERROR, f"InterfaceType '{interface_type_name}' not declared previously"+subrow_issue_message(subrow))
-                return
-            elif len(ft_list) > 1:
-                self._add_issue(IType.ERROR, f"InterfaceType '{interface_type_name}' found {str(len(ft_list))} times. "
-                                             f"It must be uniquely identified."+subrow_issue_message(subrow))
-                return
+            interface_types: Sequence[FactorType] = self._glb_idx.get(FactorType.partial_key(interface_type_name))
+            if len(interface_types) == 0:
+                raise CommandExecutionError(f"InterfaceType '{interface_type_name}' not declared previously"+subrow_issue_message(subrow))
+            elif len(interface_types) > 1:
+                raise CommandExecutionError(f"InterfaceType '{interface_type_name}' found {str(len(interface_types))} times. "
+                                            f"It must be uniquely identified."+subrow_issue_message(subrow))
             else:
-                ft = ft_list[0]
+                interface_type = interface_types[0]
 
         # Get attributes default values taken from Interface Type or Processor attributes
         interface_type_values = {
-            "sphere": ft.sphere,
-            "roegen_type": ft.roegen_type,
-            "opposite_processor_type": ft.opposite_processor_type
+            "sphere": interface_type.sphere,
+            "roegen_type": interface_type.roegen_type,
+            "opposite_processor_type": interface_type.opposite_processor_type
         }
 
         # Get internal and user-defined attributes in one dictionary
@@ -209,58 +95,64 @@ class InterfacesAndQualifiedQuantitiesCommand(BasicCommand):
         attributes = {c.name: ifnull(field_values[c.name], ifnull(interface_type_values.get(c.name), head(c.allowed_values)))
                       for c in self._command_fields if c.attribute_of == Factor}
 
-        if not f:
-            attributes.update(field_values["interface_attributes"])
+        if not interface:
+            # f_list: Sequence[Factor] = self._glb_idx.get(
+            #     Factor.partial_key(processor=p, factor_type=ft, orientation=f_orientation))
+            #
+            # if len(f_list) > 0:
+            #     raise CommandExecutionError(f"An interface called '{f_list[0].name}' for Processor '{f_processor_name}'"
+            #                                  f" with InterfaceType '{f_interface_type_name}' and orientation "
+            #                                  f"'{f_orientation}' already exists"+subrow_issue_message(subrow))
 
-            f = Factor.create_and_append(f_interface_name,
-                                         p,
-                                         in_processor_type=FactorInProcessorType(
-                                             external=False,
-                                             incoming=False
-                                         ),
-                                         taxon=ft,
-                                         geolocation=f_location,
-                                         tags=None,
-                                         attributes=attributes)
-            self._glb_idx.put(f.key(), f)
-        elif not f.compare_attributes(attributes):
-            initial = ', '.join([f"{k}: {f.get_attribute(k)}" for k in attributes])
+            # Transform text of "interface_attributes" into a dictionary
+            interface_attributes = self.transform_text_attributes_into_dictionary(
+                field_values.get("interface_attributes"), subrow)
+            attributes.update(interface_attributes)
+
+            location = self.get_location(field_values.get("location"), subrow)
+
+            interface = Factor.create_and_append(f_interface_name,
+                                                 processor,
+                                                 in_processor_type=FactorInProcessorType(
+                                                     external=False,
+                                                     incoming=False
+                                                 ),
+                                                 taxon=interface_type,
+                                                 geolocation=location,
+                                                 tags=None,
+                                                 attributes=attributes)
+            self._glb_idx.put(interface.key(), interface)
+        elif not interface.compare_attributes(attributes):
+            initial = ', '.join([f"{k}: {interface.get_attribute(k)}" for k in attributes])
             new = ', '.join([f"{k}: {attributes[k]}" for k in attributes])
-            name = f.processor.full_hierarchy_names(self._glb_idx)[0] + ":" + f.name
-            self._add_issue(IType.ERROR, f"The same interface '{name}', is being redeclared with different properties. "
-                                         f"INITIAL: {initial}; NEW: {new}."+subrow_issue_message(subrow))
-            return
+            name = interface.processor.full_hierarchy_names(self._glb_idx)[0] + ":" + interface.name
+            raise CommandExecutionError(f"The same interface '{name}', is being redeclared with different properties. "
+                                        f"INITIAL: {initial}; NEW: {new}."+subrow_issue_message(subrow))
 
-        # Find Observer
-        oer: Optional[Observer] = None
-        if f_source:
-            oer = self._glb_idx.get_one(Observer.partial_key(f_source))
-            if not oer:
-                self._add_issue(IType.WARNING, f"Observer '{f_source}' has not been found."+subrow_issue_message(subrow))
-
+        f_unit = field_values.get("unit")
         if not f_unit:
-            f_unit = ft.unit
+            f_unit = interface_type.unit
 
         # Unify unit (it must be done before considering RelativeTo -below-, because it adds a transformation to "f_unit")
-        if f_value is not None and f_unit != ft.unit:
+        f_value = field_values.get("value")
+        if f_value is not None and f_unit != interface_type.unit:
             try:
-                f_value = UnitConversion.convert(f_value, f_unit, ft.unit)
+                f_value = UnitConversion.convert(f_value, f_unit, interface_type.unit)
             except DimensionalityError:
-                self._add_issue(IType.ERROR,
-                                f"Dimensions of units in InterfaceType ({ft.unit}) and specified ({f_unit}) are not convertible" + subrow_issue_message(
-                                    subrow))
-                return
+                raise CommandExecutionError(
+                    f"Dimensions of units in InterfaceType ({interface_type.unit}) and specified ({f_unit}) are not convertible" + subrow_issue_message(
+                        subrow))
 
-            f_unit = ft.unit
+            f_unit = interface_type.unit
 
         # Search for a relative_to interface
-        f_relative_to_interface: Optional[Factor] = None
+        f_relative_to = field_values.get("relative_to")
+        relative_to_interface: Optional[Factor] = None
         if f_relative_to:
             try:
                 ast = parser_field_parsers.string_to_ast(parser_field_parsers.factor_unit, f_relative_to)
             except:
-                self._add_issue(IType.ERROR, f"Could not parse the RelativeTo column, value {str(f_relative_to)}. "+subrow_issue_message(subrow))
-                return
+                raise CommandExecutionError(f"Could not parse the RelativeTo column, value {str(f_relative_to)}. "+subrow_issue_message(subrow))
 
             relative_to_interface_name = ast_to_string(ast["factor"])
 
@@ -268,24 +160,22 @@ class InterfacesAndQualifiedQuantitiesCommand(BasicCommand):
             # try:
             #     f_unit = str((ureg(f_unit) / ureg(rel_unit_name)).units)
             # except (UndefinedUnitError, AttributeError) as ex:
-            #     self._add_issue(IType.ERROR, f"The final unit could not be computed, interface '{f_unit}' / "
+            #     raise CommandExecutionError(f"The final unit could not be computed, interface '{f_unit}' / "
             #                                  f"relative_to '{rel_unit_name}': {str(ex)}"+subrow_issue_message(subrow))
-            #     return
 
-            f_relative_to_interface = first(f.processor.factors, lambda ifc: strcmp(ifc.name, relative_to_interface_name))
+            relative_to_interface = first(interface.processor.factors, lambda ifc: strcmp(ifc.name, relative_to_interface_name))
 
-            if not f_relative_to_interface:
-                self._add_issue(IType.ERROR, f"Interface specified in 'relative_to' column "
-                                             f"'{relative_to_interface_name}' has not been found."+subrow_issue_message(subrow))
-                return
+            if not relative_to_interface:
+                raise CommandExecutionError(f"Interface specified in 'relative_to' column "
+                                            f"'{relative_to_interface_name}' has not been found."+subrow_issue_message(subrow))
 
-        if f_value is None and f_relative_to_interface is not None:
+        if f_value is None and relative_to_interface is not None:
             # Search for a Interface Type Conversion defined in the ScaleChangeMap command
             interface_types_transforms: List[FactorTypesRelationUnidirectionalLinearTransformObservation] = \
-                find_factor_types_transform_relation(self._glb_idx, f_relative_to_interface.taxon, f.taxon, p, p)
+                find_factor_types_transform_relation(self._glb_idx, relative_to_interface.taxon, interface.taxon, processor, processor)
 
             # Overwrite any specified unit, it doesn't make sense without a value, i.e. it cannot be used for conversion
-            f_unit = f.taxon.unit
+            f_unit = interface.taxon.unit
             if len(interface_types_transforms) == 1:
                 f_value = interface_types_transforms[0].scaled_weight
             else:
@@ -300,15 +190,36 @@ class InterfacesAndQualifiedQuantitiesCommand(BasicCommand):
 
         # Create quantitative observation
         if f_value is not None:
+            f_uncertainty = field_values.get("uncertainty")
+            f_assessment = field_values.get("assessment")
+            f_pedigree_matrix = field_values.get("pedigree_matrix")
+            f_pedigree = field_values.get("pedigree")
+            f_time = field_values.get("time")
+            f_comments = field_values.get("comments")
+
+            # Find Observer
+            observer: Optional[Observer] = None
+            if f_source:
+                observer = self._glb_idx.get_one(Observer.partial_key(f_source))
+                if not observer:
+                    self._add_issue(IType.WARNING,
+                                    f"Observer '{f_source}' has not been found." + subrow_issue_message(subrow))
+
             # If an observation exists then "time" is mandatory
             if not f_time:
-                self._add_issue(IType.ERROR, f"Field 'time' needs to be specified for the given observation."+subrow_issue_message(subrow))
-                return
+                raise CommandExecutionError(f"Field 'time' needs to be specified for the given observation."+subrow_issue_message(subrow))
 
-            o = _create_or_append_quantitative_observation(f,
-                                                           f_value, f_unit, f_uncertainty, f_assessment, f_pedigree, f_pedigree_matrix,
-                                                           oer,
-                                                           f_relative_to_interface,
+            self.check_existence_of_pedigree_matrix(f_pedigree_matrix, f_pedigree, subrow)
+
+            # Transform text of "number_attributes" into a dictionary
+            number_attributes = self.transform_text_attributes_into_dictionary(field_values.get("number_attributes"),
+                                                                               subrow)
+
+            o = _create_or_append_quantitative_observation(interface,
+                                                           f_value, f_unit, f_uncertainty, f_assessment,
+                                                           f_pedigree, f_pedigree_matrix,
+                                                           observer,
+                                                           relative_to_interface,
                                                            f_time,
                                                            None,
                                                            f_comments,
@@ -317,3 +228,85 @@ class InterfacesAndQualifiedQuantitiesCommand(BasicCommand):
 
             # TODO Register? Disable for now. Observation can be obtained from a pass over all Interfaces
             # glb_idx.put(o.key(), o)
+
+    def transform_text_attributes_into_dictionary(self, text_attributes: str, subrow) -> Dict:
+        dictionary_attributes = {}
+        if text_attributes:
+            try:
+                dictionary_attributes = dictionary_from_key_value_list(text_attributes, self._glb_idx)
+            except Exception as e:
+                raise CommandExecutionError(str(e) + subrow_issue_message(subrow))
+
+        return dictionary_attributes
+
+    def find_processor(self, processor_name, subrow) -> Processor:
+        # Find Processor
+        # TODO Allow creating a basic Processor if it is not found?
+        processors = find_processors_matching_name(processor_name, self._glb_idx)
+        # p = find_observable_by_name(processor_name, self._glb_idx)
+        # p = self._glb_idx.get(Processor.partial_key(processor_name))
+        if len(processors) == 0:
+            raise CommandExecutionError(
+                "Processor '" + processor_name + "' not declared previously" + subrow_issue_message(subrow))
+        elif len(processors) > 1:
+            raise CommandExecutionError(
+                f"Processor '{processor_name}' declared previously {len(processors)} times" + subrow_issue_message(subrow))
+
+        return processors[0]
+
+    def get_location(self, reference_name, subrow) -> Any:
+        reference = None
+
+        if reference_name:
+            try:
+                # TODO Change to parser for Location (includes references, but also Codes)
+                ast = parser_field_parsers.string_to_ast(parser_field_parsers.reference, reference_name)
+                ref_id = ast["ref_id"]
+                references = self._glb_idx.get(GeographicReference.partial_key(ref_id))
+                if len(references) == 1:
+                    reference = references[0]
+                else:
+                    raise CommandExecutionError(f"Reference '{reference_name}' not found" + subrow_issue_message(subrow))
+            except:
+                reference = reference_name
+
+        return reference
+
+    def get_source(self, reference_name, subrow) -> Any:
+        reference = None
+
+        if reference_name:
+            try:
+                ast = parser_field_parsers.string_to_ast(parser_field_parsers.reference, reference_name)
+                ref_id = ast["ref_id"]
+                references = self._glb_idx.get(ProvenanceReference.partial_key(ref_id))
+                if len(references) == 1:
+                    reference = references[0]
+                else:
+                    references = self._glb_idx.get(BibliographicReference.partial_key(ref_id))
+                    if len(references) == 1:
+                        reference = references[0]
+                    else:
+                        raise CommandExecutionError(f"Reference '{reference_name}' not found" + subrow_issue_message(subrow))
+            except:
+                # TODO Change when Ref* are implemented
+                reference = reference_name + " (not found)"
+
+        return reference
+
+    def check_existence_of_pedigree_matrix(self, pedigree_matrix: str, pedigree: str, subrow=None) -> NoReturn:
+        # Check existence of PedigreeMatrix, if used
+        if pedigree_matrix and pedigree:
+            pm = self._glb_idx.get(PedigreeMatrix.partial_key(name=pedigree_matrix))
+            if len(pm) == 0:
+                raise CommandExecutionError("Could not find Pedigree Matrix '" + pedigree_matrix + "'" +
+                                            subrow_issue_message(subrow))
+            else:
+                try:
+                    lst = pm[0].get_modes_for_code(pedigree)
+                except:
+                    raise CommandExecutionError("Could not decode Pedigree '" + pedigree + "' for Pedigree Matrix '"
+                                                + pedigree_matrix + "'" + subrow_issue_message(subrow))
+        elif pedigree and not pedigree_matrix:
+            raise CommandExecutionError("Pedigree specified without accompanying Pedigree Matrix" +
+                                        subrow_issue_message(subrow))
