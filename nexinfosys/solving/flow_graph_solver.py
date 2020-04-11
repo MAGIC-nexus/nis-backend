@@ -820,15 +820,11 @@ def compute_partof_hierarchies(registry) -> Tuple[List[InterfaceNodeHierarchy], 
     processor_partof_relations, weights = get_processor_partof_relations(registry)
 
     # Get all different existing interfaces
-    for interface_type in registry.get(FactorType.partial_key()):
+    for interface in registry.get(Factor.partial_key()):  # type: Factor
 
-        for orientation in orientations:
-
-            hierarchies.append(
-                create_interface_node_hierarchy_from_processors(processor_partof_relations,
-                                                                interface_type,
-                                                                orientation)
-            )
+        hierarchies.append(
+            create_interface_node_hierarchy_from_processors(processor_partof_relations, interface)
+        )
 
     return hierarchies, weights
 
@@ -878,14 +874,12 @@ def compute_hierarchy_aggregate_results(hierarchies: List[InterfaceNodeHierarchy
 
 def create_interface_node_hierarchy_from_processors(
         relations: Dict[Processor, Set[Processor]],
-        interface_or_type: Union[Factor, FactorType],
-        orientation: str) -> InterfaceNodeHierarchy:
+        interface: Factor) -> InterfaceNodeHierarchy:
 
     hierarchy: InterfaceNodeHierarchy = {}
 
     for parent, children in relations.items():
-        hierarchy[InterfaceNode(interface_or_type, parent, orientation)] = \
-            {InterfaceNode(interface_or_type, child, orientation) for child in children}
+        hierarchy[InterfaceNode(interface, parent)] = {InterfaceNode(interface, child) for child in children}
 
     return hierarchy
 
