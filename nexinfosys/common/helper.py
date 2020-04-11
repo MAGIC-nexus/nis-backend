@@ -239,6 +239,12 @@ def strcmp(s1, s2):
     :param s2:
     :return:
     """
+    # Handling empty or None strings
+    if not s1:
+        return True if not s2 else False
+    if not s2:
+        return False
+
     if case_sensitive:
         return s1.strip() == s2.strip()
     else:
