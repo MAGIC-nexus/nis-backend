@@ -120,30 +120,36 @@ class InterfaceNode:
             self.interface: Optional[Factor] = interface_or_type
             self.interface_type = self.interface.taxon
             self.orientation: Optional[str] = orientation if orientation else self.interface.orientation
+            self.interface_name: str = interface_or_type.name
             self.processor = processor if processor else self.interface.processor
         elif isinstance(interface_or_type, FactorType):
             self.interface: Optional[Factor] = None
             self.interface_type = interface_or_type
             self.orientation = orientation
+            # TODO: it may not be unique
+            self.interface_name: str = self.orientation.title() + self.interface_type.name.title()
             self.processor = processor
         else:
             raise Exception(f"Invalid object type '{type(interface_or_type)}' for the first parameter. "
                             f"Valid object types are [Factor, FactorType].")
 
-        self.interface_name: str = interface_or_type.name
         self.processor_name: str = get_processor_name(self.processor, self.registry) if self.processor else processor_name
 
     @property
     def key(self) -> Tuple:
-        return self.processor_name, self.interface_name, self.orientation
+        return self.processor_name, self.interface_name
 
     @staticmethod
     def key_labels() -> List[str]:
-        return ["Processor", "Interface", "Orientation"]
+        return ["Processor", "Interface"]
 
     @property
     def name(self) -> str:
         return ":".join(self.key)
+
+    @property
+    def type(self) -> str:
+        return self.interface_type.name
 
     @property
     def unit(self):
@@ -1081,7 +1087,9 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
     #
 
     data = {result_key.as_string_tuple() + node.key:
-                {"RoegenType": node.roegen_type if node else "-",
+                {"InterfaceType": node.type,
+                 "Orientation": node.orientation,
+                 "RoegenType": node.roegen_type if node else "-",
                  "Value": float_computed.value.val,
                  "Computed": float_computed.computed.name,
                  "Observer": float_computed.observer,
@@ -1137,7 +1145,7 @@ def export_solver_data(datasets, data, dynamic_scenario, glb_idx, global_paramet
     df = df.round(3)
     # Give a name to the dataframe indexes
     index_names = [f.title() for f in
-                   ResultKey._fields] + InterfaceNode.key_labels()  # "Processor", "Interface", "Orientation"
+                   ResultKey._fields] + InterfaceNode.key_labels()
     df.index.names = index_names
     # Sort the dataframe based on indexes. Not necessary, only done for debugging purposes.
     df = df.sort_index(level=index_names)
@@ -1390,7 +1398,7 @@ def calculate_local_scalar_indicators(indicators: List[Indicator],
         return df2
 
     # -- calculate_local_scalar_indicators --
-    idx_to_change = ["Interface", "Orientation"]
+    idx_to_change = ["Interface"]
     results.reset_index(idx_to_change, inplace=True)
 
     # For each ScalarIndicator...
