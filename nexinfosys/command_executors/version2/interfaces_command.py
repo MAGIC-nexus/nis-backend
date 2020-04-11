@@ -212,6 +212,14 @@ class InterfacesAndQualifiedQuantitiesCommand(BasicCommand):
             if not f_time:
                 raise CommandExecutionError(f"Field 'time' needs to be specified for the given observation."+subrow_issue_message(subrow))
 
+            # An interface can have multiple observations if each of them have a different [time, observer] combination
+            for observation in interface.quantitative_observations:
+                observer_name = observation.observer.name if observation.observer else None
+                if strcmp(observation.attributes["time"], f_time) and strcmp(observer_name, f_source):
+                    raise CommandExecutionError(
+                        f"The interface '{interface.name}' in processor '{interface.processor.name}' already has an "
+                        f"observation with time '{f_time}' and source '{f_source}'.")
+
             self.check_existence_of_pedigree_matrix(f_pedigree_matrix, f_pedigree, subrow)
 
             # Transform text of "number_attributes" into a dictionary
