@@ -43,7 +43,7 @@ from nexinfosys.command_field_definitions import command_fields
 from nexinfosys.command_field_descriptions import cf_descriptions
 from nexinfosys.command_generators import Issue, IType
 from nexinfosys.command_generators.parser_field_examples import generic_field_examples, generic_field_syntax
-from nexinfosys.command_generators.parser_field_parsers import string_to_ast, arith_boolean_expression
+from nexinfosys.command_generators.parser_field_parsers import string_to_ast, arith_boolean_expression, simple_ident
 from nexinfosys.command_generators.parser_spreadsheet_utils_accel import rewrite_xlsx_file
 from nexinfosys.ie_exports.json_export import export_model_to_json, model_to_json
 from nexinfosys.models.musiasem_concepts import Parameter, Hierarchy, ProblemStatement
@@ -920,8 +920,20 @@ def reproducible_session_get_command_generator(order):  # Return one of the comm
     return r
 
 
+# ----------------------------------------------------------------------------------------------------------------------
+# State management: save, list, get, delete ("update"" is "save", overwrite always)
+# ----------------------------------------------------------------------------------------------------------------------
+
 @app.route(nis_api_base + "/isession/rsession/state", methods=["PUT"])
 def reproducible_session_save_state():  # Save state
+    """
+    Save or overwrite state in-memory to a file at the backend side
+
+    Receives a "code" Query parameter with the name for the saved state file (which must be unique, unless an overwrite
+    is wanted)
+
+    :return: Empty if everything is ok, Error if there is an issue
+    """
     def ensure_dir(file_path):
         directory = os.path.dirname(file_path)
         if not os.path.exists(directory):
@@ -936,6 +948,10 @@ def reproducible_session_save_state():  # Save state
     if isess.reproducible_session_opened():
         if isess.state:
             code = request.args.get("code", None)
+            try:
+                string_to_ast(simple_ident, code)
+            except:
+                code = None
             if code is None:
                 r = build_json_response({"error": "Query parameter 'code' is mandatory"}, 401)
             else:
@@ -955,8 +971,15 @@ def reproducible_session_save_state():  # Save state
     return r
 
 
-@app.route(nis_api_base + "/isession/rsession/state", methods=["GET"])
-def reproducible_session_load_state():  # Load saved state
+@app.route(nis_api_base + "/isession/rsession/state", methods=["DELETE"])
+def reproducible_session_delete_state():  # Delete state
+    """
+    Delete a saved state
+
+    Receives a "code" Query parameter with the name for the saved state file to delete
+
+    :return: Empty if everything is ok, Error if there is an issue
+    """
     # Recover InteractiveSession
     isess = deserialize_isession_and_prepare_db_session()
     if isess and isinstance(isess, Response):
@@ -964,12 +987,81 @@ def reproducible_session_load_state():  # Load saved state
 
     # A reproducible session must be open, signal about it if not
     if isess.reproducible_session_opened():
+        if isess.state:
+            code = request.args.get("code", None)
+            try:
+                string_to_ast(simple_ident, code)
+            except:
+                code = None
+            if code is None:
+                r = build_json_response({"error": "Query parameter 'code' is mandatory"}, 401)
+            else:
+                cs_path = nexinfosys.get_global_configuration_variable("CASE_STUDIES_DIR")
+                fname = cs_path+os.sep+code+".state_serialized"
+                if os.path.exists(fname):
+                    os.remove(fname)
+                    r = build_json_response({}, 204)
+                else:
+                    r = build_json_response({"error": f"A state with code {code} did not exist"}, 401)
+        else:
+            r = build_json_response({}, 204)
+    else:
+        r = build_json_response({"error": "Cannot delete state, no open reproducible session"}, 401)
+
+    return r
+
+
+@app.route(nis_api_base + "/isession/rsession/state/", methods=["GET"])
+def reproducible_session_list_states():  # List available states
+    """
+    List codes of all previously saved states
+
+    :return: A JSON with a single entry "codes", with a list of the codes to address the saved states. Error if there is an issue
+    """
+    # Recover InteractiveSession
+    isess = deserialize_isession_and_prepare_db_session()
+    if isess and isinstance(isess, Response):
+        return isess
+
+    # A reproducible session must be open, signal about it if not
+    if isess.reproducible_session_opened():
+        cs_path = nexinfosys.get_global_configuration_variable("CASE_STUDIES_DIR")
+        lst = [f for f in os.listdir(cs_path) if os.path.isfile(f"{cs_path}{os.sep}{f}")]
+        r = build_json_response({"codes": lst}, 204)
+    else:
+        r = build_json_response({"error": "Cannot return the list of states, no open reproducible session"}, 401)
+
+    return r
+
+
+@app.route(nis_api_base + "/isession/rsession/state", methods=["GET"])
+def reproducible_session_load_state():
+    """
+    Loads a previously saved state in the reproducible session. After this call, output datasets can be retrieved or
+    new parameters for the dynamic scenario submitted.
+
+    A "code" Query parameter must be passed with a code for the saved state.
+
+    :return: Empty if everything is ok (the state is on the backend side). Error if there is an issue
+    """
+    # Recover InteractiveSession
+    isess = deserialize_isession_and_prepare_db_session()
+    if isess and isinstance(isess, Response):
+        return isess
+
+    # A reproducible session must be open, signal about it if not
+    if isess.reproducible_session_opened():
+        cs_path = nexinfosys.get_global_configuration_variable("CASE_STUDIES_DIR")
         code = request.args.get("code", None)
+        try:
+            string_to_ast(simple_ident, code)
+        except:
+            code = None
         if code is None:
             r = build_json_response({"error": "Query parameter 'code' is mandatory"}, 401)
         else:
-            cs_path = nexinfosys.get_global_configuration_variable("CASE_STUDIES_DIR")
-            with open(cs_path + os.sep + code + ".state_serialized", "rt") as f:
+            fname = cs_path + os.sep + code + ".state_serialized"
+            with open(fname, "rt") as f:
                 s = f.read()
                 isess.state = deserialize_state(s)
 
@@ -979,6 +1071,8 @@ def reproducible_session_load_state():  # Load saved state
 
     return r
 
+
+# ----------------------------------------------------------------------------------------------------------------------
 
 @app.route(nis_api_base + "/isession/rsession/state.pickled", methods=["GET"])
 def reproducible_session_get_state():  # Return current status of ReproducibleSession
