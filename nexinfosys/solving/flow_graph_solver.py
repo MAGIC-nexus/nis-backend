@@ -112,6 +112,14 @@ class MissingValueResolutionPolicy(Enum):
 
 
 class InterfaceNode:
+    """
+    Identifies an interface which value should be computed by the solver.
+    An interface can be identified in two different ways:
+    1. In the common case there is an interface declared in the Interfaces command. The interface is identified
+       with "ProcessorName:InterfaceName".
+    2. When we are aggregating by the interface type and there isn't a declared interface. The interface is
+       identified with "ProcessorName:InterfaceTypeName:Orientation"
+    """
     registry: PartialRetrievalDictionary = None
 
     def __init__(self, interface_or_type: Union[Factor, FactorType], processor: Optional[Processor] = None,
@@ -1723,45 +1731,56 @@ def aggregate_results(tree: InterfaceNodeHierarchy, params: NodeFloatComputedDic
                       processors_relation_weights: ProcessorsRelationWeights) \
         -> Tuple[NodeFloatComputedDict, NodeFloatComputedDict, NodeFloatComputedDict]:
 
-    def sum_values(values: List[FloatComputedTuple]) -> FloatComputedTuple:
+    def sum_values(values: List[FloatExp]) -> FloatExp:
         result: Optional[FloatExp] = None
 
-        for value, _, _ in values:
+        for value in values:
             if result is None:
                 result = value.assignable_copy()
             else:
                 result += value
 
-        return FloatComputedTuple(result, Computed.Yes)
+        return result
 
-    def get(node_dict: NodeFloatComputedDict, node: InterfaceNode) -> Optional[FloatComputedTuple]:
+    def get(node_dict: NodeFloatComputedDict, node: InterfaceNode) -> Tuple[InterfaceNode, Optional[FloatComputedTuple]]:
+        """
+        Get the node value from a dictionary that stores nodes that can be identified in two different ways:
+        as "ProcessorName:InterfaceName" or as "ProcessorName:InterfaceTypeName:Orientation".
+        If a node is not present in its original form we should search it in its associated form.
+        - Original form "ProcessorName:InterfaceName" -> we can directly compute the "ProcessorName:InterfaceTypeName:Orientation" form
+        - Original form "ProcessorName:InterfaceTypeName:Orientation" -> we can have multiple nodes "ProcessorName:InterfaceName" matching
+        """
         if node in node_dict:
-            return node_dict[node]
+            return node, node_dict[node]
         else:
             debug_string = f"DEBUG - GET: node '{node}' not found, "
-            result: Optional[FloatComputedTuple] = None
+            result: Tuple[InterfaceNode, Optional[FloatComputedTuple]] = (node, None)
             if node.has_interface():
+                # Transformation "ProcessorName:InterfaceName" -> "ProcessorName:InterfaceTypeName:Orientation"
                 no_interface_copy = node.no_interface_copy()
                 debug_string += f"searching no interface node '{no_interface_copy}' instead"
-                result = node_dict.get(no_interface_copy)
+                if no_interface_copy in node_dict:
+                    result = no_interface_copy, node_dict[no_interface_copy]
             else:
-                values: List[FloatComputedTuple] = [v for k, v in node_dict.items() if k.alternate_key == node.alternate_key]
+                # Transformation "ProcessorName:InterfaceTypeName:Orientation" -> "ProcessorName:InterfaceName"
+                values: List[Tuple[InterfaceNode, FloatComputedTuple]] = \
+                    [(k, v) for k, v in node_dict.items() if k.alternate_key == node.alternate_key]
                 debug_string += f"searching nodes matching alternate key '{node.alternate_key}' instead, these are '{values}'"
                 if len(values) == 1:
                     result = values[0]
                 elif len(values) > 1:
-                    result = sum_values(values)
+                    result = node, FloatComputedTuple(sum_values([v[1].value for v in values]), Computed.Yes)
 
-            if result:
-                print(f"{debug_string}, result: {result}")
+            if result[1]:
+                print(f"{debug_string}, result: {result[1]}")
 
             return result
 
     def compute_node(node: InterfaceNode) -> Optional[FloatExp]:
         # If the node has already been computed return the value
-        f = get(new_values, node)
-        if f is not None:
-            return f.value
+        node, float_value = get(new_values, node)
+        if float_value is not None:
+            return float_value.value
 
         # Make a depth-first search
         return_value: Optional[FloatExp]
@@ -1790,16 +1809,16 @@ def aggregate_results(tree: InterfaceNodeHierarchy, params: NodeFloatComputedDic
                 sum_children = None
                 break
 
-        f = get(params, node)
+        node, float_value = get(params, node)
         if sum_children is not None:
             # New value has been computed
             sum_children.name = node.name
             new_computed_value = FloatComputedTuple(sum_children, Computed.Yes)
 
-            if f is not None:
+            if float_value is not None:
                 # Conflict here: applies strategy
                 taken_conflicts[node], dismissed_conflicts[node] = \
-                    conflicting_data_policy.resolve(new_computed_value, f)
+                    conflicting_data_policy.resolve(new_computed_value, float_value)
 
                 new_values[node] = taken_conflicts[node]
                 return_value = taken_conflicts[node].value
@@ -1808,7 +1827,7 @@ def aggregate_results(tree: InterfaceNodeHierarchy, params: NodeFloatComputedDic
                 return_value = new_computed_value.value
         else:
             # No value got from children, try to search in "params"
-            return_value = f.value if f is not None else None
+            return_value = float_value.value if float_value is not None else None
 
         return return_value
 
