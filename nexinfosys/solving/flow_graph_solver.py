@@ -994,6 +994,7 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
                 flow_last_known_nodes = set()
                 scale_last_known_nodes = set()
                 scale_change_last_known_nodes = set()
+                iteration_number = 1
 
                 # START ITERATIVE SOLVING
 
@@ -1006,6 +1007,7 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
 
                     # Iterate while the number of results is increasing
                     while len(results) > previous_len_results:
+                        print(f"********************* Solving iteration: {iteration_number}")
                         previous_len_results = len(results)
 
                         new_results = compute_graph_results(comp_graph_flow, results, flow_last_known_nodes)
@@ -1046,6 +1048,8 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
                                     scenario_state, unresolved_observations_with_interfaces, results
                                 )
                             results.update(new_results)
+
+                        iteration_number += 1
 
                 if unresolved_observations_with_interfaces:
                     issues.append(Issue(IType.WARNING, f"Scenario '{scenario_name}' - period '{time_period}'."
