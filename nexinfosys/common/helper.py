@@ -9,6 +9,7 @@ import itertools
 import json
 import logging
 import mimetypes
+import os
 import tempfile
 import urllib
 import urllib.request
@@ -30,7 +31,6 @@ import nexinfosys
 from nexinfosys import case_sensitive, SDMXConcept, get_global_configuration_variable
 from nexinfosys.ie_imports.google_drive import download_xlsx_file_id
 from nexinfosys.models import log_level
-import os
 
 logger = logging.getLogger(__name__)
 logger.setLevel(log_level)
@@ -1582,6 +1582,9 @@ class FloatExp(SupportsFloat):
 
     def __str__(self) -> str:
         return f'Value = {self.val}, Name = {self.name}, Expression = "{self.exp}"'
+
+    def __repr__(self):
+        return str(self)
 
 
 def add_label_columns_to_dataframe(ds_name, df, prd):

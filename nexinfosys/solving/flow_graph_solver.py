@@ -126,8 +126,7 @@ class InterfaceNode:
             self.interface: Optional[Factor] = None
             self.interface_type = interface_or_type
             self.orientation = orientation
-            # TODO: it may not be unique
-            self.interface_name: str = self.orientation.title() + self.interface_type.name.title()
+            self.interface_name: str = ""
             self.processor = processor
         else:
             raise Exception(f"Invalid object type '{type(interface_or_type)}' for the first parameter. "
@@ -139,13 +138,20 @@ class InterfaceNode:
     def key(self) -> Tuple:
         return self.processor_name, self.interface_name
 
+    @property
+    def alternate_key(self) -> Tuple:
+        return self.processor_name, self.interface_type.name, self.orientation
+
     @staticmethod
     def key_labels() -> List[str]:
         return ["Processor", "Interface"]
 
     @property
     def name(self) -> str:
-        return ":".join(self.key)
+        if self.interface_name:
+            return ":".join(self.key)
+        else:
+            return ":".join(self.alternate_key)
 
     @property
     def type(self) -> str:
@@ -184,6 +190,12 @@ class InterfaceNode:
     @property
     def subsystem(self) -> Optional[str]:
         return self.processor.subsystem_type if self.processor else None
+
+    def has_interface(self) -> bool:
+        return self.interface is not None
+
+    def no_interface_copy(self) -> "InterfaceNode":
+        return InterfaceNode(self.interface_type, self.processor, self.orientation)
 
     def __str__(self):
         return self.name
@@ -1711,10 +1723,45 @@ def aggregate_results(tree: InterfaceNodeHierarchy, params: NodeFloatComputedDic
                       processors_relation_weights: ProcessorsRelationWeights) \
         -> Tuple[NodeFloatComputedDict, NodeFloatComputedDict, NodeFloatComputedDict]:
 
+    def sum_values(values: List[FloatComputedTuple]) -> FloatComputedTuple:
+        result: Optional[FloatExp] = None
+
+        for value, _, _ in values:
+            if result is None:
+                result = value.assignable_copy()
+            else:
+                result += value
+
+        return FloatComputedTuple(result, Computed.Yes)
+
+    def get(node_dict: NodeFloatComputedDict, node: InterfaceNode) -> Optional[FloatComputedTuple]:
+        if node in node_dict:
+            return node_dict[node]
+        else:
+            debug_string = f"DEBUG - GET: node '{node}' not found, "
+            result: Optional[FloatComputedTuple] = None
+            if node.has_interface():
+                no_interface_copy = node.no_interface_copy()
+                debug_string += f"searching no interface node '{no_interface_copy}' instead"
+                result = node_dict.get(no_interface_copy)
+            else:
+                values: List[FloatComputedTuple] = [v for k, v in node_dict.items() if k.alternate_key == node.alternate_key]
+                debug_string += f"searching nodes matching alternate key '{node.alternate_key}' instead, these are '{values}'"
+                if len(values) == 1:
+                    result = values[0]
+                elif len(values) > 1:
+                    result = sum_values(values)
+
+            if result:
+                print(f"{debug_string}, result: {result}")
+
+            return result
+
     def compute_node(node: InterfaceNode) -> Optional[FloatExp]:
         # If the node has already been computed return the value
-        if new_values.get(node) is not None:
-            return new_values[node].value
+        f = get(new_values, node)
+        if f is not None:
+            return f.value
 
         # Make a depth-first search
         return_value: Optional[FloatExp]
@@ -1743,15 +1790,16 @@ def aggregate_results(tree: InterfaceNodeHierarchy, params: NodeFloatComputedDic
                 sum_children = None
                 break
 
+        f = get(params, node)
         if sum_children is not None:
             # New value has been computed
             sum_children.name = node.name
             new_computed_value = FloatComputedTuple(sum_children, Computed.Yes)
 
-            if params.get(node) is not None:
+            if f is not None:
                 # Conflict here: applies strategy
                 taken_conflicts[node], dismissed_conflicts[node] = \
-                    conflicting_data_policy.resolve(new_computed_value, params[node])
+                    conflicting_data_policy.resolve(new_computed_value, f)
 
                 new_values[node] = taken_conflicts[node]
                 return_value = taken_conflicts[node].value
@@ -1760,7 +1808,7 @@ def aggregate_results(tree: InterfaceNodeHierarchy, params: NodeFloatComputedDic
                 return_value = new_computed_value.value
         else:
             # No value got from children, try to search in "params"
-            return_value = params[node].value if params.get(node) is not None else None
+            return_value = f.value if f is not None else None
 
         return return_value
 
