@@ -1,3 +1,4 @@
+import csv
 import io
 import os
 import binascii
@@ -2099,15 +2100,32 @@ def list_of_registered_nis_files():
 
     :return:
     """
-    files = [
-        dict(name="MuSIASEM hierarchies", url="https://nextcloud.data.magic-nexus.eu/remote.php/webdav/NIS_internal/WP4/D4.3%20global%20food%20supply%20and%20diets/README.md", example=False, description=""),
-        dict(name="Water grammar", url="https://nextcloud.data.magic-nexus.eu/remote.php/webdav/NIS_internal/WP4/D4.3%20global%20food%20supply%20and%20diets/README.md", example=False, description=""),
-        dict(name="Energy grammar", url="https://nextcloud.data.magic-nexus.eu/remote.php/webdav/NIS_internal/WP4/D4.3%20global%20food%20supply%20and%20diets/README.md", example=False, description=""),
-        dict(name="Food grammar", url="https://nextcloud.data.magic-nexus.eu/remote.php/webdav/NIS_internal/WP4/D4.3%20global%20food%20supply%20and%20diets/README.md", example=False, description=""),
-        dict(name="Biofuel", url="https://nextcloud.data.magic-nexus.eu/remote.php/webdav/NIS_internal/WP6/CS6_2_Biofuels/README.md", example=True, description=""),
-        dict(name="Gran Canaria", url="https://nextcloud.data.magic-nexus.eu/remote.php/webdav/NIS_internal/WP6/CS6_6_Alternative_water_sources/README.md", example=True, description=""),
-        dict(name="Tenerife", url="https://nextcloud.data.magic-nexus.eu/remote.php/webdav/NIS_internal/WP6/CS6_6_Alternative_water_sources/README.md", example=True, description=""),
-    ]
+    # Elaborate a list of dictionaries
+    files = []
+    if "NIS_FILES_LIST" in app.config:
+        example_files = app.config["NIS_FILES_LIST"].split(",")
+        for url in example_files:
+            try:
+                tmp = download_file(url).getvalue().decode("UTF-8")
+                df = pd.read_csv(io.StringIO(tmp), skipinitialspace=True, quoting=csv.QUOTE_ALL)
+                df.columns = [c.strip().lower() for c in df.columns]
+                for t in df.iterrows():
+                    desc = ""
+                    files.append(dict(name=t[1]["name"], url=t[1]["url"], example=t[1]["example"], description=desc))
+            except Exception as e:
+                traceback.print_exc()  # Print the Exception to std output
+
+    if len(files) == 0:
+        files = [
+            dict(name="MuSIASEM hierarchies", url="https://nextcloud.data.magic-nexus.eu/remote.php/webdav/NIS_internal/WP4/D4.3%20global%20food%20supply%20and%20diets/README.md", example=False, description=""),
+            dict(name="Water grammar", url="https://nextcloud.data.magic-nexus.eu/remote.php/webdav/NIS_internal/WP4/D4.3%20global%20food%20supply%20and%20diets/README.md", example=False, description=""),
+            dict(name="Energy grammar", url="https://nextcloud.data.magic-nexus.eu/remote.php/webdav/NIS_internal/WP4/D4.3%20global%20food%20supply%20and%20diets/README.md", example=False, description=""),
+            dict(name="Food grammar", url="https://nextcloud.data.magic-nexus.eu/remote.php/webdav/NIS_internal/WP4/D4.3%20global%20food%20supply%20and%20diets/README.md", example=False, description=""),
+            dict(name="Biofuel", url="https://nextcloud.data.magic-nexus.eu/remote.php/webdav/NIS_internal/WP6/CS6_2_Biofuels/README.md", example=True, description=""),
+            dict(name="Gran Canaria", url="https://nextcloud.data.magic-nexus.eu/remote.php/webdav/NIS_internal/WP6/CS6_6_Alternative_water_sources/README.md", example=True, description=""),
+            dict(name="Tenerife", url="https://nextcloud.data.magic-nexus.eu/remote.php/webdav/NIS_internal/WP6/CS6_6_Alternative_water_sources/README.md", example=True, description=""),
+        ]
+
     return build_json_response(files, 200)
 
 

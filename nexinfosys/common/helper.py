@@ -1697,6 +1697,7 @@ def prepare_default_configuration(create_directories):
             "CACHE_FILE_LOCATION": f"{tmp_path}/sdmx_datasets_cache",
             "REDIS_HOST_FILESYSTEM_DIR": f"{tmp_path}/sessions",
             "SSP_FILES_DIR": "",
+            "NIS_FILES_LIST": "https://drive.google.com/open?id=1I_afcebegpEaOxfKKMzJCJDCG-vtulsM"
         }
 
     from appdirs import AppDirs
