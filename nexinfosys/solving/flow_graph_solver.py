@@ -1056,6 +1056,12 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
                                                        f"The following observations could not be evaluated: "
                                                        f"{[k for k in unresolved_observations_with_interfaces.keys()]}"))
 
+                issues.extend(check_unresolved_nodes_in_computation_graphs(
+                    [comp_graph_flow, comp_graph_scale, comp_graph_scale_change], results))
+
+                # issues.extend(check_unresolved_nodes_in_aggregation_hierarchies(
+                #     interfacetype_hierarchies + partof_hierarchies, results))
+
                 current_results: ResultDict = {}
                 result_key = ResultKey(scenario_name, time_period, Scope.Total)
 
@@ -1123,6 +1129,31 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
 
     export_solver_data(datasets, data, dynamic_scenario, glb_idx, global_parameters, problem_statement)
 
+    return issues
+
+
+def check_unresolved_nodes_in_computation_graphs(computation_graphs: List[ComputationGraph], resolved_nodes: NodeFloatComputedDict) -> List[Issue]:
+    issues: List[Issue] = []
+    for comp_graph in computation_graphs:
+        unresolved_nodes = [n for n in comp_graph.nodes if n not in resolved_nodes]
+        if unresolved_nodes:
+            issues.append(Issue(IType.WARNING, f"The following nodes in '{comp_graph.name}' graph could not be "
+                                               f"evaluated: {unresolved_nodes}"))
+    return issues
+
+
+def check_unresolved_nodes_in_aggregation_hierarchies(hierarchies: List[InterfaceNodeHierarchy], resolved_nodes: NodeFloatComputedDict) -> List[Issue]:
+    issues: List[Issue] = []
+    unresolved_nodes: Set[InterfaceNode] = set()
+
+    for hierarchy in hierarchies:
+        unresolved_nodes.update({n for n in hierarchy if n not in resolved_nodes})
+        for parent, children in hierarchy.items():
+            unresolved_nodes.update({n for n in children if n not in resolved_nodes})
+
+    if unresolved_nodes:
+        issues.append(Issue(IType.WARNING, f"The following nodes in aggregation hierarchies could not be "
+                                           f"evaluated: {unresolved_nodes}"))
     return issues
 
 
