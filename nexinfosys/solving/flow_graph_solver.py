@@ -1377,13 +1377,16 @@ def calculate_local_scalar_indicators(indicators: List[Indicator],
             state = State(d)
             val, variables = ast_evaluator(ast, state, None, issues)
             if val is not None:  # If it was possible to evaluate ... append a new row
+                l = list(t)
+                l.append(indicator.name)
+                t = tuple(l)
                 new_df_rows_idx.append(t)  # (scenario, period, scope, processor)
-                new_df_rows_data.append((indicator.name, val, None))  # (indicator, value, unit)
+                new_df_rows_data.append((val, None))  # (indicator, value, unit)
         # print(issues)
         # Construct pd.DataFrame with the result of the scalar indicator calculation
         df2 = pd.DataFrame(data=new_df_rows_data,
-                           index=pd.MultiIndex.from_tuples(new_df_rows_idx, names=idx_names),
-                           columns=["Indicator", "Value", "Unit"])
+                           index=pd.MultiIndex.from_tuples(new_df_rows_idx, names=idx_names+["Indicator"]),
+                           columns=["Value", "Unit"])
         return df2
 
     # -- calculate_local_scalar_indicators --
@@ -1541,16 +1544,15 @@ def calculate_local_benchmarks(df_local_indicators, indicators: List[Indicator])
             if len(si.benchmarks) > 0:
                 ind_map[si.name] = si
 
-    idx_names = ["Scenario", "Period", "Scope", "Processor"]  # Changing factors
+    idx_names = ["Scenario", "Period", "Scope", "Processor", "Indicator"]  # Changing factors
 
     new_df_rows_idx = []
     new_df_rows_data = []
-    indicator_column_idx = df_local_indicators.columns.get_loc("Indicator")
+    indicator_column_idx = 4
     value_column_idx = df_local_indicators.columns.get_loc("Value")
     unit_column_idx = df_local_indicators.columns.get_loc("Unit")
     for r in df_local_indicators.itertuples():
-        indic = r[1+indicator_column_idx]
-        ind = ind_map[indic]
+        ind = ind_map[r[0][indicator_column_idx]]
         val = r[1+value_column_idx]
         unit = r[1+unit_column_idx]
         for b in ind.benchmarks:
@@ -1559,12 +1561,12 @@ def calculate_local_benchmarks(df_local_indicators, indicators: List[Indicator])
                 c = f"<out ({val})>"
 
             new_df_rows_idx.append(r[0])  # (scenario, period, scope, processor)
-            new_df_rows_data.append((indic, val, b.name, c))
+            new_df_rows_data.append((val, b.name, c))
 
     # Construct pd.DataFrame with the result of the scalar indicator calculation
     df2 = pd.DataFrame(data=new_df_rows_data,
                        index=pd.MultiIndex.from_tuples(new_df_rows_idx, names=idx_names),
-                       columns=["Indicator", "Value", "Benchmark", "Category"])
+                       columns=["Value", "Benchmark", "Category"])
 
     return df2
 
@@ -1618,7 +1620,7 @@ def calculate_global_benchmarks(df_global_indicators, indicators: List[Indicator
 def prepare_matrix_indicators(indicators: List[MatrixIndicator],
                               registry: PartialRetrievalDictionary,
                               serialized_model: lxml.etree._ElementTree, p_map: Dict,
-                              results: pd.DataFrame, indicator_results: pd.DataFrame,
+                              interface_results: pd.DataFrame, indicator_results: pd.DataFrame,
                               dynamic_scenario: bool) -> Dict[str, Dataset]:
     """
     Compute Matrix Indicators
@@ -1627,8 +1629,8 @@ def prepare_matrix_indicators(indicators: List[MatrixIndicator],
     :param registry:
     :param serialized_model:
     :param p_map:
-    :param results: The matrix with all the input results
-    :param indicator_results: Matrix with local scalar indicators
+    :param interface_results: The pd.DataFrame with all the interface results
+    :param indicator_results: The pd.DataFrame with all the local scalar indicators
     :param dynamic_scenario: True if the matrices have to be prepared for a dynamic scenario
     :return: A dictionary <dataset_name> -> <dataset>
     """
@@ -1643,14 +1645,18 @@ def prepare_matrix_indicators(indicators: List[MatrixIndicator],
         :return: a pd.DataFrame containing the desired matrix indicator
         """
         # Filter "Scope", if defined
+        indicators_df = indicator_results
         if indicator.scope:
             # TODO Consider case sensitiveness of "indicator.scope" (it is entered by the user)
-            df = results.query('Scope in ("'+indicator.scope+'")')
+            interfaces_df = interface_results.query('Scope in ("' + indicator.scope + '")')
+            if not indicator_results.empty:
+                indicators_df = indicator_results.query(f'Scope in ("{indicator.scope}")')
         else:
-            df = results
+            interfaces_df = interface_results
 
         # Apply XPath to obtain the dataframe filtered by the desired set of processors
-        df, selected_processors = obtain_subset_of_processors(indicator.processors_selector, serialized_model, registry, p_map, df)
+        dfs, selected_processors = obtain_subset_of_processors(indicator.processors_selector, serialized_model, registry, p_map, [interfaces_df, indicators_df])
+        interfaces_df, indicators_df = dfs[0], dfs[1]
 
         # Filter Interfaces
         if indicator.interfaces_selector:
@@ -1658,17 +1664,22 @@ def prepare_matrix_indicators(indicators: List[MatrixIndicator],
             if not case_sensitive:
                 ifaces = set([_.lower() for _ in ifaces])
 
-            i_names = get_adapted_case_dataframe_filter(results, "Interface", ifaces)
+            i_names = get_adapted_case_dataframe_filter(interface_results, "Interface", ifaces)
             # i_names = results.index.unique(level="Interface").values
             # i_names_case = [_ if case_sensitive else _.lower() for _ in i_names]
             # i_names_corr = dict(zip(i_names_case, i_names))
             # i_names = [i_names_corr[_] for _ in ifaces]
             # Filter dataframe to only the desired Interfaces.
-            df = df.query('Interface in [' + ', '.join(['"' + _ + '"' for _ in i_names]) + ']')
+            interfaces_df = interfaces_df.query('Interface in [' + ', '.join(['"' + _ + '"' for _ in i_names]) + ']')
 
-        # TODO Filter ScalarIndicators
-        #   Indicator (scalar) names are accompanied by: Unit
-        #   indicator_results
+        # Filter ScalarIndicators
+        if indicator.indicators_selector:
+            inds = set([_.strip() for _ in indicator.indicators_selector.split(",")])
+            if not case_sensitive:
+                inds = set([_.lower() for _ in inds])
+
+            i_names = get_adapted_case_dataframe_filter(indicator_results, "Indicator", inds)
+            indicators_df = indicators_df.query('Indicator in [' + ', '.join(['"' + _ + '"' for _ in i_names]) + ']')
 
         # Pivot Table: Dimensions (rows) are (Scenario, Period, Processor[, Scope])
         #              Dimensions (columns) are (Interface, Orientation -of Interface-)
@@ -1676,15 +1687,15 @@ def prepare_matrix_indicators(indicators: List[MatrixIndicator],
         idx_columns = ["Scenario", "Period", "Processor"]
         if indicator.scope:
             idx_columns.append("Scope")
-        df = df.pivot_table(values="Value", index=idx_columns, columns=["Interface", "Orientation"])
+        interfaces_df = interfaces_df.pivot_table(values="Value", index=idx_columns, columns=["Interface", "Orientation"])
         # Flatten columns, concatenating levels
-        df.columns = [f"{x} {y}" for x, y in zip(df.columns.get_level_values(0), df.columns.get_level_values(1))]
+        interfaces_df.columns = [f"{x} {y}" for x, y in zip(interfaces_df.columns.get_level_values(0), interfaces_df.columns.get_level_values(1))]
 
-        # TODO Interface names are accompanied by: Orientation, RoegenType, Unit
-        # TODO Output columns (MultiIndex?): external/internal/total,
-        #  <scenarios>, <times>, <interfaces>, <scalar_indicators>
+        if not indicators_df.empty:
+            indicators_df = indicators_df.pivot_table(values="Value", index=idx_columns, columns=["Indicator"])
+            interfaces_df = pd.merge(interfaces_df, indicators_df, how="outer", left_index=True, right_index=True)
 
-        return df
+        return interfaces_df
 
     # For each MatrixIndicator...
     result = {}

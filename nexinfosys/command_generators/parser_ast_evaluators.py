@@ -132,10 +132,19 @@ def get_adapted_case_dataframe_filter(df, column, values):
 
 def obtain_subset_of_processors(processors_selector: str, serialized_model: lxml.etree._ElementTree,
                                 registry: PartialRetrievalDictionary,
-                                p_map: Dict[str, Processor], df: pd.DataFrame) -> pd.DataFrame:
+                                p_map: Dict[str, Processor], df: Union[List, pd.DataFrame]) -> pd.DataFrame:
+
     processors = obtain_processors(processors_selector, serialized_model, p_map)
+
     if len(p_map) == len(processors):
         processors = set()
+
+    if isinstance(df, pd.DataFrame):
+        dfs = [df]
+    else:
+        dfs = df
+
+    results = []
 
     # Filter Processors
     if len(processors) > 0:
@@ -151,12 +160,18 @@ def obtain_subset_of_processors(processors_selector: str, serialized_model: lxml
         # # https://stackoverflow.com/questions/18453566/python-dictionary-get-list-of-values-for-list-of-keys
         # p_names = [p_names_corr[_] for _ in processor_names.intersection(p_names_case)]
         # Filter dataframe to only the desired Processors
-        df2 = df.query('Processor in [' + ', '.join(['"' + p + '"' for p in p_names]) + ']')
+
+        for df_ in dfs:
+            results.append(df_.query('Processor in [' + ', '.join(['"' + p + '"' for p in p_names]) + ']'))
     else:
-        df2 = df
+        for df_ in dfs:
+            results.append(df_)
         processors = p_map
 
-    return df2, processors
+    if isinstance(df, pd.DataFrame):
+        results = results[0]
+
+    return results, processors
 
 
 def aggregator_generic(funct, field: str, xquery: str=None, scope: str='Total', processors_dom=None, processors_map=None, df_group=None, df_indicators_group=None):

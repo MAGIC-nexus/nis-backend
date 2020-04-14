@@ -2908,6 +2908,10 @@ class MatrixIndicator(Nameable, Identifiable, Encodable):
         return self._interfaces_selector
 
     @property
+    def indicators_selector(self):
+        return self._indicators_selector
+
+    @property
     def description(self):
         return self._description
 
