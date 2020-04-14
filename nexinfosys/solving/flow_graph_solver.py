@@ -42,7 +42,7 @@ from nexinfosys.command_generators.parser_ast_evaluators import ast_evaluator, o
     get_adapted_case_dataframe_filter
 from nexinfosys.command_generators.parser_field_parsers import string_to_ast, expression_with_parameters, is_year, \
     is_month, indicator_expression, parse_string_as_simple_ident_list, number_interval
-from nexinfosys.common.helper import create_dictionary, PartialRetrievalDictionary, ifnull, Memoize, istr, strcmp, \
+from nexinfosys.common.helper import create_dictionary, PartialRetrievalDictionary, ifnull, istr, strcmp, \
     FloatExp, precedes_in_list
 from nexinfosys.ie_exports.xml_export import export_model_to_xml
 from nexinfosys.model_services import get_case_study_registry_objects, State
@@ -120,8 +120,6 @@ class InterfaceNode:
     2. When we are aggregating by the interface type and there isn't a declared interface. The interface is
        identified with "ProcessorName:InterfaceTypeName:Orientation"
     """
-    registry: PartialRetrievalDictionary = None
-
     def __init__(self, interface_or_type: Union[Factor, FactorType], processor: Optional[Processor] = None,
                  orientation: Optional[str] = None, processor_name: Optional[str] = None):
         if isinstance(interface_or_type, Factor):
@@ -140,7 +138,7 @@ class InterfaceNode:
             raise Exception(f"Invalid object type '{type(interface_or_type)}' for the first parameter. "
                             f"Valid object types are [Factor, FactorType].")
 
-        self.processor_name: str = get_processor_name(self.processor, self.registry) if self.processor else processor_name
+        self.processor_name: str = self.processor.full_hierarchy_name if self.processor else processor_name
 
     @property
     def key(self) -> Tuple:
@@ -243,12 +241,6 @@ AstType = Dict
 ObservationListType = List[Tuple[Optional[Union[float, AstType]], FactorQuantitativeObservation]]
 TimeObservationsType = Dict[str, ObservationListType]
 InterfaceNodeAstDict = Dict[InterfaceNode, Tuple[AstType, FactorQuantitativeObservation]]
-
-
-@Memoize
-def get_processor_name(processor: Processor, registry: PartialRetrievalDictionary) -> str:
-    """ Get the processor hierarchical name with caching enabled """
-    return processor.full_hierarchy_names(registry)[0]
 
 
 def get_circular_dependencies(parameters: Dict[str, Tuple[Any, list]]) -> list:
@@ -587,8 +579,8 @@ def create_scale_change_relations_and_update_flow_relations(relations_flow: nx.D
             continue
 
         hidden_node = InterfaceNode(src.taxon,
-                                    processor_name=f"{get_processor_name(src.processor, registry)}-"
-                                                   f"{get_processor_name(dst.processor, registry)}",
+                                    processor_name=f"{src.processor.full_hierarchy_name}-"
+                                                   f"{dst.processor.full_hierarchy_name}",
                                     orientation="Input/Output")
 
         relations_flow.add_edge(source_node, hidden_node, weight=weight)
@@ -918,6 +910,11 @@ def create_interface_node_hierarchy_from_interface_types(
     return hierarchy
 
 
+def init_processor_full_names(registry: PartialRetrievalDictionary):
+    for processor in registry.get(Processor.partial_key()):
+        processor.full_hierarchy_name = processor.full_hierarchy_names(registry)[0]
+
+
 def flow_graph_solver(global_parameters: List[Parameter], problem_statement: ProblemStatement,
                       global_state: State, dynamic_scenario: bool) -> List[Issue]:
     """
@@ -933,7 +930,7 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
     """
     issues: List[Issue] = []
     glb_idx, _, _, datasets, _ = get_case_study_registry_objects(global_state)
-    InterfaceNode.registry = glb_idx
+    init_processor_full_names(glb_idx)
 
     # Get available observations
     time_absolute_observations, time_relative_observations = \
