@@ -146,7 +146,7 @@ class InterfaceNode:
 
     @property
     def alternate_key(self) -> Tuple:
-        return self.processor_name, self.interface_type.name, self.orientation
+        return self.processor_name, self.type, self.orientation
 
     @staticmethod
     def key_labels() -> List[str]:
@@ -821,19 +821,54 @@ def compute_interfacetype_hierarchies(registry) -> InterfaceNodeHierarchy:
     return hierarchies
 
 
-def compute_partof_hierarchies(registry) -> Tuple[InterfaceNodeHierarchy, ProcessorsRelationWeights]:
-    hierarchies: InterfaceNodeHierarchy = {}
-
+def compute_partof_hierarchies(registry, interface_nodes: Set[InterfaceNode]) \
+        -> Tuple[InterfaceNodeHierarchy, ProcessorsRelationWeights]:
     # Get the -PartOf- processor relations of the system
     processor_partof_relations, weights = get_processor_partof_relations(registry)
+    hierarchies: InterfaceNodeHierarchy = {}
+    visited_processors: Set[Processor] = set()
 
-    # Get all different existing interfaces
-    for interface in registry.get(Factor.partial_key()):  # type: Factor
+    current_difference = len(processor_partof_relations)
+    previous_difference = current_difference + 1
+    while current_difference != 0 and previous_difference > current_difference:
+        previous_difference = current_difference
 
-        for parent_processor, child_processors in processor_partof_relations.items():
+        # Get the list of interfaces of each processor
+        processor_interfaces: Dict[Processor, List[InterfaceNode]] = {}
+        for interface in interface_nodes:
+            processor_interfaces.setdefault(interface.processor, []).append(interface)
 
-            hierarchies[InterfaceNode(interface, parent_processor)] = \
-                {InterfaceNode(interface, processor) for processor in child_processors}
+        computable_processor_partof_relations = {}
+        for parent, children in processor_partof_relations.items():
+            if parent not in visited_processors:
+                children_to_visit = children.intersection(processor_partof_relations.keys())
+                if not children_to_visit or children_to_visit <= visited_processors:
+                    computable_processor_partof_relations[parent] = children
+
+        for parent_processor, child_processors in computable_processor_partof_relations.items():
+            for child_processor in child_processors:
+                for child_interface in processor_interfaces.get(child_processor, {}):
+                    parent_interface = InterfaceNode(child_interface.interface, parent_processor)
+
+                    if parent_interface in interface_nodes:
+                        for interface in interface_nodes:
+                            if interface == parent_interface:
+                                if (interface.type, interface.orientation) != (parent_interface.type, parent_interface.orientation):
+                                    raise SolvingException(
+                                        f"Interface '{parent_interface}' already defined with type <{parent_interface.type}> and orientation <{parent_interface.orientation}> "
+                                        f"is being redefined with type <{interface.type}> and orientation <{interface.orientation}> when aggregating processor "
+                                        f"<{child_interface.processor_name}> to parent processor <{parent_interface.processor_name}>")
+                                break
+                    else:
+                        interface_nodes.add(parent_interface)
+
+                    hierarchies.setdefault(parent_interface, set()).add(child_interface)
+
+            visited_processors.add(parent_processor)
+
+        current_difference = len(processor_partof_relations) - len(visited_processors)
+
+    assert len(processor_partof_relations) == len(visited_processors)
 
     return hierarchies, weights
 
@@ -884,10 +919,10 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
         return [Issue(IType.WARNING, f"No absolute observations have been found. The solver has nothing to solve.")]
 
     # Get available interfaces
-    # interface_nodes: Set[InterfaceNode] = {InterfaceNode(i) for i in glb_idx.get(Factor.partial_key())}
+    interface_nodes: Set[InterfaceNode] = {InterfaceNode(i) for i in glb_idx.get(Factor.partial_key())}
 
     # Get hierarchies of processors and update interfaces to compute
-    partof_hierarchies, partof_weights = compute_partof_hierarchies(glb_idx)
+    partof_hierarchies, partof_weights = compute_partof_hierarchies(glb_idx, interface_nodes)
 
     # Get hierarchies of interface types and update interfaces to compute
     interfacetype_hierarchies = compute_interfacetype_hierarchies(glb_idx)
