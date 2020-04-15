@@ -558,7 +558,8 @@ def resolve_partof_weight_expressions(weights: ProcessorsRelationWeights, state:
     return evaluated_weights
 
 
-def create_scale_change_relations_and_update_flow_relations(relations_flow: nx.DiGraph, registry) -> nx.DiGraph:
+def create_scale_change_relations_and_update_flow_relations(relations_flow: nx.DiGraph, registry,
+                                                            interface_nodes: Set[InterfaceNode]) -> nx.DiGraph:
     relations_scale_change = nx.DiGraph()
 
     edges = [(r.source_factor, r.target_factor, r.back_factor, r.weight, r.scale_change_weight)
@@ -592,6 +593,13 @@ def create_scale_change_relations_and_update_flow_relations(relations_flow: nx.D
 
         real_dest_node = InterfaceNode(source_node.interface_type, dest_node.processor,
                                        orientation="Input" if source_node.orientation.lower() == "output" else "Output")
+
+        # Check if synthetic interface is equal to an existing one
+        matching_interfaces = [n for n in interface_nodes if n.alternate_key == real_dest_node.alternate_key]
+        if len(matching_interfaces) == 1:
+            real_dest_node = matching_interfaces[0]
+        else:
+            interface_nodes.add(real_dest_node)
 
         if relations_flow.has_edge(source_node, real_dest_node):
             # weight = relations_flow[source_node][real_dest_node]['weight']
@@ -961,7 +969,7 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
     interfacetype_hierarchies = compute_interfacetype_hierarchies(glb_idx, interface_nodes)
 
     relations_flow, relations_scale, relations_scale_change = \
-        compute_flow_and_scale_relation_graphs(glb_idx, global_state)
+        compute_flow_and_scale_relation_graphs(glb_idx, global_state, interface_nodes)
 
     total_results: ResultDict = {}
 
@@ -1171,7 +1179,7 @@ def check_unresolved_nodes_in_aggregation_hierarchies(hierarchies: List[Interfac
     return issues
 
 
-def compute_flow_and_scale_relation_graphs(registry, state: State):
+def compute_flow_and_scale_relation_graphs(registry, state: State, interface_nodes: Set[InterfaceNode]):
 
     # Add Interfaces -Flow- relations (time independent)
     relations_flow = nx.DiGraph(
@@ -1190,7 +1198,7 @@ def compute_flow_and_scale_relation_graphs(registry, state: State):
     )
 
     # Add Interfaces -Scale Change- relations (time independent). Also update Flow relations.
-    relations_scale_change = create_scale_change_relations_and_update_flow_relations(relations_flow, registry)
+    relations_scale_change = create_scale_change_relations_and_update_flow_relations(relations_flow, registry, interface_nodes)
 
     # First pass to resolve weight expressions: only expressions without parameters can be solved
     # NOT WORKING:
