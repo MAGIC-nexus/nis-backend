@@ -801,22 +801,55 @@ def compute_internal_external_results(values: NodeFloatComputedDict, comp_graph:
     return internal_results, external_results
 
 
-def compute_interfacetype_hierarchies(registry) -> InterfaceNodeHierarchy:
-    hierarchies: InterfaceNodeHierarchy = {}
-
+def compute_interfacetype_hierarchies(registry, interface_nodes: Set[InterfaceNode]) -> InterfaceNodeHierarchy:
     # Get all different existing interface types with children interface types
     interface_types_parent_relations: Dict[FactorType, Set[FactorType]] = \
         {ft: ft.get_children() for ft in registry.get(FactorType.partial_key()) if len(ft.get_children()) > 0}
+    hierarchies: InterfaceNodeHierarchy = {}
+    visited_interface_types: Set[FactorType] = set()
 
-    for processor in [p for p in registry.get(Processor.partial_key())
-                      if p.instance_or_archetype != "Archetype"]:  # type: Processor
+    current_difference = len(interface_types_parent_relations)
+    previous_difference = current_difference + 1
+    while current_difference != 0 and previous_difference > current_difference:
+        previous_difference = current_difference
 
-        for orientation in orientations:
+        # Get the list of interfaces for each combination
+        interfaces_dict: Dict[Tuple[str, str, str], List[InterfaceNode]] = {}
+        for interface in interface_nodes:
+            interfaces_dict.setdefault(interface.alternate_key, []).append(interface)
 
-            for parent_itype, child_itypes in interface_types_parent_relations.items():
+        computable_interface_types_parent_relations: Dict[FactorType, Set[FactorType]] = {}
+        for parent, children in interface_types_parent_relations.items():
+            if parent not in visited_interface_types:
+                children_to_visit = children.intersection(interface_types_parent_relations.keys())
+                if not children_to_visit or children_to_visit <= visited_interface_types:
+                    computable_interface_types_parent_relations[parent] = children
 
-                hierarchies[InterfaceNode(parent_itype, processor, orientation)] = \
-                    {InterfaceNode(itype, processor, orientation) for itype in child_itypes}
+        for parent_interface_type, child_interface_types in computable_interface_types_parent_relations.items():
+            for child_interface_type in child_interface_types:
+                for processor in {p.processor for p in interface_nodes}:  # type: Processor
+                    for orientation in orientations:
+                        child_interfaces = interfaces_dict.get(
+                            (processor.full_hierarchy_name, child_interface_type.name, orientation), {})
+                        if child_interfaces:
+                            parent_interface = InterfaceNode(parent_interface_type, processor, orientation)
+
+                            if parent_interface.alternate_key in interfaces_dict:
+                                # Replacement "ProcessorName:InterfaceTypeName:Orientation" -> "ProcessorName:InterfaceName"
+                                interfaces = interfaces_dict[parent_interface.alternate_key]
+                                if len(interfaces) == 1:
+                                    parent_interface = interfaces[0]
+                                else:  # len(interfaces) == 1
+                                    # TODO: raise warning or error?
+                                    interface_nodes.add(parent_interface)
+                            else:
+                                interface_nodes.add(parent_interface)
+
+                            hierarchies.setdefault(parent_interface, set()).update(child_interfaces)
+
+            visited_interface_types.add(parent_interface_type)
+
+        current_difference = len(interface_types_parent_relations) - len(visited_interface_types)
 
     return hierarchies
 
@@ -838,7 +871,7 @@ def compute_partof_hierarchies(registry, interface_nodes: Set[InterfaceNode]) \
         for interface in interface_nodes:
             processor_interfaces.setdefault(interface.processor, []).append(interface)
 
-        computable_processor_partof_relations = {}
+        computable_processor_partof_relations: Dict[Processor, Set[Processor]] = {}
         for parent, children in processor_partof_relations.items():
             if parent not in visited_processors:
                 children_to_visit = children.intersection(processor_partof_relations.keys())
@@ -925,7 +958,7 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
     partof_hierarchies, partof_weights = compute_partof_hierarchies(glb_idx, interface_nodes)
 
     # Get hierarchies of interface types and update interfaces to compute
-    interfacetype_hierarchies = compute_interfacetype_hierarchies(glb_idx)
+    interfacetype_hierarchies = compute_interfacetype_hierarchies(glb_idx, interface_nodes)
 
     relations_flow, relations_scale, relations_scale_change = \
         compute_flow_and_scale_relation_graphs(glb_idx, global_state)
