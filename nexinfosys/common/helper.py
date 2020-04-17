@@ -10,6 +10,7 @@ import json
 import logging
 import mimetypes
 import os
+import re
 import tempfile
 import urllib
 import urllib.request
@@ -1449,6 +1450,21 @@ def split_and_strip(s: str, sep=",") -> List[str]:
 def precedes_in_list(lst: List[T], elem1: Optional[T], elem2: Optional[T]) -> bool:
     """ Check if an element comes before another inside a list """
     return elem1 in lst and (elem2 not in lst or lst.index(elem1) < lst.index(elem2))
+
+
+def replace_string_from_dictionary(s: str, d: Dict[str, str]) -> str:
+    """
+    Replace in a string all the words defined as keys in the dictionary with the associated value.
+    Note: values of the dictionary are sorted before replacement in order to avoid replacing on top of a replaced word.111
+
+    :param s: input string to transform with replacements
+    :param d: dictionary with old_word -> new_word scheme
+    :return: a string with replacements applied
+    """
+    for k, v in sorted(d.items(), key=lambda item: len(item[1])):
+        print(v)
+        s = re.sub(r"\b" + k + r"\b", v, s)
+    return s
 
 # #####################################################################################################################
 # >>>> CUSTOM DATA TYPES <<<<
