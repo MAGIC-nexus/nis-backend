@@ -1183,13 +1183,13 @@ def query_state_list_results(isess):
                                     for f in dataset_formats],
                            ) for k in datasets
                       ] +
-                     [dict(name="FG",
+                     [dict(name="interfaces_graph",
                            type="graph",
                            description="Graph of Interfaces, Quantities; Scales and Exchanges",
                            formats=[dict(format=f,
                                          url=nis_api_base + F"/isession/rsession/state_query/flow_graph.{f.lower()}")
                                     for f in graph_formats]),
-                      dict(name="PG",
+                      dict(name="processors_graph",
                            type="graph",
                            description="Processors and exchanges graph",
                            formats=[dict(format=f,
@@ -1203,7 +1203,7 @@ def query_state_list_results(isess):
                                dict(format=f, url=nis_api_base + F"/isession/rsession/state_query/sankey_graph.{f.lower()}")
                                for f in ["JSON"]]),
                       ] +
-                     [dict(name="P_GIS",
+                     [dict(name="processors_geolayer",
                            type="geolayer",
                            description="Processors",
                            formats=[

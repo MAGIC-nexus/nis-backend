@@ -10,10 +10,12 @@ gunicorn==19.9.0
 Cython==0.29.7
 # WINDOWS: REMOVE and USE "conda install -c conda-forge python-blosc" (install "gitforwindows", then open terminal using "Run as Administrator")
 blosc>=1.8.1
-brightway2==2.3
+# Commented because no LCA dataset was made available during the lifetime of the project, found no way to integrate with this powerful LCA package
+# brightway2==2.3
 matplotlib>=3.0.3
 #psycopg2==2.7.3.2  # Removed because it requires having PostgreSQL installed. It is explicitly in the Dockerfile
 webdavclient==1.0.8
+# May be troublesome in generating Windows executable
 owlready2==0.23
 celery>=4.3.0
 pykml==0.1.3

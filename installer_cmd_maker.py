@@ -53,10 +53,13 @@ def elaborate_pyinstaller_command_line(system, output_name, output_type, config_
         output_type_option = ""
 
     cmd = f"""
-<Install a Python environment>
+<In Windows, install Visual Studio Community>
+<Install a Python environment (tested with Anaconda)>
 <In Windows, execute the following commands in a special BASH shell, available after installing "gitforwindows">
-git clone ...
+git clone https://github.com/MAGIC-nexus/nis-backend
 <In Windows, execute the following commands in a special BASH shell, available after installing "gitforwindows". Run as Administrator>
+<Execute the following two "pip" lines IF it is the first time OR if there is an update in requirements.txt or in "pyinstaller">
+<In Windows: conda install -c conda-forge fiona> (the first time)>
 pip install -r requirements.txt
 pip install pyinstaller
 
@@ -108,7 +111,7 @@ nexinfosys/restful_service/service_main.py
 
 <Modify config file. Different in Windows and Linux>
 
-{set_var} MAGIC_NIS_SERVICE_CONFIG_FILE={config_file_name} {lsep}
+{set_var} MAGIC_NIS_SERVICE_CONFIG_FILE={config_file_name.replace("/", sep)} {lsep}
 dist{sep}{output_name}{sep+output_name if output_type == "onedir" else ""}
 """
     return cmd
@@ -116,6 +119,6 @@ dist{sep}{output_name}{sep+output_name if output_type == "onedir" else ""}
 
 if __name__ == '__main__':
     cfg_file = "/home/rnebot/Dropbox/nis-backend-config/nis_local.conf"
-    system_type = "linux"  # "linux", "windows", "macosx", None (autodetect)
-    dist_type = "onedir"  # "onedir", "onefile"
+    system_type = "windows"  # "linux", "windows", "macosx", None (autodetect)
+    dist_type = "onefile"  # "onedir", "onefile"
     print(elaborate_pyinstaller_command_line(system_type, "nis-backend", dist_type, cfg_file))

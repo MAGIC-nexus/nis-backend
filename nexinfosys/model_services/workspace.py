@@ -358,18 +358,7 @@ def call_solver(state: State, dynamic_scenario_parameters: Dict) -> List[Issue]:
         problem_statement = obtain_problem_statement(dynamic_scenario_parameters)
 
     # Obtain "parameters" Dataset
-    params_keys = []
-    params_data = []
-    for scenario_name, scenario_exp_params in problem_statement.scenarios.items():  # type: str, dict
-        p = evaluate_parameters_for_scenario(global_parameters, scenario_exp_params)
-        for k, v in p.items():
-            params_keys.append((scenario_name, k))
-            params_data.append(v)
-
-    df = pd.DataFrame(params_data,
-                      index=pd.MultiIndex.from_tuples(params_keys, names=["Scenario", "Parameter"]),
-                      columns=["Value"])
-    datasets["params"] = get_dataset(df, "params", "Parameter values per Scenario")
+    datasets["params"] = obtain_parameters_dataset(global_parameters, problem_statement)
 
     solver_type_param = glb_idx.get(Parameter.partial_key("NISSolverType"))
     solver_type_param = solver_type_param[0]
@@ -464,6 +453,20 @@ def prepare_model(state) -> NoReturn:
                 fr = FactorsRelationDirectedFlowObservation.create_and_append(source=source, target=target, observer=None)
                 glb_idx.put(fr.key(), fr)
 
+
+def obtain_parameters_dataset(global_parameters: List[Parameter], problem_statement: ProblemStatement):
+    params_keys = []
+    params_data = []
+    for scenario_name, scenario_exp_params in problem_statement.scenarios.items():  # type: str, dict
+        p = evaluate_parameters_for_scenario(global_parameters, scenario_exp_params)
+        for k, v in p.items():
+            params_keys.append((scenario_name, k))
+            params_data.append(v)
+
+    df = pd.DataFrame(params_data,
+                      index=pd.MultiIndex.from_tuples(params_keys, names=["Scenario", "Parameter"]),
+                      columns=["Value"])
+    return get_dataset(df, "params", "Parameter values per Scenario")
 
 # #####################################################################################################################
 # >>>> INTERACTIVE SESSION <<<<

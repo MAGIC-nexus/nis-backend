@@ -1178,7 +1178,7 @@ def export_solver_data(datasets, data, dynamic_scenario, glb_idx, global_paramet
 
     if not dynamic_scenario:
         ds_name = "flow_graph_solution"
-        ds_flows_name = "flow_graph_edges_matrix"
+        ds_flows_name = "flow_graph_solution_edges"
         ds_indicators_name = "flow_graph_solution_indicators"
         df_global_indicators_name = "flow_graph_global_indicators"
         ds_benchmarks_name = "flow_graph_solution_benchmarks"
@@ -1186,7 +1186,7 @@ def export_solver_data(datasets, data, dynamic_scenario, glb_idx, global_paramet
         ds_stakeholders_name = "benchmarks_and_stakeholders"
     else:
         ds_name = "dyn_flow_graph_solution"
-        ds_flows_name = "dyn_flow_graph_edges_matrix"
+        ds_flows_name = "dyn_flow_graph_solution_edges"
         ds_indicators_name = "dyn_flow_graph_solution_indicators"
         df_global_indicators_name = "dyn_flow_graph_global_indicators"
         ds_benchmarks_name = "dyn_flow_graph_solution_benchmarks"
@@ -1194,9 +1194,9 @@ def export_solver_data(datasets, data, dynamic_scenario, glb_idx, global_paramet
         ds_stakeholders_name = "benchmarks_and_stakeholders"
 
     for d, name, label in [(df, ds_name, "Flow Graph Solver - Interfaces"),
+                           (ds_flow_values, ds_flows_name, "Flow Graph Solver Edges - Interfaces"),
                            (df_local_indicators, ds_indicators_name, "Flow Graph Solver - Local Indicators"),
                            (df_global_indicators, df_global_indicators_name, "Flow Graph Solver - Global Indicators"),
-                           (ds_flow_values, ds_flows_name, "Flow Graph Edges Matrix - Interfaces"),
                            (ds_benchmarks, ds_benchmarks_name, "Flow Graph Solver - Local Benchmarks"),
                            (ds_global_benchmarks, ds_global_benchmarks_name, "Flow Graph Solver - Global Benchmarks"),
                            (ds_stakeholders, ds_stakeholders_name, "Benchmarks - Stakeholders")
