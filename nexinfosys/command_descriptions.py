@@ -32,9 +32,9 @@ c_descriptions = {
     # DatasetData
     ("datasetdata", "title"): "Dataset Data",
     ("datasetdata",
-     "description"): "Custom datasets need the means to specify the data contained in it. As it was mentioned in the Dataset Definition command (DatasetDataLocation field), they can store its data in a CSV file, out of the spreadsheet or in the same spreadsheet, using this command.",
+     "description"): "Custom datasets need the means to specify the data contained in it. As it was mentioned in the Dataset Definition command (DatasetDataLocation field), they can store its data in a CSV file, out of the spreadsheet or in the same spreadsheet, using this command.\nTo do so, create the command 'DatasetData' appending the dataset name, e.g., 'DatasetData WaterPerCountry', then in the header line write the names of the concepts (dimensions and measures) matching those in a preceding DatasetDef command.",
     ("datasetdata",
-     "semantics"): "Data in this command is attached to a dataset whose structure has been declared previously. The completed dataset can now be used in different ways: Dataset Query command, Dataset Exports or Dataset Expansion in core MuSIASEM commands (Processors, Interfaces mainly).",
+     "semantics"): "Data in this command is attached to a dataset whose structure has been declared previously (using a 'DatasetDef' command). The completed dataset (structure+data) can now be used in different ways: feed it into a Dataset Query command, directly export it or Dataset Expansion in MuSIASEM commands allowing it (BareProcessors, InterfaceTypes, Interfaces, ProcessorScalings, Relationships, ScalarBenchmarks, ScalarIndicators, ScaleChangeMap).",
     ("datasetdata", "examples"): [],
     # Parameters
     ("parameters", "title"): "Parameters",
