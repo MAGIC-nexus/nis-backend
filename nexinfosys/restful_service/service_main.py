@@ -3688,18 +3688,18 @@ Version\tV0.1"]}
         return {"type": "Input", "name": "DatasetData", "template":
             "<Dataset concept #1>\t<Dataset concept #2>\t<Dataset concept #3>\t...",
                 "examples": [
-                    "Country\tYear\tWaterConsumption\n\
-                    ES\t2015\t102\n\
-                    ES\t2016\t110\n\
-                    IT\t2015\t130\n\
-                    IT\t2016\t140\n",
+"Country\tYear\tWaterConsumption\n\
+ES\t2015\t102\n\
+ES\t2016\t110\n\
+IT\t2015\t130\n\
+IT\t2016\t140\n",
 
-                    "Tech\tScale\tUnitEnergyConsumption\n\
-                    Coal\tMiddle\t1.4\n\
-                    Coal\tLarge\t1.3\n\
-                    Coal\tVeryLarge\t1.2\n\
-                    Nuclear\tLarge\t1.3\n\
-                    Nuclear\tVeryLarge\t1.15\n"
+"Tech\tScale\tUnitEnergyConsumption\n\
+Coal\tMiddle\t1.4\n\
+Coal\tLarge\t1.3\n\
+Coal\tVeryLarge\t1.2\n\
+Nuclear\tLarge\t1.3\n\
+Nuclear\tVeryLarge\t1.15\n"
                 ]
                 }
     else:
