@@ -31,6 +31,7 @@ from nexinfosys import case_sensitive, SDMXConcept, get_global_configuration_var
 from nexinfosys.ie_imports.google_drive import download_xlsx_file_id
 from nexinfosys.models import log_level
 import os
+from zipfile import ZipFile
 
 logger = logging.getLogger(__name__)
 logger.setLevel(log_level)
@@ -1195,6 +1196,48 @@ def download_file(location, wv_user=None, wv_password=None, wv_host_name=None):
     else:
         data = urllib.request.urlopen(location).read()
         data = io.BytesIO(data)
+
+    # If it is a ZIP file...
+    if pr.path.lower().endswith(".zip"):
+        zipfile = ZipFile(data)
+        # If no anchor, return the XLSX file (find it and return it)
+        file_to_extract = None
+        candidate_files_to_extract = []
+        if pr.fragment:
+            file_to_extract = pr.fragment
+            if "#" in file_to_extract:
+                pos = file_to_extract.find("#")
+                sub_fragment = file_to_extract[pos + 1:]
+                file_to_extract = file_to_extract[:pos]
+            if file_to_extract.startswith("/"):
+                file_to_extract = file_to_extract[1:]
+        found = False
+        for name in zipfile.namelist():
+            if not file_to_extract:
+                if name.lower().endswith(".xlsx"):
+                    candidate_files_to_extract.append(name)
+                    found = True
+            else:
+                if strcmp(file_to_extract, name):
+                    found = True
+                    break
+        if found:
+            if not file_to_extract:
+                # Try to find best option from the list of candidates
+                file_to_extract = candidate_files_to_extract[0]
+                for f in candidate_files_to_extract:
+                    if f.lower().startswith("msm/cs"):
+                        file_to_extract = f
+                        break  # Best option (DMP): a file named "cs_<whatever>.xlsx" in "msm" folder
+                    if f.lower().startswith("msm/"):
+                        file_to_extract = f  # Second best option: an XLSX file inside "msm" folder
+
+            if file_to_extract:
+                data = io.BytesIO(zipfile.read(file_to_extract))
+            else:
+                data = None
+        else:
+            data = None
 
     return data
 
