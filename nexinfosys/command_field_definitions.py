@@ -89,11 +89,11 @@ command_fields: Dict[str, List[CommandField]] = {
         CommandField(allowed_names=["DatasetDataLocation"], name="dataset_data_location", mandatory=True, parser=url_parser),
         CommandField(allowed_names=["ConceptType"], name="concept_type", mandatory=True, allowed_values=concept_types, parser=simple_ident),
         CommandField(allowed_names=["Concept", "ConceptName"], name="concept_name", mandatory=True, parser=simple_ident),
-        CommandField(allowed_names=["DataType", "ConceptDataType"], name="concept_data_type", mandatory=True, allowed_values=data_types, parser=simple_ident),
-        CommandField(allowed_names=["Domain", "ConceptDomain"], name="concept_domain", parser=domain_definition),
-        CommandField(allowed_names=["Description", "ConceptDescription"], name="concept_description", parser=unquoted_string),
+        CommandField(allowed_names=["ConceptDataType", "DataType"], name="concept_data_type", mandatory=True, allowed_values=data_types, parser=simple_ident),
+        CommandField(allowed_names=["ConceptDomain", "Domain"], name="concept_domain", parser=domain_definition),
+        CommandField(allowed_names=["ConceptDescription", "Description"], name="concept_description", parser=unquoted_string),
         CommandField(allowed_names=[attributeRegex], name="attributes", many_appearances=True, parser=value),
-        CommandField(allowed_names=["Attributes"], name="attributes", parser=key_value_list)
+        CommandField(allowed_names=["ConceptAttributes", "Attributes"], name="attributes", parser=key_value_list)
     ],
 
     "attribute_sets": [

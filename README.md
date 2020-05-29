@@ -72,10 +72,11 @@ It is an open system as it can be used to integrate MuSIASEM as a formalism in a
 
 **nis-backend** is a Python package. There are several options to have it installed.
 
-#### pip
+<!-- #### pip -->
 
 <!-- Prepare package to upload it to pypi -->
 
+<!--
 * Set a Python environment
 * Install the package with
 
@@ -84,7 +85,8 @@ TO-DO `pip install nexinfosys`
 * Start the server
 
 `python3 nexinfosys.restful_service.service_main.py`
- 
+-->
+
 #### Docker image
 
 For a lab setup, this option allows to configure and run nis-backend inside a Docker environment (Docker must be installed in the target computer).
@@ -104,12 +106,22 @@ git clone https://github.com/MAGIC-nexus/nis-backend
 cd nis-backend
 git checkout develop
 pip install -r requirements.txt
-python3 nexinfosys.restful_service.service_main.py
+PYTHONPATH=. python3 nexinfosys/restful_service/service_main.py
 ```
 
+Alternately to the last line, for a more robust server (**gunicorn** assumed to be installed):
+
+```bash
+gunicorn --workers=3 --log-level=2000 --bind 0.0.0.0:5000 nexinfosys.restful_service.service_main:app
+```
+
+Change the port to the one desired
+
+<!--
 #### Windows executable
 
 TO-DO - (PyInstaller executable, in single file form)
+-->
 
 ### Models with Commands
 
