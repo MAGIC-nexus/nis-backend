@@ -269,7 +269,10 @@ class BasicCommand(IExecutableCommand):
 
     def _get_processor_from_field(self, field_name: str) -> Processor:
         processor_name = self._fields[field_name]
-        processor = find_processor_by_name(state=self._glb_idx, processor_name=processor_name)
+        try:
+            processor = find_processor_by_name(state=self._glb_idx, processor_name=processor_name)
+        except Exception as e:
+            raise CommandExecutionError(e)
 
         if not processor:
             raise CommandExecutionError(f"The processor '{processor_name}' defined in field '{field_name}' "
