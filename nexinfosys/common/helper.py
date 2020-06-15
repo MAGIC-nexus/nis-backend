@@ -1455,7 +1455,7 @@ def precedes_in_list(lst: List[T], elem1: Optional[T], elem2: Optional[T]) -> bo
 def replace_string_from_dictionary(s: str, d: Dict[str, str]) -> str:
     """
     Replace in a string all the words defined as keys in the dictionary with the associated value.
-    Note: values of the dictionary are sorted before replacement in order to avoid replacing on top of a replaced word.111
+    Note: values of the dictionary are sorted by length before replacement in order to avoid replacing on top of a replaced word.
 
     :param s: input string to transform with replacements
     :param d: dictionary with old_word -> new_word scheme

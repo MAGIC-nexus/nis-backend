@@ -636,12 +636,13 @@ def resolve_observations_with_parameters(state: State, observations: Observation
 
     for expression, obs in observations:
         interface_params: Dict[str, str] = {}
+        obs_new_value: Optional[str] = None
         value, ast, params, issues = evaluate_numeric_expression_with_parameters(expression, state)
         if value is None:
             interface_params, params, issues = convert_params_to_extended_interface_names(params, obs, registry)
             if interface_params and not issues:
                 ast = replace_ast_variable_parts(ast, interface_params)
-                obs.value = replace_string_from_dictionary(obs.value, interface_params)
+                obs_new_value = replace_string_from_dictionary(obs.value, interface_params)
             else:
                 raise SolvingException(
                     f"Cannot evaluate expression '{expression}' for observation at interface '{obs.factor.name}'. "
@@ -678,10 +679,13 @@ def resolve_observations_with_parameters(state: State, observations: Observation
                 continue
 
         if interface_params:
-            unresolved_observations_with_interfaces[node] = (ast, obs)
+            new_obs = deepcopy(obs)
+            if obs_new_value is not None:
+                new_obs.value = obs_new_value
+            unresolved_observations_with_interfaces[node] = (ast, new_obs)
             resolved_observations.pop(node, None)
         else:
-            resolved_observations[node] = FloatComputedTuple(FloatExp(value, node.name, str(obs.value)),
+            resolved_observations[node] = FloatComputedTuple(FloatExp(value, node.name, obs_new_value),
                                                              Computed.No, observer_name)
             unresolved_observations_with_interfaces.pop(node, None)
 
