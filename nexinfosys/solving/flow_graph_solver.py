@@ -789,15 +789,11 @@ def compute_interfacetype_hierarchies(registry, interface_nodes: Set[InterfaceNo
                         if child_interfaces:
                             parent_interface = InterfaceNode(parent_interface_type, processor, orientation)
 
-                            if parent_interface.alternate_key in interfaces_dict:
-                                # Replacement "ProcessorName:InterfaceTypeName:Orientation" -> "ProcessorName:InterfaceName"
-                                interfaces = interfaces_dict[parent_interface.alternate_key]
-                                if len(interfaces) == 1:
-                                    parent_interface = interfaces[0]
-                                else:  # len(interfaces) == 1
-                                    # TODO: raise warning or error?
-                                    interface_nodes.add(parent_interface)
-                            else:
+                            interfaces = interfaces_dict.get(parent_interface.alternate_key, [])
+                            if len(interfaces) == 1:
+                                # Replace "ProcessorName:InterfaceTypeName:Orientation" -> "ProcessorName:InterfaceName"
+                                parent_interface = interfaces[0]
+                            else:  # len(interfaces) != 1
                                 interface_nodes.add(parent_interface)
 
                             hierarchies.setdefault(parent_interface, set()).update(child_interfaces)
