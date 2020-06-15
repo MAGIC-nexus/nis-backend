@@ -1036,7 +1036,7 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
         interfacetype_hierarchies = compute_interfacetype_hierarchies(glb_idx, interface_nodes)
 
         relations_flow, relations_scale, relations_scale_change = \
-            compute_flow_and_scale_relation_graphs(glb_idx, global_state, interface_nodes)
+            compute_flow_and_scale_relation_graphs(glb_idx, interface_nodes)
 
         total_results: ResultDict = {}
 
@@ -1245,9 +1245,9 @@ def check_unresolved_nodes_in_aggregation_hierarchies(hierarchies: List[Interfac
     return issues
 
 
-def compute_flow_and_scale_relation_graphs(registry, state: State, interface_nodes: Set[InterfaceNode]):
+def compute_flow_and_scale_relation_graphs(registry, interface_nodes: Set[InterfaceNode]):
 
-    # Add Interfaces -Flow- relations (time independent)
+    # Compute Interfaces -Flow- relations (time independent)
     relations_flow = nx.DiGraph(
         incoming_graph_data=create_interface_edges(
             [(r.source_factor, r.target_factor, r.weight)
@@ -1255,7 +1255,7 @@ def compute_flow_and_scale_relation_graphs(registry, state: State, interface_nod
              if r.scale_change_weight is None and r.back_factor is None]
         )
     )
-    # Add Processors -Scale- relations (time independent)
+    # Compute Processors -Scale- relations (time independent)
     relations_scale = nx.DiGraph(
         incoming_graph_data=create_interface_edges(
             [(r.origin, r.destination, r.quantity)
@@ -1263,7 +1263,7 @@ def compute_flow_and_scale_relation_graphs(registry, state: State, interface_nod
         )
     )
 
-    # Add Interfaces -Scale Change- relations (time independent). Also update Flow relations.
+    # Compute Interfaces -Scale Change- relations (time independent). Also update Flow relations.
     relations_scale_change = create_scale_change_relations_and_update_flow_relations(relations_flow, registry, interface_nodes)
 
     # First pass to resolve weight expressions: only expressions without parameters can be solved
