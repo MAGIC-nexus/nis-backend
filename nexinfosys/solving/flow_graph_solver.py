@@ -838,6 +838,11 @@ def compute_partof_hierarchies(registry, interface_nodes: Set[InterfaceNode]) \
                 for child_interface in processor_interfaces.get(child_processor, {}):
                     parent_interface = InterfaceNode(child_interface.interface, parent_processor)
 
+                    # Search parent_interface in Set of existing interface_nodes, it can have same name but different
+                    # combination of (type, orientation). For example, we define:
+                    # - interface "ChildProcessor:Water" as (BlueWater, Input)
+                    # - interface "ParentProcessor:Water" as (BlueWater, Output)
+                    # In this case aggregating child interface results in a conflict in parent
                     if parent_interface in interface_nodes:
                         for interface in interface_nodes:
                             if interface == parent_interface:
@@ -845,7 +850,7 @@ def compute_partof_hierarchies(registry, interface_nodes: Set[InterfaceNode]) \
                                     raise SolvingException(
                                         f"Interface '{parent_interface}' already defined with type <{parent_interface.type}> and orientation <{parent_interface.orientation}> "
                                         f"is being redefined with type <{interface.type}> and orientation <{interface.orientation}> when aggregating processor "
-                                        f"<{child_interface.processor_name}> to parent processor <{parent_interface.processor_name}>")
+                                        f"<{child_interface.processor_name}> to parent processor <{parent_interface.processor_name}>. Rename either the child or the parent interface.")
                                 break
                     else:
                         interface_nodes.add(parent_interface)
@@ -1013,207 +1018,210 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
                               Also "problem_statement" MUST have only one scenario with the parameters.
     :return: List of Issues
     """
-    issues: List[Issue] = []
-    glb_idx, _, _, datasets, _ = get_case_study_registry_objects(global_state)
-    init_processor_full_names(glb_idx)
+    try:
+        issues: List[Issue] = []
+        glb_idx, _, _, datasets, _ = get_case_study_registry_objects(global_state)
+        init_processor_full_names(glb_idx)
 
-    # Get available observations
-    time_absolute_observations, time_relative_observations = \
-        split_observations_by_relativeness(get_evaluated_observations_by_time(glb_idx))
+        # Get available observations
+        time_absolute_observations, time_relative_observations = \
+            split_observations_by_relativeness(get_evaluated_observations_by_time(glb_idx))
 
-    if len(time_absolute_observations) == 0:
-        return [Issue(IType.WARNING, f"No absolute observations have been found. The solver has nothing to solve.")]
+        if len(time_absolute_observations) == 0:
+            return [Issue(IType.WARNING, f"No absolute observations have been found. The solver has nothing to solve.")]
 
-    # Get available interfaces
-    interface_nodes: Set[InterfaceNode] = {InterfaceNode(i) for i in glb_idx.get(Factor.partial_key())}
+        # Get available interfaces
+        interface_nodes: Set[InterfaceNode] = {InterfaceNode(i) for i in glb_idx.get(Factor.partial_key())}
 
-    # Get hierarchies of processors and update interfaces to compute
-    partof_hierarchies, partof_weights = compute_partof_hierarchies(glb_idx, interface_nodes)
+        # Get hierarchies of processors and update interfaces to compute
+        partof_hierarchies, partof_weights = compute_partof_hierarchies(glb_idx, interface_nodes)
 
-    # Get hierarchies of interface types and update interfaces to compute
-    interfacetype_hierarchies = compute_interfacetype_hierarchies(glb_idx, interface_nodes)
+        # Get hierarchies of interface types and update interfaces to compute
+        interfacetype_hierarchies = compute_interfacetype_hierarchies(glb_idx, interface_nodes)
 
-    relations_flow, relations_scale, relations_scale_change = \
-        compute_flow_and_scale_relation_graphs(glb_idx, global_state, interface_nodes)
+        relations_flow, relations_scale, relations_scale_change = \
+            compute_flow_and_scale_relation_graphs(glb_idx, global_state, interface_nodes)
 
-    total_results: ResultDict = {}
+        total_results: ResultDict = {}
 
-    for scenario_name, scenario_params in problem_statement.scenarios.items():  # type: str, Dict[str, Any]
-        print(f"********************* SCENARIO: {scenario_name}")
+        for scenario_name, scenario_params in problem_statement.scenarios.items():  # type: str, Dict[str, Any]
+            print(f"********************* SCENARIO: {scenario_name}")
 
-        scenario_state = State(evaluate_parameters_for_scenario(global_parameters, scenario_params))
+            scenario_state = State(evaluate_parameters_for_scenario(global_parameters, scenario_params))
 
-        scenario_partof_weights = resolve_partof_weight_expressions(partof_weights, scenario_state, raise_error=True)
+            scenario_partof_weights = resolve_partof_weight_expressions(partof_weights, scenario_state, raise_error=True)
 
-        # Get scenario parameters
-        observers_priority_list = parse_string_as_simple_ident_list(scenario_state.get('NISSolverObserversPriority'))
-        conflicting_data_policy = ConflictingDataResolutionPolicy[scenario_state.get(ConflictingDataResolutionPolicy.get_key())]
-        missing_value_policy = MissingValueResolutionPolicy[scenario_state.get(MissingValueResolutionPolicy.get_key())]
+            # Get scenario parameters
+            observers_priority_list = parse_string_as_simple_ident_list(scenario_state.get('NISSolverObserversPriority'))
+            conflicting_data_policy = ConflictingDataResolutionPolicy[scenario_state.get(ConflictingDataResolutionPolicy.get_key())]
+            missing_value_policy = MissingValueResolutionPolicy[scenario_state.get(MissingValueResolutionPolicy.get_key())]
 
-        missing_value_policies: List[MissingValueResolutionPolicy] = [MissingValueResolutionPolicy.Invalidate]
-        if missing_value_policy == MissingValueResolutionPolicy.UseZero:
-            missing_value_policies.append(MissingValueResolutionPolicy.UseZero)
+            missing_value_policies: List[MissingValueResolutionPolicy] = [MissingValueResolutionPolicy.Invalidate]
+            if missing_value_policy == MissingValueResolutionPolicy.UseZero:
+                missing_value_policies.append(MissingValueResolutionPolicy.UseZero)
 
-        for time_period, absolute_observations in time_absolute_observations.items():
-            print(f"********************* TIME PERIOD: {time_period}")
+            for time_period, absolute_observations in time_absolute_observations.items():
+                print(f"********************* TIME PERIOD: {time_period}")
 
-            aggregations: NodeFloatComputedDict = {}
-            total_itype_taken_results: NodeFloatComputedDict = {}
-            total_itype_dismissed_results: NodeFloatComputedDict = {}
-            total_partof_taken_results: NodeFloatComputedDict = {}
-            total_partof_dismissed_results: NodeFloatComputedDict = {}
-            total_flow_internal_results: NodeFloatComputedDict = {}
-            total_flow_external_results: NodeFloatComputedDict = {}
+                aggregations: NodeFloatComputedDict = {}
+                total_itype_taken_results: NodeFloatComputedDict = {}
+                total_itype_dismissed_results: NodeFloatComputedDict = {}
+                total_partof_taken_results: NodeFloatComputedDict = {}
+                total_partof_dismissed_results: NodeFloatComputedDict = {}
+                total_flow_internal_results: NodeFloatComputedDict = {}
+                total_flow_external_results: NodeFloatComputedDict = {}
 
-            try:
-                comp_graph_flow, comp_graph_scale, comp_graph_scale_change = \
-                    compute_flow_and_scale_computation_graphs(scenario_state, time_relative_observations[time_period],
-                                                              relations_flow,
-                                                              relations_scale,
-                                                              relations_scale_change)
+                try:
+                    comp_graph_flow, comp_graph_scale, comp_graph_scale_change = \
+                        compute_flow_and_scale_computation_graphs(scenario_state, time_relative_observations[time_period],
+                                                                  relations_flow,
+                                                                  relations_scale,
+                                                                  relations_scale_change)
 
-                # Get final results from the absolute observations
-                results, unresolved_observations_with_interfaces = \
-                    resolve_observations_with_parameters(scenario_state, absolute_observations,
-                                                         observers_priority_list, glb_idx)
+                    # Get final results from the absolute observations
+                    results, unresolved_observations_with_interfaces = \
+                        resolve_observations_with_parameters(scenario_state, absolute_observations,
+                                                             observers_priority_list, glb_idx)
 
-                # Initializations
-                flow_last_known_nodes = set()
-                scale_last_known_nodes = set()
-                scale_change_last_known_nodes = set()
-                iteration_number = 1
+                    # Initializations
+                    flow_last_known_nodes = set()
+                    scale_last_known_nodes = set()
+                    scale_change_last_known_nodes = set()
+                    iteration_number = 1
 
-                # START ITERATIVE SOLVING
+                    # START ITERATIVE SOLVING
 
-                # We first iterate with policy MissingValueResolutionPolicy.Invalidate trying to get as many results
-                # we can without supposing zero for missing values.
-                # Second, if specified in paramater "NISSolverMissingValueResolutionPolicy" we try to get further
-                # results with policy MissingValueResolutionPolicy.UseZero.
-                for missing_value_policy in missing_value_policies:
-                    previous_len_results = len(results) - 1
+                    # We first iterate with policy MissingValueResolutionPolicy.Invalidate trying to get as many results
+                    # we can without supposing zero for missing values.
+                    # Second, if specified in paramater "NISSolverMissingValueResolutionPolicy" we try to get further
+                    # results with policy MissingValueResolutionPolicy.UseZero.
+                    for missing_value_policy in missing_value_policies:
+                        previous_len_results = len(results) - 1
 
-                    # Iterate while the number of results is increasing
-                    while len(results) > previous_len_results:
-                        print(f"********************* Solving iteration: {iteration_number}")
-                        previous_len_results = len(results)
+                        # Iterate while the number of results is increasing
+                        while len(results) > previous_len_results:
+                            print(f"********************* Solving iteration: {iteration_number}")
+                            previous_len_results = len(results)
 
-                        new_results = compute_graph_results(comp_graph_flow, results, flow_last_known_nodes)
-                        results.update(new_results)
-                        flow_last_known_nodes = set(results.keys())
-
-                        new_results = compute_graph_results(comp_graph_scale, results, scale_last_known_nodes)
-                        results.update(new_results)
-                        scale_last_known_nodes = set(results.keys())
-
-                        new_results = compute_graph_results(comp_graph_scale_change, results, scale_change_last_known_nodes)
-                        results.update(new_results)
-                        scale_change_last_known_nodes = set(results.keys())
-
-                        new_results, itype_taken_results, itype_dismissed_results = compute_hierarchy_aggregate_results(
-                            interfacetype_hierarchies, results, aggregations, conflicting_data_policy, missing_value_policy)
-
-                        aggregations.update(new_results)
-                        results.update(new_results)
-                        total_itype_taken_results.update(itype_taken_results)
-                        total_itype_dismissed_results.update(itype_dismissed_results)
-
-                        new_results, partof_taken_results, partof_dismissed_results = compute_hierarchy_aggregate_results(
-                            partof_hierarchies, results, aggregations, conflicting_data_policy, missing_value_policy,
-                            scenario_partof_weights)
-
-                        aggregations.update(new_results)
-                        results.update(new_results)
-                        total_partof_taken_results.update(partof_taken_results)
-                        total_partof_dismissed_results.update(partof_dismissed_results)
-
-                        if unresolved_observations_with_interfaces:
-                            new_results, unresolved_observations_with_interfaces = \
-                                resolve_observations_with_interfaces(
-                                    scenario_state, unresolved_observations_with_interfaces, results
-                                )
+                            new_results = compute_graph_results(comp_graph_flow, results, flow_last_known_nodes)
                             results.update(new_results)
+                            flow_last_known_nodes = set(results.keys())
 
-                        iteration_number += 1
+                            new_results = compute_graph_results(comp_graph_scale, results, scale_last_known_nodes)
+                            results.update(new_results)
+                            scale_last_known_nodes = set(results.keys())
 
-                if unresolved_observations_with_interfaces:
-                    issues.append(Issue(IType.WARNING, f"Scenario '{scenario_name}' - period '{time_period}'."
-                                                       f"The following observations could not be evaluated: "
-                                                       f"{[k for k in unresolved_observations_with_interfaces.keys()]}"))
+                            new_results = compute_graph_results(comp_graph_scale_change, results, scale_change_last_known_nodes)
+                            results.update(new_results)
+                            scale_change_last_known_nodes = set(results.keys())
 
-                issues.extend(check_unresolved_nodes_in_computation_graphs(
-                    [comp_graph_flow, comp_graph_scale, comp_graph_scale_change], results))
+                            new_results, itype_taken_results, itype_dismissed_results = compute_hierarchy_aggregate_results(
+                                interfacetype_hierarchies, results, aggregations, conflicting_data_policy, missing_value_policy)
 
-                # issues.extend(check_unresolved_nodes_in_aggregation_hierarchies(
-                #     interfacetype_hierarchies + partof_hierarchies, results))
+                            aggregations.update(new_results)
+                            results.update(new_results)
+                            total_itype_taken_results.update(itype_taken_results)
+                            total_itype_dismissed_results.update(itype_dismissed_results)
 
-                current_results: ResultDict = {}
-                result_key = ResultKey(scenario_name, time_period, Scope.Total)
+                            new_results, partof_taken_results, partof_dismissed_results = compute_hierarchy_aggregate_results(
+                                partof_hierarchies, results, aggregations, conflicting_data_policy, missing_value_policy,
+                                scenario_partof_weights)
 
-                # Filter out conflicted results from TOTAL results
-                current_results[result_key] = {k: v for k, v in results.items()
-                                               if k not in total_itype_taken_results and k not in total_partof_taken_results}
+                            aggregations.update(new_results)
+                            results.update(new_results)
+                            total_partof_taken_results.update(partof_taken_results)
+                            total_partof_dismissed_results.update(partof_dismissed_results)
 
-                if total_itype_taken_results:
-                    current_results[result_key._replace(conflict_itype=ConflictResolution.Taken)] = total_itype_taken_results
-                    current_results[result_key._replace(conflict_itype=ConflictResolution.Dismissed)] = total_itype_dismissed_results
+                            if unresolved_observations_with_interfaces:
+                                new_results, unresolved_observations_with_interfaces = \
+                                    resolve_observations_with_interfaces(
+                                        scenario_state, unresolved_observations_with_interfaces, results
+                                    )
+                                results.update(new_results)
 
-                if total_partof_taken_results:
-                    current_results[result_key._replace(conflict_partof=ConflictResolution.Taken)] = total_partof_taken_results
-                    current_results[result_key._replace(conflict_partof=ConflictResolution.Dismissed)] = total_partof_dismissed_results
+                            iteration_number += 1
 
-                int_ext_results: ResultDict = {}
-                for key, res in current_results.items():
-                    internal_results: NodeFloatComputedDict = {}
-                    external_results: NodeFloatComputedDict = {}
-                    for node, value in res.items():
-                        if node not in total_flow_external_results and node not in total_flow_internal_results:
-                            if node.subsystem.lower() in ["external", "externalenvironment"]:
-                                external_results[node] = value
-                            else:
-                                internal_results[node] = value
+                    if unresolved_observations_with_interfaces:
+                        issues.append(Issue(IType.WARNING, f"Scenario '{scenario_name}' - period '{time_period}'."
+                                                           f"The following observations could not be evaluated: "
+                                                           f"{[k for k in unresolved_observations_with_interfaces.keys()]}"))
 
-                    if internal_results:
-                        int_ext_results[key._replace(scope=Scope.Internal)] = internal_results
+                    issues.extend(check_unresolved_nodes_in_computation_graphs(
+                        [comp_graph_flow, comp_graph_scale, comp_graph_scale_change], results))
 
-                    if external_results:
-                        int_ext_results[key._replace(scope=Scope.External)] = external_results
+                    # issues.extend(check_unresolved_nodes_in_aggregation_hierarchies(
+                    #     interfacetype_hierarchies + partof_hierarchies, results))
 
-                if total_flow_internal_results:
-                    int_ext_results[result_key._replace(scope=Scope.Internal)].update(total_flow_internal_results)
+                    current_results: ResultDict = {}
+                    result_key = ResultKey(scenario_name, time_period, Scope.Total)
 
-                if total_flow_external_results:
-                    int_ext_results[result_key._replace(scope=Scope.External)].update(total_flow_external_results)
+                    # Filter out conflicted results from TOTAL results
+                    current_results[result_key] = {k: v for k, v in results.items()
+                                                   if k not in total_itype_taken_results and k not in total_partof_taken_results}
 
-                total_results.update(current_results)
-                total_results.update(int_ext_results)
+                    if total_itype_taken_results:
+                        current_results[result_key._replace(conflict_itype=ConflictResolution.Taken)] = total_itype_taken_results
+                        current_results[result_key._replace(conflict_itype=ConflictResolution.Dismissed)] = total_itype_dismissed_results
 
-            except SolvingException as e:
-                return [Issue(IType.ERROR, f"Scenario '{scenario_name}' - period '{time_period}'. {e.args[0]}")]
+                    if total_partof_taken_results:
+                        current_results[result_key._replace(conflict_partof=ConflictResolution.Taken)] = total_partof_taken_results
+                        current_results[result_key._replace(conflict_partof=ConflictResolution.Dismissed)] = total_partof_dismissed_results
 
-    #
-    # ---------------------- CREATE PD.DATAFRAMES PREVIOUS TO OUTPUT DATASETS  ----------------------
-    #
+                    int_ext_results: ResultDict = {}
+                    for key, res in current_results.items():
+                        internal_results: NodeFloatComputedDict = {}
+                        external_results: NodeFloatComputedDict = {}
+                        for node, value in res.items():
+                            if node not in total_flow_external_results and node not in total_flow_internal_results:
+                                if node.subsystem.lower() in ["external", "externalenvironment"]:
+                                    external_results[node] = value
+                                else:
+                                    internal_results[node] = value
 
-    data = {result_key.as_string_tuple() + node.key:
-                {"InterfaceType": node.type,
-                 "Orientation": node.orientation,
-                 "RoegenType": node.roegen_type if node else "-",
-                 "Value": float_computed.value.val,
-                 "Computed": float_computed.computed.name,
-                 "Observer": float_computed.observer,
-                 "Expression": float_computed.value.exp,
-                 "Unit": node.unit if node else "-",
-                 "Level": node.processor.attributes.get('level', '') if node else "-",
-                 "System": node.system if node else "-",
-                 "Subsystem": node.subsystem if node else "-",
-                 "Sphere": node.sphere if node else "-"
-                 }
-            for result_key, node_floatcomputed_dict in total_results.items()
-            for node, float_computed in node_floatcomputed_dict.items()}
+                        if internal_results:
+                            int_ext_results[key._replace(scope=Scope.Internal)] = internal_results
 
-    export_solver_data(datasets, data, dynamic_scenario, glb_idx, global_parameters, problem_statement)
+                        if external_results:
+                            int_ext_results[key._replace(scope=Scope.External)] = external_results
 
-    return issues
+                    if total_flow_internal_results:
+                        int_ext_results[result_key._replace(scope=Scope.Internal)].update(total_flow_internal_results)
+
+                    if total_flow_external_results:
+                        int_ext_results[result_key._replace(scope=Scope.External)].update(total_flow_external_results)
+
+                    total_results.update(current_results)
+                    total_results.update(int_ext_results)
+
+                except SolvingException as e:
+                    return [Issue(IType.ERROR, f"Scenario '{scenario_name}' - period '{time_period}'. {e.args[0]}")]
+
+        #
+        # ---------------------- CREATE PD.DATAFRAMES PREVIOUS TO OUTPUT DATASETS  ----------------------
+        #
+
+        data = {result_key.as_string_tuple() + node.key:
+                    {"InterfaceType": node.type,
+                     "Orientation": node.orientation,
+                     "RoegenType": node.roegen_type if node else "-",
+                     "Value": float_computed.value.val,
+                     "Computed": float_computed.computed.name,
+                     "Observer": float_computed.observer,
+                     "Expression": float_computed.value.exp,
+                     "Unit": node.unit if node else "-",
+                     "Level": node.processor.attributes.get('level', '') if node else "-",
+                     "System": node.system if node else "-",
+                     "Subsystem": node.subsystem if node else "-",
+                     "Sphere": node.sphere if node else "-"
+                     }
+                for result_key, node_floatcomputed_dict in total_results.items()
+                for node, float_computed in node_floatcomputed_dict.items()}
+
+        export_solver_data(datasets, data, dynamic_scenario, glb_idx, global_parameters, problem_statement)
+
+        return issues
+    except SolvingException as e:
+        return [Issue(IType.ERROR, e.args[0])]
 
 
 def check_unresolved_nodes_in_computation_graphs(computation_graphs: List[ComputationGraph], resolved_nodes: NodeFloatComputedDict) -> List[Issue]:
