@@ -9,6 +9,8 @@ import itertools
 import json
 import logging
 import mimetypes
+import os
+import re
 import tempfile
 import urllib
 import urllib.request
@@ -30,7 +32,6 @@ import nexinfosys
 from nexinfosys import case_sensitive, SDMXConcept, get_global_configuration_variable
 from nexinfosys.ie_imports.google_drive import download_xlsx_file_id
 from nexinfosys.models import log_level
-import os
 from zipfile import ZipFile
 
 logger = logging.getLogger(__name__)
@@ -240,6 +241,12 @@ def strcmp(s1, s2):
     :param s2:
     :return:
     """
+    # Handling empty or None strings
+    if not s1:
+        return True if not s2 else False
+    if not s2:
+        return False
+
     if case_sensitive:
         return s1.strip() == s2.strip()
     else:
@@ -1197,48 +1204,6 @@ def download_file(location, wv_user=None, wv_password=None, wv_host_name=None):
         data = urllib.request.urlopen(location).read()
         data = io.BytesIO(data)
 
-    # If it is a ZIP file...
-    if pr.path.lower().endswith(".zip"):
-        zipfile = ZipFile(data)
-        # If no anchor, return the XLSX file (find it and return it)
-        file_to_extract = None
-        candidate_files_to_extract = []
-        if pr.fragment:
-            file_to_extract = pr.fragment
-            if "#" in file_to_extract:
-                pos = file_to_extract.find("#")
-                sub_fragment = file_to_extract[pos + 1:]
-                file_to_extract = file_to_extract[:pos]
-            if file_to_extract.startswith("/"):
-                file_to_extract = file_to_extract[1:]
-        found = False
-        for name in zipfile.namelist():
-            if not file_to_extract:
-                if name.lower().endswith(".xlsx"):
-                    candidate_files_to_extract.append(name)
-                    found = True
-            else:
-                if strcmp(file_to_extract, name):
-                    found = True
-                    break
-        if found:
-            if not file_to_extract:
-                # Try to find best option from the list of candidates
-                file_to_extract = candidate_files_to_extract[0]
-                for f in candidate_files_to_extract:
-                    if f.lower().startswith("msm/cs"):
-                        file_to_extract = f
-                        break  # Best option (DMP): a file named "cs_<whatever>.xlsx" in "msm" folder
-                    if f.lower().startswith("msm/"):
-                        file_to_extract = f  # Second best option: an XLSX file inside "msm" folder
-
-            if file_to_extract:
-                data = io.BytesIO(zipfile.read(file_to_extract))
-            else:
-                data = None
-        else:
-            data = None
-
     return data
 
 
@@ -1487,6 +1452,21 @@ def precedes_in_list(lst: List[T], elem1: Optional[T], elem2: Optional[T]) -> bo
     """ Check if an element comes before another inside a list """
     return elem1 in lst and (elem2 not in lst or lst.index(elem1) < lst.index(elem2))
 
+
+def replace_string_from_dictionary(s: str, d: Dict[str, str]) -> str:
+    """
+    Replace in a string all the words defined as keys in the dictionary with the associated value.
+    Note: values of the dictionary are sorted by length before replacement in order to avoid replacing on top of a replaced word.
+
+    :param s: input string to transform with replacements
+    :param d: dictionary with old_word -> new_word scheme
+    :return: a string with replacements applied
+    """
+    for k, v in sorted(d.items(), key=lambda item: len(item[1])):
+        print(v)
+        s = re.sub(r"\b" + k + r"\b", v, s)
+    return s
+
 # #####################################################################################################################
 # >>>> CUSTOM DATA TYPES <<<<
 # #####################################################################################################################
@@ -1620,6 +1600,9 @@ class FloatExp(SupportsFloat):
     def __str__(self) -> str:
         return f'Value = {self.val}, Name = {self.name}, Expression = "{self.exp}"'
 
+    def __repr__(self):
+        return str(self)
+
 
 def add_label_columns_to_dataframe(ds_name, df, prd):
     """
@@ -1740,7 +1723,6 @@ def prepare_default_configuration(create_directories):
             "CACHE_FILE_LOCATION": f"{tmp_path}/sdmx_datasets_cache",
             "REDIS_HOST_FILESYSTEM_DIR": f"{tmp_path}/sessions",
             "SSP_FILES_DIR": "",
-            "NIS_FILES_LIST": "https://drive.google.com/open?id=1I_afcebegpEaOxfKKMzJCJDCG-vtulsM"
         }
 
     from appdirs import AppDirs

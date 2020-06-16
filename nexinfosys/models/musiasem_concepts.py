@@ -1235,6 +1235,8 @@ class Processor(Identifiable, Nameable, Taggable, Qualifiable, Automatable, Obse
         # * Relations are NOT assimilated, at least by default. THIS HAS TO BE STUDIED IN DEPTH
         self._referenced_processor = referenced_processor
 
+        self._full_hierarchy_name = None
+
     def encode(self):
         d = Identifiable.encode(self)
         d.update(Nameable.encode(self))
@@ -1288,6 +1290,14 @@ class Processor(Identifiable, Nameable, Taggable, Qualifiable, Automatable, Obse
             return parts[-1]
         else:
             return self.name
+
+    @property
+    def full_hierarchy_name(self):
+        return ifnull(self._full_hierarchy_name, self.name)
+
+    @full_hierarchy_name.setter
+    def full_hierarchy_name(self, n: str):
+        self._full_hierarchy_name = n
 
     def full_hierarchy_names(self, registry: PartialRetrievalDictionary) -> List[str]:
         """

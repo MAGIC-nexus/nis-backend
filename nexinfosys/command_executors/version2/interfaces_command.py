@@ -1,4 +1,4 @@
-from typing import Dict, Any, Optional, Sequence, List, Tuple, NoReturn
+from typing import Dict, Any, Optional, Sequence, List, NoReturn
 
 from pint import DimensionalityError
 
@@ -41,10 +41,6 @@ class InterfacesAndQualifiedQuantitiesCommand(BasicCommand):
 
             f_interface_name = f_interface_type_name
 
-        f_source = field_values.get("qq_source")
-        # TODO: source is not being used
-        source = self.get_source(f_source, subrow)
-
         processor = self.find_processor(field_values.get("processor"), subrow)
 
         # Try to find Interface
@@ -54,11 +50,13 @@ class InterfacesAndQualifiedQuantitiesCommand(BasicCommand):
         interfaces: Sequence[Factor] = self._glb_idx.get(Factor.partial_key(processor=processor, name=f_interface_name))
         if len(interfaces) == 1:
             interface = interfaces[0]
+            print(f"DEBUG - Interface '{interface.name}' found")
             interface_type = interface.taxon
             if f_interface_type_name and not strcmp(interface_type.name, f_interface_type_name):
-                self._add_issue(IType.WARNING, f"The InterfaceType of the Interface, {interface_type.name} "
-                                               f"is different from the specified InterfaceType, {f_interface_type_name}. "
-                                               f"Record skipped."+subrow_issue_message(subrow))
+                self._add_issue(IType.WARNING, f"The existing Interface '{interface.name}' has the InterfaceType "
+                                               f"'{interface_type.name}' which is different from the specified "
+                                               f"InterfaceType '{f_interface_type_name}'. Record skipped." +
+                                               subrow_issue_message(subrow))
                 return
         elif len(interfaces) > 1:
             raise CommandExecutionError(f"Interface '{f_interface_name}' found {str(len(interfaces))} times. "
@@ -122,6 +120,7 @@ class InterfacesAndQualifiedQuantitiesCommand(BasicCommand):
                                                  tags=None,
                                                  attributes=attributes)
             self._glb_idx.put(interface.key(), interface)
+            print(f"DEBUG - Interface '{interface.name}' created")
         elif not interface.compare_attributes(attributes):
             initial = ', '.join([f"{k}: {interface.get_attribute(k)}" for k in attributes])
             new = ', '.join([f"{k}: {attributes[k]}" for k in attributes])
@@ -197,6 +196,10 @@ class InterfacesAndQualifiedQuantitiesCommand(BasicCommand):
             f_time = field_values.get("time")
             f_comments = field_values.get("comments")
 
+            f_source = field_values.get("qq_source")
+            # TODO: source is not being used
+            source = self.get_source(f_source, subrow)
+
             # Find Observer
             observer: Optional[Observer] = None
             if f_source:
@@ -208,6 +211,14 @@ class InterfacesAndQualifiedQuantitiesCommand(BasicCommand):
             # If an observation exists then "time" is mandatory
             if not f_time:
                 raise CommandExecutionError(f"Field 'time' needs to be specified for the given observation."+subrow_issue_message(subrow))
+
+            # An interface can have multiple observations if each of them have a different [time, observer] combination
+            for observation in interface.quantitative_observations:
+                observer_name = observation.observer.name if observation.observer else None
+                if strcmp(observation.attributes["time"], f_time) and strcmp(observer_name, f_source):
+                    raise CommandExecutionError(
+                        f"The interface '{interface.name}' in processor '{interface.processor.name}' already has an "
+                        f"observation with time '{f_time}' and source '{f_source}'.")
 
             self.check_existence_of_pedigree_matrix(f_pedigree_matrix, f_pedigree, subrow)
 
