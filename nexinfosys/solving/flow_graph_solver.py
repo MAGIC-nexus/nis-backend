@@ -148,9 +148,13 @@ class InterfaceNode:
     def alternate_key(self) -> Tuple:
         return self.processor_name, self.type, self.orientation
 
+    @property
+    def full_key(self) -> Tuple:
+        return self.processor_name, self.interface_name, self.type, self.orientation
+
     @staticmethod
-    def key_labels() -> List[str]:
-        return ["Processor", "Interface"]
+    def full_key_labels() -> List[str]:
+        return ["Processor", "Interface", "InterfaceType", "Orientation"]
 
     @property
     def name(self) -> str:
@@ -886,56 +890,10 @@ def compute_hierarchy_aggregate_results(
         processors_relation_weights: ProcessorsRelationWeights = None) \
         -> Tuple[NodeFloatComputedDict, NodeFloatComputedDict, NodeFloatComputedDict]:
 
-    def sum_values(values: List[FloatExp]) -> FloatExp:
-        result: Optional[FloatExp] = None
-
-        for value in values:
-            if result is None:
-                result = value.assignable_copy()
-            else:
-                result += value
-
-        return result
-
-    def get(node_dict: NodeFloatComputedDict, node: InterfaceNode) -> Tuple[InterfaceNode, Optional[FloatComputedTuple]]:
-        """
-        Get the node value from a dictionary that stores nodes that can be identified in two different ways:
-        as "ProcessorName:InterfaceName" or as "ProcessorName:InterfaceTypeName:Orientation".
-        If a node is not present in its original form we should search it in its associated form.
-        - Original form "ProcessorName:InterfaceName" -> we can directly compute the "ProcessorName:InterfaceTypeName:Orientation" form
-        - Original form "ProcessorName:InterfaceTypeName:Orientation" -> we can have multiple nodes "ProcessorName:InterfaceName" matching
-        """
-        if node in node_dict:
-            return node, node_dict[node]
-        else:
-            debug_string = f"DEBUG - GET: node '{node}' not found, "
-            result: Tuple[InterfaceNode, Optional[FloatComputedTuple]] = (node, None)
-            if node.has_interface():
-                # Transformation "ProcessorName:InterfaceName" -> "ProcessorName:InterfaceTypeName:Orientation"
-                no_interface_copy = node.no_interface_copy()
-                debug_string += f"searching no interface node '{no_interface_copy}' instead"
-                if no_interface_copy in node_dict:
-                    result = no_interface_copy, node_dict[no_interface_copy]
-            else:
-                # Transformation "ProcessorName:InterfaceTypeName:Orientation" -> "ProcessorName:InterfaceName"
-                values: List[Tuple[InterfaceNode, FloatComputedTuple]] = \
-                    [(k, v) for k, v in node_dict.items() if k.alternate_key == node.alternate_key]
-                debug_string += f"searching nodes matching alternate key '{node.alternate_key}' instead, these are '{values}'"
-                if len(values) == 1:
-                    result = values[0]
-                elif len(values) > 1:
-                    result = node, FloatComputedTuple(sum_values([v[1].value for v in values]), Computed.Yes)
-
-            if result[1]:
-                print(f"{debug_string}, result: {result[1]}")
-
-            return result
-
     def compute_node(node: InterfaceNode) -> Optional[FloatExp]:
         # If the node has already been computed return the value
-        node, float_value = get(new_values, node)
-        if float_value is not None:
-            return float_value.value
+        if new_values.get(node) is not None:
+            return new_values[node].value
 
         # Make a depth-first search
         return_value: Optional[FloatExp]
@@ -964,7 +922,7 @@ def compute_hierarchy_aggregate_results(
                 sum_children = None
                 break
 
-        node, float_value = get(params, node)
+        float_value = params.get(node)
         if sum_children is not None:
             # New value has been computed
             sum_children.name = node.name
@@ -1196,10 +1154,8 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
         # ---------------------- CREATE PD.DATAFRAMES PREVIOUS TO OUTPUT DATASETS  ----------------------
         #
 
-        data = {result_key.as_string_tuple() + node.key:
-                    {"InterfaceType": node.type,
-                     "Orientation": node.orientation,
-                     "RoegenType": node.roegen_type if node else "-",
+        data = {result_key.as_string_tuple() + node.full_key:
+                    {"RoegenType": node.roegen_type if node else "-",
                      "Value": float_computed.value.val,
                      "Computed": float_computed.computed.name,
                      "Observer": float_computed.observer,
@@ -1282,7 +1238,7 @@ def export_solver_data(datasets, data, dynamic_scenario, glb_idx, global_paramet
     df = df.round(3)
     # Give a name to the dataframe indexes
     index_names = [f.title() for f in
-                   ResultKey._fields] + InterfaceNode.key_labels()
+                   ResultKey._fields] + InterfaceNode.full_key_labels()
     df.index.names = index_names
     # Sort the dataframe based on indexes. Not necessary, only done for debugging purposes.
     df = df.sort_index(level=index_names)
