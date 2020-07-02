@@ -437,6 +437,11 @@ def send_web_client_file(path=None):
     if not path or path == "":
         path = "index.html"
 
+    print(f"PATH: {path}")
+
+    if "config.json" in path:
+        return build_json_response(dict(url=f"{request.host_url[:-1]}"), 200)
+
     if nis_external_client_base in incoming_url:
         # From outside
         if path == "index.html":
@@ -1715,7 +1720,7 @@ def reproducible_session_query_state_get_dataset(name, format):  # Query list of
                     print("Preparing Dataset labels")
                     ds2 = add_label_columns_to_dataframe(name, ds2, glb_idx)
 
-                if isinstance(ds2.index, pd.core.indexes.range.RangeIndex):
+                if isinstance(ds2.index, (pd.Int64Index, pd.core.indexes.range.RangeIndex)):
                     export_index = False
                 else:
                     export_index = True
