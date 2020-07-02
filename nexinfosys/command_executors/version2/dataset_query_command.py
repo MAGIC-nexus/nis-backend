@@ -51,7 +51,7 @@ def pctna(x):
     """
     Aggregation function computing the percentage of NaN values VS total number of elements, in a group "x"
     """
-    return 100.0 * np.count_nonzero(np.isnan(x)) / x.size
+    return 100.0 * np.count_nonzero(np.isnan(x.astype(np.float))) / x.size
 
 
 class DatasetQryCommand(IExecutableCommand):

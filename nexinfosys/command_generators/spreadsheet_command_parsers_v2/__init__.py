@@ -221,6 +221,8 @@ def parse_command_in_worksheet(sh: Worksheet, area: AreaTupleType, name: Optiona
                                     else:
                                         line[field_name] = value  # Store the value
                             except:
+                                import traceback
+                                traceback.print_exc()
                                 col_header = sh.cell(row=1, column=col_idx).value
                                 issues.append(Issue(itype=IType.ERROR,
                                                     description=f"The value in field '{col_header}' of command "
