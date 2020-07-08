@@ -28,7 +28,7 @@ Before the elaboration of flow graphs, several preparatory steps:
 from collections import defaultdict
 from copy import deepcopy
 from enum import Enum
-from typing import Dict, List, Set, Any, Tuple, Union, Optional, NamedTuple, Generator, Type, NoReturn, Sequence
+from typing import Dict, List, Set, Any, Tuple, Union, Optional, NamedTuple, Generator, NoReturn, Sequence
 
 import lxml
 import networkx as nx
@@ -42,6 +42,7 @@ from nexinfosys.command_generators.parser_ast_evaluators import ast_evaluator, o
     get_adapted_case_dataframe_filter
 from nexinfosys.command_generators.parser_field_parsers import string_to_ast, expression_with_parameters, is_year, \
     is_month, indicator_expression, parse_string_as_simple_ident_list, number_interval
+from nexinfosys.common.constants import SubsystemType, Scope
 from nexinfosys.common.helper import create_dictionary, PartialRetrievalDictionary, ifnull, istr, strcmp, \
     FloatExp, precedes_in_list, replace_string_from_dictionary
 from nexinfosys.ie_exports.xml_export import export_model_to_xml
@@ -58,12 +59,6 @@ from nexinfosys.solving.graph.flow_graph import FlowGraph, IType
 
 class SolvingException(Exception):
     pass
-
-
-class Scope(Enum):
-    Total = 1
-    Internal = 2
-    External = 3
 
 
 class Computed(Enum):
@@ -198,8 +193,8 @@ class InterfaceNode:
         return self.processor.processor_system if self.processor else None
 
     @property
-    def subsystem(self) -> Optional[str]:
-        return self.processor.subsystem_type if self.processor else None
+    def subsystem(self) -> Optional[SubsystemType]:
+        return SubsystemType.from_str(self.processor.subsystem_type) if self.processor else None
 
     def has_interface(self) -> bool:
         return self.interface is not None
@@ -689,7 +684,7 @@ def resolve_observations_with_parameters(state: State, observations: Observation
             unresolved_observations_with_interfaces[node] = (ast, new_obs)
             resolved_observations.pop(node, None)
         else:
-            resolved_observations[node] = FloatComputedTuple(FloatExp(value, node.name, obs_new_value),
+            resolved_observations[node] = FloatComputedTuple(FloatExp(value, node.name, obs_new_value, True),
                                                              Computed.No, observer_name)
             unresolved_observations_with_interfaces.pop(node, None)
 
@@ -707,7 +702,7 @@ def resolve_observations_with_interfaces(
         value, ast, params, issues = evaluate_numeric_expression_with_parameters(ast, state)
         if value is not None:
             observer_name = obs.observer.name if obs.observer else None
-            results[node] = FloatComputedTuple(FloatExp(value, node.name, str(obs.value)), Computed.Yes, observer_name)
+            results[node] = FloatComputedTuple(FloatExp(value, node.name, str(obs.value), True), Computed.Yes, observer_name)
         else:
             unresolved_observations[node] = (ast, obs)
 
@@ -897,6 +892,8 @@ def compute_hierarchy_aggregate_results(
 
         # Make a depth-first search
         return_value: Optional[FloatExp]
+        children_values: List[Tuple[FloatExp, Optional[FloatExp], bool]] = []
+        invalidate_sum_children: bool = False
         sum_children: Optional[FloatExp] = None
 
         # Try to get the sum from children, if any
@@ -905,22 +902,16 @@ def compute_hierarchy_aggregate_results(
             if child_value is not None:
                 weight: FloatExp = None if processors_relation_weights is None \
                                         else processors_relation_weights[(node.processor, child.processor)]
-                add_weight: bool = weight is not None and weight != 1.0
+                same_system: bool = node.system == child.system and node.subsystem.is_same_scope(child.subsystem)
 
-                if sum_children is None:
-                    if add_weight:
-                        sum_children = child_value.assignable_copy() * weight
-                    else:
-                        sum_children = child_value.assignable_copy()
-                else:
-                    if add_weight:
-                        sum_children += child_value * weight
-                    else:
-                        sum_children += child_value
+                children_values.append((child_value, weight, same_system))
             elif missing_values_policy == MissingValueResolutionPolicy.Invalidate:
                 # Invalidate current children computation and stop evaluating following children
-                sum_children = None
+                invalidate_sum_children = True
                 break
+
+        if not invalidate_sum_children:
+            sum_children = FloatExp.create_from_weighted_addends(children_values)
 
         float_value = params.get(node)
         if sum_children is not None:
@@ -1121,31 +1112,11 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
                         current_results[result_key._replace(conflict_partof=ConflictResolution.Taken)] = total_partof_taken_results
                         current_results[result_key._replace(conflict_partof=ConflictResolution.Dismissed)] = total_partof_dismissed_results
 
-                    int_ext_results: ResultDict = {}
-                    for key, res in current_results.items():
-                        internal_results: NodeFloatComputedDict = {}
-                        external_results: NodeFloatComputedDict = {}
-                        for node, value in res.items():
-                            if node not in total_flow_external_results and node not in total_flow_internal_results:
-                                if node.subsystem.lower() in ["external", "externalenvironment"]:
-                                    external_results[node] = value
-                                else:
-                                    internal_results[node] = value
-
-                        if internal_results:
-                            int_ext_results[key._replace(scope=Scope.Internal)] = internal_results
-
-                        if external_results:
-                            int_ext_results[key._replace(scope=Scope.External)] = external_results
-
-                    if total_flow_internal_results:
-                        int_ext_results[result_key._replace(scope=Scope.Internal)].update(total_flow_internal_results)
-
-                    if total_flow_external_results:
-                        int_ext_results[result_key._replace(scope=Scope.External)].update(total_flow_external_results)
+                    internal_results, external_results = compute_internal_external_results(current_results[result_key])
+                    current_results[result_key._replace(scope=Scope.Internal)] = internal_results
+                    current_results[result_key._replace(scope=Scope.External)] = external_results
 
                     total_results.update(current_results)
-                    total_results.update(int_ext_results)
 
                 except SolvingException as e:
                     return [Issue(IType.ERROR, f"Scenario '{scenario_name}' - period '{time_period}'. {e.args[0]}")]
@@ -1163,7 +1134,7 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
                      "Unit": node.unit if node else "-",
                      "Level": node.processor.attributes.get('level', '') if node else "-",
                      "System": node.system if node else "-",
-                     "Subsystem": node.subsystem if node else "-",
+                     "Subsystem": node.subsystem.name if node else "-",
                      "Sphere": node.sphere if node else "-"
                      }
                 for result_key, node_floatcomputed_dict in total_results.items()
@@ -1174,6 +1145,24 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
         return issues
     except SolvingException as e:
         return [Issue(IType.ERROR, e.args[0])]
+
+
+def compute_internal_external_results(results: NodeFloatComputedDict) -> Tuple[NodeFloatComputedDict, NodeFloatComputedDict]:
+    internal_results: NodeFloatComputedDict = {}
+    external_results: NodeFloatComputedDict = {}
+
+    # Iterate over all results
+    for node, value in results.items():
+
+        internal_value = value.value.get_scope_value(Scope.Internal)
+        if internal_value:
+            internal_results[node] = value._replace(value=internal_value)
+
+        external_value = value.value.get_scope_value(Scope.External)
+        if external_value:
+            external_results[node] = value._replace(value=external_value)
+
+    return internal_results, external_results
 
 
 def check_unresolved_nodes_in_computation_graphs(computation_graphs: List[ComputationGraph], resolved_nodes: NodeFloatComputedDict) -> List[Issue]:

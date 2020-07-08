@@ -1,7 +1,6 @@
 ######################################
 #  LIST OF FIELDS FOR THE COMMANDS   #
 ######################################
-
 from typing import Dict, List, Type
 
 from nexinfosys import CommandField
@@ -12,6 +11,7 @@ from nexinfosys.command_generators.parser_field_parsers import simple_ident, unq
     processor_names, value, list_simple_ident, reference, processor_name, processors_selector_expression, \
     interfaces_list_expression, attributes_list_expression, indicators_list_expression, number_interval, pair_numbers, \
     external_ds_name, level_name, expression_with_parameters_or_list_simple_ident
+from nexinfosys.common.constants import SubsystemType, Scope
 from nexinfosys.common.helper import first, class_full_name
 from nexinfosys.model_services import IExecutableCommand
 from nexinfosys.models.musiasem_concepts import Processor, Factor, RelationClassType, FactorType
@@ -25,7 +25,6 @@ roegen_types = ["Flow", "Fund"]
 orientations = ["Input", "Output"]
 no_yes = ["No", "Yes"]
 yes_no = ["Yes", "No"]
-processor_types = ["Local", "Environment", "External", "ExternalEnvironment"]
 functional_or_structural = ["Functional", "Structural", "Notional"]
 instance_or_archetype = ["Yes", "No", "Instance", "Archetype"]  # Yes/No -> Instead of "instance/archetype", now the field is "Accounted"
 copy_interfaces_mode = ["No", "FromParent", "FromChildren", "Bidirectional"]
@@ -38,7 +37,6 @@ geographic_topic_categories = ["Farming", "Biota", "Boundaries", "Climatology", 
 bib_entry_types = ["article", "book", "booklet", "conference", "inbook", "incollection", "inproceedings",
                    "manual", "mastersthesis", "misc", "phdtesis", "proceedings", "techreport", "unpublished"]
 bib_months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"]
-scope_types = ["Total", "Internal", "External"]
 benchmark_groups = ["Feasibility", "Viability", "Desirability"]
 aggregators_list = ["Sum", "Avg", "Count", "SumNA", "CountAv", "AvgNA", "PctNA"]
 
@@ -126,7 +124,7 @@ command_fields: Dict[str, List[CommandField]] = {
         CommandField(allowed_names=["Description"], name="description", parser=unquoted_string),
         CommandField(allowed_names=["Unit"], name="unit", mandatory=True, parser=unit_name),
         CommandField(allowed_names=["OppositeSubsystemType", "OppositeProcessorType"], name="opposite_processor_type",
-                     default_value=processor_types[0], allowed_values=processor_types, parser=simple_ident),
+                     default_value=SubsystemType.get_names()[0], allowed_values=SubsystemType.get_names(), parser=simple_ident),
         CommandField(allowed_names=[attributeRegex], name="attributes", many_appearances=True, parser=value),
         CommandField(allowed_names=["Attributes"], name="attributes", parser=key_value_list)
     ],
@@ -139,7 +137,7 @@ command_fields: Dict[str, List[CommandField]] = {
         #              default_value=copy_interfaces_mode[0], allowed_values=copy_interfaces_mode, parser=simple_ident),
         # CommandField(allowed_names=["CloneProcessor"], name="clone_processor", parser=simple_ident),
         CommandField(allowed_names=["SubsystemType", "ProcessorContextType", "ProcessorType"], name="subsystem_type",
-                     default_value=processor_types[0], allowed_values=processor_types, parser=simple_ident,
+                     default_value=SubsystemType.get_names()[0], allowed_values=SubsystemType.get_names(), parser=simple_ident,
                      attribute_of=Processor),
         CommandField(allowed_names=["System"], name="processor_system", default_value="default",
                      parser=simple_ident, attribute_of=Processor),
@@ -175,7 +173,7 @@ command_fields: Dict[str, List[CommandField]] = {
         CommandField(allowed_names=["Orientation"], name="orientation", mandatory=True, allowed_values=orientations,
                      parser=simple_ident, attribute_of=Factor),
         CommandField(allowed_names=["OppositeSubsystemType", "OppositeProcessorType"], name="opposite_processor_type",
-                     allowed_values=processor_types, parser=simple_ident, attribute_of=Factor),
+                     allowed_values=SubsystemType.get_names(), parser=simple_ident, attribute_of=Factor),
         CommandField(allowed_names=["GeolocationRef"], name="geolocation_ref", parser=reference),
         CommandField(allowed_names=["GeolocationCode"], name="geolocation_code", parser=code_string),
         # CommandField(allowed_names=["Alias", "SpecificName"], name="alias", parser=simple_ident),
@@ -232,7 +230,7 @@ command_fields: Dict[str, List[CommandField]] = {
         CommandField(allowed_names=["NewProcessorGroup"], name="processor_group", parser=simple_ident, attribute_of=Processor),
         CommandField(allowed_names=["NewParentProcessor"], name="parent_processor", parser=processor_name),
         CommandField(allowed_names=["NewSubsystemType"], name="subsystem_type",
-                     default_value=processor_types[0], allowed_values=processor_types, parser=simple_ident,
+                     default_value=SubsystemType.get_names()[0], allowed_values=SubsystemType.get_names(), parser=simple_ident,
                      attribute_of=Processor),
         CommandField(allowed_names=["NewProcessorLevel"], name="level", parser=level_name, attribute_of=Processor),
         # DISABLED because this fields apply to processors Cloned and Scaled, so they will always have a parent,
@@ -354,7 +352,7 @@ command_fields: Dict[str, List[CommandField]] = {
 
     "matrix_indicators": [
         CommandField(allowed_names=["Indicator"], name="indicator_name", mandatory=True, parser=simple_ident),
-        CommandField(allowed_names=["Scope"], name="scope", default_value=scope_types[0], allowed_values=scope_types, parser=simple_ident),
+        CommandField(allowed_names=["Scope"], name="scope", default_value=Scope.get_names()[0], allowed_values=Scope.get_names(), parser=simple_ident),
         CommandField(allowed_names=["Processors"], name="processors_selector", parser=processors_selector_expression),
         CommandField(allowed_names=["Interfaces"], name="interfaces_selector", parser=interfaces_list_expression),
         CommandField(allowed_names=["Indicators"], name="indicators_selector", parser=indicators_list_expression),
