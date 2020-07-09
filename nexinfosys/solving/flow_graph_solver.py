@@ -1116,6 +1116,10 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
                     current_results[result_key._replace(scope=Scope.Internal)] = internal_results
                     current_results[result_key._replace(scope=Scope.External)] = external_results
 
+                    internal_results, external_results = compute_flow_graph_internal_external_results(comp_graph_flow, current_results[result_key])
+                    current_results[result_key._replace(scope=Scope.Internal)].update(internal_results)
+                    current_results[result_key._replace(scope=Scope.External)].update(external_results)
+
                     total_results.update(current_results)
 
                 except SolvingException as e:
@@ -1161,6 +1165,33 @@ def compute_internal_external_results(results: NodeFloatComputedDict) -> Tuple[N
         external_value = value.value.get_scope_value(Scope.External)
         if external_value:
             external_results[node] = value._replace(value=external_value)
+
+    return internal_results, external_results
+
+
+def compute_flow_graph_internal_external_results(comp_graph: ComputationGraph, results: NodeFloatComputedDict) \
+        -> Tuple[NodeFloatComputedDict, NodeFloatComputedDict]:
+    internal_results: NodeFloatComputedDict = {}
+    external_results: NodeFloatComputedDict = {}
+
+    for node in comp_graph.nodes:
+        if comp_graph.direct_inputs(node):
+            internal_addends: List[FloatExp.ValueWeightTuple] = []
+            external_addends: List[FloatExp.ValueWeightTuple] = []
+
+            for input_node, weight in comp_graph.direct_inputs(node):
+                input_value = results[input_node]
+                same_system = node.system == input_node.system and node.subsystem.is_same_scope(input_node.subsystem)
+                if same_system:
+                    internal_addends.append((input_value.value, weight))
+                else:
+                    external_addends.append((input_value.value, weight))
+
+            if internal_addends:
+                internal_results[node] = FloatComputedTuple(FloatExp.compute_weighted_addition(internal_addends), Computed.Yes)
+
+            if external_addends:
+                external_results[node] = FloatComputedTuple(FloatExp.compute_weighted_addition(external_addends), Computed.Yes)
 
     return internal_results, external_results
 
