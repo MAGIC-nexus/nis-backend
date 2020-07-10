@@ -44,7 +44,7 @@ from nexinfosys.command_generators.parser_field_parsers import string_to_ast, ex
     is_month, indicator_expression, parse_string_as_simple_ident_list, number_interval
 from nexinfosys.common.constants import SubsystemType, Scope
 from nexinfosys.common.helper import create_dictionary, PartialRetrievalDictionary, ifnull, istr, strcmp, \
-    FloatExp, precedes_in_list, replace_string_from_dictionary
+    FloatExp, precedes_in_list, replace_string_from_dictionary, brackets
 from nexinfosys.ie_exports.xml_export import export_model_to_xml
 from nexinfosys.model_services import get_case_study_registry_objects, State
 from nexinfosys.models import CodeImmutable
@@ -1112,13 +1112,16 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
                         current_results[result_key._replace(conflict_partof=ConflictResolution.Taken)] = total_partof_taken_results
                         current_results[result_key._replace(conflict_partof=ConflictResolution.Dismissed)] = total_partof_dismissed_results
 
-                    internal_results, external_results = compute_internal_external_results(current_results[result_key])
-                    current_results[result_key._replace(scope=Scope.Internal)] = internal_results
-                    current_results[result_key._replace(scope=Scope.External)] = external_results
+                    # internal_results, external_results = compute_internal_external_results(current_results[result_key])
+                    # current_results[result_key._replace(scope=Scope.Internal)] = internal_results
+                    # current_results[result_key._replace(scope=Scope.External)] = external_results
 
                     internal_results, external_results = compute_flow_graph_internal_external_results(comp_graph_flow, current_results[result_key])
-                    current_results[result_key._replace(scope=Scope.Internal)].update(internal_results)
-                    current_results[result_key._replace(scope=Scope.External)].update(external_results)
+                    compute_hierarchy_aggregate_internal_external_results(interfacetype_hierarchies, None, current_results[result_key], internal_results, external_results)
+                    compute_hierarchy_aggregate_internal_external_results(partof_hierarchies, scenario_partof_weights, current_results[result_key], internal_results, external_results)
+
+                    current_results[result_key._replace(scope=Scope.Internal)] = internal_results
+                    current_results[result_key._replace(scope=Scope.External)] = external_results
 
                     total_results.update(current_results)
 
@@ -1179,7 +1182,7 @@ def compute_flow_graph_internal_external_results(comp_graph: ComputationGraph, r
             internal_addends: List[FloatExp.ValueWeightTuple] = []
             external_addends: List[FloatExp.ValueWeightTuple] = []
 
-            for input_node, weight in comp_graph.direct_inputs(node):
+            for input_node, weight in sorted(comp_graph.direct_inputs(node)):
                 input_value = results[input_node]
                 same_system = node.system == input_node.system and node.subsystem.is_same_scope(input_node.subsystem)
                 if same_system:
@@ -1188,12 +1191,66 @@ def compute_flow_graph_internal_external_results(comp_graph: ComputationGraph, r
                     external_addends.append((input_value.value, weight))
 
             if internal_addends:
-                internal_results[node] = FloatComputedTuple(FloatExp.compute_weighted_addition(internal_addends), Computed.Yes)
+                scope_value = FloatExp.compute_weighted_addition(internal_addends)
+                scope_value.name = node.name
+                internal_results[node] = FloatComputedTuple(scope_value, Computed.Yes)
 
             if external_addends:
-                external_results[node] = FloatComputedTuple(FloatExp.compute_weighted_addition(external_addends), Computed.Yes)
+                scope_value = FloatExp.compute_weighted_addition(external_addends)
+                scope_value.name = node.name
+                external_results[node] = FloatComputedTuple(scope_value, Computed.Yes)
 
     return internal_results, external_results
+
+
+def compute_hierarchy_aggregate_internal_external_results(
+        tree: InterfaceNodeHierarchy, processors_relation_weights: Optional[ProcessorsRelationWeights],
+        results: NodeFloatComputedDict,
+        internal_results: NodeFloatComputedDict, external_results: NodeFloatComputedDict) -> NoReturn:
+    def compute(node: InterfaceNode) -> Tuple[Optional[FloatComputedTuple], Optional[FloatComputedTuple]]:
+        if node not in internal_results and node not in external_results:
+            # TODO: seguro se calculan siempre los dos o ninguno?
+
+            if results[node].computed == Computed.No or not tree.get(node):
+                internal_results[node] = results[node]
+            else:
+                # Node has children
+                internal_addends: List[FloatExp.ValueWeightTuple] = []
+                external_addends: List[FloatExp.ValueWeightTuple] = []
+
+                for child_node in sorted(tree[node]):
+                    weight: FloatExp = None if processors_relation_weights is None \
+                                            else processors_relation_weights[(node.processor, child_node.processor)]
+                    same_system = node.system == child_node.system and node.subsystem.is_same_scope(child_node.subsystem)
+
+                    if same_system:
+                        child_internal_value, child_external_value = compute(child_node)
+
+                        if child_internal_value:
+                            child_internal_value.value.name = Scope.Internal.name + brackets(child_node.name)
+                            internal_addends.append((child_internal_value.value, weight))
+
+                        if child_external_value:
+                            child_external_value.value.name = Scope.External.name + brackets(child_node.name)
+                            external_addends.append((child_external_value.value, weight))
+                    else:
+                        child_value = results[child_node]
+                        external_addends.append((child_value.value, weight))
+
+                if internal_addends:
+                    scope_value = FloatExp.compute_weighted_addition(internal_addends)
+                    scope_value.name = node.name
+                    internal_results[node] = FloatComputedTuple(scope_value, Computed.Yes)
+
+                if external_addends:
+                    scope_value = FloatExp.compute_weighted_addition(external_addends)
+                    scope_value.name = node.name
+                    external_results[node] = FloatComputedTuple(scope_value, Computed.Yes)
+
+        return internal_results.get(node), external_results.get(node)
+
+    for interface_node in tree:
+        compute(interface_node)
 
 
 def check_unresolved_nodes_in_computation_graphs(computation_graphs: List[ComputationGraph], resolved_nodes: NodeFloatComputedDict) -> List[Issue]:
