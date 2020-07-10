@@ -684,7 +684,7 @@ def resolve_observations_with_parameters(state: State, observations: Observation
             unresolved_observations_with_interfaces[node] = (ast, new_obs)
             resolved_observations.pop(node, None)
         else:
-            resolved_observations[node] = FloatComputedTuple(FloatExp(value, node.name, obs_new_value, True),
+            resolved_observations[node] = FloatComputedTuple(FloatExp(value, node.name, obs_new_value),
                                                              Computed.No, observer_name)
             unresolved_observations_with_interfaces.pop(node, None)
 
@@ -702,7 +702,7 @@ def resolve_observations_with_interfaces(
         value, ast, params, issues = evaluate_numeric_expression_with_parameters(ast, state)
         if value is not None:
             observer_name = obs.observer.name if obs.observer else None
-            results[node] = FloatComputedTuple(FloatExp(value, node.name, str(obs.value), True), Computed.Yes, observer_name)
+            results[node] = FloatComputedTuple(FloatExp(value, node.name, str(obs.value)), Computed.Yes, observer_name)
         else:
             unresolved_observations[node] = (ast, obs)
 
@@ -892,7 +892,7 @@ def compute_hierarchy_aggregate_results(
 
         # Make a depth-first search
         return_value: Optional[FloatExp]
-        children_values: List[Tuple[FloatExp, Optional[FloatExp], bool]] = []
+        children_values: List[FloatExp.ValueWeightPair] = []
         invalidate_sum_children: bool = False
         sum_children: Optional[FloatExp] = None
 
@@ -902,16 +902,15 @@ def compute_hierarchy_aggregate_results(
             if child_value is not None:
                 weight: FloatExp = None if processors_relation_weights is None \
                                         else processors_relation_weights[(node.processor, child.processor)]
-                same_system: bool = node.system == child.system and node.subsystem.is_same_scope(child.subsystem)
 
-                children_values.append((child_value, weight, same_system))
+                children_values.append((child_value, weight))
             elif missing_values_policy == MissingValueResolutionPolicy.Invalidate:
                 # Invalidate current children computation and stop evaluating following children
                 invalidate_sum_children = True
                 break
 
         if not invalidate_sum_children:
-            sum_children = FloatExp.create_from_weighted_addends(children_values)
+            sum_children = FloatExp.compute_weighted_addition(children_values)
 
         float_value = params.get(node)
         if sum_children is not None:
@@ -1112,10 +1111,6 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
                         current_results[result_key._replace(conflict_partof=ConflictResolution.Taken)] = total_partof_taken_results
                         current_results[result_key._replace(conflict_partof=ConflictResolution.Dismissed)] = total_partof_dismissed_results
 
-                    # internal_results, external_results = compute_internal_external_results(current_results[result_key])
-                    # current_results[result_key._replace(scope=Scope.Internal)] = internal_results
-                    # current_results[result_key._replace(scope=Scope.External)] = external_results
-
                     internal_results, external_results = compute_flow_graph_internal_external_results(comp_graph_flow, current_results[result_key])
                     compute_hierarchy_aggregate_internal_external_results(interfacetype_hierarchies, None, current_results[result_key], internal_results, external_results)
                     compute_hierarchy_aggregate_internal_external_results(partof_hierarchies, scenario_partof_weights, current_results[result_key], internal_results, external_results)
@@ -1154,24 +1149,6 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
         return [Issue(IType.ERROR, e.args[0])]
 
 
-def compute_internal_external_results(results: NodeFloatComputedDict) -> Tuple[NodeFloatComputedDict, NodeFloatComputedDict]:
-    internal_results: NodeFloatComputedDict = {}
-    external_results: NodeFloatComputedDict = {}
-
-    # Iterate over all results
-    for node, value in results.items():
-
-        internal_value = value.value.get_scope_value(Scope.Internal)
-        if internal_value:
-            internal_results[node] = value._replace(value=internal_value)
-
-        external_value = value.value.get_scope_value(Scope.External)
-        if external_value:
-            external_results[node] = value._replace(value=external_value)
-
-    return internal_results, external_results
-
-
 def compute_flow_graph_internal_external_results(comp_graph: ComputationGraph, results: NodeFloatComputedDict) \
         -> Tuple[NodeFloatComputedDict, NodeFloatComputedDict]:
     internal_results: NodeFloatComputedDict = {}
@@ -1179,8 +1156,8 @@ def compute_flow_graph_internal_external_results(comp_graph: ComputationGraph, r
 
     for node in comp_graph.nodes:
         if comp_graph.direct_inputs(node):
-            internal_addends: List[FloatExp.ValueWeightTuple] = []
-            external_addends: List[FloatExp.ValueWeightTuple] = []
+            internal_addends: List[FloatExp.ValueWeightPair] = []
+            external_addends: List[FloatExp.ValueWeightPair] = []
 
             for input_node, weight in sorted(comp_graph.direct_inputs(node)):
                 input_value = results[input_node]
@@ -1215,8 +1192,8 @@ def compute_hierarchy_aggregate_internal_external_results(
                 internal_results[node] = results[node]
             else:
                 # Node has children
-                internal_addends: List[FloatExp.ValueWeightTuple] = []
-                external_addends: List[FloatExp.ValueWeightTuple] = []
+                internal_addends: List[FloatExp.ValueWeightPair] = []
+                external_addends: List[FloatExp.ValueWeightPair] = []
 
                 for child_node in sorted(tree[node]):
                     weight: FloatExp = None if processors_relation_weights is None \

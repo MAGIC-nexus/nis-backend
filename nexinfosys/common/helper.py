@@ -30,10 +30,8 @@ from pandas import DataFrame
 
 import nexinfosys
 from nexinfosys import case_sensitive, SDMXConcept, get_global_configuration_variable
-from nexinfosys.common.constants import Scope
 from nexinfosys.ie_imports.google_drive import download_xlsx_file_id
 from nexinfosys.models import log_level
-from zipfile import ZipFile
 
 logger = logging.getLogger(__name__)
 logger.setLevel(log_level)
@@ -1549,10 +1547,9 @@ class FloatExp(SupportsFloat):
     """ Wrapper of the Float data type which includes a name and a string expression that will grow
         when operating with other objects """
 
-    ValueWeightTuple = Tuple[Optional['FloatExp'], Optional['FloatExp']]
+    ValueWeightPair = Tuple[Optional['FloatExp'], Optional['FloatExp']]
 
-    def __init__(self, val: Union[float, int], name: Optional[str] = None, exp: Optional[str] = None,
-                 mark_as_internal: bool = False):
+    def __init__(self, val: Union[float, int], name: Optional[str] = None, exp: Optional[str] = None):
         assert(isinstance(val, float) or isinstance(val, int))
         assert(name is None or isinstance(name, str))
         assert(exp is None or isinstance(exp, str))
@@ -1560,10 +1557,6 @@ class FloatExp(SupportsFloat):
         self.val = float(val)
         self.exp = str(self.val) if exp is None else exp
         self.name = self.exp if name is None else name
-
-        self.scope_values: Dict[Scope, FloatExp] = {}
-        if mark_as_internal:
-            self.scope_values[Scope.Internal] = FloatExp(self.val, Scope.Internal.name + brackets(self.name), self.exp)
 
     def __float__(self) -> float:
         """ Needed for abc SupportsFloat used in match.isclose() """
@@ -1580,15 +1573,12 @@ class FloatExp(SupportsFloat):
     def assignable_copy(self):
         return FloatExp(self.val, self.name, self.name)
 
-    def get_scope_value(self, scope: Scope) -> Optional['FloatExp']:
-        return self.scope_values.get(scope)
-
     @staticmethod
     def get_float(f: Union[float, 'FloatExp']) -> float:
         return f.val if isinstance(f, FloatExp) else f
 
     @staticmethod
-    def compute_weighted_addition(addends: List[ValueWeightTuple]) -> Optional['FloatExp']:
+    def compute_weighted_addition(addends: List[ValueWeightPair]) -> Optional['FloatExp']:
         result: Optional[FloatExp] = None
 
         for value, weight in addends:
@@ -1599,33 +1589,6 @@ class FloatExp(SupportsFloat):
                     result = value.assignable_copy() * weight if add_weight else value.assignable_copy()
                 else:
                     result += value * weight if add_weight else value
-
-        return result
-
-    @staticmethod
-    def create_from_weighted_addends(addends: List[Tuple['FloatExp', Optional['FloatExp'], bool]]) -> 'FloatExp':
-        result = FloatExp.compute_weighted_addition([(v, w) for v, w, _ in addends])
-
-        if result:
-            # Mismo sistema - se agrega al procesador padre cada valor por separado, el LOCAL del hijofrom nexinfosys.command_field_definitions import Scope al LOCAL
-            # del padre y el EXTERNAL del hijo al EXTERNAL del padre
-            internal_addends = [(v.get_scope_value(Scope.Internal), w) for v, w, same_system in addends if same_system]
-            external_addends = [(v.get_scope_value(Scope.External), w) for v, w, same_system in addends if same_system]
-            # Diferentes sistemas - se añade el valor total del procesador hijo (LOCAL+EXTERNO) al valor EXTERNO
-            # del padre
-            external_addends.extend([(v, w) for v, w, same_system in addends if not same_system])
-
-            if internal_addends:
-                scope_value = FloatExp.compute_weighted_addition(internal_addends)
-                if scope_value:
-                    scope_value.name = Scope.Internal.name + brackets(scope_value.name)
-                result.scope_values[Scope.Internal] = scope_value
-
-            if external_addends:
-                scope_value = FloatExp.compute_weighted_addition(external_addends)
-                if scope_value:
-                    scope_value.name = Scope.External.name + brackets(scope_value.name)
-                result.scope_values[Scope.External] = scope_value
 
         return result
 
