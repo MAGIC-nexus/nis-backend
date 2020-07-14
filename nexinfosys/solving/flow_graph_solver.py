@@ -702,7 +702,7 @@ def resolve_observations_with_interfaces(
         value, ast, params, issues = evaluate_numeric_expression_with_parameters(ast, state)
         if value is not None:
             observer_name = obs.observer.name if obs.observer else None
-            results[node] = FloatComputedTuple(FloatExp(value, node.name, str(obs.value)), Computed.Yes, observer_name)
+            results[node] = FloatComputedTuple(FloatExp(value, node.name, str(obs.value)), Computed.No, observer_name)
         else:
             unresolved_observations[node] = (ast, obs)
 
@@ -1111,7 +1111,10 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
                         current_results[result_key._replace(conflict_partof=ConflictResolution.Taken)] = total_partof_taken_results
                         current_results[result_key._replace(conflict_partof=ConflictResolution.Dismissed)] = total_partof_dismissed_results
 
-                    internal_results, external_results = compute_flow_graph_internal_external_results(comp_graph_flow, current_results[result_key])
+                    internal_results: NodeFloatComputedDict = {}
+                    external_results: NodeFloatComputedDict = {}
+                    mark_observations_as_internal_results(current_results[result_key], internal_results)
+                    compute_flow_graph_internal_external_results(comp_graph_flow, current_results[result_key], internal_results, external_results)
                     compute_hierarchy_aggregate_internal_external_results(interfacetype_hierarchies, None, current_results[result_key], internal_results, external_results)
                     compute_hierarchy_aggregate_internal_external_results(partof_hierarchies, scenario_partof_weights, current_results[result_key], internal_results, external_results)
 
@@ -1149,10 +1152,16 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
         return [Issue(IType.ERROR, e.args[0])]
 
 
-def compute_flow_graph_internal_external_results(comp_graph: ComputationGraph, results: NodeFloatComputedDict) \
-        -> Tuple[NodeFloatComputedDict, NodeFloatComputedDict]:
-    internal_results: NodeFloatComputedDict = {}
-    external_results: NodeFloatComputedDict = {}
+def mark_observations_as_internal_results(
+        results: NodeFloatComputedDict, internal_results: NodeFloatComputedDict) -> NoReturn:
+    for node, value in results.items():
+        if value.computed == Computed.No:
+            internal_results[node] = value
+
+
+def compute_flow_graph_internal_external_results(
+        comp_graph: ComputationGraph, results: NodeFloatComputedDict,
+        internal_results: NodeFloatComputedDict, external_results: NodeFloatComputedDict) -> NoReturn:
 
     for node in comp_graph.nodes:
         if comp_graph.direct_inputs(node):
@@ -1177,8 +1186,6 @@ def compute_flow_graph_internal_external_results(comp_graph: ComputationGraph, r
                 scope_value.name = node.name
                 external_results[node] = FloatComputedTuple(scope_value, Computed.Yes)
 
-    return internal_results, external_results
-
 
 def compute_hierarchy_aggregate_internal_external_results(
         tree: InterfaceNodeHierarchy, processors_relation_weights: Optional[ProcessorsRelationWeights],
@@ -1186,9 +1193,7 @@ def compute_hierarchy_aggregate_internal_external_results(
         internal_results: NodeFloatComputedDict, external_results: NodeFloatComputedDict) -> NoReturn:
     def compute(node: InterfaceNode) -> Tuple[Optional[FloatComputedTuple], Optional[FloatComputedTuple]]:
         if node not in internal_results and node not in external_results:
-            # TODO: seguro se calculan siempre los dos o ninguno?
-
-            if results[node].computed == Computed.No or not tree.get(node):
+            if not tree.get(node):
                 internal_results[node] = results[node]
             else:
                 # Node has children
