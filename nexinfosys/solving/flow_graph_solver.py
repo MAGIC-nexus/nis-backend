@@ -1113,10 +1113,10 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
 
                     internal_results: NodeFloatComputedDict = {}
                     external_results: NodeFloatComputedDict = {}
-                    mark_observations_as_internal_results(current_results[result_key], internal_results)
-                    compute_flow_graph_internal_external_results(comp_graph_flow, current_results[result_key], internal_results, external_results)
-                    compute_hierarchy_aggregate_internal_external_results(interfacetype_hierarchies, None, current_results[result_key], internal_results, external_results)
-                    compute_hierarchy_aggregate_internal_external_results(partof_hierarchies, scenario_partof_weights, current_results[result_key], internal_results, external_results)
+                    mark_observations_as_internal_results(results, internal_results)
+                    compute_flow_graph_internal_external_results(comp_graph_flow, results, internal_results, external_results)
+                    compute_hierarchy_aggregate_internal_external_results(partof_hierarchies, scenario_partof_weights, results, internal_results, external_results)
+                    compute_hierarchy_aggregate_internal_external_results(interfacetype_hierarchies, None, results, internal_results, external_results)
 
                     current_results[result_key._replace(scope=Scope.Internal)] = internal_results
                     current_results[result_key._replace(scope=Scope.External)] = external_results
