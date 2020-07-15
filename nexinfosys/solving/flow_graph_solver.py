@@ -1012,8 +1012,6 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
                 total_itype_dismissed_results: NodeFloatComputedDict = {}
                 total_partof_taken_results: NodeFloatComputedDict = {}
                 total_partof_dismissed_results: NodeFloatComputedDict = {}
-                total_flow_internal_results: NodeFloatComputedDict = {}
-                total_flow_external_results: NodeFloatComputedDict = {}
 
                 try:
                     comp_graph_flow, comp_graph_scale, comp_graph_scale_change = \
