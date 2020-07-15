@@ -32,7 +32,6 @@ import nexinfosys
 from nexinfosys import case_sensitive, SDMXConcept, get_global_configuration_variable
 from nexinfosys.ie_imports.google_drive import download_xlsx_file_id
 from nexinfosys.models import log_level
-from zipfile import ZipFile
 
 logger = logging.getLogger(__name__)
 logger.setLevel(log_level)
@@ -1547,6 +1546,9 @@ def binary_exp(exp1: str, exp2: str, oper: str) -> str:
 class FloatExp(SupportsFloat):
     """ Wrapper of the Float data type which includes a name and a string expression that will grow
         when operating with other objects """
+
+    ValueWeightPair = Tuple[Optional['FloatExp'], Optional['FloatExp']]
+
     def __init__(self, val: Union[float, int], name: Optional[str] = None, exp: Optional[str] = None):
         assert(isinstance(val, float) or isinstance(val, int))
         assert(name is None or isinstance(name, str))
@@ -1574,6 +1576,21 @@ class FloatExp(SupportsFloat):
     @staticmethod
     def get_float(f: Union[float, 'FloatExp']) -> float:
         return f.val if isinstance(f, FloatExp) else f
+
+    @staticmethod
+    def compute_weighted_addition(addends: List[ValueWeightPair]) -> Optional['FloatExp']:
+        result: Optional[FloatExp] = None
+
+        for value, weight in addends:
+            if value:
+                add_weight: bool = weight and weight != 1.0
+
+                if not result:
+                    result = value.assignable_copy() * weight if add_weight else value.assignable_copy()
+                else:
+                    result += value * weight if add_weight else value
+
+        return result
 
     def __add__(self, other: 'FloatExp') -> 'FloatExp':
         exp = binary_exp(self.name, other.name, "+")

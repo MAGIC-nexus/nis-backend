@@ -310,7 +310,7 @@ def prepare_and_solve_model(state: State, dynamic_scenario_parameters: Dict = No
     :param dynamic_scenario_parameters:
     :return:
     """
-    prepare_model(state)
+    # prepare_model(state)
     issues = call_solver(state, dynamic_scenario_parameters)
 
     return issues
