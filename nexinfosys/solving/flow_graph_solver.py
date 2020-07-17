@@ -821,6 +821,9 @@ def compute_partof_hierarchies(registry, interface_nodes: Set[InterfaceNode]) \
         for interface in interface_nodes:
             processor_interfaces.setdefault(interface.processor, []).append(interface)
 
+        # We don't process all processor part of relations directly, we process them as their children are not
+        # parents of another relation or they are already processed. This is, we start processing from the leaf
+        # nodes of the entire part of hierarchy.
         computable_processor_partof_relations: Dict[Processor, Set[Processor]] = {}
         for parent, children in processor_partof_relations.items():
             if parent not in visited_processors:
