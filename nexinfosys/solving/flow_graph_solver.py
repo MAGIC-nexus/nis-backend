@@ -806,60 +806,56 @@ def compute_interfacetype_hierarchies(registry, interface_nodes: Set[InterfaceNo
 
 def compute_partof_hierarchies(registry, interface_nodes: Set[InterfaceNode]) \
         -> Tuple[InterfaceNodeHierarchy, ProcessorsRelationWeights]:
+
+    def compute(parent: Processor):
+        """ Recursive computation for a depth-first search """
+        if parent in visited_processors:
+            return
+
+        for child in processor_partof_relations[parent]:
+            if child in processor_partof_relations:
+                compute(child)
+
+            # Add the interfaces of the child processor to the parent processor
+            for child_interface_node in processor_interface_nodes.get(child, {}):
+                parent_interface_node = InterfaceNode(child_interface_node.interface, parent)
+
+                # Search parent_interface in Set of existing interface_nodes, it can have same name but different
+                # combination of (type, orientation). For example, we define:
+                # - interface "ChildProcessor:Water" as (BlueWater, Input)
+                # - interface "ParentProcessor:Water" as (BlueWater, Output)
+                # In this case aggregating child interface results in a conflict in parent
+                if parent_interface_node in interface_nodes:
+                    for interface_node in interface_nodes:
+                        if interface_node == parent_interface_node:
+                            if (interface_node.type, interface_node.orientation) != (parent_interface_node.type, parent_interface_node.orientation):
+                                raise SolvingException(
+                                    f"Interface '{parent_interface_node}' already defined with type <{parent_interface_node.type}> and orientation <{parent_interface_node.orientation}> "
+                                    f"is being redefined with type <{interface_node.type}> and orientation <{interface_node.orientation}> when aggregating processor "
+                                    f"<{child_interface_node.processor_name}> to parent processor <{parent_interface_node.processor_name}>. Rename either the child or the parent interface.")
+                            break
+                else:
+                    interface_nodes.add(parent_interface_node)
+                    processor_interface_nodes.setdefault(parent_interface_node.processor, []).append(parent_interface_node)
+
+                hierarchies.setdefault(parent_interface_node, set()).add(child_interface_node)
+
+        visited_processors.add(parent)
+
     # Get the -PartOf- processor relations of the system
     processor_partof_relations, weights = get_processor_partof_relations(registry)
+
+    # Get the list of interfaces of each processor
+    processor_interface_nodes: Dict[Processor, List[InterfaceNode]] = {}
+    for node in interface_nodes:
+        processor_interface_nodes.setdefault(node.processor, []).append(node)
+
     hierarchies: InterfaceNodeHierarchy = {}
     visited_processors: Set[Processor] = set()
 
-    current_difference = len(processor_partof_relations)
-    previous_difference = current_difference + 1
-    while current_difference != 0 and previous_difference > current_difference:
-        previous_difference = current_difference
-
-        # Get the list of interfaces of each processor
-        processor_interfaces: Dict[Processor, List[InterfaceNode]] = {}
-        for interface in interface_nodes:
-            processor_interfaces.setdefault(interface.processor, []).append(interface)
-
-        # We don't process all processor part of relations directly, we process them as their children are not
-        # parents of another relation or they are already processed. This is, we start processing from the leaf
-        # nodes of the entire part of hierarchy.
-        computable_processor_partof_relations: Dict[Processor, Set[Processor]] = {}
-        for parent, children in processor_partof_relations.items():
-            if parent not in visited_processors:
-                children_to_visit = children.intersection(processor_partof_relations.keys())
-                if not children_to_visit or children_to_visit <= visited_processors:
-                    computable_processor_partof_relations[parent] = children
-
-        for parent_processor, child_processors in computable_processor_partof_relations.items():
-            for child_processor in child_processors:
-                for child_interface in processor_interfaces.get(child_processor, {}):
-                    parent_interface = InterfaceNode(child_interface.interface, parent_processor)
-
-                    # Search parent_interface in Set of existing interface_nodes, it can have same name but different
-                    # combination of (type, orientation). For example, we define:
-                    # - interface "ChildProcessor:Water" as (BlueWater, Input)
-                    # - interface "ParentProcessor:Water" as (BlueWater, Output)
-                    # In this case aggregating child interface results in a conflict in parent
-                    if parent_interface in interface_nodes:
-                        for interface in interface_nodes:
-                            if interface == parent_interface:
-                                if (interface.type, interface.orientation) != (parent_interface.type, parent_interface.orientation):
-                                    raise SolvingException(
-                                        f"Interface '{parent_interface}' already defined with type <{parent_interface.type}> and orientation <{parent_interface.orientation}> "
-                                        f"is being redefined with type <{interface.type}> and orientation <{interface.orientation}> when aggregating processor "
-                                        f"<{child_interface.processor_name}> to parent processor <{parent_interface.processor_name}>. Rename either the child or the parent interface.")
-                                break
-                    else:
-                        interface_nodes.add(parent_interface)
-
-                    hierarchies.setdefault(parent_interface, set()).add(child_interface)
-
-            visited_processors.add(parent_processor)
-
-        current_difference = len(processor_partof_relations) - len(visited_processors)
-
-    assert len(processor_partof_relations) == len(visited_processors)
+    # Iterate over all relations
+    for parent_processor in processor_partof_relations:
+        compute(parent_processor)
 
     return hierarchies, weights
 
