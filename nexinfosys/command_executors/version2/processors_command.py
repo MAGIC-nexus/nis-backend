@@ -1,6 +1,6 @@
 import json
 import re
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 
 from nexinfosys import CommandField
 from nexinfosys.command_executors import BasicCommand, CommandExecutionError, subrow_issue_message
@@ -231,13 +231,12 @@ class ProcessorsCommand(BasicCommand):
         else:
             parent_processor = None
 
+        behave_as_processor: Optional[Processor] = None
         if field_values.get("behave_as_processor"):
             try:
                 behave_as_processor = self._get_processor_from_field("behave_as_processor")
             except CommandExecutionError:
                 self._add_issue(IType.WARNING, f"Specified 'behave as' processor, '{field_values.get('behave_as_processor')}', does not exist, value ignored"+subrow_issue_message(subrow))
-        else:
-            behave_as_processor = None
 
         # Find or create processor and REGISTER it in "glb_idx"
         # TODO Now, only Simple name allowed
