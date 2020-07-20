@@ -816,8 +816,14 @@ def compute_partof_hierarchies(registry, interface_nodes: Set[InterfaceNode]) \
             if child in processor_partof_relations:
                 compute(child)
 
+            child_interface_nodes: List[InterfaceNode] = processor_interface_nodes.get(child, [])
+
+            if child_interface_nodes and (parent, child) in behave_as_differences:
+                # Remove interfaces from child that doesn't belong to behave_as_processor
+                child_interface_nodes = [n for n in child_interface_nodes if n.interface_name not in behave_as_differences[(parent, child)]]
+
             # Add the interfaces of the child processor to the parent processor
-            for child_interface_node in processor_interface_nodes.get(child, {}):
+            for child_interface_node in child_interface_nodes:
                 parent_interface_node = InterfaceNode(child_interface_node.interface, parent)
 
                 # Search parent_interface in Set of existing interface_nodes, it can have same name but different
@@ -843,12 +849,15 @@ def compute_partof_hierarchies(registry, interface_nodes: Set[InterfaceNode]) \
         visited_processors.add(parent)
 
     # Get the -PartOf- processor relations of the system
-    processor_partof_relations, weights = get_processor_partof_relations(registry)
+    processor_partof_relations, weights, behave_as_dependencies = get_processor_partof_relations(registry)
 
     # Get the list of interfaces of each processor
     processor_interface_nodes: Dict[Processor, List[InterfaceNode]] = {}
     for node in interface_nodes:
         processor_interface_nodes.setdefault(node.processor, []).append(node)
+
+    check_behave_as_dependencies(behave_as_dependencies, processor_interface_nodes)
+    behave_as_differences = compute_behave_as_differences(behave_as_dependencies, processor_interface_nodes)
 
     hierarchies: InterfaceNodeHierarchy = {}
     visited_processors: Set[Processor] = set()
@@ -860,20 +869,51 @@ def compute_partof_hierarchies(registry, interface_nodes: Set[InterfaceNode]) \
     return hierarchies, weights
 
 
+def check_behave_as_dependencies(
+        behave_as_dependencies: Dict[Tuple[Processor, Processor], Processor],
+        processor_interface_nodes: Dict[Processor, List[InterfaceNode]]):
+    """ Make a check for the 'BehaveAs' property that can be defined in the 'BareProcessors' command.
+        If defined, all the interfaces of the 'BehaveAs' processor must be specified in the selected processor."""
+    for (_, child_processor), behave_as_processor in behave_as_dependencies.items():
+        child_interfaces = {n.interface_name for n in processor_interface_nodes[child_processor]}
+        behave_as_interfaces = {n.interface_name for n in processor_interface_nodes[behave_as_processor]}
+        difference_interfaces = behave_as_interfaces.difference(child_interfaces)
+        if difference_interfaces:
+            raise SolvingException(
+                f"The processor '{child_processor.name}' cannot behave as processor '{behave_as_processor.name}' on "
+                f"aggregations because it doesn't have these interfaces: {difference_interfaces}")
+
+
+def compute_behave_as_differences(
+        behave_as_dependencies: Dict[Tuple[Processor, Processor], Processor],
+        processor_interface_nodes: Dict[Processor, List[InterfaceNode]]) -> Dict[Tuple[Processor, Processor], Set[str]]:
+    """ Compute the difference in interfaces from a processor and the associated BehaveAs processor """
+    behave_as_differences: Dict[Tuple[Processor, Processor], Set[str]] = {}
+    for (parent_processor, child_processor), behave_as_processor in behave_as_dependencies.items():
+        child_interfaces = {n.interface_name for n in processor_interface_nodes[child_processor]}
+        behave_as_interfaces = {n.interface_name for n in processor_interface_nodes[behave_as_processor]}
+        behave_as_differences[(parent_processor, child_processor)] = child_interfaces.difference(behave_as_interfaces)
+
+    return behave_as_differences
+
+
 def get_processor_partof_relations(glb_idx: PartialRetrievalDictionary) \
-        -> Tuple[Dict[Processor, Set[Processor]], ProcessorsRelationWeights]:
+        -> Tuple[Dict[Processor, Set[Processor]], ProcessorsRelationWeights, Dict[Tuple[Processor, Processor], Processor]]:
     """ Get in a dictionary the -PartOf- processor relations, ignoring Archetype processors """
     relations: Dict[Processor, Set[Processor]] = {}
     weights: ProcessorsRelationWeights = {}
+    behave_as_dependencies: Dict[Tuple[Processor, Processor], Processor] = {}
 
-    for parent, child, weight in [(r.parent_processor, r.child_processor, r.weight)
-                                  for r in glb_idx.get(ProcessorsRelationPartOfObservation.partial_key())
-                                  if "Archetype" not in [r.parent_processor.instance_or_archetype,
-                                                         r.child_processor.instance_or_archetype]]:
+    for parent, child, weight, behave_as_processor in \
+            [(r.parent_processor, r.child_processor, r.weight, r.behave_as)
+             for r in glb_idx.get(ProcessorsRelationPartOfObservation.partial_key())
+             if "Archetype" not in [r.parent_processor.instance_or_archetype, r.child_processor.instance_or_archetype]]:
         relations.setdefault(parent, set()).add(child)
         weights[(parent, child)] = weight
+        if behave_as_processor:
+            behave_as_dependencies[(parent, child)] = behave_as_processor
 
-    return relations, weights
+    return relations, weights, behave_as_dependencies
 
 
 def compute_hierarchy_aggregate_results(
