@@ -66,10 +66,19 @@ class Computed(Enum):
     Yes = 2
 
 
+class ComputationSource(Enum):
+    Flow = 1
+    Scale = 2
+    ScaleChange = 3
+    PartOfAggregation = 4
+    InterfaceTypeAggregation = 5
+
+
 class FloatComputedTuple(NamedTuple):
     value: FloatExp
     computed: Computed
     observer: str = None
+    computation_source: ComputationSource = None
 
 
 class ConflictResolution(Enum):
@@ -453,7 +462,8 @@ def split_observations_by_relativeness(observations_by_time: TimeObservationsTyp
 
 def compute_graph_results(comp_graph: ComputationGraph,
                           existing_results: NodeFloatComputedDict,
-                          previous_known_nodes: Set[InterfaceNode]) -> NodeFloatComputedDict:
+                          previous_known_nodes: Set[InterfaceNode],
+                          computation_source: ComputationSource) -> NodeFloatComputedDict:
     # Filter results in graph
     graph_params: NodeFloatDict = {k: v.value for k, v in existing_results.items() if k in comp_graph.nodes}
 
@@ -479,7 +489,7 @@ def compute_graph_results(comp_graph: ComputationGraph,
     for k, v in results.items():
         if v is not None:
             v.name = k.name
-            return_values[k] = FloatComputedTuple(v, Computed.Yes)
+            return_values[k] = FloatComputedTuple(v, Computed.Yes, computation_source=computation_source)
 
     return return_values
 
@@ -921,6 +931,7 @@ def compute_hierarchy_aggregate_results(
         prev_computed_values: NodeFloatComputedDict,
         conflicting_data_policy: ConflictingDataResolutionPolicy,
         missing_values_policy: MissingValueResolutionPolicy,
+        computation_source: ComputationSource,
         processors_relation_weights: ProcessorsRelationWeights = None) \
         -> Tuple[NodeFloatComputedDict, NodeFloatComputedDict, NodeFloatComputedDict]:
 
@@ -955,7 +966,7 @@ def compute_hierarchy_aggregate_results(
         if sum_children is not None:
             # New value has been computed
             sum_children.name = node.name
-            new_computed_value = FloatComputedTuple(sum_children, Computed.Yes)
+            new_computed_value = FloatComputedTuple(sum_children, Computed.Yes, computation_source=computation_source)
 
             if float_value is not None:
                 # Conflict here: applies strategy
@@ -1084,29 +1095,32 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
                             print(f"********************* Solving iteration: {iteration_number}")
                             previous_len_results = len(results)
 
-                            new_results = compute_graph_results(comp_graph_flow, results, flow_last_known_nodes)
+                            new_results = compute_graph_results(comp_graph_flow, results, flow_last_known_nodes, ComputationSource.Flow)
                             results.update(new_results)
                             flow_last_known_nodes = set(results.keys())
 
-                            new_results = compute_graph_results(comp_graph_scale, results, scale_last_known_nodes)
+                            new_results = compute_graph_results(comp_graph_scale, results, scale_last_known_nodes, ComputationSource.Scale)
                             results.update(new_results)
                             scale_last_known_nodes = set(results.keys())
 
-                            new_results = compute_graph_results(comp_graph_scale_change, results, scale_change_last_known_nodes)
+                            new_results = compute_graph_results(comp_graph_scale_change, results, scale_change_last_known_nodes, ComputationSource.ScaleChange)
                             results.update(new_results)
                             scale_change_last_known_nodes = set(results.keys())
 
-                            new_results, itype_taken_results, itype_dismissed_results = compute_hierarchy_aggregate_results(
-                                interfacetype_hierarchies, results, aggregations, conflicting_data_policy, missing_value_policy)
+                            new_results, itype_taken_results, itype_dismissed_results = \
+                                compute_hierarchy_aggregate_results(
+                                    interfacetype_hierarchies, results, aggregations, conflicting_data_policy,
+                                    missing_value_policy, ComputationSource.InterfaceTypeAggregation)
 
                             aggregations.update(new_results)
                             results.update(new_results)
                             total_itype_taken_results.update(itype_taken_results)
                             total_itype_dismissed_results.update(itype_dismissed_results)
 
-                            new_results, partof_taken_results, partof_dismissed_results = compute_hierarchy_aggregate_results(
-                                partof_hierarchies, results, aggregations, conflicting_data_policy, missing_value_policy,
-                                scenario_partof_weights)
+                            new_results, partof_taken_results, partof_dismissed_results = \
+                                compute_hierarchy_aggregate_results(
+                                    partof_hierarchies, results, aggregations, conflicting_data_policy,
+                                    missing_value_policy, ComputationSource.PartOfAggregation, scenario_partof_weights)
 
                             aggregations.update(new_results)
                             results.update(new_results)
@@ -1152,8 +1166,12 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
                     external_results: NodeFloatComputedDict = {}
                     mark_observations_as_internal_results(results, internal_results)
                     compute_flow_graph_internal_external_results(comp_graph_flow, results, internal_results, external_results)
-                    compute_hierarchy_aggregate_internal_external_results(partof_hierarchies, scenario_partof_weights, results, internal_results, external_results)
-                    compute_hierarchy_aggregate_internal_external_results(interfacetype_hierarchies, None, results, internal_results, external_results)
+                    compute_hierarchy_aggregate_internal_external_results(
+                        partof_hierarchies, scenario_partof_weights, results, internal_results, external_results,
+                        ComputationSource.PartOfAggregation)
+                    compute_hierarchy_aggregate_internal_external_results(
+                        interfacetype_hierarchies, None, results, internal_results, external_results,
+                        ComputationSource.InterfaceTypeAggregation)
 
                     current_results[result_key._replace(scope=Scope.Internal)] = internal_results
                     current_results[result_key._replace(scope=Scope.External)] = external_results
@@ -1171,6 +1189,7 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
                     {"RoegenType": node.roegen_type if node else "-",
                      "Value": float_computed.value.val,
                      "Computed": float_computed.computed.name,
+                     "ComputationSource": float_computed.computation_source.name if float_computed.computation_source else None,
                      "Observer": float_computed.observer,
                      "Expression": float_computed.value.exp,
                      "Unit": node.unit if node else "-",
@@ -1216,18 +1235,19 @@ def compute_flow_graph_internal_external_results(
             if internal_addends:
                 scope_value = FloatExp.compute_weighted_addition(internal_addends)
                 scope_value.name = node.name
-                internal_results[node] = FloatComputedTuple(scope_value, Computed.Yes)
+                internal_results[node] = FloatComputedTuple(scope_value, Computed.Yes, computation_source=ComputationSource.Flow)
 
             if external_addends:
                 scope_value = FloatExp.compute_weighted_addition(external_addends)
                 scope_value.name = node.name
-                external_results[node] = FloatComputedTuple(scope_value, Computed.Yes)
+                external_results[node] = FloatComputedTuple(scope_value, Computed.Yes, computation_source=ComputationSource.Flow)
 
 
 def compute_hierarchy_aggregate_internal_external_results(
         tree: InterfaceNodeHierarchy, processors_relation_weights: Optional[ProcessorsRelationWeights],
         results: NodeFloatComputedDict,
-        internal_results: NodeFloatComputedDict, external_results: NodeFloatComputedDict) -> NoReturn:
+        internal_results: NodeFloatComputedDict, external_results: NodeFloatComputedDict,
+        computation_source: ComputationSource) -> NoReturn:
     def compute(node: InterfaceNode) -> Tuple[Optional[FloatComputedTuple], Optional[FloatComputedTuple]]:
         if node not in internal_results and node not in external_results:
             if not tree.get(node):
@@ -1260,12 +1280,12 @@ def compute_hierarchy_aggregate_internal_external_results(
                 if internal_addends:
                     scope_value = FloatExp.compute_weighted_addition(internal_addends)
                     scope_value.name = node.name
-                    internal_results[node] = FloatComputedTuple(scope_value, Computed.Yes)
+                    internal_results[node] = FloatComputedTuple(scope_value, Computed.Yes, computation_source=computation_source)
 
                 if external_addends:
                     scope_value = FloatExp.compute_weighted_addition(external_addends)
                     scope_value.name = node.name
-                    external_results[node] = FloatComputedTuple(scope_value, Computed.Yes)
+                    external_results[node] = FloatComputedTuple(scope_value, Computed.Yes, computation_source=computation_source)
 
         return internal_results.get(node), external_results.get(node)
 
