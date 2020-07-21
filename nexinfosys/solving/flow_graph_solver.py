@@ -1231,7 +1231,8 @@ def compute_hierarchy_aggregate_internal_external_results(
     def compute(node: InterfaceNode) -> Tuple[Optional[FloatComputedTuple], Optional[FloatComputedTuple]]:
         if node not in internal_results and node not in external_results:
             if not tree.get(node):
-                internal_results[node] = results[node]
+                if node in results:
+                    internal_results[node] = results[node]
             else:
                 # Node has children
                 internal_addends: List[FloatExp.ValueWeightPair] = []
