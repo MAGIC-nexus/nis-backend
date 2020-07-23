@@ -15,7 +15,8 @@ import tempfile
 import urllib
 import urllib.request
 import uuid
-from functools import partial
+from functools import partial, reduce
+from operator import add
 from typing import IO, List, Tuple, Dict, Any, Optional, Iterable, Callable, TypeVar, Type, Union, SupportsFloat
 from urllib.parse import urlparse
 from uuid import UUID
@@ -1543,6 +1544,11 @@ def binary_exp(exp1: str, exp2: str, oper: str) -> str:
     return brackets(exp1) + oper + brackets(exp2)
 
 
+def multiary_exp(exps: List[str], oper: str) -> str:
+    """ Join multiple string expressions with an operator """
+    return oper.join([brackets(exp) for exp in exps])
+
+
 class FloatExp(SupportsFloat):
     """ Wrapper of the Float data type which includes a name and a string expression that will grow
         when operating with other objects """
@@ -1579,18 +1585,16 @@ class FloatExp(SupportsFloat):
 
     @staticmethod
     def compute_weighted_addition(addends: List[ValueWeightPair]) -> Optional['FloatExp']:
-        result: Optional[FloatExp] = None
+        filtered_addends = [(v, w) for v, w in addends if v]
 
-        for value, weight in addends:
-            if value:
-                add_weight: bool = weight and weight != 1.0
-
-                if not result:
-                    result = value.assignable_copy() * weight if add_weight else value.assignable_copy()
-                else:
-                    result += value * weight if add_weight else value
-
-        return result
+        if filtered_addends:
+            exps = [binary_exp(value.name, weight.name, "*") if weight and weight != 1.0 else value.name
+                    for value, weight in filtered_addends]
+            exp = exps[0] if len(exps) == 1 else multiary_exp(exps, "+")
+            value = reduce(add, [value.val * weight.val if weight else value.val for value, weight in filtered_addends])
+            return FloatExp(value, exp, exp)
+        else:
+            return None
 
     def __add__(self, other: 'FloatExp') -> 'FloatExp':
         exp = binary_exp(self.name, other.name, "+")
