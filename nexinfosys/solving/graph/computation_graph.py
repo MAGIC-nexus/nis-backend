@@ -249,7 +249,7 @@ class ComputationGraph:
                  the process.
         """
         def solve_inputs(inputs: List[Tuple[Node, Weight]], split: bool) -> Optional[Value]:
-            result = None
+            input_values: List[Tuple[Value, Weight]] = []
 
             for n, weight in sorted(inputs):
                 res_backward = solve_backward(n)
@@ -260,14 +260,11 @@ class ComputationGraph:
                         return res_backward * weight
                 else:
                     if res_backward is not None and weight is not None:
-                        if result is None:
-                            result = res_backward * weight
-                        else:
-                            result += res_backward * weight
+                        input_values.append((res_backward, weight))
                     else:
                         return None
 
-            return result
+            return Value.compute_weighted_addition(input_values)
 
         def solve_backward(node: Node) -> Optional[Value]:
             # Is the node already computed?
