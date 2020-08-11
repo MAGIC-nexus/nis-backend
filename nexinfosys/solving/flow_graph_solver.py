@@ -488,7 +488,7 @@ def compute_graph_results(comp_graph: ComputationGraph,
     return_values: NodeFloatComputedDict = {}
     for k, v in results.items():
         if v is not None:
-            v.name = k.name
+            # v.name = k.name
             return_values[k] = FloatComputedTuple(v, Computed.Yes, computation_source=computation_source)
 
     return return_values

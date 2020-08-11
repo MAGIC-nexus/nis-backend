@@ -289,6 +289,10 @@ class ComputationGraph:
             if result is None:
                 result = solve_inputs(self.reverse_inputs(node), split[EdgeType.DIRECT.value])
 
+            if result is not None:
+                # TODO: this line is not generic
+                result.name = node.name
+
             values[node] = result
             return result
 
