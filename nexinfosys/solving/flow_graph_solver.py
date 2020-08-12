@@ -44,7 +44,7 @@ from nexinfosys.command_generators.parser_field_parsers import string_to_ast, ex
     is_month, indicator_expression, parse_string_as_simple_ident_list, number_interval
 from nexinfosys.common.constants import SubsystemType, Scope
 from nexinfosys.common.helper import create_dictionary, PartialRetrievalDictionary, ifnull, istr, strcmp, \
-    FloatExp, precedes_in_list, replace_string_from_dictionary, brackets
+    FloatExp, precedes_in_list, replace_string_from_dictionary, brackets, get_interfaces_and_weights_from_expression
 from nexinfosys.ie_exports.xml_export import export_model_to_xml
 from nexinfosys.model_services import get_case_study_registry_objects, State
 from nexinfosys.models import CodeImmutable
@@ -1191,7 +1191,7 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
                      "Computed": float_computed.computed.name,
                      "ComputationSource": float_computed.computation_source.name if float_computed.computation_source else None,
                      "Observer": float_computed.observer,
-                     "Expression": float_computed.value.exp,
+                     "Expression": str(float_computed.value.exp),
                      "Unit": node.unit if node else "-",
                      "Level": node.processor.attributes.get('level', '') if node else "-",
                      "System": node.system if node else "-",
@@ -1203,16 +1203,43 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
 
         export_solver_data(datasets, data, dynamic_scenario, glb_idx, global_parameters, problem_statement)
 
+        dataframe_sankey = compute_dataframe_sankey(total_results)
+        dataset_name = "flow_graph_solution_sankey"
+        datasets[dataset_name] = get_dataset(dataframe_sankey, dataset_name, "Flow Graph Solution - Sankey")
+
         return issues
     except SolvingException as e:
         return [Issue(IType.ERROR, e.args[0])]
+
+
+def compute_dataframe_sankey(results: ResultDict) -> pd.DataFrame:
+    data: List[Dict] = []
+    for result_key, node_floatcomputed_dict in results.items():
+        if result_key.scope == Scope.Total and result_key.conflict_itype != ConflictResolution.Dismissed \
+           and result_key.conflict_partof != ConflictResolution.Dismissed:
+
+            for node, float_computed in node_floatcomputed_dict.items():
+                for interface_fullname, weight in get_interfaces_and_weights_from_expression(float_computed.value):
+                    data.append(
+                        {"Scenario": result_key.scenario,
+                         "Period": result_key.period,
+                         "OriginProcessor": interface_fullname.split(":")[0],
+                         "OriginInterface": interface_fullname.split(":")[1],
+                         "DestinationProcessor": node.processor_name,
+                         "DestinationInterface": node.interface_name,
+                         "RelationType": float_computed.computation_source.name if float_computed.computation_source else None,
+                         "Quantity": weight
+                         }
+                    )
+
+    return pd.DataFrame(data)
 
 
 def mark_observations_as_internal_results(
         results: NodeFloatComputedDict, internal_results: NodeFloatComputedDict) -> NoReturn:
     for node, value in results.items():
         if value.computed == Computed.No:
-            internal_results[node] = value
+            internal_results[node] = deepcopy(value)
 
 
 def compute_flow_graph_internal_external_results(
@@ -1225,7 +1252,7 @@ def compute_flow_graph_internal_external_results(
             external_addends: List[FloatExp.ValueWeightPair] = []
 
             for input_node, weight in sorted(comp_graph.direct_inputs(node)):
-                input_value = results[input_node]
+                input_value = deepcopy(results[input_node])
                 same_system = node.system == input_node.system and node.subsystem.is_same_scope(input_node.subsystem)
                 if same_system:
                     internal_addends.append((input_value.value, weight))
@@ -1252,7 +1279,7 @@ def compute_hierarchy_aggregate_internal_external_results(
         if node not in internal_results and node not in external_results:
             if not tree.get(node):
                 if node in results:
-                    internal_results[node] = results[node]
+                    internal_results[node] = deepcopy(results[node])
             else:
                 # Node has children
                 internal_addends: List[FloatExp.ValueWeightPair] = []
@@ -1274,7 +1301,7 @@ def compute_hierarchy_aggregate_internal_external_results(
                             child_external_value.value.name = Scope.External.name + brackets(child_node.name)
                             external_addends.append((child_external_value.value, weight))
                     else:
-                        child_value = results[child_node]
+                        child_value = deepcopy(results[child_node])
                         external_addends.append((child_value.value, weight))
 
                 if internal_addends:

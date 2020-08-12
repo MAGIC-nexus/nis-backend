@@ -15,8 +15,10 @@ import tempfile
 import urllib
 import urllib.request
 import uuid
+from abc import abstractmethod
+from enum import Enum
 from functools import partial, reduce
-from operator import add
+from operator import add, mul, sub, truediv
 from typing import IO, List, Tuple, Dict, Any, Optional, Iterable, Callable, TypeVar, Type, Union, SupportsFloat
 from urllib.parse import urlparse
 from uuid import UUID
@@ -1534,35 +1536,62 @@ class UnitConversion:
         return FloatOrString.multiply_with_float(weight, ratio)
 
 
+class ArithmeticOperator(Enum):
+    ADD = ("+", add)
+    MUL = ("*", mul)
+    SUB = ("-", sub)
+    DIV = ("/", truediv)
+    ABS = ("abs", abs)
+
+    def __init__(self, symbol: str, operation: Callable):
+        self.symbol = symbol
+        self.operation = operation
+
+
+class ArithmeticExpression:
+    def __init__(self, operator: ArithmeticOperator, operands: List['IArithmeticExpression']):
+        self.operator = operator
+        self.operands = operands
+
+    def __repr__(self):
+        return self.__str__()
+
+    def __str__(self):
+        if len(self.operands) == 1:
+            return f"{self.operator.symbol}({self.operands[0].get_expression()})"
+        else:
+            return self.operator.symbol.join([f"({o.get_expression()})" for o in self.operands])
+
+
+class IArithmeticExpression:
+    @abstractmethod
+    def get_expression(self) -> Union[str, ArithmeticExpression]:
+        raise NotImplementedError
+
+    @abstractmethod
+    def get_value(self) -> Any:
+        raise NotImplementedError
+
+
 def brackets(exp: str) -> str:
     """ Surround a string expression with brackets """
     return "(" + exp + ")"
 
 
-def binary_exp(exp1: str, exp2: str, oper: str) -> str:
-    """ Join two string expressions with an operator """
-    return brackets(exp1) + oper + brackets(exp2)
-
-
-def multiary_exp(exps: List[str], oper: str) -> str:
-    """ Join multiple string expressions with an operator """
-    return oper.join([brackets(exp) for exp in exps])
-
-
-class FloatExp(SupportsFloat):
+class FloatExp(SupportsFloat, IArithmeticExpression):
     """ Wrapper of the Float data type which includes a name and a string expression that will grow
         when operating with other objects """
 
     ValueWeightPair = Tuple[Optional['FloatExp'], Optional['FloatExp']]
 
-    def __init__(self, val: Union[float, int], name: Optional[str] = None, exp: Optional[str] = None):
+    def __init__(self, val: Union[float, int], name: Optional[str] = None, exp: Union[str, ArithmeticExpression] = None):
         assert(isinstance(val, float) or isinstance(val, int))
         assert(name is None or isinstance(name, str))
-        assert(exp is None or isinstance(exp, str))
+        assert(exp is None or isinstance(exp, str) or isinstance(exp, ArithmeticExpression))
 
         self.val = float(val)
         self.exp = str(self.val) if exp is None else exp
-        self.name = self.exp if name is None else name
+        self.name = str(self.exp) if name is None else name
 
     def __float__(self) -> float:
         """ Needed for abc SupportsFloat used in match.isclose() """
@@ -1570,14 +1599,16 @@ class FloatExp(SupportsFloat):
 
     def __round__(self, n=None):
         exp = f"round({self.name}{'' if n is None else ','+str(n)})"
-        return FloatExp(float(round(self.val, n)), exp, exp)
+        return FloatExp(float(round(self.val, n)), exp, self.exp)
 
     def __abs__(self):
-        exp = f"abs({self.name})"
-        return FloatExp(abs(self.val), exp, exp)
+        return self._operate_unary(ArithmeticOperator.ABS)
 
-    def assignable_copy(self):
-        return FloatExp(self.val, self.name, self.name)
+    def get_expression(self) -> Union[str, ArithmeticExpression]:
+        return self.exp if isinstance(self.exp, ArithmeticExpression) else self.name
+
+    def get_value(self) -> Any:
+        return self
 
     @staticmethod
     def get_float(f: Union[float, 'FloatExp']) -> float:
@@ -1588,29 +1619,33 @@ class FloatExp(SupportsFloat):
         filtered_addends = [(v, w) for v, w in addends if v]
 
         if filtered_addends:
-            exps = [binary_exp(value.name, weight.name, "*") if weight and weight != 1.0 else value.name
-                    for value, weight in filtered_addends]
-            exp = exps[0] if len(exps) == 1 else multiary_exp(exps, "+")
-            value = reduce(add, [value.val * weight.val if weight else value.val for value, weight in filtered_addends])
-            return FloatExp(value, exp, exp)
+            values = [value * weight if weight and weight != 1.0 else value for value, weight in filtered_addends]
+            exp = values[0].name if len(values) == 1 \
+                else ArithmeticExpression(ArithmeticOperator.ADD, values)
+            value = reduce(add, [value.val for value in values])
+            return FloatExp(value, str(exp), exp)
         else:
             return None
 
+    def _operate_unary(self, operator: ArithmeticOperator) -> 'FloatExp':
+        new_exp = ArithmeticExpression(operator, [self])
+        return FloatExp(operator.operation(self.val), str(new_exp), new_exp)
+
+    def _operate_binary(self, operator: ArithmeticOperator, other: 'FloatExp') -> 'FloatExp':
+        new_exp = ArithmeticExpression(operator, [self, other])
+        return FloatExp(operator.operation(self.val, other.val), str(new_exp), new_exp)
+
     def __add__(self, other: 'FloatExp') -> 'FloatExp':
-        exp = binary_exp(self.name, other.name, "+")
-        return FloatExp(self.val + other.val, exp, exp)
+        return self._operate_binary(ArithmeticOperator.ADD, other)
 
     def __sub__(self, other: 'FloatExp') -> 'FloatExp':
-        exp = binary_exp(self.name, other.name, "-")
-        return FloatExp(self.val - other.val, exp, exp)
+        return self._operate_binary(ArithmeticOperator.SUB, other)
 
     def __mul__(self, other: 'FloatExp') -> 'FloatExp':
-        exp = binary_exp(self.name, other.name, "*")
-        return FloatExp(self.val * other.val, exp, exp)
+        return self._operate_binary(ArithmeticOperator.MUL, other)
 
     def __truediv__(self, other: 'FloatExp') -> 'FloatExp':
-        exp = binary_exp(self.name, other.name, "/")
-        return FloatExp(self.val / other.val, exp, exp)
+        return self._operate_binary(ArithmeticOperator.DIV, other)
 
     def __eq__(self, other: Union[float, 'FloatExp']) -> bool:
         return self.val == FloatExp.get_float(other)
@@ -1623,6 +1658,49 @@ class FloatExp(SupportsFloat):
 
     def __repr__(self):
         return str(self)
+
+
+def get_interfaces_and_weights_from_expression(exp: IArithmeticExpression) -> List[Tuple[str, float]]:
+    def is_interface(s: str) -> bool:
+        return s.find(":") > 0
+
+    def find_interface(exp: IArithmeticExpression) -> Optional[Tuple[str, float]]:
+        if isinstance(exp.get_expression(), str):
+            if is_interface(exp.get_expression()):
+                return exp.get_expression(), 1.0
+            else:
+                print(f"Name not interface: {exp.get_expression()}")
+        elif exp.get_expression().operator == ArithmeticOperator.MUL:
+            interfaces_list: List[Tuple[str, float]] = []
+            weight: float = 1.0
+            for o in exp.get_expression().operands:
+                i = find_interface(o)
+                if i:
+                    interfaces_list.append(i)
+                else:
+                    weight *= o.get_value().val
+
+            if len(interfaces_list) == 1:
+                return interfaces_list[0][0], interfaces_list[0][1] * weight
+            elif len(interfaces_list) > 1:
+                print(f"Error multiple interfaces: {interfaces_list}")
+        else:
+            print(f"Error operator not allowed: {exp.get_expression().operator}")
+
+        return None
+
+    interfaces: List[Tuple[str, float]] = []
+    if isinstance(exp.get_expression(), ArithmeticExpression) and exp.get_expression().operator == ArithmeticOperator.ADD:
+        for operand in exp.get_expression().operands:
+            i = find_interface(operand)
+            if i:
+                interfaces.append(i)
+    else:
+        i = find_interface(exp)
+        if i:
+            interfaces.append(i)
+
+    return interfaces
 
 
 def add_label_columns_to_dataframe(ds_name, df, prd):
