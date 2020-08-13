@@ -1219,7 +1219,7 @@ def compute_dataframe_sankey(results: ResultDict) -> pd.DataFrame:
            and result_key.conflict_partof != ConflictResolution.Dismissed:
 
             for node, float_computed in node_floatcomputed_dict.items():
-                for interface_fullname, weight in get_interfaces_and_weights_from_expression(float_computed.value):
+                for interface_fullname, weight in get_interfaces_and_weights_from_expression(float_computed.value.exp):
                     data.append(
                         {"Scenario": result_key.scenario,
                          "Period": result_key.period,

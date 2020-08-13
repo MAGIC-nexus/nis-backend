@@ -1548,29 +1548,29 @@ class ArithmeticOperator(Enum):
         self.operation = operation
 
 
+class ArithmeticOperand:
+    def __init__(self, name: str, value: float):
+        self.name = name
+        self.value = value
+
+    def __str__(self):
+        return self.name
+
+
 class ArithmeticExpression:
-    def __init__(self, operator: ArithmeticOperator, operands: List['IArithmeticExpression']):
+    def __init__(self, operator: ArithmeticOperator, operands: List[Union[ArithmeticOperand, 'ArithmeticExpression']], value: float):
         self.operator = operator
         self.operands = operands
+        self.value = value
 
     def __repr__(self):
         return self.__str__()
 
     def __str__(self):
         if len(self.operands) == 1:
-            return f"{self.operator.symbol}({self.operands[0].get_expression()})"
+            return f"{self.operator.symbol}({self.operands[0]})"
         else:
-            return self.operator.symbol.join([f"({o.get_expression()})" for o in self.operands])
-
-
-class IArithmeticExpression:
-    @abstractmethod
-    def get_expression(self) -> Union[str, ArithmeticExpression]:
-        raise NotImplementedError
-
-    @abstractmethod
-    def get_value(self) -> Any:
-        raise NotImplementedError
+            return self.operator.symbol.join([f"({o})" for o in self.operands])
 
 
 def brackets(exp: str) -> str:
@@ -1578,19 +1578,27 @@ def brackets(exp: str) -> str:
     return "(" + exp + ")"
 
 
-class FloatExp(SupportsFloat, IArithmeticExpression):
+class FloatExp(SupportsFloat):
     """ Wrapper of the Float data type which includes a name and a string expression that will grow
         when operating with other objects """
 
     ValueWeightPair = Tuple[Optional['FloatExp'], Optional['FloatExp']]
 
-    def __init__(self, val: Union[float, int], name: Optional[str] = None, exp: Union[str, ArithmeticExpression] = None):
-        assert(isinstance(val, float) or isinstance(val, int))
-        assert(name is None or isinstance(name, str))
-        assert(exp is None or isinstance(exp, str) or isinstance(exp, ArithmeticExpression))
+    def __init__(self, val: Union[float, int], name: Optional[str] = None,
+                 exp: Union[str, ArithmeticExpression] = None):
+        assert (isinstance(val, float) or isinstance(val, int))
+        assert (name is None or isinstance(name, str))
+        assert (exp is None or isinstance(exp, str) or isinstance(exp, ArithmeticExpression))
 
         self.val = float(val)
-        self.exp = str(self.val) if exp is None else exp
+
+        if exp is None:
+            self.exp = ArithmeticOperand(str(self.val), self.val)
+        elif isinstance(exp, str):
+            self.exp = ArithmeticOperand(exp, self.val)
+        else:
+            self.exp = exp
+
         self.name = str(self.exp) if name is None else name
 
     def __float__(self) -> float:
@@ -1598,17 +1606,11 @@ class FloatExp(SupportsFloat, IArithmeticExpression):
         return self.val
 
     def __round__(self, n=None):
-        exp = f"round({self.name}{'' if n is None else ','+str(n)})"
+        exp = f"round({self.name}{'' if n is None else ',' + str(n)})"
         return FloatExp(float(round(self.val, n)), exp, self.exp)
 
     def __abs__(self):
         return self._operate_unary(ArithmeticOperator.ABS)
-
-    def get_expression(self) -> Union[str, ArithmeticExpression]:
-        return self.exp if isinstance(self.exp, ArithmeticExpression) else self.name
-
-    def get_value(self) -> Any:
-        return self
 
     @staticmethod
     def get_float(f: Union[float, 'FloatExp']) -> float:
@@ -1618,22 +1620,33 @@ class FloatExp(SupportsFloat, IArithmeticExpression):
     def compute_weighted_addition(addends: List[ValueWeightPair]) -> Optional['FloatExp']:
         filtered_addends = [(v, w) for v, w in addends if v]
 
-        if filtered_addends:
-            values = [value * weight if weight and weight != 1.0 else value for value, weight in filtered_addends]
-            exp = values[0].name if len(values) == 1 \
-                else ArithmeticExpression(ArithmeticOperator.ADD, values)
+        if len(filtered_addends) == 1:
+            value, weight = filtered_addends[0]
+            if weight and weight != 1.0:
+                return value * weight
+            else:
+                return FloatExp(value.val, value.name, value.name)
+        elif len(filtered_addends) > 1:
+            values = [value * weight
+                      if weight and weight != 1.0
+                      else FloatExp(value.val, value.name, value.name)
+                      for value, weight in filtered_addends]
             value = reduce(add, [value.val for value in values])
+            exp = ArithmeticExpression(ArithmeticOperator.ADD, [v.exp for v in values], value)
             return FloatExp(value, str(exp), exp)
         else:
             return None
 
     def _operate_unary(self, operator: ArithmeticOperator) -> 'FloatExp':
-        new_exp = ArithmeticExpression(operator, [self])
-        return FloatExp(operator.operation(self.val), str(new_exp), new_exp)
+        value = operator.operation(self.val)
+        new_exp = ArithmeticExpression(operator, [ArithmeticOperand(self.name, self.val)], value)
+        return FloatExp(value, str(new_exp), new_exp)
 
     def _operate_binary(self, operator: ArithmeticOperator, other: 'FloatExp') -> 'FloatExp':
-        new_exp = ArithmeticExpression(operator, [self, other])
-        return FloatExp(operator.operation(self.val, other.val), str(new_exp), new_exp)
+        value = operator.operation(self.val, other.val)
+        new_exp = ArithmeticExpression(operator, [ArithmeticOperand(self.name, self.val),
+                                                  ArithmeticOperand(other.name, other.val)], value)
+        return FloatExp(value, str(new_exp), new_exp)
 
     def __add__(self, other: 'FloatExp') -> 'FloatExp':
         return self._operate_binary(ArithmeticOperator.ADD, other)
@@ -1660,38 +1673,38 @@ class FloatExp(SupportsFloat, IArithmeticExpression):
         return str(self)
 
 
-def get_interfaces_and_weights_from_expression(exp: IArithmeticExpression) -> List[Tuple[str, float]]:
+def get_interfaces_and_weights_from_expression(exp: Union[ArithmeticOperand, ArithmeticExpression]) -> List[Tuple[str, float]]:
     def is_interface(s: str) -> bool:
         return s.find(":") > 0
 
-    def find_interface(exp: IArithmeticExpression) -> Optional[Tuple[str, float]]:
-        if isinstance(exp.get_expression(), str):
-            if is_interface(exp.get_expression()):
-                return exp.get_expression(), 1.0
+    def find_interface(exp: Union[ArithmeticOperand, ArithmeticExpression]) -> Optional[Tuple[str, float]]:
+        if isinstance(exp, ArithmeticOperand):
+            if is_interface(exp.name):
+                return exp.name, 1.0
             else:
-                print(f"Name not interface: {exp.get_expression()}")
-        elif exp.get_expression().operator == ArithmeticOperator.MUL:
+                print(f"Operand not interface: {exp.name}")
+        elif exp.operator == ArithmeticOperator.MUL:
             interfaces_list: List[Tuple[str, float]] = []
             weight: float = 1.0
-            for o in exp.get_expression().operands:
+            for o in exp.operands:
                 i = find_interface(o)
                 if i:
                     interfaces_list.append(i)
                 else:
-                    weight *= o.get_value().val
+                    weight *= o.value
 
             if len(interfaces_list) == 1:
                 return interfaces_list[0][0], interfaces_list[0][1] * weight
             elif len(interfaces_list) > 1:
                 print(f"Error multiple interfaces: {interfaces_list}")
         else:
-            print(f"Error operator not allowed: {exp.get_expression().operator}")
+            print(f"Error operator not allowed: {exp.operator}")
 
         return None
 
     interfaces: List[Tuple[str, float]] = []
-    if isinstance(exp.get_expression(), ArithmeticExpression) and exp.get_expression().operator == ArithmeticOperator.ADD:
-        for operand in exp.get_expression().operands:
+    if isinstance(exp, ArithmeticExpression) and exp.operator == ArithmeticOperator.ADD:
+        for operand in exp.operands:
             i = find_interface(operand)
             if i:
                 interfaces.append(i)
