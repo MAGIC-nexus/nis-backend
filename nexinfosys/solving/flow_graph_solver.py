@@ -1219,18 +1219,19 @@ def compute_dataframe_sankey(results: ResultDict) -> pd.DataFrame:
            and result_key.conflict_partof != ConflictResolution.Dismissed:
 
             for node, float_computed in node_floatcomputed_dict.items():
-                for interface_fullname, weight in get_interfaces_and_weights_from_expression(float_computed.value.exp):
-                    data.append(
-                        {"Scenario": result_key.scenario,
-                         "Period": result_key.period,
-                         "OriginProcessor": interface_fullname.split(":")[0],
-                         "OriginInterface": interface_fullname.split(":")[1],
-                         "DestinationProcessor": node.processor_name,
-                         "DestinationInterface": node.interface_name,
-                         "RelationType": float_computed.computation_source.name if float_computed.computation_source else None,
-                         "Quantity": weight
-                         }
-                    )
+                if float_computed.computed == Computed.Yes:
+                    for interface_fullname, weight in get_interfaces_and_weights_from_expression(float_computed.value.exp):
+                        data.append(
+                            {"Scenario": result_key.scenario,
+                             "Period": result_key.period,
+                             "OriginProcessor": interface_fullname.split(":")[0],
+                             "OriginInterface": interface_fullname.split(":")[1],
+                             "DestinationProcessor": node.processor_name,
+                             "DestinationInterface": node.interface_name if node.interface_name else node.type+":"+node.orientation,
+                             "RelationType": float_computed.computation_source.name if float_computed.computation_source else None,
+                             "Quantity": weight
+                             }
+                        )
 
     df = pd.DataFrame(data)
     df.set_index(["Scenario", "Period", "OriginProcessor", "OriginInterface", "DestinationProcessor", "DestinationInterface"], inplace=True)
