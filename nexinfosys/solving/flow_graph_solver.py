@@ -1232,7 +1232,9 @@ def compute_dataframe_sankey(results: ResultDict) -> pd.DataFrame:
                          }
                     )
 
-    return pd.DataFrame(data)
+    df = pd.DataFrame(data)
+    df.set_index(["Scenario", "Period", "OriginProcessor", "OriginInterface", "DestinationProcessor", "DestinationInterface"], inplace=True)
+    return df.sort_index()
 
 
 def mark_observations_as_internal_results(
