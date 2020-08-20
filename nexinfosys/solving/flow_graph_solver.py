@@ -1258,10 +1258,13 @@ class HierarchicalNodeStructure:
         if isinstance(self.structure, ComputationGraph):
             return self.structure.direct_inputs(node)
         else:
-            if self.weights:
-                return [(n, self.weights[(node.processor, n.processor)]) for n in self.structure[node]]
+            if node in self.structure:
+                if self.weights:
+                    return [(n, self.weights[(node.processor, n.processor)]) for n in self.structure[node]]
+                else:
+                    return [(n, None) for n in self.structure[node]]
             else:
-                return [(n, None) for n in self.structure[node]]
+                return []
 
 
 def compute_internal_external_results(results: NodeFloatComputedDict, structures: List[HierarchicalNodeStructure]) \
