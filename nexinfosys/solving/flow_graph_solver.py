@@ -1297,6 +1297,7 @@ def compute_hierarchical_structure_internal_external_results(
         if node not in internal_results and node not in external_results:
             if not structure.get_children(node):
                 unknown_nodes.add(node)
+                return None, None
             else:
                 internal_addends: List[FloatExp.ValueWeightPair] = []
                 external_addends: List[FloatExp.ValueWeightPair] = []
@@ -1306,6 +1307,10 @@ def compute_hierarchical_structure_internal_external_results(
                     same_system = node.system == input_node.system and node.subsystem.is_same_scope(input_node.subsystem)
                     if same_system:
                         child_internal_value, child_external_value = compute(input_node)
+
+                        if not child_internal_value and not child_external_value:
+                            unknown_nodes.add(node)
+                            return None, None
 
                         if child_internal_value:
                             child_internal_value.value.name = Scope.Internal.name + brackets(input_node.name)
