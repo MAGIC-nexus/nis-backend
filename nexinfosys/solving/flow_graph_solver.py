@@ -1162,11 +1162,12 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
                         current_results[result_key._replace(conflict_partof=ConflictResolution.Taken)] = total_partof_taken_results
                         current_results[result_key._replace(conflict_partof=ConflictResolution.Dismissed)] = total_partof_dismissed_results
 
-                    internal_results, external_results = compute_internal_external_results(results, [
-                        HierarchicalNodeStructure(comp_graph_flow, ComputationSource.Flow),
-                        HierarchicalNodeStructure(partof_hierarchies, ComputationSource.PartOfAggregation, scenario_partof_weights),
-                        HierarchicalNodeStructure(interfacetype_hierarchies, ComputationSource.InterfaceTypeAggregation)
-                    ])
+                    hierarchical_structures = HierarchicalNodeStructure.from_flow_computation_graph(comp_graph_flow)
+                    hierarchical_structures.append(HierarchicalNodeStructure.from_partof_aggregation(partof_hierarchies, scenario_partof_weights))
+                    hierarchical_structures.append(HierarchicalNodeStructure.from_interfacetype_aggregation(interfacetype_hierarchies))
+
+                    internal_results, external_results = compute_internal_external_results(results, hierarchical_structures)
+
                     current_results[result_key._replace(scope=Scope.Internal)] = internal_results
                     current_results[result_key._replace(scope=Scope.External)] = external_results
 
@@ -1232,21 +1233,37 @@ def compute_dataframe_sankey(results: ResultDict) -> pd.DataFrame:
     return df.sort_index()
 
 
-def mark_observations_as_internal_results(
+def mark_observations_and_scales_as_internal_results(
         results: NodeFloatComputedDict, internal_results: NodeFloatComputedDict) -> NoReturn:
     for node, value in results.items():
-        if value.computed == Computed.No:
+        if (value.computed == Computed.No) or \
+           (value.computation_source and value.computation_source == ComputationSource.Scale):
             internal_results[node] = deepcopy(value)
 
 
 class HierarchicalNodeStructure:
     def __init__(self, structure: Union[ComputationGraph, InterfaceNodeHierarchy],
                  computation_source: ComputationSource,
-                 weights: Optional[ProcessorsRelationWeights] = None):
+                 weights: Optional[ProcessorsRelationWeights] = None,
+                 direct: Optional[bool] = None):
         assert(isinstance(structure, ComputationGraph) or isinstance(structure, Dict))
         self.structure = structure
         self.computation_source = computation_source
         self.weights = weights
+        self.direct = direct
+
+    @classmethod
+    def from_partof_aggregation(cls, structure: InterfaceNodeHierarchy, weights: ProcessorsRelationWeights) -> 'HierarchicalNodeStructure':
+        return cls(structure, ComputationSource.PartOfAggregation, weights)
+
+    @classmethod
+    def from_interfacetype_aggregation(cls, structure: InterfaceNodeHierarchy) -> 'HierarchicalNodeStructure':
+        return cls(structure, ComputationSource.InterfaceTypeAggregation)
+
+    @classmethod
+    def from_flow_computation_graph(cls, structure: ComputationGraph) -> List['HierarchicalNodeStructure']:
+        return [cls(structure, ComputationSource.Flow, direct=True),
+                cls(structure, ComputationSource.Flow, direct=False)]
 
     def __iter__(self):
         if isinstance(self.structure, ComputationGraph):
@@ -1256,7 +1273,10 @@ class HierarchicalNodeStructure:
 
     def get_children(self, node: InterfaceNode) -> List[Tuple[InterfaceNode, Optional[FloatExp]]]:
         if isinstance(self.structure, ComputationGraph):
-            return self.structure.direct_inputs(node)
+            if self.direct:
+                return self.structure.direct_inputs(node)
+            else:
+                return self.structure.reverse_inputs(node)
         else:
             if node in self.structure:
                 if self.weights:
@@ -1272,7 +1292,7 @@ def compute_internal_external_results(results: NodeFloatComputedDict, structures
     internal_results: NodeFloatComputedDict = {}
     external_results: NodeFloatComputedDict = {}
 
-    mark_observations_as_internal_results(results, internal_results)
+    mark_observations_and_scales_as_internal_results(results, internal_results)
 
     len_unknown = len(results)
     prev_len_unknown = len_unknown + 1
