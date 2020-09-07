@@ -1162,11 +1162,14 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
                         current_results[result_key._replace(conflict_partof=ConflictResolution.Taken)] = total_partof_taken_results
                         current_results[result_key._replace(conflict_partof=ConflictResolution.Dismissed)] = total_partof_dismissed_results
 
-                    hierarchical_structures = HierarchicalNodeStructure.from_flow_computation_graph(comp_graph_flow)
-                    hierarchical_structures.append(HierarchicalNodeStructure.from_partof_aggregation(partof_hierarchies, scenario_partof_weights))
-                    hierarchical_structures.append(HierarchicalNodeStructure.from_interfacetype_aggregation(interfacetype_hierarchies))
+                    hierarchical_structures = [
+                        HierarchicalNodeStructure.from_flow_computation_graph(comp_graph_flow, True),
+                        HierarchicalNodeStructure.from_partof_aggregation(partof_hierarchies, scenario_partof_weights),
+                        HierarchicalNodeStructure.from_interfacetype_aggregation(interfacetype_hierarchies)]
+                    additional_hierarchical_structure = HierarchicalNodeStructure.from_flow_computation_graph(comp_graph_flow, False)
 
-                    internal_results, external_results = compute_internal_external_results(results, hierarchical_structures)
+                    internal_results, external_results = \
+                        compute_internal_external_results(results, hierarchical_structures, additional_hierarchical_structure)
 
                     current_results[result_key._replace(scope=Scope.Internal)] = internal_results
                     current_results[result_key._replace(scope=Scope.External)] = external_results
@@ -1261,9 +1264,8 @@ class HierarchicalNodeStructure:
         return cls(structure, ComputationSource.InterfaceTypeAggregation)
 
     @classmethod
-    def from_flow_computation_graph(cls, structure: ComputationGraph) -> List['HierarchicalNodeStructure']:
-        return [cls(structure, ComputationSource.Flow, direct=True),
-                cls(structure, ComputationSource.Flow, direct=False)]
+    def from_flow_computation_graph(cls, structure: ComputationGraph, direct: Optional[bool]) -> 'HierarchicalNodeStructure':
+        return cls(structure, ComputationSource.Flow, direct=direct)
 
     def __iter__(self):
         if isinstance(self.structure, ComputationGraph):
@@ -1287,8 +1289,18 @@ class HierarchicalNodeStructure:
                 return []
 
 
-def compute_internal_external_results(results: NodeFloatComputedDict, structures: List[HierarchicalNodeStructure]) \
+def compute_internal_external_results(results: NodeFloatComputedDict, structures: List[HierarchicalNodeStructure],
+                                      additional_structure: HierarchicalNodeStructure) \
         -> Tuple[NodeFloatComputedDict, NodeFloatComputedDict]:
+
+    def compute_structures() -> int:
+        unknown_nodes: Set[InterfaceNode] = set()
+        for structure in structures:
+            unknown_nodes |= compute_hierarchical_structure_internal_external_results(structure, results,
+                                                                                      internal_results,
+                                                                                      external_results)
+        return len(unknown_nodes)
+
     internal_results: NodeFloatComputedDict = {}
     external_results: NodeFloatComputedDict = {}
 
@@ -1299,11 +1311,13 @@ def compute_internal_external_results(results: NodeFloatComputedDict, structures
     while len_unknown and len_unknown < prev_len_unknown:
         prev_len_unknown = len_unknown
 
-        unknown_nodes: Set[InterfaceNode] = set()
-        for structure in structures:
-            unknown_nodes |= compute_hierarchical_structure_internal_external_results(structure, results, internal_results, external_results)
+        len_unknown = compute_structures()
 
-        len_unknown = len(unknown_nodes)
+        # If resolution is stuck try to solve flow graph in reverse order
+        if len_unknown and len_unknown == prev_len_unknown:
+            compute_hierarchical_structure_internal_external_results(additional_structure, results,
+                                                                     internal_results, external_results)
+            len_unknown = compute_structures()
 
     return internal_results, external_results
 
