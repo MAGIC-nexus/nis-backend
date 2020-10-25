@@ -231,11 +231,10 @@ class ResultKey(NamedTuple):
     scenario: str
     period: str
     scope: Scope
-    conflict_partof: ConflictResolution = ConflictResolution.No
-    conflict_itype: ConflictResolution = ConflictResolution.No
+    conflict: ConflictResolution = ConflictResolution.No
 
-    def as_string_tuple(self) -> Tuple[str, str, str, str, str]:
-        return self.scenario, self.period, self.scope.name, self.conflict_partof.name, self.conflict_itype.name
+    def as_string_tuple(self) -> Tuple[str, str, str, str]:
+        return self.scenario, self.period, self.scope.name, self.conflict.name
 
 
 ProcessorsRelationWeights = Dict[Tuple[Processor, Processor], Any]
@@ -1058,10 +1057,8 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
                 print(f"********************* TIME PERIOD: {time_period}")
 
                 aggregations: NodeFloatComputedDict = {}
-                total_itype_taken_results: NodeFloatComputedDict = {}
-                total_itype_dismissed_results: NodeFloatComputedDict = {}
-                total_partof_taken_results: NodeFloatComputedDict = {}
-                total_partof_dismissed_results: NodeFloatComputedDict = {}
+                total_taken_results: NodeFloatComputedDict = {}
+                total_dismissed_results: NodeFloatComputedDict = {}
 
                 try:
                     comp_graph_flow, comp_graph_scale, comp_graph_scale_change = \
@@ -1107,25 +1104,25 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
                             results.update(new_results)
                             scale_change_last_known_nodes = set(results.keys())
 
-                            new_results, itype_taken_results, itype_dismissed_results = \
+                            new_results, taken_results, dismissed_results = \
                                 compute_hierarchy_aggregate_results(
                                     interfacetype_hierarchies, results, aggregations, conflicting_data_policy,
                                     missing_value_policy, ComputationSource.InterfaceTypeAggregation)
 
                             aggregations.update(new_results)
                             results.update(new_results)
-                            total_itype_taken_results.update(itype_taken_results)
-                            total_itype_dismissed_results.update(itype_dismissed_results)
+                            total_taken_results.update(taken_results)
+                            total_dismissed_results.update(dismissed_results)
 
-                            new_results, partof_taken_results, partof_dismissed_results = \
+                            new_results, taken_results, dismissed_results = \
                                 compute_hierarchy_aggregate_results(
                                     partof_hierarchies, results, aggregations, conflicting_data_policy,
                                     missing_value_policy, ComputationSource.PartOfAggregation, scenario_partof_weights)
 
                             aggregations.update(new_results)
                             results.update(new_results)
-                            total_partof_taken_results.update(partof_taken_results)
-                            total_partof_dismissed_results.update(partof_dismissed_results)
+                            total_taken_results.update(taken_results)
+                            total_dismissed_results.update(dismissed_results)
 
                             if unresolved_observations_with_interfaces:
                                 new_results, unresolved_observations_with_interfaces = \
@@ -1144,23 +1141,15 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
                     issues.extend(check_unresolved_nodes_in_computation_graphs(
                         [comp_graph_flow, comp_graph_scale, comp_graph_scale_change], results))
 
-                    # issues.extend(check_unresolved_nodes_in_aggregation_hierarchies(
-                    #     interfacetype_hierarchies + partof_hierarchies, results))
-
                     current_results: ResultDict = {}
                     result_key = ResultKey(scenario_name, time_period, Scope.Total)
 
                     # Filter out conflicted results from TOTAL results
-                    current_results[result_key] = {k: v for k, v in results.items()
-                                                   if k not in total_itype_taken_results and k not in total_partof_taken_results}
+                    current_results[result_key] = {k: v for k, v in results.items() if k not in total_taken_results}
 
-                    if total_itype_taken_results:
-                        current_results[result_key._replace(conflict_itype=ConflictResolution.Taken)] = total_itype_taken_results
-                        current_results[result_key._replace(conflict_itype=ConflictResolution.Dismissed)] = total_itype_dismissed_results
-
-                    if total_partof_taken_results:
-                        current_results[result_key._replace(conflict_partof=ConflictResolution.Taken)] = total_partof_taken_results
-                        current_results[result_key._replace(conflict_partof=ConflictResolution.Dismissed)] = total_partof_dismissed_results
+                    if total_taken_results:
+                        current_results[result_key._replace(conflict=ConflictResolution.Taken)] = total_taken_results
+                        current_results[result_key._replace(conflict=ConflictResolution.Dismissed)] = total_dismissed_results
 
                     hierarchical_structures = [
                         HierarchicalNodeStructure.from_flow_computation_graph(comp_graph_flow, True),
@@ -1213,8 +1202,7 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
 def compute_dataframe_sankey(results: ResultDict) -> pd.DataFrame:
     data: List[Dict] = []
     for result_key, node_floatcomputed_dict in results.items():
-        if result_key.scope == Scope.Total and result_key.conflict_itype != ConflictResolution.Dismissed \
-           and result_key.conflict_partof != ConflictResolution.Dismissed:
+        if result_key.scope == Scope.Total and result_key.conflict != ConflictResolution.Dismissed:
 
             for node, float_computed in node_floatcomputed_dict.items():
                 if float_computed.computed == Computed.Yes:
@@ -1459,7 +1447,7 @@ def export_solver_data(datasets, data, dynamic_scenario, glb_idx, global_paramet
     benchmarks = glb_idx.get(Benchmark.partial_key())
 
     # Filter out conflicts and prepare for case insensitiveness
-    # Filter: Conflict_Partof!='Dismissed', Conflic_iType!='Dismissed', and remove the two columns
+    # Filter: Conflict!='Dismissed' and remove the column
     df_without_conflicts = get_conflicts_filtered_dataframe(df)
     inplace_case_sensitiveness_dataframe(df_without_conflicts)
 
@@ -1599,11 +1587,9 @@ def prepare_sankey_dataset(registry: PartialRetrievalDictionary, df: pd.DataFram
 
 
 def get_conflicts_filtered_dataframe(in_df: pd.DataFrame) -> pd.DataFrame:
-    filt = in_df.index.get_level_values("Conflict_Partof").isin(["No", "Taken"]) & in_df.index.get_level_values(
-        "Conflict_Itype").isin(["No", "Taken"])
+    filt = in_df.index.get_level_values("Conflict").isin(["No", "Taken"])
     df = in_df[filt]
-    df = df.droplevel("Conflict_Partof")
-    df = df.droplevel("Conflict_Itype")
+    df = df.droplevel("Conflict")
     return df
 
 
