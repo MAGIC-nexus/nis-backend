@@ -31,10 +31,10 @@ It is an open system as it can be used to integrate MuSIASEM as a formalism in a
 - [Getting started](#getting-started)
   - [Features](#features)
   - [Installing and executing **nis-backend**](#installing-and-executing-nis-backend)
-    - [pip](#pip)
+<!--    - [pip](#pip) -->
     - [Docker image](#docker-image)
     - [Source code](#source-code)
-    - [Windows executable](#windows-executable)
+<!--    - [Windows executable](#windows-executable) -->
   - [Models with Commands](#models-with-commands)
   - [**nis-frontend** quick intro](#quick-intro-to-nis-frontend)
 - [Accessing **nis-backend** in Python and R scripts with **nis-client**](#accessing-nis-backend-in-python-and-r-scripts-with-nis-client)
@@ -120,7 +120,7 @@ Change the port to the one desired
 <!--
 #### Windows executable
 
-TO-DO - (PyInstaller executable, in single file form)
+TO-DO - (installer_cmd_maker.py: script using PyInstaller to create executable, in single file form)
 -->
 
 ### Models with Commands
