@@ -233,3 +233,120 @@ class CommandField:
         rep = [(r if contains_any(r, ".+") else re.escape(r))+"$" for r in self.allowed_names]
 
         return re.compile("|".join(rep), flags=re.IGNORECASE)
+
+
+# Embedded commands, assumed to be present in every submitted workbook
+default_cmds = """
+[
+    {
+      "command": "cat_hierarchies",
+      "label": "Hierarchies by default",
+      "content":
+        {
+            "command_name": "Hierarchies",
+            "items": [
+            {
+                "_complex": false,
+                "_expandable": [],
+                "_row": 2,
+                "code": "FlowGraph",
+                "description": "Flow graph algorithm for the solving",
+                "hierarchy_name": "SolvingAlgorithms",
+                "label": "Solve graph converting the MuSIASEM into overlapping flow graphs"
+            },
+            {
+                "_complex": false,
+                "_expandable": [],
+                "_row": 2,
+                "code": "TakeUpper",
+                "description": "Policy: take the value upper instead of the value coming from lower level accumulation",
+                "hierarchy_name": "AggregationConflictingDataResolutionPolicies",
+                "label": "Take value from the upper level"
+            },
+            {
+                "_complex": false,
+                "_expandable": [],
+                "_row": 3,
+                "code": "TakeLowerAggregation",
+                "description": "Policy: take the value computed by aggregation lower levels of a hierarchy",
+                "hierarchy_name": "AggregationConflictingDataResolutionPolicies",
+                "label": "Take value accumulated from lower levels"
+            },
+            {
+                "_complex": false,
+                "_expandable": [],
+                "_row": 3,
+                "code": "UseZero",
+                "description": "Policy: use the zero value when a child is missing during hierarchy aggregation",
+                "hierarchy_name": "AggregationMissingValueResolutionPolicies",
+                "label": "Use zero in aggregations"
+            },
+            {
+                "_complex": false,
+                "_expandable": [],
+                "_row": 3,
+                "code": "Invalidate",
+                "description": "Policy: invalidate the aggregation for a node in hierarchy if any of the children's value is missing",
+                "hierarchy_name": "AggregationMissingValueResolutionPolicies",
+                "label": "Invalidate aggregation"
+            }
+
+            ]
+        }
+    },
+    {
+      "command": "parameters",
+      "label": "Parameters by default",
+      "content":
+        {
+            "command_name": "Parameters",
+                    "items": [
+                        {
+                            "_complex": false,
+                            "_expandable": [],
+                            "_row": 2,
+                            "description": "Which algorithm to use for the solving",
+                            "domain": "SolvingAlgorithms",
+                            "group": "NISSolverParameters",
+                            "name": "NISSolverType",
+                            "type": "Code",
+                            "value": "FlowGraph"
+                        },
+                        {
+                            "_complex": false,
+                            "_expandable": [],
+                            "_row": 2,
+                            "description": "Ordered list of consideration of observations",
+                            "domain": null,
+                            "group": "NISSolverParameters",
+                            "name": "NISSolverObserversPriority",
+                            "type": "String",
+                            "value": ""
+                        },
+                        {
+                            "_complex": false,
+                            "_expandable": [],
+                            "_row": 2,
+                            "description": "Conflicting data resolution policy",
+                            "domain": "AggregationConflictingDataResolutionPolicies",
+                            "group": "NISSolverParameters",
+                            "name": "NISSolverConflictingDataResolutionPolicy",
+                            "type": "Code",
+                            "value": "TakeUpper"
+                        },
+                        {
+                            "_complex": false,
+                            "_expandable": [],
+                            "_row": 2,
+                            "description": "Missing value resolution policy",
+                            "domain": "AggregationMissingValueResolutionPolicies",
+                            "group": "NISSolverParameters",
+                            "name": "NISSolverMissingValueResolutionPolicy",
+                            "type": "Code",
+                            "value": "UseZero"
+                        }
+                    ]
+        }
+    }
+]
+"""

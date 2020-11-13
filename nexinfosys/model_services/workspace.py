@@ -32,7 +32,7 @@ from nexinfosys.models.musiasem_methodology_support import (User,
                                                             CaseStudyStatus,
                                                             ObjectType, PermissionType)
 from nexinfosys.restful_service import tm_default_users, tm_authenticators, tm_case_study_version_statuses, \
-    tm_object_types, tm_permissions, default_cmds
+    tm_object_types, tm_permissions
 from nexinfosys.restful_service.serialization import serialize_state, deserialize_state
 from nexinfosys.solving import BasicQuery
 from nexinfosys.solving.flow_graph_solver import flow_graph_solver, evaluate_parameters_for_scenario, get_dataset
@@ -1033,7 +1033,7 @@ def execute_file_return_issues(file_name, generator_type):
                                     allow_saving=False)
 
     # Add system-level entities from JSON definition in "default_cmds"
-    ret = isess.register_andor_execute_command_generator("json", "application/json", default_cmds, False, True)
+    ret = isess.register_andor_execute_command_generator("json", "application/json", nexinfosys.default_cmds, False, True)
 
     # Execute current file
     with open(file_name, read_type) as f1:

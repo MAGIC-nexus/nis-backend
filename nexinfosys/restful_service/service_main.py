@@ -1,73 +1,58 @@
+import binascii
 import csv
 import io
-import os
-import binascii
-import urllib
-from collections import OrderedDict
-import traceback
-import pandas as pd
-import openpyxl
-import redis
+import json
 import logging
+import os
+import traceback
+import urllib
 from pathlib import Path
-import sqlalchemy.schema
 
-from nexinfosys.ie_exports.geolayer import generate_geojson
-from nexinfosys.ie_exports.jupyter_notebook import generate_jupyter_notebook_python, generate_jupyter_notebook_r
-from openpyxl.writer.excel import save_virtual_workbook
-from sqlalchemy.pool import StaticPool
+import openpyxl
+import pandas as pd
+import pyximport
+import redis
 # from flask import (jsonify, abort, redirect, url_for,
 #
 #                    )
 from flask import (Response, request, session as flask_session, send_from_directory, redirect
                    )
 from flask.helpers import get_root_path
-from flask_session import Session as FlaskSessionServerSide
 from flask_cors import CORS
+from flask_session import Session as FlaskSessionServerSide
+from openpyxl.writer.excel import save_virtual_workbook
 from werkzeug.exceptions import NotFound
-import json
-import pyximport
 
-from nexinfosys.ie_exports.back_to_nis_format import nis_format_spreadsheet
-from nexinfosys.ie_exports.reference_of_commands import obtain_commands_help
-from nexinfosys.ie_exports.sdmx import get_dataset_metadata
-from nexinfosys.ie_exports.xml_export import export_model_to_xml
+from nexinfosys.ie_exports.jupyter_notebook import generate_jupyter_notebook_python, generate_jupyter_notebook_r
 
 pyximport.install(reload_support=True, language_level=3)
 
 # >>>>>>>>>> IMPORTANT <<<<<<<<<
 # To debug in local mode, prepare an environment variable "MAGIC_NIS_SERVICE_CONFIG_FILE", with value "./nis_local.conf"
 # >>>>>>>>>> IMPORTANT <<<<<<<<<
+from nexinfosys.ie_exports.reference_of_commands import obtain_commands_help
 from nexinfosys.command_definitions import commands
-from nexinfosys.command_descriptions import c_descriptions
 from nexinfosys.command_field_definitions import command_fields
-from nexinfosys.command_field_descriptions import cf_descriptions
 from nexinfosys.command_generators import Issue, IType
-from nexinfosys.command_generators.parser_field_examples import generic_field_examples, generic_field_syntax
-from nexinfosys.command_generators.parser_field_parsers import string_to_ast, arith_boolean_expression, simple_ident
+from nexinfosys.command_generators.parser_field_parsers import string_to_ast, simple_ident
 from nexinfosys.command_generators.parser_spreadsheet_utils_accel import rewrite_xlsx_file
-from nexinfosys.ie_exports.json_export import export_model_to_json, model_to_json
-from nexinfosys.models.musiasem_concepts import Parameter, Hierarchy, ProblemStatement
 from nexinfosys.common.helper import generate_json, gzipped, str2bool, \
-    add_label_columns_to_dataframe, download_file, create_dictionary, any_error_issue, prepare_default_configuration, \
-    strcmp, wv_upload_file
+    download_file, any_error_issue, wv_upload_file
 from nexinfosys.models.musiasem_methodology_support import *
-from nexinfosys.common.create_database import create_pg_database_engine, create_monet_database_engine
-from nexinfosys.restful_service import app, register_external_datasources, default_cmds
+from nexinfosys.restful_service import app, get_parameters_in_state, \
+    get_scenarios_in_state, get_results_in_session, get_dataset_from_state, get_model, get_geolayer, get_ontology, \
+    get_graph_from_state, validate_command, command_field_help, comm_help, initialize_database_data, \
+    initialize_databases, register_external_datasources
 import nexinfosys
 from nexinfosys.command_executors import create_command
 from nexinfosys.command_executors.specification.metadata_command import generate_dublin_core_xml
 from nexinfosys.model_services import State, get_case_study_registry_objects
 from nexinfosys.model_services.workspace import InteractiveSession, CreateNew, ReproducibleSession, \
     execute_command_container, convert_generator_to_native, prepare_and_solve_model
-from nexinfosys.restful_service import nis_api_base, nis_client_base, nis_external_client_base, tm_default_users, \
-    tm_authenticators, \
-    tm_object_types, \
-    tm_permissions, \
-    tm_case_study_version_statuses
+from nexinfosys.restful_service import nis_api_base, nis_client_base, nis_external_client_base
 from nexinfosys.models import log_level
 from nexinfosys.restful_service.serialization import serialize, deserialize, serialize_state, deserialize_state
-from nexinfosys.ie_exports.flows_graph import BasicQuery, construct_flow_graph, construct_flow_graph_2
+from nexinfosys.ie_exports.flows_graph import BasicQuery
 from nexinfosys.ie_exports.processors_graph import construct_processors_graph_2
 
 
@@ -84,78 +69,6 @@ def printNProcessors(s, state):
     print("--------------------------------------------------------")
     print("--------------------------------------------------------")
     print("--------------------------------------------------------")
-
-
-def initialize_database_data():
-    # Load base tables
-    load_table(DBSession, User, tm_default_users)
-    load_table(DBSession, Authenticator, tm_authenticators)
-    load_table(DBSession, CaseStudyStatus, tm_case_study_version_statuses)
-    load_table(DBSession, ObjectType, tm_object_types)
-    load_table(DBSession, PermissionType, tm_permissions)
-    # Create and insert a user
-    session = DBSession()
-    # Create test User, if it does not exist
-    u = session.query(User).filter(User.name == 'test_user').first()
-    if not u:
-        u = User()
-        u.name = "test_user"
-        u.uuid = "27c6a285-dd80-44d3-9493-3e390092d301"
-        session.add(u)
-        session.commit()
-    DBSession.remove()
-
-# Initialize DATABASEs
-
-
-def initialize_databases():
-    recreate_db = False
-    if 'DB_CONNECTION_STRING' in app.config:
-        db_connection_string = app.config['DB_CONNECTION_STRING']
-        print("Connecting to metadata server")
-        print(db_connection_string)
-        print("-----------------------------")
-        if db_connection_string.startswith("sqlite://"):
-            nexinfosys.engine = sqlalchemy.create_engine(db_connection_string,
-                                                         echo=True,
-                                                         connect_args={'check_same_thread': False},
-                                                         poolclass=StaticPool)
-        else:
-            nexinfosys.engine = create_pg_database_engine(db_connection_string, "magic_nis", recreate_db=recreate_db)
-
-        # global DBSession # global DBSession registry to get the scoped_session
-        DBSession.configure(bind=nexinfosys.engine)  # reconfigure the sessionmaker used by this scoped_session
-        tables = ORMBase.metadata.tables
-        connection = nexinfosys.engine.connect()
-        table_existence = [nexinfosys.engine.dialect.has_table(connection, tables[t].name) for t in tables]
-        connection.close()
-        if False in table_existence:
-            ORMBase.metadata.bind = nexinfosys.engine
-            ORMBase.metadata.create_all()
-        # connection = nexinfosys.engine.connect()
-        # table_existence = [nexinfosys.engine.dialect.has_table(connection, tables[t].name) for t in tables]
-        # connection.close()
-        # Load base tables
-        initialize_database_data()
-    else:
-        print("No database connection defined (DB_CONNECTION_STRING), exiting now!")
-        sys.exit(1)
-
-    if 'DATA_CONNECTION_STRING' in app.config:
-        data_connection_string = app.config['DATA_CONNECTION_STRING']
-        print("Connecting to data server")
-        if data_connection_string.startswith("monetdb"):
-            nexinfosys.data_engine = create_monet_database_engine(data_connection_string, "magic_data")
-        elif data_connection_string.startswith("sqlite://"):
-            nexinfosys.data_engine = sqlalchemy.create_engine(data_connection_string,
-                                                              echo=True,
-                                                              connect_args={'check_same_thread': False},
-                                                              poolclass=StaticPool)
-        else:
-            nexinfosys.data_engine = create_pg_database_engine(data_connection_string, "magic_data", recreate_db=recreate_db)
-    else:
-        print("No data connection defined (DATA_CONNECTION_STRING), exiting now!")
-        sys.exit(1)
 
 
 def construct_session_persistence_backend():
@@ -1170,96 +1083,6 @@ def reproducible_session_query_state_everything_executed():  # Query if all comm
     return r
 
 
-# Obtain list of ALL possible outputs (not only datasets) IN the current state. output datasets outputs datasets.
-def query_state_list_results(isess):
-    dataset_formats = ["CSV", "XLSX", "SDMX.json"] #, "XLSXwithPivotTable", "NISembedded", "NISdetached"]
-    graph_formats = ["VisJS", "GML"] #, "GraphML"]
-    ontology_formats = ["OWL"]
-    geo_formats = ["GeoJSON"]
-    # A reproducible session must be open, signal about it if not
-    if isess.reproducible_session_opened():
-        if isess.state:
-            glb_idx, p_sets, hh, datasets, mappings = get_case_study_registry_objects(isess.state)
-            r = {"datasets":
-                     [dict(name=k,
-                           type="dataset",
-                           description=F"{datasets[k].description} [{datasets[k].data.shape[0]} rows, {datasets[k].data.size} cells, "
-                           F"{datasets[k].data.memory_usage(True).sum()} bytes]",
-                           # nelements=datasets[k].data.size,
-                           # nrows=datasets[k].data.shape[0],
-                           # size=datasets[k].data.memory_usage(True).sum(),
-                           formats=[dict(format=f,
-                                         url=nis_api_base + F"/isession/rsession/state_query/datasets/{k}.{f.lower()}")
-                                    for f in dataset_formats],
-                           ) for k in datasets
-                      ] +
-                     [dict(name="interfaces_graph",
-                           type="graph",
-                           description="Graph of Interfaces, Quantities; Scales and Exchanges",
-                           formats=[dict(format=f,
-                                         url=nis_api_base + F"/isession/rsession/state_query/flow_graph.{f.lower()}")
-                                    for f in graph_formats]),
-                      dict(name="processors_graph",
-                           type="graph",
-                           description="Processors and exchanges graph",
-                           formats=[dict(format=f,
-                                         url=nis_api_base + F"/isession/rsession/state_query/processors_graph.{f.lower()}")
-                                    for f in graph_formats]),
-                      ] +
-                     [dict(name="Sankey_Graph",
-                           type="Graph",
-                           description="Dictionary of Sankey Graph for every scenario for implementation in JupyterLab using plotly",
-                           formats=[
-                               dict(format=f, url=nis_api_base + F"/isession/rsession/state_query/sankey_graph.{f.lower()}")
-                               for f in ["JSON"]]),
-                      ] +
-                     [dict(name="processors_geolayer",
-                           type="geolayer",
-                           description="Processors",
-                           formats=[
-                               dict(format=f, url=nis_api_base + F"/isession/rsession/state_query/geolayer.{f.lower()}")
-                               for f in geo_formats]),
-                      ] +
-                     [dict(name="Model",
-                           type="model",
-                           description="Model",
-                           formats=[
-                               dict(format=f, url=nis_api_base + F"/isession/rsession/state_query/model.{f.lower()}")
-                               for f in ["JSON", "XLSX", "XML"]]),
-                      ] +
-                     [dict(name="Ontology",
-                           type="ontology",
-                           description="OWL ontology",
-                           formats=[
-                               dict(format=f, url=nis_api_base + F"/isession/rsession/state_query/ontology.{f.lower()}")
-                               for f in ontology_formats]),
-                      ] +
-                     [dict(name="Python script",
-                           type="script",
-                           description="Python script",
-                           formats=[dict(format=f,
-                                         url=nis_api_base + F"/isession/rsession/state_query/python_script.{f.lower()}")
-                                    for f in ["Python", "JupyterNotebook"]]),
-                      dict(name="R script",
-                           type="script",
-                           description="R script",
-                           formats=[
-                               dict(format=f, url=nis_api_base + F"/isession/rsession/state_query/r_script.{f.lower()}")
-                               for f in ["R", "JupyterNotebook"]]),
-                      ] +
-                     [dict(name="Commands reference",
-                           type="document",
-                           description="Reference of all commands and their fields",
-                           formats=[
-                               dict(format=f,
-                                    url=nis_api_base + F"/isession/rsession/state_query/commands_reference_document.{f}")
-                               for f in ["html"]]),
-                      ]
-                 }
-
-    return r
-
-
 @app.route(nis_api_base + "/isession/rsession/state_query/outputs", methods=["GET"])
 @app.route(nis_api_base + "/isession/rsession/state_query/datasets", methods=["GET"])
 def reproducible_session_query_state_list_results():  # Query list of outputs (not only datasets) IN the current state
@@ -1271,7 +1094,7 @@ def reproducible_session_query_state_list_results():  # Query list of outputs (n
     # A reproducible session must be open, signal about it if not
     if isess.reproducible_session_opened():
         if isess.state:
-            r = build_json_response(query_state_list_results(isess), 200)
+            r = build_json_response(get_results_in_session(isess), 200)
         else:
             r = build_json_response([], 204)
     else:
@@ -1338,22 +1161,7 @@ def get_parameter_definitions():
     if isess and isinstance(isess, Response):
         return isess
 
-    res = []
-    query = BasicQuery(isess.state)
-    for p in query.execute([Parameter], filt=""):
-        p_name = p.name
-        p_type = p.type
-        if p.range:
-            if strcmp(p_type, "Number"):
-                p_range = p.range
-            else:
-                glb_idx, _, _, _, _ = get_case_study_registry_objects(isess.state)
-                h = glb_idx.get(Hierarchy.partial_key(p.range))
-                h = h[0]
-                p_range = ', '.join(h.codes.keys())
-        else:
-            p_range = ""
-        res.append(dict(name=p_name, type=p_type, range=p_range))
+    res = get_parameters_in_state(isess.state)
 
     return build_json_response(res, 200)
 
@@ -1399,74 +1207,31 @@ def get_scenarios():
     if isess and isinstance(isess, Response):
         return isess
 
-    glb_idx, _, _, _, _ = get_case_study_registry_objects(isess.state)
-
-    ps = glb_idx.get(ProblemStatement.partial_key())
-    if len(ps) == 0:
-        ps = [ProblemStatement()]
-
-    scenarios = []
-    for scenario, params in ps[0].scenarios.items():
-        scenarios.append(dict(name=scenario, parameters=params.items()))
+    scenarios = get_scenarios_in_state(isess.state)
 
     return build_json_response(scenarios, 200)
 
 
 @app.route(nis_api_base + "/isession/rsession/state_query/geolayer.<format>", methods=["GET"])
-def get_geolayer(format):
+def get_geolayer_service(format):
     isess = deserialize_isession_and_prepare_db_session()
     if isess and isinstance(isess, Response):
         return isess
 
-    output = None
-    # Generate graph from State
-    if isess.state:
-        # TODO Obtain a list of Geolocated processors
-        #      Obtain attributes attached to the processor: Name, Full name, system, subsystem type, ...
-        #      Go to general matrix and obtain values for interfaces, different scenarios, times and observers
-        # TODO Extract geometry of processors into a new layer
-        # TODO  Elaborate a new layer where each processor
-        printNProcessors("GEOLAYER", isess.state)
-
-        if format == "geojson":
-            # TODO Prepare GeoJSON file
-            output = generate_geojson(isess.state)
-            output = io.StringIO(generate_json(output))
-            mimetype = "application/geo+json"
-        elif format == "kmz" or format == "kml":
-            # TODO Prepare KML file
-            output = io.BytesIO()
-            if format == "kmz":
-                mimetype = "application/vnd.google-earth.kmz"
-            else:
-                mimetype = "application/vnd.google-earth.kml+xml"
-
-    if output:
-        return Response(output.getvalue(), mimetype=mimetype, status=200)
-    else:
-        return build_json_response({"error": F"Cannot return geolayer, format '{format}' not recognized"}, 401)
+    content, content_type, ok = get_geolayer(isess.state, format)
+    return Response(content, mimetype=content_type, status=200 if ok else 401)
 
 
 @app.route(nis_api_base + "/isession/rsession/state_query/ontology.<format>", methods=["GET"])
-def get_ontology(format):
+def get_ontology_service(format):
     # TODO OWLREADY2 installation on the Docker image issues a problem
     # Recover InteractiveSession
     isess = deserialize_isession_and_prepare_db_session()
     if isess and isinstance(isess, Response):
         return isess
 
-    output = None
-    # Generate graph from State
-    if isess.state:
-        if format == "owl":
-            # TODO Prepare OWL file
-            output = io.StringIO()
-            mimetype = "application/rdf+xml"  # TODO
-
-    if output:
-        return Response(output.getvalue(), mimetype=mimetype, status=200)
-    else:
-        return build_json_response({"error": F"Cannot return ontology, format '{format}' not recognized"}, 401)
+    content, content_type, ok = get_ontology(isess.state, format)
+    return Response(content, mimetype=content_type, status=200 if ok else 401)
 
 
 @app.route(nis_api_base + "/isession/rsession/state_query/python_script.<format>", methods=["GET"])
@@ -1539,41 +1304,13 @@ def get_commands_reference_document(format):
 
 
 @app.route(nis_api_base + "/isession/rsession/state_query/model.<format>", methods=["GET"])
-def get_model(format):
+def get_model_service(format):
     isess = deserialize_isession_and_prepare_db_session()
     if isess and isinstance(isess, Response):
         return isess
 
-    output = None
-    # Generate graph from State
-    if isess.state:
-        if format == "json":
-            # A reproducible session must be open, signal about it if not
-            if isess.reproducible_session_opened():
-                if isess.state:
-                    # Prepare a JSON string
-                    output = str(export_model_to_json(isess.state))
-            mimetype = "text/json"
-        elif format == "xlsx":
-            # A reproducible session must be open, signal about it if not
-            if isess.reproducible_session_opened():
-                if isess.state:
-                    # Prepare a XLSX binary
-                    output = nis_format_spreadsheet(isess.state)
-            mimetype = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        elif format == "xml":
-            # A reproducible session must be open, signal about it if not
-            if isess.reproducible_session_opened():
-                if isess.state:
-                    # Prepare a XML string
-                    glb_idx, _, _, _, _ = get_case_study_registry_objects(isess.state)
-                    output, _ = export_model_to_xml(glb_idx)
-            mimetype = "text/xml"
-
-    if output:
-        return Response(output, mimetype=mimetype, status=200)
-    else:
-        return build_json_response({"error": F"Cannot return model, format '{format}' not recognized"}, 401)
+    content, content_type, ok = get_model(isess.state, format)
+    return Response(content, mimetype=content_type, status=200 if ok else 401)
 
 
 @app.route(nis_api_base + '/isession/rsession/state_query/flow_graph.<format>', methods=["GET"])
@@ -1586,37 +1323,20 @@ def obtain_flow_graph(format):
     output = None
     # Generate graph from State
     if isess.state:
-        if format == "visjs":
-            # TODO Prepare JSON file
-            query = BasicQuery(isess.state)
-            output = construct_flow_graph_2(isess.state, query, None, format)  # Version 2 !!!
-            mimetype = "application/json"
-        elif format == "gml":
-            # Prepare GML file
-            query = BasicQuery(isess.state)
-            output = construct_flow_graph_2(isess.state, query, None, format)  # Version 2 !!!
-            mimetype = "application/text"  # TODO
+        output, mimetype, ok = get_graph_from_state(isess.state, f"interfaces_graph.{format}")
+        # if format == "visjs":
+        #     # TODO Prepare JSON file
+        #     query = BasicQuery(isess.state)
+        #     output = construct_flow_graph_2(isess.state, query, None, format)  # Version 2 !!!
+        #     mimetype = "application/json"
+        # elif format == "gml":
+        #     # Prepare GML file
+        #     query = BasicQuery(isess.state)
+        #     output = construct_flow_graph_2(isess.state, query, None, format)  # Version 2 !!!
+        #     mimetype = "application/text"  # TODO
 
     if output:
         r = Response(output, mimetype=mimetype, status=200)
-    else:
-        r = build_json_response({}, 200)
-
-    return r
-
-
-@app.route(nis_api_base + '/isession/rsession/query/flow_graph.visjs', methods=["GET"])
-def obtain_flow_graph_visjs_format():
-    # Recover InteractiveSession
-    isess = deserialize_isession_and_prepare_db_session()
-    if isess and isinstance(isess, Response):
-        return isess
-
-    # Generate graph from State
-    if isess.state:
-        query = BasicQuery(isess.state)
-        json = construct_flow_graph(isess.state, query, None, "visjs")
-        r = build_json_response(json, 200)
     else:
         r = build_json_response({}, 200)
 
@@ -1710,70 +1430,9 @@ def reproducible_session_query_state_get_dataset(name, format):  # Query list of
     # A reproducible session must be open, signal about it if not
     if isess.reproducible_session_opened():
         if isess.state:
-            glb_idx, p_sets, hh, datasets, mappings = get_case_study_registry_objects(isess.state)
-            if "." in name:
-                pos = name.find(".")
-                format = name[pos+1:] + "." + format
-                name = name[:pos]
-            if name in datasets:
-                # Obtain the data and the metadata
-                ds = datasets[name]  # type: Dataset
-                ds2 = ds.data
-                # Labels
-                labels_enabled = request.args.get("labels", "True") == "True"
-                if labels_enabled:
-                    print("Preparing Dataset labels")
-                    ds2 = add_label_columns_to_dataframe(name, ds2, glb_idx)
-
-                if isinstance(ds2.index, (pd.Int64Index, pd.core.indexes.range.RangeIndex)):
-                    export_index = False
-                else:
-                    export_index = True
-
-                # TODO Elaborate "meta-workbook" (NIS workbook capable of reproducing the dataset)
-                if format == "json":
-                    tmp = json.loads('{"data": '+ds2.to_json(orient='split', date_format='iso', date_unit='s')+', "metadata": {}}')
-                    del tmp["data"]["index"]
-                    r = build_json_response(tmp, 200)
-                elif format == "json2":
-                    tmp = ds2.to_json(orient='records', date_format='iso', date_unit='s')
-                    r = Response(tmp, mimetype="text/json", status=200)
-                elif format == "csv":
-                    tmp = ds2.to_csv(date_format="%Y-%m-%d %H:%M:%S", index=export_index, na_rep="")
-                    r = Response(io.StringIO(tmp), mimetype="text/csv", status=200)
-                elif format == "kendopivotgrid":
-                    # Prepare Data and Schema in Kendo PivotGrid format
-                    data = json.loads(ds2.to_json(orient='records', date_format='iso', date_unit='s'))
-                    fields = {}
-                    dimensions = {}
-                    measures = {}
-                    for i, c in enumerate(ds2.columns):
-                        is_dimension = i < len(ds2.columns)-1
-                        fields[c] = dict(type="string" if is_dimension else "number")
-                        if is_dimension:
-                            dimensions[c] = dict(caption="All "+c)
-                        else:
-                            measures["Sum "+c] = dict(field=c, format="{0:c}", aggregate="sum")
-                            measures["Avg " + c] = dict(field=c, format="{0:c}", aggregate="average")
-                    schema = dict(model=dict(fields=fields), cube=dict(dimensions=dimensions, measures=measures))
-                    r = build_json_response(dict(data=data, schema=schema), 200)
-                elif format == "sdmx.json":
-                    md = get_dataset_metadata(name, ds)
-                    r = build_json_response(md, 200)
-                elif format == "xlsx":
-                    # Generate XLSX from data & return it
-                    output = io.BytesIO()
-                    # from pyexcelerate import Workbook, Writer
-                    # wb = Workbook()
-                    # data = [ds2.columns] + [ds2.values]
-                    # wb.new_sheet(name, data=data)
-                    # wr = Writer.Writer(wb)
-                    # wr.save(output)
-                    print("Generating Excel")
-                    ds2.to_excel(output, sheet_name=name, index=False) #, engine="xlsxwriter")
-                    r = Response(output.getvalue(), mimetype="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", status=200)
-            else:
-                r = build_json_response({"error": "Could not find a Dataset with name '"+name+"' in the current state"}, 401)
+            labels_enabled = request.args.get("labels", "True") == "True"
+            content, content_type, ok = get_dataset_from_state(isess.state, name, labels_enabled)
+            r = Response(content, mimetype=content_type, status=200 if ok else 401)
         else:
             r = build_json_response([], 204)
     else:
@@ -1976,7 +1635,7 @@ def reproducible_session_append_command_generator():  # Receive a command_execut
         reset_state_and_reproducible_session(isess)
 
         # Add system-level entities from JSON definition in "default_cmds"
-        ret = isess.register_andor_execute_command_generator("json", "application/json", default_cmds, False, True)
+        ret = isess.register_andor_execute_command_generator("json", "application/json", nexinfosys.default_cmds, False, True)
 
         # Check that objects have been properly registered
         # glb_idx, p_sets, hh, datasets, mappings = get_case_study_registry_objects(isess._state)
@@ -3458,43 +3117,6 @@ def obtain_commands_and_their_fields():
     return j
 
 
-def split_expansion_expressions(f, content):
-    # Dataset expansion. Isolate each expression
-    pieces = []
-    offset = 0
-    look_for = "{"
-    open_brace = False
-    s = None
-    while offset < len(content):
-        pos = content[offset:].find(look_for)
-        if pos >= 0:
-            if look_for == "{":
-                if pos > 0:
-                    pieces.append((content[offset:offset + pos], False))  # Literal
-                look_for = "}"
-                open_brace = True
-            else:
-                if pos > 0:
-                    pieces.append((content[offset:offset + pos], True))  # Expansion
-                else:
-                    s = f"Invalid syntax in field '{f}' with value: " + content + ". No expression between curly braces."
-                    valid = False
-                    break
-                look_for = "{"
-                open_brace = False
-            offset += pos + 1
-        else:  # Character not found
-            if open_brace:
-                s = f"Invalid syntax in field '{f}' with value: " + content + ". Curly brace not closed."
-                valid = False
-                break
-            else:  # Add the rest
-                pieces.append((content[offset:], False))
-                offset = len(content)
-
-    return pieces, s
-
-
 @app.route(nis_api_base + "/validate_command_record", methods=["POST"])
 def validate_command_record():
     """
@@ -3517,119 +3139,8 @@ def validate_command_record():
 
     # Read request
     command_content_to_validate = request.get_json()
-    if "command" in command_content_to_validate:
-        command = command_content_to_validate["command"]
-    else:
-        raise Exception("Must specify 'command'")
-
-    if "fields" in command_content_to_validate:
-        fields = command_content_to_validate["fields"]
-    else:
-        raise Exception("Must specify 'fields'")
-
-    alternative_command_names = command_content_to_validate.get("alternative_command_names", {})
-
-    result = {}
-    # Find command from the worksheet name ("command")
-    match = None
-    for cmd in commands:
-        for cmd_name in cmd.allowed_names:
-            if cmd_name.lower() in command.lower():
-                if match:
-                    if match[1] < len(cmd_name):
-                        match = (cmd.name, len(cmd_name))
-                else:
-                    match = (cmd.name, len(cmd_name))
-    if not match:
-        for k, v in alternative_command_names:
-            if k.lower() in command.lower():
-                for cmd in commands:
-                    for cmd_name in cmd.allowed_names:
-                        if cmd_name.lower() in v.lower():
-                            match = (cmd.name, 0)
-                            break
-                    if match:
-                        break
-                if match:
-                    break
-
-    # Fields in the command
-    status = 200
-    if match:
-        for f in fields:  # Validate field by field
-            for f2 in command_fields[match[0]]:  # Find corresponding field in the command
-                if f.lower() in [f3.lower() for f3 in f2.allowed_names]:
-                    fld = f2
-                    break
-            else:
-                fld = None
-            if fld:  # If found, can validate syntax
-                # Validate Syntax
-                content = fields[f]
-                content_msg = content  # Original "content", to show in case of error
-                if isinstance(content, (int, float)):
-                    content = str(content)
-
-                # Check if it is an expansion expression
-                valid = True
-                if "{" in content or "}" in content:
-                    # Is expansion allowed in this command?
-                    expansion_allowed = True
-                    if expansion_allowed:
-                        pieces, s = split_expansion_expressions(f, content)
-                        if s is None:
-                            c = ""
-                            for p in pieces:
-                                if p[1]:  # Expansion expression
-                                    try:
-                                        string_to_ast(arith_boolean_expression, p[0])
-                                        c += "expand"
-                                    except:
-                                        s = f"Invalid syntax in field '{f}' with value: {content}, expansion expression '{p[0]}' invalid"
-                                        result[f] = s
-                                        valid = False
-                                        break
-                                else:
-                                    c += p[0]
-                            if valid:
-                                content = c
-                        else:
-                            valid = False
-
-                if not valid:
-                    result[f] = s
-                    status = 400
-                else:
-                    if fld.allowed_values:
-                        if content != content_msg:  # It was an expansion expression, cannot check it now, assume it is good
-                            result[f] = None
-                        else:
-                            # Case insensitive comparison
-                            if content.lower().strip() in [f.lower().strip() for f in fld.allowed_values]:
-                                result[f] = None
-                            else:
-                                result[f] = "'"+content+"' in field '"+f+"' must be one of: "+", ".join(fld.allowed_values)
-                                status = 400
-                    else:
-                        try:
-                            string_to_ast(fld.parser, content)
-                            result[f] = None
-                        except:
-                            s = f"Invalid syntax in field '{f}' with value: '{content_msg}'"
-                            if fld.examples:
-                                s += ". Examples: "+", ".join(fld.examples)
-                            result[f] = s
-                            status = 400
-
-            else:
-                result[f] = "Field '"+f+"' not found in command '"+command+"'. Possible field names: "+", ".join([item for f2 in command_fields[command] for item in f2.allowed_names])
-                status = 400
-    else:
-        for f in fields:  # Validate field by field
-            result[f] = "Command '" + command +"' not found in the list of command names: " +", ".join([n for c in commands for n in c.allowed_names])
-        status = 400
-
-    return build_json_response(result, status)
+    result, status = validate_command(command_content_to_validate)
+    return build_json_response(result, 200 if status else 400)
 
 
 def get_misc_cmd_help(cmd_name):
@@ -3989,51 +3500,7 @@ def command_help():
 
     # Read request
     command_content_to_validate = request.get_json()
-    if "command" in command_content_to_validate:
-        command = command_content_to_validate["command"]
-    else:
-        raise Exception("Must specify 'command'")
-
-    alternative_command_names = command_content_to_validate.get("alternative_command_names", {})
-
-    # Find command from the worksheet name ("command")
-    match = None
-    for cmd in commands:
-        for cmd_name in cmd.allowed_names:
-            if cmd_name.lower() in command.lower():
-                if match:
-                    if match[1] < len(cmd_name):
-                        match = (cmd.name, len(cmd_name))
-                else:
-                    match = (cmd.name, len(cmd_name))
-    if not match:
-        for k, v in alternative_command_names:
-            if k.lower() in command.lower():
-                for cmd in commands:
-                    for cmd_name in cmd.allowed_names:
-                        if cmd_name.lower() in v.lower():
-                            match = (cmd.name, 0)
-                            break
-                    if match:
-                        break
-                if match:
-                    break
-
-    # Fields in the command
-    status = 200
-    if match:
-        if (match[0], "title") in c_descriptions:
-            title = c_descriptions[(match[0], "title")]
-            description = c_descriptions[(match[0], "description")]
-            semantics = c_descriptions[(match[0], "semantics")]
-            examples = c_descriptions[(match[0], "examples")]
-            fields = command_fields_help
-            result = dict(title=title, description=description, semantics=semantics, examples=examples)
-        else:
-            result = dict(title=f"Title {command}", description=f"Description {command}", semantics=f"Semantics {command}")
-    else:
-        status = 400
-        result = dict()
+    result, status = comm_help(command_content_to_validate)
 
     return build_json_response(result, status)
 
@@ -4054,77 +3521,8 @@ def command_fields_help():
 
     # Read request
     command_content_to_validate = request.get_json()
-    if "command" in command_content_to_validate:
-        command = command_content_to_validate["command"]
-    else:
-        raise Exception("Must specify 'command'")
-
-    if "fields" in command_content_to_validate:
-        fields = command_content_to_validate["fields"]
-    else:
-        raise Exception("Must specify 'fields'")
-
-    alternative_command_names = command_content_to_validate.get("alternative_command_names", {})
-
-    result = {}
-    # Find command from the worksheet name ("command")
-    match = None
-    for cmd in commands:
-        for cmd_name in cmd.allowed_names:
-            if cmd_name.lower() in command.lower():
-                if match:
-                    if match[1] < len(cmd_name):
-                        match = (cmd.name, len(cmd_name))
-                else:
-                    match = (cmd.name, len(cmd_name))
-    if not match:
-        for k, v in alternative_command_names:
-            if k.lower() in command.lower():
-                for cmd in commands:
-                    for cmd_name in cmd.allowed_names:
-                        if cmd_name.lower() in v.lower():
-                            match = (cmd.name, 0)
-                            break
-                    if match:
-                        break
-                if match:
-                    break
-
-    # Fields in the command
-    status = 200
-    if match:
-        for f in fields:  # Validate field by field
-            for f2 in command_fields.get(match[0], []):  # Find corresponding field in the command
-                if f.lower() in [f3.lower() for f3 in f2.allowed_names]:
-                    fld = f2
-                    break
-            else:
-                fld = None
-            if fld:  # If found, can elaborate help
-                mandatoriness = "Mandatory" if fld.mandatory else "Optional"
-                description = cf_descriptions.get((match[0], fld.name), f"Text for field {f} in command {match[0]}")
-                if isinstance(description, list):
-                    description = description[0]  # Short version for online. Index 1 contains the long version
-                examples = ("<br><b>Examples:</b><br>&nbsp;&nbsp;"+"<br>&nbsp;&nbsp;".join(generic_field_examples[fld.parser])) if generic_field_examples.get(fld.parser) else ""
-                syntax = ", ".join(fld.allowed_values) if fld.allowed_values else generic_field_syntax.get(fld.parser, "<>")
-                if fld.allowed_values:
-                    result[f] = f"<small><b>({mandatoriness})</b></small><br>{description}<br><b>Syntax. One of:</b> {syntax}"
-                else:
-                    result[f] = f"<small><b>({mandatoriness})</b></small><br>{description}<br><b>Syntax:</b> {syntax}{examples}"
-            else:
-                if match[0] == "datasetqry" and f:  # Must be a dimension name
-                    mandatoriness = "Optional"
-                    description = "A dimension name. Use for filtering purposes (leave the values that MUST be at the output)."
-                    result[f] = f"<small><b>({mandatoriness})</b></small><br>{description}"
-                else:
-                    result[f] = "Field '"+f+"' not found in command '"+command+"'. Possible field names: "+", ".join([item for f2 in command_fields.get(match[0], []) for item in f2.allowed_names])
-                    status = 400
-    else:
-        for f in fields:  # Validate field by field
-            result[f] = "Command '" + command +"' not found in the list of command names: " +", ".join([n for c in commands for n in c.allowed_names])
-        status = 400
-
-    return build_json_response(result, status)
+    result, status = command_field_help(command_content_to_validate)
+    return build_json_response(result, 200 if status else 400)
 
 
 # @app.route(nis_api_base + "/sources/<id>/databases/<database_id>/datasets/<dataset_id>", methods=["GET"])
