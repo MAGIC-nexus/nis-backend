@@ -37,6 +37,7 @@ It is an open system as it can be used to integrate MuSIASEM as a formalism in a
   - [**nis-frontend** quick intro](#quick-intro-to-nis-frontend)
 - [Accessing **nis-backend** in Python and R scripts with **nis-client**](#accessing-nis-backend-in-python-and-r-scripts-with-nis-client)
 - [Configuration](#configuration)
+- [Contributing](#contributing)
 - [People](#people)
 - [Contact](#contact)
 - [License](#license)
@@ -208,6 +209,16 @@ FS_PASSWORD | Password for the previous user | "<password in clear>" |
 GAPI_CREDENTIALS_FILE | Path to a file obtained from Google API management web, to directly access a NIS workbook file in Google Sheets | "/srv/credentials.json" |
 GAPI_TOKEN_FILE | Path to a file used to stored authorization token | "/srv/tocken.pickle" |
 
+## Contributing
+
+Contributions are welcome. Follows a list of possible ways in which you could do it:
+
+* Testing as end user. Install "nis-backend" (this repository) and execute it, launching the user interface to specify and submit case studies, maybe with the help of an external spreadsheet software. Use Github issues when you find incorrect behavior. Please follow [Mastering Issues](https://guides.github.com/features/issues/) guidelines.
+* Testing as scripts developer. Install "nis-backend" and use it in your scripts using either NIS class or the subproject [nis-client](https://github.com/MAGIC-nexus/nis-python-client) connecting it to a running "nis-backend".
+* Prepare reusable MuSIASEM library files, containing model parts, like structures of high level functions in different domains (water, energy, food), interface type hierarchies, technical data about structurals, mappings from specific official statistical datasets to MuSIASEM interface types, calculation of scalar indicators, benchmarks, etc. All of them may be compiled in separate files, as long as the composition of them is consistent.
+* If you are a developer willing to contribute to "nis-backend", please mail one of the contact persons (see Contact below) to discuss some of the features and improvements which could be interesting to have implemented. Once you are ready to contribute, please do it through Github Pull Requests, following the [standard PR workflow](https://guides.github.com/introduction/flow/).
+
+The standard [contributor covenant](CODE_OF_CONDUCT.md) code of conduct is earnestly applied in interactions with the community.
 
 ## People
 
