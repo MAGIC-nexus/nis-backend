@@ -2,7 +2,8 @@ import unittest
 import sqlalchemy
 
 # Memory
-from nexinfosys.model_services.workspace import InteractiveSession, CreateNew, prepare_and_reset_database_for_tests
+from nexinfosys.model_services.workspace import InteractiveSession, CreateNew
+from nexinfosys.initialization import prepare_and_reset_database_for_tests
 from nexinfosys.command_executors import create_command
 from nexinfosys.restful_service import tm_default_users, \
     tm_authenticators, \

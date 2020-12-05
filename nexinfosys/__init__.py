@@ -10,7 +10,6 @@ from collections import namedtuple
 from attr import attrs, attrib
 
 # GLOBAL VARIABLES
-
 engine = None
 
 # Database containing OLAP data (cache of Data Cubes)
@@ -94,11 +93,87 @@ def simple_regex(names: List[str]):
     return r"(" + "|".join(names) + ")" + regex_optional_alphanumeric
 
 
+# #####################################################################################################################
+# >>>> CONFIGURATION FILE AND DIRECTORIES <<<<
+# #####################################################################################################################
+
+def prepare_default_configuration(create_directories):
+    def default_directories(path, tmp_path):
+        return {
+            "DB_CONNECTION_STRING": f"sqlite:///{path}/nis_metadata.db",
+            "DATA_CONNECTION_STRING": f"sqlite:///{path}/nis_cached_datasets.db",
+            "CASE_STUDIES_DIR": f"{path}/data/cs/",
+            "FAO_DATASETS_DIR": f"{path}/data/faostat/",
+            "FADN_FILES_LOCATION": f"{path}/data/fadn",
+            "CACHE_FILE_LOCATION": f"{tmp_path}/sdmx_datasets_cache",
+            "REDIS_HOST_FILESYSTEM_DIR": f"{tmp_path}/sessions",
+            "SSP_FILES_DIR": "",
+        }
+
+    from appdirs import AppDirs
+    app_dirs = AppDirs("nis-backend")
+
+    # Default directories, multi-platform
+    data_path = app_dirs.user_data_dir
+    cache_path = app_dirs.user_cache_dir
+    if create_directories:
+        os.makedirs(data_path, exist_ok=True)
+        os.makedirs(cache_path, exist_ok=True)
+
+    # Obtain and create directories
+    dirs = default_directories(data_path, cache_path)
+    for v in dirs.values():
+        if v:
+            if create_directories:
+                os.makedirs(v, exist_ok=True)
+
+    # Default configuration
+    return f"""{os.linesep.join([f'{k}="{v}"' for k, v in dirs.items()])}
+# Flask Session (server side session)
+REDIS_HOST="filesystem:local_session"
+TESTING="True"
+SELF_SCHEMA=""
+FS_TYPE="WebDAV"
+FS_SERVER=""
+FS_USER=""
+FS_PASSWORD=""
+# Google Drive API
+GAPI_CREDENTIALS_FILE="{data_path}/credentials.json"
+GAPI_TOKEN_FILE="{data_path}/token.pickle"    
+""", data_path + os.sep + "nis_local.conf"
+
 # Global configuration variables
 global_configuration = None
 
 
-def get_global_configuration_variable(key: str) -> str:
+def initialize_configuration():
+    try:
+        _, file_name = prepare_default_configuration(False)
+        if not os.environ.get("MAGIC_NIS_SERVICE_CONFIG_FILE"):
+            found = False
+            for f in [file_name]:  # f"{nexinfosys.__path__[0]}/restful_service/nis_local_dist.conf"
+                if os.path.isfile(f):
+                    print(f"Assuming {f} as configuration file")
+                    found = True
+                    os.environ["MAGIC_NIS_SERVICE_CONFIG_FILE"] = f
+                    break
+            if not found:
+                cfg, file_name = prepare_default_configuration(True)
+                print(f"Generating {file_name} as configuration file:\n{cfg}")
+                with open(file_name, "wt") as f:
+                    f.write(cfg)
+                os.environ["MAGIC_NIS_SERVICE_CONFIG_FILE"] = file_name
+
+        print("-----------------------------------------------")
+        print(f'Configuration file at: {os.environ["MAGIC_NIS_SERVICE_CONFIG_FILE"]}')
+        print("-----------------------------------------------")
+
+    except Exception as e:
+        print("MAGIC_NIS_SERVICE_CONFIG_FILE environment variable not defined!")
+        print(e)
+
+
+def get_global_configuration():
     def read_configuration() -> Dict[str, str]:
         """
         If environment variable "MAGIC_NIS_SERVICE_CONFIG_FILE" is defined, and the contents is the name of an existing file,
@@ -114,12 +189,19 @@ def get_global_configuration_variable(key: str) -> str:
                 config = configparser.ConfigParser()
                 config.read_string(config_string)
                 return {k: expand_paths(k, remove_quotes(v)) for k, v in config.items("asection")}
-        return {}
+        else:
+            return {}
 
     global global_configuration
     if global_configuration is None:
         global_configuration = read_configuration()
-    return global_configuration.get(key.lower())
+    return global_configuration
+
+
+def get_global_configuration_variable(key: str, default: str = None) -> str:
+    global global_configuration
+    get_global_configuration()
+    return global_configuration.get(key.lower(), default)
 
 
 def remove_quotes(s: str) -> str:

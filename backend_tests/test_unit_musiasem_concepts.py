@@ -6,7 +6,7 @@ from nexinfosys.models.experiments.expressions import ExpressionsEngine
 from nexinfosys.models.musiasem_concepts import *
 from nexinfosys.models.musiasem_concepts_helper import *
 from nexinfosys.models.musiasem_concepts_helper import _get_observer, _find_or_create_relation
-from nexinfosys.restful_service.serialization import serialize_state, deserialize_state
+from nexinfosys.serialization import serialize_state, deserialize_state
 
 """ Integration tests for in memory model structures """
 

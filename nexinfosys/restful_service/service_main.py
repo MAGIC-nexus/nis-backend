@@ -30,19 +30,20 @@ pyximport.install(reload_support=True, language_level=3)
 # >>>>>>>>>> IMPORTANT <<<<<<<<<
 # To debug in local mode, prepare an environment variable "MAGIC_NIS_SERVICE_CONFIG_FILE", with value "./nis_local.conf"
 # >>>>>>>>>> IMPORTANT <<<<<<<<<
+from nexinfosys.command_generators.parser_spreadsheet_utils_accel import rewrite_xlsx_file
+
 from nexinfosys.ie_exports.reference_of_commands import obtain_commands_help
 from nexinfosys.command_definitions import commands
 from nexinfosys.command_field_definitions import command_fields
 from nexinfosys.command_generators import Issue, IType
 from nexinfosys.command_generators.parser_field_parsers import string_to_ast, simple_ident
-from nexinfosys.command_generators.parser_spreadsheet_utils_accel import rewrite_xlsx_file
 from nexinfosys.common.helper import generate_json, gzipped, str2bool, \
     download_file, any_error_issue, wv_upload_file
 from nexinfosys.models.musiasem_methodology_support import *
-from nexinfosys.restful_service import app, get_parameters_in_state, \
-    get_scenarios_in_state, get_results_in_session, get_dataset_from_state, get_model, get_geolayer, get_ontology, \
-    get_graph_from_state, validate_command, command_field_help, comm_help, initialize_database_data, \
-    initialize_databases, register_external_datasources
+from nexinfosys.restful_service import app, get_results_in_session
+from nexinfosys.initialization import initialize_database_data, initialize_databases, get_parameters_in_state, \
+    get_scenarios_in_state, register_external_datasources, get_graph_from_state, \
+    get_dataset_from_state, get_model, get_geolayer, get_ontology, validate_command, command_field_help, comm_help
 import nexinfosys
 from nexinfosys.command_executors import create_command
 from nexinfosys.command_executors.specification.metadata_command import generate_dublin_core_xml
@@ -51,7 +52,7 @@ from nexinfosys.model_services.workspace import InteractiveSession, CreateNew, R
     execute_command_container, convert_generator_to_native, prepare_and_solve_model
 from nexinfosys.restful_service import nis_api_base, nis_client_base, nis_external_client_base
 from nexinfosys.models import log_level
-from nexinfosys.restful_service.serialization import serialize, deserialize, serialize_state, deserialize_state
+from nexinfosys.serialization import serialize, deserialize, serialize_state, deserialize_state
 from nexinfosys.ie_exports.flows_graph import BasicQuery
 from nexinfosys.ie_exports.processors_graph import construct_processors_graph_2
 
@@ -124,7 +125,7 @@ def construct_session_persistence_backend():
 #
 
 initialize_databases()
-nexinfosys.data_source_manager = register_external_datasources(app.config)
+nexinfosys.data_source_manager = register_external_datasources()
 
 d = construct_session_persistence_backend()
 if "SESSION_REDIS" in d:

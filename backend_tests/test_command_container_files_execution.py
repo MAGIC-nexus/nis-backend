@@ -4,8 +4,8 @@ import unittest
 import nexinfosys
 from nexinfosys.ie_exports.json_export import export_model_to_json
 from nexinfosys.model_services import get_case_study_registry_objects
-from nexinfosys.model_services.workspace import execute_file, prepare_and_reset_database_for_tests, \
-    prepare_and_solve_model, execute_file_return_issues
+from nexinfosys.model_services.workspace import execute_file, prepare_and_solve_model, execute_file_return_issues
+from nexinfosys.initialization import prepare_and_reset_database_for_tests
 from nexinfosys.models.musiasem_concepts import Observer, \
     Processor, FactorType, Factor, \
     Hierarchy, \
@@ -13,8 +13,8 @@ from nexinfosys.models.musiasem_concepts import Observer, \
     ProcessorsRelationUndirectedFlowObservation, ProcessorsRelationUpscaleObservation, \
     FactorsRelationDirectedFlowObservation
 # Database (ORM)
-from nexinfosys.restful_service import register_external_datasources
-from nexinfosys.restful_service.serialization import serialize_state, deserialize_state
+from nexinfosys import register_external_datasources
+from nexinfosys.serialization import serialize_state, deserialize_state
 from nexinfosys.solving import get_processor_names_to_processors_dictionary
 from nexinfosys.common.helper import add_label_columns_to_dataframe
 

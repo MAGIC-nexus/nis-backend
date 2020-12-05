@@ -9,13 +9,11 @@ import itertools
 import json
 import logging
 import mimetypes
-import os
 import re
 import tempfile
 import urllib
 import urllib.request
 import uuid
-from abc import abstractmethod
 from enum import Enum
 from functools import partial, reduce
 from operator import add, mul, sub, truediv
@@ -1820,60 +1818,11 @@ def change_tuple_value(t: Tuple, index: int, value: Any) -> Tuple:
 #     print("Finished!!")
 
 
-# #####################################################################################################################
-# >>>> CREATE DEFAULT CONFIGURATION FILE AND DIRECTORIES <<<<
-# #####################################################################################################################
-
-def prepare_default_configuration(create_directories):
-    def default_directories(path, tmp_path):
-        return {
-            "DB_CONNECTION_STRING": f"sqlite:///{path}/nis_metadata.db",
-            "DATA_CONNECTION_STRING": f"sqlite:///{path}/nis_cached_datasets.db",
-            "CASE_STUDIES_DIR": f"{path}/data/cs/",
-            "FAO_DATASETS_DIR": f"{path}/data/faostat/",
-            "FADN_FILES_LOCATION": f"{path}/data/fadn",
-            "CACHE_FILE_LOCATION": f"{tmp_path}/sdmx_datasets_cache",
-            "REDIS_HOST_FILESYSTEM_DIR": f"{tmp_path}/sessions",
-            "SSP_FILES_DIR": "",
-        }
-
-    from appdirs import AppDirs
-    app_dirs = AppDirs("nis-backend")
-
-    # Default directories, multi-platform
-    data_path = app_dirs.user_data_dir
-    cache_path = app_dirs.user_cache_dir
-    if create_directories:
-        os.makedirs(data_path, exist_ok=True)
-        os.makedirs(cache_path, exist_ok=True)
-
-    # Obtain and create directories
-    dirs = default_directories(data_path, cache_path)
-    for v in dirs.values():
-        if v:
-            if create_directories:
-                os.makedirs(v, exist_ok=True)
-
-    # Default configuration
-    return f"""{os.linesep.join([f'{k}="{v}"' for k, v in dirs.items()])}
-# Flask Session (server side session)
-REDIS_HOST="filesystem:local_session"
-TESTING="True"
-SELF_SCHEMA=""
-FS_TYPE="WebDAV"
-FS_SERVER=""
-FS_USER=""
-FS_PASSWORD=""
-# Google Drive API
-GAPI_CREDENTIALS_FILE="{data_path}/credentials.json"
-GAPI_TOKEN_FILE="{data_path}/token.pickle"    
-""", data_path + os.sep + "nis_local.conf"
-
-
 if __name__ == '__main__':
     # f = open("/home/rnebot/GoogleDrive/AA_MAGIC/FAOSTAT_analysis.xlsx", "rb")
     # data = io.BytesIO(f.read())
     # f.close()
     # wv_upload_file(data, "https://nextcloud.data.magic-nexus.eu/remote.php/webdav/NIS_beta/CS_format_examples/FAOSTAT_analysis.xlsx", "NIS_agent", "NIS_agent@1", "nextcloud.data.magic-nexus.eu")
-    ret = download_file("https://nextcloud.data.magic-nexus.eu/remote.php/webdav/NIS_beta/CS_format_examples/08_caso_energia_eu_new_commands.xlsx", "NIS_agent", "NIS_agent@1")
+    ret = download_file("https://sandbox.zenodo.org/record/536704/files/url_demo_2.zip?download=1#msm/geolayer.xlsx")
+    # ret = download_file("https://nextcloud.data.magic-nexus.eu/remote.php/webdav/NIS_beta/CS_format_examples/08_caso_energia_eu_new_commands.xlsx", "NIS_agent", "NIS_agent@1")
     print(f"Longit: {len(ret.getvalue())}")

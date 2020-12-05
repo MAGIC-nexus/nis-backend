@@ -12,12 +12,12 @@ from enum import Enum
 from typing import List, Union, Dict, NoReturn
 
 import pandas as pd
-import sqlalchemy
 
 import nexinfosys
 from nexinfosys.command_generators import Issue, IssueLocation, IType
 from nexinfosys.command_generators.parsers_factory import commands_container_parser_factory
 from nexinfosys.common.helper import create_dictionary, strcmp
+from nexinfosys.initialization import prepare_and_reset_database_for_tests
 from nexinfosys.model_services import IExecutableCommand, get_case_study_registry_objects
 from nexinfosys.model_services import State
 from nexinfosys.models.musiasem_concepts import ProblemStatement, FactorsRelationDirectedFlowObservation, Processor, \
@@ -28,12 +28,8 @@ from nexinfosys.models.musiasem_methodology_support import (User,
                                                             CaseStudyVersionSession,
                                                             CommandsContainer,
                                                             force_load,
-                                                            DBSession, ORMBase, load_table, Authenticator,
-                                                            CaseStudyStatus,
-                                                            ObjectType, PermissionType)
-from nexinfosys.restful_service import tm_default_users, tm_authenticators, tm_case_study_version_statuses, \
-    tm_object_types, tm_permissions
-from nexinfosys.restful_service.serialization import serialize_state, deserialize_state
+                                                            DBSession)
+from nexinfosys.serialization import serialize_state, deserialize_state
 from nexinfosys.solving import BasicQuery
 from nexinfosys.solving.flow_graph_solver import flow_graph_solver, evaluate_parameters_for_scenario, get_dataset
 
@@ -1060,40 +1056,6 @@ def execute_file(file_name, generator_type):
     :return:
     """
     return execute_file_return_issues(file_name, generator_type)[0]  # Return just "isession"
-
-
-def prepare_and_reset_database_for_tests(prepare=False, metadata_string="sqlite://", data_string="sqlite://"):
-    if prepare:
-        nexinfosys.engine = sqlalchemy.create_engine(metadata_string, echo=True)
-        nexinfosys.data_engine = sqlalchemy.create_engine(data_string, echo=True)
-
-        # global DBSession # global DBSession registry to get the scoped_session
-        DBSession.configure(bind=nexinfosys.engine)  # reconfigure the sessionmaker used by this scoped_session
-        tables = ORMBase.metadata.tables
-        connection = nexinfosys.engine.connect()
-        table_existence = [nexinfosys.engine.dialect.has_table(connection, tables[t].name) for t in tables]
-        connection.close()
-        if False in table_existence:
-            ORMBase.metadata.bind = nexinfosys.engine
-            ORMBase.metadata.create_all()
-
-    # Load base tables
-    load_table(DBSession, User, tm_default_users)
-    load_table(DBSession, Authenticator, tm_authenticators)
-    load_table(DBSession, CaseStudyStatus, tm_case_study_version_statuses)
-    load_table(DBSession, ObjectType, tm_object_types)
-    load_table(DBSession, PermissionType, tm_permissions)
-    # Create and insert a user
-    session = DBSession()
-    # Create test User, if it does not exist
-    u = session.query(User).filter(User.name == 'test_user').first()
-    if not u:
-        u = User()
-        u.name = "test_user"
-        u.uuid = "27c6a285-dd80-44d3-9493-3e390092d301"
-        session.add(u)
-        session.commit()
-    DBSession.remove()
 
 
 if __name__ == '__main__':
