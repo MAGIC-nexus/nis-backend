@@ -4,7 +4,7 @@ import pyximport
 
 pyximport.install(reload_support=True, language_level=3)
 
-from nexinfosys.common.helper_accel import augment_dataframe_with_mapped_columns2
+from nexinfosys.restful_service.helper_accel import augment_dataframe_with_mapped_columns2
 import nexinfosys.common.helper
 from nexinfosys.common.helper import PartialRetrievalDictionary, augment_dataframe_with_mapped_columns, create_dictionary
 from nexinfosys.models.musiasem_concepts import Processor, ProcessorsRelationPartOfObservation, Observer

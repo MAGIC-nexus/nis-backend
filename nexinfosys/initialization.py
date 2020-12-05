@@ -245,7 +245,7 @@ def get_graph_from_state(state: State, name: str):
     return output, mimetype, output is not None
 
 
-def get_dataset_from_state(state: State, name: str, labels_enabled: bool):
+def get_dataset_from_state(state: State, name: str, extension: str, labels_enabled: bool):
     glb_idx, p_sets, hh, datasets, mappings = get_case_study_registry_objects(state)
     if "." in name:
         pos = name.find(".")

@@ -7,14 +7,11 @@ from typing import List
 
 import nexinfosys
 from nexinfosys.common.helper import strcmp, create_dictionary, obtain_dataset_metadata, \
-    augment_dataframe_with_mapped_columns, translate_case
-import pyximport
+    translate_case
 
 from nexinfosys.models import CodeImmutable
 from nexinfosys.models.statistical_datasets import Dataset, Dimension, CodeList
 
-pyximport.install(reload_support=True, language_level=3)
-from nexinfosys.common.helper_accel import augment_dataframe_with_mapped_columns2
 from nexinfosys.model_services import IExecutableCommand, get_case_study_registry_objects
 
 
@@ -172,7 +169,16 @@ class DatasetQryCommand(IExecutableCommand):
                 # mapping_tuples.append((mappings[m].origin, mappings[m].destination, mappings[m].map))
                 mapping_dict[mappings[m].origin] = (mappings[m].destination, {d["o"]: d["to"] for d in mappings[m].map})
 
-        df = augment_dataframe_with_mapped_columns2(df, mapping_dict, ["value"])
+        # If accelerated version not available, use slow version
+        try:
+            if nexinfosys.get_global_configuration_variable("ENABLE_CYTHON_OPTIMIZATIONS") == "True":
+                from nexinfosys.restful_service.helper_accel import augment_dataframe_with_mapped_columns2 as augment_df
+            else:
+                raise Exception("Just to import the slow version")
+        except:
+            from nexinfosys.common.helper import augment_dataframe_with_mapped_columns as augment_df
+
+        df = augment_df(df, mapping_dict, ["value"])
 
         # Aggregate (If any dimension has been specified)
         if len(self._content["group_by"]) > 0:

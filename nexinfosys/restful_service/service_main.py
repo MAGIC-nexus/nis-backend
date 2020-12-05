@@ -1432,7 +1432,7 @@ def reproducible_session_query_state_get_dataset(name, format):  # Query list of
     if isess.reproducible_session_opened():
         if isess.state:
             labels_enabled = request.args.get("labels", "True") == "True"
-            content, content_type, ok = get_dataset_from_state(isess.state, name, labels_enabled)
+            content, content_type, ok = get_dataset_from_state(isess.state, name, format, labels_enabled)
             r = Response(content, mimetype=content_type, status=200 if ok else 401)
         else:
             r = build_json_response([], 204)

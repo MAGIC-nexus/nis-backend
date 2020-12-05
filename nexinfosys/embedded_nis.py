@@ -6,7 +6,6 @@ from typing import List, Tuple, Dict
 from urllib.parse import urlparse
 
 import pandas as pd
-import pyximport
 import webdav.client as wc
 import xlrd
 
@@ -16,11 +15,10 @@ from nexinfosys.common.helper import any_error_issue
 from nexinfosys.model_services import get_case_study_registry_objects
 from nexinfosys.model_services.workspace import InteractiveSession, prepare_and_solve_model
 from nexinfosys.models.musiasem_methodology_support import DBSession
-from nexinfosys.restful_service import get_parameters_in_state, get_scenarios_in_state, \
-    get_dataset_from_state, get_graph_from_state, get_geolayer, get_ontology, get_model, validate_command, \
-    command_field_help, comm_help, initialize_databases, register_external_datasources, app
-
-pyximport.install(reload_support=True, language_level=3)
+from nexinfosys.initialization import initialize_databases, get_parameters_in_state, get_scenarios_in_state, \
+    register_external_datasources, get_graph_from_state, get_dataset_from_state, get_model, get_geolayer, get_ontology, \
+    validate_command, command_field_help, comm_help
+from nexinfosys import initialize_configuration
 
 
 class NIS:
@@ -30,9 +28,11 @@ class NIS:
         self._dataframe_names = []  # type: List[str]
         self._dataframes = []  # type: List[pd.DataFrame]
         self._issues = None
-        self._config = app.config
+        initialize_configuration()
+        # Disable optimizations
+        nexinfosys.set_global_configuration_variable("ENABLE_CYTHON_OPTIMIZATIONS", False)
         initialize_databases()
-        nexinfosys.data_source_manager = register_external_datasources(self._config)
+        nexinfosys.data_source_manager = register_external_datasources()
 
     @property
     def dataframes(self):
@@ -405,11 +405,12 @@ class NIS:
                 if "." in ds_name:
                     pos = ds_name.find(".")
                     extension = ds_name[pos + 1:]
+                    ds_name = ds_name[:pos]
 
                 if struc_type == "dataset":
-                    ds, ctype, ok = get_dataset_from_state(self._isession.state, ds_name, labels_enabled=True)
+                    ds, ctype, ok = get_dataset_from_state(self._isession.state, ds_name, extension, labels_enabled=True)
                 elif struc_type == "graph":
-                    ds, ctype, ok = get_graph_from_state(self._isession.state, ds_name)
+                    ds, ctype, ok = get_graph_from_state(self._isession.state, ds_name+"."+extension)
                 elif struc_type == "geolayer":
                     ds, ctype, ok = get_geolayer(self._isession.state, extension)
                 elif struc_type == "model":
@@ -475,6 +476,9 @@ class NIS:
 
 
 if __name__ == '__main__':
+    examples = [
+        "/home/rnebot/GoogleDrive/AA_PROPUESTAS/Sentinel/Enviro/examples/01_eurostat_datasets.xlsx"
+                ]
     nis = NIS()
     nis.open_session()
     # nis.load_workbook("/home/rnebot/Dropbox/nis-backend/backend_tests/z_input_files/v2/Biofuel_NIS.xlsx")
@@ -483,5 +487,5 @@ if __name__ == '__main__':
     issues = nis.solve()
     tmp = nis.query_available_datasets()
     print(tmp)
-    # nis.get_results(["dataset", "ds1"])
+    nis.get_results([tmp[0]["type"], tmp[0]["name"]])
 
