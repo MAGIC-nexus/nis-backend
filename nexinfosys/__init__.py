@@ -132,6 +132,7 @@ def prepare_default_configuration(create_directories):
 # Flask Session (server side session)
 REDIS_HOST="filesystem:local_session"
 TESTING="True"
+ENABLE_CYTHON_OPTIMIZATIONS="True"
 SELF_SCHEMA=""
 FS_TYPE="WebDAV"
 FS_SERVER=""
@@ -202,6 +203,19 @@ def get_global_configuration_variable(key: str, default: str = None) -> str:
     global global_configuration
     get_global_configuration()
     return global_configuration.get(key.lower(), default)
+
+
+def set_global_configuration_variable(key: str, value: str):
+    """
+    Use carefully. The initial intention is to set the "ENABLE_CYTHON_OPTIMIZATIONS" variable to False
+
+    :param key:
+    :param value:
+    :return:
+    """
+    global global_configuration
+    if global_configuration:
+        global_configuration[key.lower()] = value
 
 
 def remove_quotes(s: str) -> str:

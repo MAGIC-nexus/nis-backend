@@ -1,4 +1,4 @@
-recursive-include nexinfosys/frontend *
+# recursive-include nexinfosys/frontend */
 exclude MANIFEST.in
 include requirements.txt
 include nexinfosys/restful_service/nis_local_dist.conf

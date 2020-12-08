@@ -4,6 +4,9 @@ import tempfile
 import zipfile
 from typing import List
 import pandas as pd
+
+from nexinfosys import get_global_configuration_variable
+
 pd.core.common.is_list_like = pd.api.types.is_list_like
 import pandas_datareader.data as web
 import numpy as np
@@ -82,12 +85,9 @@ def generate_datasets(seed_datasets):
 
 
 def get_fadn_directory():
-    app = import_names("nexinfosys.restful_service", "app")
-    if not app:
-        app = import_names("magic_box", "app")
     # EuroStat datasets
-    if 'FADN_FILES_LOCATION' in app.config:
-        dir_name = app.config['FADN_FILES_LOCATION']
+    if get_global_configuration_variable('FADN_FILES_LOCATION'):
+        dir_name = get_global_configuration_variable('FADN_FILES_LOCATION')
         print("USER: "+getpass.getuser())
     else:
         dir_name = tempfile.gettempdir() + "/fadn_datasets"

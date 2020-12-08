@@ -14,19 +14,16 @@ import pandasdmx
 import requests
 import requests_cache
 
+from nexinfosys import get_global_configuration_variable
 from nexinfosys.common.helper import create_dictionary, import_names, Memoize2, translate_case
 from nexinfosys.ie_imports.data_source_manager import IDataSourceManager, filter_dataset_into_dataframe
 from nexinfosys.models.statistical_datasets import DataSource, Database, Dataset, Dimension, CodeList, CodeImmutable
 
 
 def create_estat_request():
-    # from magic_box import app  # APP is this now. Adapt to the current app object!
-    app = import_names("nexinfosys.restful_service", "app")
-    if not app:
-        app = import_names("magic_box", "app")
     # EuroStat datasets
-    if 'CACHE_FILE_LOCATION' in app.config:
-        cache_name = app.config['CACHE_FILE_LOCATION']
+    if get_global_configuration_variable('CACHE_FILE_LOCATION'):
+        cache_name = get_global_configuration_variable('CACHE_FILE_LOCATION')
         print("USER: "+getpass.getuser())
         if not os.path.isdir(cache_name):
             os.makedirs(cache_name)

@@ -308,6 +308,8 @@ def get_dataset_from_state(state: State, name: str, extension: str, labels_enabl
             print("Generating Excel")
             ds2.to_excel(output, sheet_name=name, index=False)  # , engine="xlsxwriter")
             return output.getvalue(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", True
+        else:
+            return ds2, "application/pandas.dataframe", True
     else:
         return {"error": f"Could not find a Dataset with name '{name}' in the current state"}, "text/json", False
 

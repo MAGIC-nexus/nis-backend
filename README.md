@@ -31,6 +31,7 @@ It is an open system as it can be used to integrate MuSIASEM as a formalism in a
 - [Getting started](#getting-started)
   - [Features](#features)
   - [Installing and executing **nis-backend**](#installing-and-executing-nis-backend)
+    - [Pip package](#pip-package)
     - [Docker image](#docker-image)
     - [Source code](#source-code)
   - [Models with Commands](#models-with-commands)
@@ -62,7 +63,7 @@ It is an open system as it can be used to integrate MuSIASEM as a formalism in a
   - Sources, so several observations can be made about the same fact.
   - Times, in years or in months.
 - **Outputs**. Exportable as datasets (statistical cubes), graphs (networks), matrices, models (transformations of the input model), geolayers, scripts (Python or R).
-- **Deployment**. It can be deployed in multiple ways: personal computer (installer or pip), or server (Docker or pip).
+- **Deployment**. It can be deployed in multiple ways: personal computer (pip, source, Docker), or server (source or Docker).
 - **Configurable**. Deployment for server can be configured to use different database servers and REDIS for session management.
 - **Open**. All functionality can be accessed through a RESTful service. Behind the scenes, because HTTP protocol is stateless, a complex serialization/deserialization function combined with a key/value store and a browser session enable saving the state in memory after a service call ends, just to recover it when another invocation is done. 
 - **Two expertise levels**. Two components wrap the RESTful interface, **nis-frontend** and **nis-client**. These components match two expertise levels: **nis-frontend** does not require programming knowledge, while **nis-client** can be used in Python/R scripts.
@@ -71,20 +72,16 @@ It is an open system as it can be used to integrate MuSIASEM as a formalism in a
 
 **nis-backend** is a Python package. There are several options to have it installed.
 
-<!-- #### pip -->
+#### pip package
 
-<!-- Prepare package to upload it to pypi -->
+The pip version is obviously for execution as package, and does not include the frontend, the other two deployment options below include the frontend.
 
-<!--
 * Set a Python environment
 * Install the package with
 
-TO-DO `pip install nexinfosys`
+`pip install nexinfosys`
 
-* Start the server
-
-`python3 nexinfosys.restful_service.service_main.py`
--->
+* Use class class *NIS*, with methods similar to *NISClient* class in [nexinfosys-client](https://github.com/MAGIC-nexus/nis-python-client) package.
 
 #### Docker image
 

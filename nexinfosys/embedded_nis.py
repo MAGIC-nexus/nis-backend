@@ -406,6 +406,8 @@ class NIS:
                     pos = ds_name.find(".")
                     extension = ds_name[pos + 1:]
                     ds_name = ds_name[:pos]
+                else:
+                    extension = None
 
                 if struc_type == "dataset":
                     ds, ctype, ok = get_dataset_from_state(self._isession.state, ds_name, extension, labels_enabled=True)

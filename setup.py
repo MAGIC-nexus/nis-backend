@@ -23,10 +23,12 @@
 # PyPI     : pip install --upgrade nexinfosys
 # No PyPI  : pip install -e <local path where "setup.py" (this file) is located>
 #
-# EXECUTE (example. "gunicorn" must be installed: "pip install gunicorn")
-# (IT WORKS WITH ONLY 1 WORKER!!!)
+# EXECUTION EXAMPLE ("gunicorn" must be installed: "pip install gunicorn")
+#
 # gunicorn --workers=1 --log-level=debug --timeout=2000 --bind 0.0.0.0:8081 nexinfosys.restful_service.service_main:app
 #
+from os import path
+
 from setuptools import setup
 from pkg_resources import yield_lines
 # from distutils.extension import Extension
@@ -34,7 +36,7 @@ from Cython.Build import cythonize
 # from Cython.Distutils import build_ext
 
 package_name = 'nexinfosys'
-version = '0.36'
+version = '0.40'
 
 
 def parse_requirements(strs):
@@ -62,7 +64,7 @@ def parse_requirements(strs):
     return ret
 
 
-with open('requirements.txt') as f:
+with open('requirements-as-package.txt') as f:
     required = f.read().splitlines()
 
 install_reqs = parse_requirements(required)
@@ -73,6 +75,11 @@ print(install_reqs)
 #     Extension("parser_spreadsheet_utils_accel", ["nexinfosys/command_generators/parser_spreadsheet_utils_accel.pyx"])
 # ]
 
+this_directory = path.abspath(path.dirname(__file__))
+with open(path.join(this_directory, 'README.md'), encoding='utf-8') as f:
+    long_description = f.read()
+
+
 setup(
     name=package_name,
     version=version,
@@ -80,7 +87,6 @@ setup(
     packages=['nexinfosys', 'nexinfosys.common', 'nexinfosys.models', 'nexinfosys.models.experiments', 'nexinfosys.solving',
               'nexinfosys.solving.graph', 'nexinfosys.ie_exports', 'nexinfosys.ie_imports', 'nexinfosys.ie_imports.data_sources',
               'nexinfosys.ie_imports.experimental', 'nexinfosys.authentication', 'nexinfosys.model_services',
-              'nexinfosys.restful_service', 'nexinfosys.restful_service.gunicorn', 'nexinfosys.restful_service.mod_wsgi',
               'nexinfosys.command_executors', 'nexinfosys.command_executors.misc', 'nexinfosys.command_executors.solving',
               'nexinfosys.command_executors.analysis', 'nexinfosys.command_executors.version2',
               'nexinfosys.command_executors.read_query', 'nexinfosys.command_executors.external_data',
@@ -89,13 +95,18 @@ setup(
               'nexinfosys.command_generators.spreadsheet_command_parsers.analysis',
               'nexinfosys.command_generators.spreadsheet_command_parsers.external_data',
               'nexinfosys.command_generators.spreadsheet_command_parsers.specification',
-              'nexinfosys.command_generators.spreadsheet_command_parsers_v2', 'nexinfosys.magic_specific_integrations'],
+              # 'nexinfosys.magic_specific_integrations',
+              'nexinfosys.command_generators.spreadsheet_command_parsers_v2',
+              ],
+    # See files to pack in "MANIFEST.in" file ("frontend" currently disabled)
     include_package_data=True,
     # cmdclass={'build_ext': build_ext},
-    ext_modules=cythonize(["nexinfosys/common/helper_accel.pyx", "nexinfosys/command_generators/parser_spreadsheet_utils_accel.pyx"], language_level="3"),
+    # ext_modules=cythonize(["nexinfosys/common/helper_accel.pyx", "nexinfosys/command_generators/parser_spreadsheet_utils_accel.pyx"], language_level="3"),
     url='https://github.com/MAGIC-nexus/nis-backend',
     license='BSD-3',
-    author='rnebot',
+    author=['Rafael Nebot', 'Marco Galluzzi'],
     author_email='rnebot@itccanarias.org',
+    long_description=long_description,
+    long_description_content_type='text/markdown',
     description='Formal and executable MuSIASEM multi-system Nexus models for Sustainable Development Analysis'
 )

@@ -6,6 +6,7 @@
 build/
 dist/
 nexinfosys_backend.egg-info/
+nexinfosys.egg-info/
 dump\.rdb
 nexinfosys/restful_service/nis_local.conf
 nexinfosys/restful_service/nis_docker_protagoras.conf

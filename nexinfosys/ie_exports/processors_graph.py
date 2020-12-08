@@ -263,7 +263,7 @@ def construct_processors_graph(state: State, query: IQueryObjects, filt: Union[s
 
 
 if __name__ == '__main__':
-    from nexinfosys.restful_service.serialization import deserialize_state
+    from nexinfosys.serialization import deserialize_state
 
     # Deserialize previously recorded Soslaires State (WARNING! Execute unit tests to generated the ".serialized" file)
     fname = "/home/rnebot/GoogleDrive/AA_MAGIC/Soslaires.serialized"

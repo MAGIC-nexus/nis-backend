@@ -7,7 +7,7 @@ from nexinfosys.solving import *
 from nexinfosys import ureg
 from nexinfosys.command_generators.parser_ast_evaluators import ast_to_string
 from nexinfosys.models.musiasem_concepts_helper import find_or_create_observable, find_quantitative_observations
-from nexinfosys.restful_service.serialization import deserialize_state
+from nexinfosys.serialization import deserialize_state
 from nexinfosys.command_generators import parser_field_parsers
 
 """
