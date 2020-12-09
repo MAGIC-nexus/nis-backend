@@ -15,6 +15,7 @@ import redis
 # from flask import (jsonify, abort, redirect, url_for,
 #
 #                    )
+from NamedAtomicLock import NamedAtomicLock
 from flask import (Response, request, session as flask_session, send_from_directory, redirect
                    )
 from flask.helpers import get_root_path
@@ -124,7 +125,13 @@ def construct_session_persistence_backend():
 # >>>> THE INITIALIZATION CODE <<<<
 #
 
-initialize_databases()
+lock = NamedAtomicLock("nis-backend-lock")
+lock.acquire()
+try:
+    initialize_databases()
+finally:
+    lock.release()
+
 nexinfosys.data_source_manager = register_external_datasources()
 
 d = construct_session_persistence_backend()

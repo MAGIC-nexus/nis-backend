@@ -64,6 +64,7 @@ jsonpickle==1.2
 python_magic>=0.4.13  # To be removed, it is used only by the Magic Box file type detection
 dotted>=0.1.8 # <- Dotted notation: !!Fantastic!!
 sympy>=1.1.1
+NamedAtomicLock==1.1.3
 #sympy==1.3
 #cachier==1.2.2
 #tablib <- dictmapper (convert nested dict's to CSV)

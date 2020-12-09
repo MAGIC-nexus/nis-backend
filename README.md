@@ -81,7 +81,7 @@ The pip version is obviously for execution as package, and does not include the 
 
 `pip install nexinfosys`
 
-* Use class class *NIS*, with methods similar to *NISClient* class in [nexinfosys-client](https://github.com/MAGIC-nexus/nis-python-client) package.
+* Use class **NIS**, with methods similar to **NISClient** class in [nexinfosys-client](https://github.com/MAGIC-nexus/nis-python-client) package.
 
 #### Docker image
 

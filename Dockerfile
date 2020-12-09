@@ -8,6 +8,7 @@ FROM python:3.7.3-slim-stretch
 # docker build -t magicnexush2020/magic-nis-backend .
 #
 # 1.bis) REFRESH image into Docker Hub:
+# ("docker login" first)
 # docker push magicnexush2020/magic-nis-backend:<TAGNAME>
 #
 # Usage example:
@@ -113,4 +114,6 @@ CMD ["/usr/local/bin/gunicorn", "--workers=3", "--log-level=debug", "--timeout=2
 #CMD ["supervisord", "-c", "/etc/supervisord.conf"]
 
 COPY nexinfosys /app/nexinfosys
+RUN cythonize -a -i /app/nexinfosys/restful_service/helper_accel.pyx && \
+    cythonize -a -i /app/nexinfosys/command_generators/parser_spreadsheet_utils_accel.pyx
 
