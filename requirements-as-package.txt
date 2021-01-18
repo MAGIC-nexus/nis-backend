@@ -40,7 +40,7 @@ uncertainties>=3.1.2
 xlrd==1.1.0
 openpyxl==2.4.8
 xlsxwriter==1.0.4
-lxml==4.3.3
+lxml==4.6.2
 jsonpickle==1.2
 python_magic>=0.4.13  # To be removed, it is used only by the Magic Box file type detection
 dotted>=0.1.8 # <- Dotted notation: !!Fantastic!!
