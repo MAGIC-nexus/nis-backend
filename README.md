@@ -28,6 +28,7 @@ It is an open system as it can be used to integrate MuSIASEM as a formalism in a
 
 ## Table of Contents
 
+- [Documentation](#documentation)
 - [Getting started](#getting-started)
   - [Features](#features)
   - [Installing and executing **nis-backend**](#installing-and-executing-nis-backend)
@@ -45,6 +46,18 @@ It is an open system as it can be used to integrate MuSIASEM as a formalism in a
 - [Acknowledgements](#acknowledgements)
 - [Keywords](#keywords)
   
+## Documentation
+
+Full documentation:
+
+- How-to  (Annex 4 - "NIS frontend how-to manual").
+- Technical reference (Annex 2 - "Report on NIsys toolset development").
+- Format of input files (Annex 3 - "Format for specification of NIS case studies").
+
+is available in the annexes of the deliverable of the project regarding "nis-backend", in the official web page, at http://www.magic-nexus.eu/documents/deliverable-33-report-datasets-and-software-tools.
+
+NOTE: the "Format of input files" document is updated outside of the main document.
+
 ## Getting started
 
 ### Features
