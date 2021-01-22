@@ -148,7 +148,7 @@ The next section introduces **nis-frontend** which is a tool embedded in **nis-b
  
 Once **nis-backend** is executing in your computer, open a browser a go to the address:
  
-<a href="http://localhost:5000/nis_client/">http://localhost:5000/nis_client</a>
+<a href="http://localhost:5000/nis_client/">http://localhost:5000/nis_client </a>
  
 A screen similar to the following should open:
 
@@ -164,7 +164,7 @@ The left zone contains helpers allowing the insertion of empty Commands (workshe
 
 The URL field allows editing a workbook using Google Sheets (the application must be authorized first). **nis-backend** reads directly from the specified worksheet, so it needs access enabled to the file.
 
-For extensive documentation see the **User's Manual**. Online help for commands appears below the list of commands:
+For extensive documentation see the [deliverable](http://www.magic-nexus.eu/documents/deliverable-33-report-datasets-and-software-tools). Online help for commands appears below the list of commands:
 
 <img src="https://github.com/MAGIC-nexus/nis-backend/raw/develop/docs/detail_of_help_window.png" style="border:1px solid black" title="Help in NIS frontend" alt="Help in NIS frontend" height=500>
 

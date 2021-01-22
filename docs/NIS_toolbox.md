@@ -11,7 +11,7 @@ NIS Toolbox is made of four main components:
 * **nis-client**, can be used from scripts written in Python ([usage example](https://github.com/MAGIC-nexus/nis-python-client/blob/develop/nexinfosys/basic_usage2.py)) or R ([example usage](https://github.com/MAGIC-nexus/nis-python-client/blob/develop/nexinfosys/basic_usage.R)) languages.  
 * **nis-eda** ([live](https://aware.nis.magic-nexus.eu/nis-eda/)) is an exploratory data analysis tool written in R and Shiny which processes analysis outputs (or connects to an instance of **nis-backend** to directly obtain the outputs to be explored).
 
-Source code is open and published in Github, under "[MAGIC-nexus H2020](https://github.com/MAGIC-nexus)" organization. Non-publishable code (due to integration of third party commercial components) can be requested to the authors.
+Source code is open and published in Github, under "[MAGIC-nexus H2020](https://github.com/MAGIC-nexus)" organization. Non-publishable code (due to integration of third party commercial components) can be requested to the contact person (see [Social](social.md)).
 
 NIS Toolbox is **open** also in the sense that it can be used to integrate MuSIASEM in reproducible analytic/scientific workflows.
 
