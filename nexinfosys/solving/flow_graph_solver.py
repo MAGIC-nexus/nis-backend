@@ -933,7 +933,19 @@ def compute_hierarchy_aggregate_results(
         computation_source: ComputationSource,
         processors_relation_weights: ProcessorsRelationWeights = None) \
         -> Tuple[NodeFloatComputedDict, NodeFloatComputedDict, NodeFloatComputedDict]:
+    """
+    Compute aggregations of nodes in a hierarchy and also mark conflicts with existing values (params)
 
+    :param tree: dictionary representing a hierarchy as a tree of interface nodes in the form [parent, set(child)]
+    :param params: all nodes with a known value
+    :param prev_computed_values: all nodes that have been previously computed by aggregation
+    :param conflicting_data_policy: policy for conflicting data
+    :param missing_values_policy: policy for missing values when aggregating children
+    :param computation_source: source of computation
+    :param processors_relation_weights: weights to use computing aggregation for processor hierarchies
+    :return: a dict with all values computed by aggregation now and in previous calls, a dict with conflicted values
+             that have been taken, a dict with conflicted values that have been dismissed
+    """
     def compute_node(node: InterfaceNode) -> Optional[FloatExp]:
         # If the node has already been computed return the value
         if new_values.get(node) is not None:
