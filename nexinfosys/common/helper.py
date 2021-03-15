@@ -965,6 +965,8 @@ def augment_dataframe_with_mapped_columns(
 
     # Now elaborate a DataFrame back
     tmp = pd.DataFrame(data=mm, columns=col_names)
+    for c in measure_columns:
+        tmp[c] = tmp[c].astype(np.float)
 
     return tmp
 

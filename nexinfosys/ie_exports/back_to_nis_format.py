@@ -66,7 +66,7 @@ def nis_format_spreadsheet(s: State):
             continue
 
         ws = wb.create_sheet(name)
-        widths = [0]*100  # A maximum of 100 columns
+        widths = [0]*(df.shape[1]+1)  # A maximum of 100 columns
         max_columns = 0
         for r in dataframe_to_rows(df, index=False, header=True):
             if len(r) > max_columns:
@@ -241,7 +241,7 @@ def get_interfaces(glb_idx: PartialRetrievalDictionary) -> pd.DataFrame:
 
         for ident2 in list(toposort.toposort_flatten(d)):
             iface = glb_idx.get(Factor.partial_key(ident=ident2))[0]
-            lst1 = [iface.processor.name, iface.taxon.name, iface.name, iface.sphere, iface.roegen_type,
+            lst1 = [iface.processor.name, iface.taxon.name, iface.name, iface.sphere, iface.roegen_type.name,
                     iface.orientation, iface.opposite_processor_type, "", "", ""]
             observations = iface.quantitative_observations
             if len(observations) > 0:

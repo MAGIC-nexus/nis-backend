@@ -126,6 +126,14 @@ def parse_command_in_worksheet(sh: Worksheet, area: AreaTupleType, name: Optiona
                     )
         return output
 
+    def commented_row(rn):
+        commented = False
+        v = sh.cell(row=r, column=1).value
+        if v is not None:
+            if str(v).startswith("#"):
+                commented = True
+        return commented
+
     issues: List[Issue] = []
 
     from nexinfosys.command_field_definitions import command_fields
@@ -149,20 +157,30 @@ def parse_command_in_worksheet(sh: Worksheet, area: AreaTupleType, name: Optiona
         expandable = set()  # A set of variables to be expanded. If empty, it is a literal line (not expandable)
         complex = False  # The line contains at least one field with a complex rule (which cannot be evaluated with a simple cast)
 
+        # A row is commented if the value in the first column starts with "#" (a first empty column could be inserted
+        # to ease this, just to signal commented rows)
+        if commented_row(r):
+            continue
+
         # Constant mandatory values
         mandatory_not_found = set([c.name for c in cols if c.mandatory and isinstance(c.mandatory, bool)])
 
         # Each "field"
         for field_def in col_map.keys():
             field_name = field_def.name
-            # Appearances of field (normally just once, there attributes allowing more than one appearance)
+            field_defined = False
+            # Appearances of field (normally just once, there are attributes allowing more than one appearance)
             for col_name, col_idx in col_map[field_def]:
                 # Read and prepare "value"
                 value = sh.cell(row=r, column=col_idx).value
                 if value is not None:
-                    if not isinstance(value, str):
+                    if isinstance(value, float):
+                        if value == int(value):
+                            value = str(int(value))
+                    elif not isinstance(value, str):
                         value = str(value)
                     value = value.strip()
+                    field_defined = True
                 else:
                     continue
 
@@ -231,7 +249,7 @@ def parse_command_in_worksheet(sh: Worksheet, area: AreaTupleType, name: Optiona
                         else:
                             line[field_name] = value  # No parser, just store blindly the value
 
-            if field_def.name in mandatory_not_found:
+            if field_defined and field_def.name in mandatory_not_found:
                 mandatory_not_found.discard(field_def.name)
 
         if len(line) == 0:

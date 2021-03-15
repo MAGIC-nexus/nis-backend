@@ -175,6 +175,11 @@ class BasicCommand(IExecutableCommand):
                 # Remove Index, and do it NOT-INPLACE
                 data = data.reset_index()
 
+                # Drop rows with empty dimension value
+                import numpy as np
+                data = data.replace(r'^\s*$', np.NaN, regex=True)
+                data.dropna(subset=requested_dimensions, inplace=True)
+
                 const_dict = obtain_dictionary_with_not_expandable_fields(self._fields)  # row?
                 var_dict = set([f for f in self._fields.keys() if f not in const_dict])
 

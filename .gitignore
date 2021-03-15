@@ -36,3 +36,9 @@ nexinfosys/frontend/assets/animal
 nexinfosys/frontend/assets/fill
 nexinfosys/frontend/assets/twotone
 nexinfosys/frontend/assets/outline
+
+nexinfosys/command_generators/parser_spreadsheet_utils_accel.c
+
+nexinfosys/command_generators/parser_spreadsheet_utils_accel.cpython-37m-x86_64-linux-gnu.so
+
+nexinfosys/restful_service/helper_accel.c

@@ -38,7 +38,7 @@ class HierarchyMappingCommand(IExecutableCommand):
             mh_src_code = item.get("source_code", None)
             mh_dst_hierarchy = item.get("destination_hierarchy", None)
             mh_dst_code = item.get("destination_code", None)
-            mh_weight = item.get("weight", None)
+            mh_weight = item.get("weight", 1.0)
 
             # Mapping name
             name = ((mh_src_dataset + ".") if mh_src_dataset else "") + mh_src_hierarchy + " -> " + mh_dst_hierarchy

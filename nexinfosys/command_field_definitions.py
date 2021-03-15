@@ -71,7 +71,7 @@ command_fields: Dict[str, List[CommandField]] = {
         CommandField(allowed_names=["OriginCode"], name="source_code", mandatory=True, parser=code_string),
         CommandField(allowed_names=["DestinationHierarchy"], name="destination_hierarchy", mandatory=True, parser=simple_ident),
         CommandField(allowed_names=["DestinationCode"], name="destination_code", mandatory=True, parser=code_string),
-        CommandField(allowed_names=["Weight"], name="weight", mandatory=True, parser=expression_with_parameters),
+        CommandField(allowed_names=["Weight"], name="weight", mandatory=False, default_value="1", parser=expression_with_parameters),
     ],
 
     "attribute_types": [
