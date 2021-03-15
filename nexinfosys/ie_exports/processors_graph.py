@@ -1,9 +1,11 @@
+import io
+
 import networkx as nx
 
 from nexinfosys.solving import *
 
 
-def construct_processors_graph_2(state: State, query: IQueryObjects, filt: Union[str, dict], part_of: bool, scale: bool, flow: bool):
+def construct_processors_graph_2(state: State, query: IQueryObjects, filt: Union[str, dict], part_of: bool, scale: bool, flow: bool, format: str):
     """
 
     :param state:
@@ -127,36 +129,42 @@ def construct_processors_graph_2(state: State, query: IQueryObjects, filt: Union
         ids_map[node[0]] = sid
         id_count += 1
 
-    vis_nodes = []
-    vis_edges = []
-    for node in processors_graph.nodes(data=True):
-        d2 = node[1]
-        print(node)
-        if "uname" not in d2:
-            continue
-        d = dict(id=node[1]["id"], label=node[1]["uname"])
-        if "shape" in node[1]:
-            # circle, ellipse, database, box, diamond, dot, square, triangle, triangleDown, text, star
-            d["shape"] = node[1]["shape"]
-        else:
-            d["shape"] = "hexagon"
-        if "color" in node[1]:
-            d["color"] = node[1]["color"]
-        vis_nodes.append(d)
-    for edge in processors_graph.edges(data=True):
-        f = ids_map[edge[0]]
-        t = ids_map[edge[1]]
-        d = {"from": f, "to": t, "arrows": "to"}
-        data = edge[2]
-        if "label" in data:
-            d["font"] = {"align": "middle"}
-        d.update(data)
+    ret = None
+    if format == "visjs":
+        vis_nodes = []
+        vis_edges = []
+        for node in processors_graph.nodes(data=True):
+            d2 = node[1]
+            print(node)
+            if "uname" not in d2:
+                continue
+            d = dict(id=node[1]["id"], label=node[1]["uname"])
+            if "shape" in node[1]:
+                # circle, ellipse, database, box, diamond, dot, square, triangle, triangleDown, text, star
+                d["shape"] = node[1]["shape"]
+            else:
+                d["shape"] = "hexagon"
+            if "color" in node[1]:
+                d["color"] = node[1]["color"]
+            vis_nodes.append(d)
+        for edge in processors_graph.edges(data=True):
+            f = ids_map[edge[0]]
+            t = ids_map[edge[1]]
+            d = {"from": f, "to": t, "arrows": "to"}
+            data = edge[2]
+            if "label" in data:
+                d["font"] = {"align": "middle"}
+            d.update(data)
 
-        vis_edges.append(d)
-    visjs = {"nodes": vis_nodes, "edges": vis_edges}
-    # print(visjs)
-    return visjs
+            vis_edges.append(d)
+        ret = {"nodes": vis_nodes, "edges": vis_edges}
+    elif format == "gml":
+        ret1 = io.BytesIO()
+        nx.write_gml(processors_graph, ret1)
+        ret = ret1.getvalue()
+        ret1.close()
 
+    return ret
 
 def construct_processors_graph(state: State, query: IQueryObjects, filt: Union[str, dict]):
     """

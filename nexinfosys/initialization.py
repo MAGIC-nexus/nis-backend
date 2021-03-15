@@ -230,6 +230,7 @@ def get_graph_from_state(state: State, name: str):
         if extension == "visjs":
             query = BasicQuery(state)
             output = construct_flow_graph_2(state, query, None, extension)  # Version 2 !!!
+            output = generate_json(output)
             mimetype = "application/json"
         elif extension == "gml":
             # Prepare GML file
@@ -239,8 +240,13 @@ def get_graph_from_state(state: State, name: str):
     elif name == "processors_graph":
         if extension == "visjs":
             query = BasicQuery(state)
-            output = construct_processors_graph_2(state, query, None, True, True, False)
+            output = construct_processors_graph_2(state, query, None, True, True, False, extension)
+            output = generate_json(output)
             mimetype = "application/json"
+        elif extension == "gml":
+            query = BasicQuery(state)
+            output = construct_processors_graph_2(state, query, None, True, True, False, extension)
+            mimetype = "application/text"
 
     return output, mimetype, output is not None
 

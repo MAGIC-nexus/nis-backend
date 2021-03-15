@@ -446,7 +446,7 @@ def construct_flow_graph_2(state: State, query: IQueryObjects, filt: Union[str, 
                 d["font"] = {"align": "horizontal"}
 
             vis_edges.append(d)
-        ret = str({"nodes": vis_nodes, "edges": vis_edges})
+        ret = {"nodes": vis_nodes, "edges": vis_edges}
     elif format == "gml":
         ret1 = io.BytesIO()
         nx.write_gml(factors_graph, ret1)

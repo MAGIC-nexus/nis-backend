@@ -31,7 +31,8 @@ pyximport.install(reload_support=True, language_level=3)
 # >>>>>>>>>> IMPORTANT <<<<<<<<<
 # To debug in local mode, prepare an environment variable "MAGIC_NIS_SERVICE_CONFIG_FILE", with value "./nis_local.conf"
 # >>>>>>>>>> IMPORTANT <<<<<<<<<
-from nexinfosys.command_generators.parser_spreadsheet_utils_accel import rewrite_xlsx_file
+from nexinfosys.command_generators.parser_spreadsheet_utils import rewrite_xlsx_file
+# from nexinfosys.command_generators.parser_spreadsheet_utils_accel import rewrite_xlsx_file
 
 from nexinfosys.ie_exports.reference_of_commands import obtain_commands_help
 from nexinfosys.command_definitions import commands
@@ -1332,16 +1333,6 @@ def obtain_flow_graph(format):
     # Generate graph from State
     if isess.state:
         output, mimetype, ok = get_graph_from_state(isess.state, f"interfaces_graph.{format}")
-        # if format == "visjs":
-        #     # TODO Prepare JSON file
-        #     query = BasicQuery(isess.state)
-        #     output = construct_flow_graph_2(isess.state, query, None, format)  # Version 2 !!!
-        #     mimetype = "application/json"
-        # elif format == "gml":
-        #     # Prepare GML file
-        #     query = BasicQuery(isess.state)
-        #     output = construct_flow_graph_2(isess.state, query, None, format)  # Version 2 !!!
-        #     mimetype = "application/text"  # TODO
 
     if output:
         r = Response(output, mimetype=mimetype, status=200)
@@ -1351,19 +1342,21 @@ def obtain_flow_graph(format):
     return r
 
 
-@app.route(nis_api_base + '/isession/rsession/state_query/processors_graph.visjs', methods=["GET"])
-@app.route(nis_api_base + '/isession/rsession/query/processors_graph.visjs', methods=["GET"])
-def obtain_processors_graph_visjs_format():
+@app.route(nis_api_base + '/isession/rsession/state_query/processors_graph.<format>', methods=["GET"])
+@app.route(nis_api_base + '/isession/rsession/query/processors_graph.<format>', methods=["GET"])
+def obtain_processors_graph_visjs_format(format):
     # Recover InteractiveSession
     isess = deserialize_isession_and_prepare_db_session()
     if isess and isinstance(isess, Response):
         return isess
 
     # Generate graph from State
+    output = None
     if isess.state:
-        query = BasicQuery(isess.state)
-        json = construct_processors_graph_2(isess.state, query, None, True, True, False)
-        r = build_json_response(json, 200)
+        output, mimetype, ok = get_graph_from_state(isess.state, f"processors_graph.{format}")
+
+    if output:
+        r = Response(output, mimetype=mimetype, status=200)
     else:
         r = build_json_response({}, 200)
 
@@ -3078,8 +3071,14 @@ def download_external_xlsx():  # From the URL of an external XLSX, obtain it and
     buffer = bytes(io.BytesIO(request.get_data()).getbuffer())
     url = buffer.decode("utf-8")
     data = download_file(url)
-    xl = openpyxl.load_workbook(data, data_only=True)
-    rewrite_xlsx_file(xl, copy_style=False)
+    try:
+        xl = openpyxl.load_workbook(data, data_only=True)
+        rewrite_xlsx_file(xl, copy_style=False)
+    except Exception as e:
+        print("Exception rewriting XLSX. Is openpyxl==2.4.8 installed?. Check with 'pip freeze | grep openpyxl'. "
+              "If that is the case, fix with 'pip install openpyxl==2.4.8'")
+        raise e
+
     data = save_virtual_workbook(xl)
 
     r = Response(data,
@@ -3097,8 +3096,14 @@ def regenerate_xlsx_file():  # Receive an XLSX workbook, regenerate it
         return isess
 
     generator_type, content_type, buffer, execute, register = receive_file_submission(request)
-    xl = openpyxl.load_workbook(io.BytesIO(buffer), data_only=True)
-    rewrite_xlsx_file(xl)
+    try:
+        xl = openpyxl.load_workbook(io.BytesIO(buffer), data_only=True)
+        rewrite_xlsx_file(xl)
+        # rewrite_xlsx_file(xl, copy_style=False)
+    except Exception as e:
+        print("Exception rewriting XLSX. Is openpyxl==2.4.8 installed?. Check with 'pip freeze | grep openpyxl'. "
+              "If that is the case, fix with 'pip install openpyxl==2.4.8'")
+        raise e
 
     tmp = save_virtual_workbook(xl)
     r = Response(tmp,
