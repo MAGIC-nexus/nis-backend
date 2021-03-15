@@ -6,6 +6,7 @@ from typing import List, Tuple, Dict
 from urllib.parse import urlparse
 
 import pandas as pd
+import requests
 import webdav.client as wc
 import xlrd
 
@@ -83,9 +84,15 @@ class NIS:
         # Load a XLSX workbook into memory, as dataframes
         pr = urlparse(fname)
         if pr.scheme != "":
+            fragment = ""
+            if "#" in fname:
+                pos = fname.find("#")
+                fragment = fname[pos + 1:]
+                fname = fname[:pos]
+
             # Load from remote site
             if not wv_host_name:
-                raise Exception("Host name not specified")
+                wv_host_name = ""
             if pr.netloc.lower() == wv_host_name:
                 # WebDAV
                 parts = fname.split("/")
@@ -106,6 +113,16 @@ class NIS:
                     f = open(temp.name, "rb")
                     data = io.BytesIO(f.read())
                     f.close()
+            elif pr.netloc.lower() == "docs.google.com" or pr.netloc.lower() == "drive.google.com":
+                # Google Drive. Only XLSX files supported (if Google Calc, an Export to XLSX is done)
+                # Extract file id from the URL
+                import re
+                m = re.match(r".*[^-\w]([-\w]{33,})[^-\w]?.*", fname)
+                file_id = m.groups()[0]
+                url = f"https://docs.google.com/spreadsheets/d/{file_id}/export?format=xlsx&id={file_id}"
+                resp = requests.get(url, allow_redirects=True)  # headers={'Cache-Control': 'no-cache'},
+                if resp.status_code == 200:
+                    data = io.BytesIO(resp.content)
             else:
                 data = urllib.request.urlopen(fname).read()
                 data = io.BytesIO(data)
