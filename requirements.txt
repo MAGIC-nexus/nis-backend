@@ -37,8 +37,8 @@ redis>=2.10.6
 #redislite>=5.0.124623  # Disabled because it leads to a problem in "setup.py". It is explicitly used in the Dockerfile
 pyparsing>=2.2.0
 numpy>=1.16.0
-pandas==1.0.3
-pandas_datareader>=0.8.1
+pandas>=1.0.3
+pandas_datareader>=0.9.0
 pyarrow==1.0.0
 pandaSDMX==0.9
 sdmx>=0.2.10
@@ -46,16 +46,15 @@ regex>=2017.11.9
 chardet>=3.0.4
 aadict>=0.2.3
 anytree>=2.2.2
-networkx==2.2
+networkx>=2.2
 multidict>=3.3.2
 xmltodict>=0.11.0
 cubes==1.1
 Pint>=0.8.1
 uncertainties>=3.1.2
 xlrd==1.1.0
-#openpyxl==2.5.0b1
+#openpyxl==3.0.7  # TODO - Needed to work with NIS-frontend - Convert to the latest version, only 2.4.8 works...
 openpyxl==2.4.8
-#openpyxl==2.6.2
 xlsxwriter==1.0.4
 #koala2==0.0.17
 lxml==4.6.2

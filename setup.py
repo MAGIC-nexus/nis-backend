@@ -10,7 +10,7 @@
 #
 # Modify version code in "setup.py" (this file)
 #
-# Build (cd to directory where "setup.py" is)
+# Build (cd to directory where "setup.py" is) ###
 # python3 setup.py sdist bdist_wheel
 #
 # Upload:
@@ -36,7 +36,7 @@ from Cython.Build import cythonize
 # from Cython.Distutils import build_ext
 
 package_name = 'nexinfosys'
-version = '0.40'
+version = '0.43'
 
 
 def parse_requirements(strs):
