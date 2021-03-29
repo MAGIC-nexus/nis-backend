@@ -1068,7 +1068,8 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
             for time_period, absolute_observations in time_absolute_observations.items():
                 print(f"********************* TIME PERIOD: {time_period}")
 
-                aggregations: NodeFloatComputedDict = {}
+                interfacetype_aggregations: NodeFloatComputedDict = {}
+                partof_aggregations: NodeFloatComputedDict = {}
                 total_taken_results: NodeFloatComputedDict = {}
                 total_dismissed_results: NodeFloatComputedDict = {}
 
@@ -1118,20 +1119,20 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
 
                             new_results, taken_results, dismissed_results = \
                                 compute_hierarchy_aggregate_results(
-                                    interfacetype_hierarchies, results, aggregations, conflicting_data_policy,
+                                    interfacetype_hierarchies, results, interfacetype_aggregations, conflicting_data_policy,
                                     missing_value_policy, ComputationSource.InterfaceTypeAggregation)
 
-                            aggregations.update(new_results)
+                            interfacetype_aggregations.update(new_results)
                             results.update(new_results)
                             total_taken_results.update(taken_results)
                             total_dismissed_results.update(dismissed_results)
 
                             new_results, taken_results, dismissed_results = \
                                 compute_hierarchy_aggregate_results(
-                                    partof_hierarchies, results, aggregations, conflicting_data_policy,
+                                    partof_hierarchies, results, partof_aggregations, conflicting_data_policy,
                                     missing_value_policy, ComputationSource.PartOfAggregation, scenario_partof_weights)
 
-                            aggregations.update(new_results)
+                            partof_aggregations.update(new_results)
                             results.update(new_results)
                             total_taken_results.update(taken_results)
                             total_dismissed_results.update(dismissed_results)
