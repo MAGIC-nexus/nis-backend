@@ -115,6 +115,33 @@ class MissingValueResolutionPolicy(Enum):
         return "NISSolverMissingValueResolutionPolicy"
 
 
+def get_computation_sources_priority_list(s: str) -> List[ComputationSource]:
+    """ Convert a list of strings into a list of valid ComputationSource values and also check its validity
+        according to the parameter "NISSolverComputationSourcesPriority".
+        The input list should contain all values of ComputationSource, without duplicates, in any order.
+    """
+    identifiers = parse_string_as_simple_ident_list(s)
+    sources: List[ComputationSource] = []
+
+    if identifiers is None:
+        raise SolvingException(f"The priority list of computation sources is invalid: {identifiers}")
+
+    for identifier in identifiers:
+        try:
+            sources.append(ComputationSource[identifier])
+        except KeyError:
+            raise SolvingException(f"The priority list of computation sources have an invalid value: {identifier}")
+
+    if len(sources) != len(ComputationSource):
+        raise SolvingException(
+            f"The priority list of computation sources should have length {len(ComputationSource)} but has length: {len(sources)}")
+
+    if len(sources) != len(set(sources)):
+        raise SolvingException(f"The priority list of computation sources cannot have duplicated values: {sources}")
+
+    return sources
+
+
 class InterfaceNode:
     """
     Identifies an interface which value should be computed by the solver.
@@ -1060,6 +1087,7 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
             observers_priority_list = parse_string_as_simple_ident_list(scenario_state.get('NISSolverObserversPriority'))
             conflicting_data_policy = ConflictingDataResolutionPolicy[scenario_state.get(ConflictingDataResolutionPolicy.get_key())]
             missing_value_policy = MissingValueResolutionPolicy[scenario_state.get(MissingValueResolutionPolicy.get_key())]
+            computation_sources_priority_list = get_computation_sources_priority_list(scenario_state.get('NISSolverComputationSourcesPriority'))
 
             missing_value_policies: List[MissingValueResolutionPolicy] = [MissingValueResolutionPolicy.Invalidate]
             if missing_value_policy == MissingValueResolutionPolicy.UseZero:

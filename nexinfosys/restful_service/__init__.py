@@ -155,6 +155,17 @@ default_cmds = """
                             "name": "NISSolverMissingValueResolutionPolicy",
                             "type": "Code",
                             "value": "UseZero"
+                        },
+                        {
+                            "_complex": false,
+                            "_expandable": [],
+                            "_row": 2,
+                            "description": "Ordered list of computation sources to consider on conflicts",
+                            "domain": null,
+                            "group": "NISSolverParameters",
+                            "name": "NISSolverComputationSourcesPriority",
+                            "type": "String",
+                            "value": "ScaleChange, Scale, PartOfAggregation, InterfaceTypeAggregation, Flow"
                         }
                     ]
         }
