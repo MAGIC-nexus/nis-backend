@@ -989,6 +989,96 @@ def get_processor_partof_relations(glb_idx: PartialRetrievalDictionary) \
     return relations, weights, behave_as_dependencies
 
 
+def compute_hierarchy_graph_results(
+        graph: ComputationGraph, params: NodeFloatComputedDict,
+        prev_computed_values: NodeFloatComputedDict,
+        conflict_resolution_algorithm: ConflictResolutionAlgorithm,
+        computation_source: ComputationSource) \
+        -> Tuple[NodeFloatComputedDict, NodeFloatComputedDict, NodeFloatComputedDict]:
+    """
+    Compute nodes in a graph hierarchy and also mark conflicts with existing values (params)
+
+    :param graph: hierarchy as a graph of interface nodes
+    :param params: all nodes with a known value
+    :param prev_computed_values: all nodes that have been previously computed with same computation source
+    :param conflict_resolution_algorithm: algorithm for resolution of conflicts
+    :param computation_source: source of computation
+    :return: a dict with all values computed now and in previous calls, a dict with conflicted values
+             that have been taken, a dict with conflicted values that have been dismissed
+    """
+
+    def solve_inputs(inputs: List[FloatExp.ValueWeightPair], split: bool) -> Optional[FloatExp]:
+        input_values: List[FloatExp.ValueWeightPair] = []
+
+        for n, weight in sorted(inputs):
+            res_backward = compute_node(n)
+
+            # If node 'n' is a 'split' only one result is needed to compute the result
+            if split:
+                if res_backward is not None:
+                    return res_backward * weight
+            else:
+                if res_backward is not None and weight is not None:
+                    input_values.append((res_backward, weight))
+                else:
+                    return None
+
+        return FloatExp.compute_weighted_addition(input_values)
+
+    def compute_node(node: InterfaceNode) -> Optional[FloatExp]:
+        # If the node has already been computed return the value
+        if new_values.get(node) is not None:
+            return new_values[node].value
+
+        # We avoid graphs with cycles
+        if node in pending_nodes:
+            return None
+
+        pending_nodes.append(node)
+
+        sum_children = solve_inputs(graph.direct_inputs(node), graph.get_reverse_node_split(node))
+
+        if sum_children is None:
+            sum_children = solve_inputs(graph.reverse_inputs(node), graph.get_direct_node_split(node))
+
+        float_value = params.get(node)
+        if sum_children is not None:
+            # New value has been computed
+            sum_children.name = node.name
+            new_computed_value = FloatComputedTuple(sum_children, Computed.Yes, computation_source=computation_source)
+
+            if float_value is not None:
+                # Conflict here: applies strategy
+                taken_conflicts[node], dismissed_conflicts[node] = \
+                    conflict_resolution_algorithm.resolve(new_computed_value, float_value)
+
+                new_values[node] = taken_conflicts[node]
+                return_value = taken_conflicts[node].value
+            else:
+                new_values[node] = new_computed_value
+                return_value = new_computed_value.value
+        else:
+            # No value got from children, try to search in "params"
+            return_value = float_value.value if float_value is not None else None
+            # if float_value is not None:
+            #     new_values[node] = float_value
+            #     return_value = float_value.value
+            # else:
+            #     return_value = None
+
+        return return_value
+
+    new_values: NodeFloatComputedDict = {**prev_computed_values}  # All computed aggregations
+    taken_conflicts: NodeFloatComputedDict = {}  # Taken values on conflicting nodes
+    dismissed_conflicts: NodeFloatComputedDict = {}  # Dismissed values on conflicting nodes
+
+    for parent_node in graph.nodes:
+        pending_nodes: List[InterfaceNode] = []
+        compute_node(parent_node)
+
+    return new_values, taken_conflicts, dismissed_conflicts
+
+
 def compute_hierarchy_aggregate_results(
         tree: InterfaceNodeHierarchy, params: NodeFloatComputedDict,
         prev_computed_values: NodeFloatComputedDict,
@@ -1135,6 +1225,9 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
             for time_period, absolute_observations in time_absolute_observations.items():
                 print(f"********************* TIME PERIOD: {time_period}")
 
+                flow_computations: NodeFloatComputedDict = {}
+                scale_computations: NodeFloatComputedDict = {}
+                scale_change_computations: NodeFloatComputedDict = {}
                 interfacetype_aggregations: NodeFloatComputedDict = {}
                 partof_aggregations: NodeFloatComputedDict = {}
                 total_taken_results: NodeFloatComputedDict = {}
@@ -1153,9 +1246,6 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
                                                              observers_priority_list, glb_idx)
 
                     # Initializations
-                    flow_last_known_nodes = set()
-                    scale_last_known_nodes = set()
-                    scale_change_last_known_nodes = set()
                     iteration_number = 1
 
                     # START ITERATIVE SOLVING
@@ -1172,17 +1262,32 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
                             print(f"********************* Solving iteration: {iteration_number}")
                             previous_len_results = len(results)
 
-                            new_results = compute_graph_results(comp_graph_flow, results, flow_last_known_nodes, ComputationSource.Flow)
-                            results.update(new_results)
-                            flow_last_known_nodes = set(results.keys())
+                            new_results, taken_results, dismissed_results = compute_hierarchy_graph_results(
+                                comp_graph_flow, results, flow_computations,
+                                conflict_resolution_algorithm, ComputationSource.Flow)
 
-                            new_results = compute_graph_results(comp_graph_scale, results, scale_last_known_nodes, ComputationSource.Scale)
+                            flow_computations.update(new_results)
                             results.update(new_results)
-                            scale_last_known_nodes = set(results.keys())
+                            total_taken_results.update(taken_results)
+                            total_dismissed_results.update(dismissed_results)
 
-                            new_results = compute_graph_results(comp_graph_scale_change, results, scale_change_last_known_nodes, ComputationSource.ScaleChange)
+                            new_results, taken_results, dismissed_results = compute_hierarchy_graph_results(
+                                comp_graph_scale, results, scale_computations,
+                                conflict_resolution_algorithm, ComputationSource.Scale)
+
+                            scale_computations.update(new_results)
                             results.update(new_results)
-                            scale_change_last_known_nodes = set(results.keys())
+                            total_taken_results.update(taken_results)
+                            total_dismissed_results.update(dismissed_results)
+
+                            new_results, taken_results, dismissed_results = compute_hierarchy_graph_results(
+                                comp_graph_scale_change, results, scale_change_computations,
+                                conflict_resolution_algorithm, ComputationSource.ScaleChange)
+
+                            scale_change_computations.update(new_results)
+                            results.update(new_results)
+                            total_taken_results.update(taken_results)
+                            total_dismissed_results.update(dismissed_results)
 
                             new_results, taken_results, dismissed_results = \
                                 compute_hierarchy_aggregate_results(

@@ -165,7 +165,7 @@ default_cmds = """
                             "group": "NISSolverParameters",
                             "name": "NISSolverComputationSourcesPriority",
                             "type": "String",
-                            "value": "ScaleChange, Scale, PartOfAggregation, InterfaceTypeAggregation, Flow"
+                            "value": "Scale, PartOfAggregation, InterfaceTypeAggregation, ScaleChange, Flow"
                         }
                     ]
         }

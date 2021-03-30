@@ -87,6 +87,18 @@ class ComputationGraph:
         """ Set the attribute 'split' to a node """
         self.graph.nodes[n]["split"][graph_type.value] = split
 
+    def get_node_split(self, n: Node, graph_type: EdgeType) -> bool:
+        """ Get the attribute 'split' from a node """
+        return self.graph.nodes[n]["split"][graph_type.value]
+
+    def get_direct_node_split(self, n: Node) -> bool:
+        """ Get the DIRECT attribute 'split' from a node """
+        return self.get_node_split(n, EdgeType.DIRECT)
+
+    def get_reverse_node_split(self, n: Node) -> bool:
+        """ Get the REVERSE attribute 'split' from a node """
+        return self.get_node_split(n, EdgeType.REVERSE)
+
     def compute_descendants(self):
         def visit_forward(node: Node) -> None:
             visited_nodes.add(node)
