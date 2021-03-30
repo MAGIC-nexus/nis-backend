@@ -71,7 +71,7 @@ default_cmds = """
                 "_row": 2,
                 "code": "TakeUpper",
                 "description": "Policy: take the value upper instead of the value coming from lower level accumulation",
-                "hierarchy_name": "AggregationConflictingDataResolutionPolicies",
+                "hierarchy_name": "AggregationConflictResolutionPolicies",
                 "label": "Take value from the upper level"
             },
             {
@@ -80,7 +80,7 @@ default_cmds = """
                 "_row": 3,
                 "code": "TakeLowerAggregation",
                 "description": "Policy: take the value computed by aggregation lower levels of a hierarchy",
-                "hierarchy_name": "AggregationConflictingDataResolutionPolicies",
+                "hierarchy_name": "AggregationConflictResolutionPolicies",
                 "label": "Take value accumulated from lower levels"
             },
             {
@@ -139,9 +139,9 @@ default_cmds = """
                             "_expandable": [],
                             "_row": 2,
                             "description": "Conflicting data resolution policy",
-                            "domain": "AggregationConflictingDataResolutionPolicies",
+                            "domain": "AggregationConflictResolutionPolicies",
                             "group": "NISSolverParameters",
-                            "name": "NISSolverConflictingDataResolutionPolicy",
+                            "name": "NISSolverAggregationConflictResolutionPolicy",
                             "type": "Code",
                             "value": "TakeUpper"
                         },

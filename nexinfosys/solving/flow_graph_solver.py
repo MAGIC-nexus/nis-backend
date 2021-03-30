@@ -87,13 +87,13 @@ class ConflictResolution(Enum):
     Dismissed = 3
 
 
-class ConflictingDataResolutionPolicy(Enum):
+class AggregationConflictResolutionPolicy(Enum):
     TakeUpper = 1
     TakeLowerAggregation = 2
 
     @staticmethod
     def get_key():
-        return "NISSolverConflictingDataResolutionPolicy"
+        return "NISSolverAggregationConflictResolutionPolicy"
 
     def resolve(self, computed_value: FloatComputedTuple, existing_value: FloatComputedTuple) \
             -> Tuple[FloatComputedTuple, FloatComputedTuple]:
@@ -113,6 +113,43 @@ class MissingValueResolutionPolicy(Enum):
     @staticmethod
     def get_key():
         return "NISSolverMissingValueResolutionPolicy"
+
+
+class ConflictResolutionAlgorithm:
+    def __init__(self, computation_sources_priority_list: List[ComputationSource], aggregation_conflict_policy: AggregationConflictResolutionPolicy):
+        self.computation_sources_priority_list = computation_sources_priority_list
+        self.aggregation_conflict_policy = aggregation_conflict_policy
+
+    def resolve(self, value1: FloatComputedTuple, value2: FloatComputedTuple) -> Tuple[FloatComputedTuple, FloatComputedTuple]:
+        assert(value1.computation_source != value2.computation_source,
+               f"The computation sources of both conflicting values cannot be the same: {value1.computation_source}")
+
+        # Both values have been computed
+        if value1.computation_source is not None and value2.computation_source is not None:
+            value1_position = self.computation_sources_priority_list.index(value1.computation_source)
+            value2_position = self.computation_sources_priority_list.index(value2.computation_source)
+
+            if value1_position < value2_position:
+                return value1, value2
+            else:
+                return value2, value1
+
+        # One of the values has been computed by aggregation while the other is an observation
+        if ifnull(value1.computation_source, value2.computation_source) in (ComputationSource.PartOfAggregation, ComputationSource.InterfaceTypeAggregation):
+            if value1.computation_source is None:
+                # value2 is computed value, value1 is existing value
+                return self.aggregation_conflict_policy.resolve(value2, value1)
+            else:
+                # value1 is computed value, value2 is existing value
+                return self.aggregation_conflict_policy.resolve(value1, value2)
+
+        # One of the values has been computed by a non-aggregation computation while the other is an observation
+        else:
+            # Return the computed value first
+            if value1.computation_source is None:
+                return value2, value1
+            else:
+                return value1, value2
 
 
 def get_computation_sources_priority_list(s: str) -> List[ComputationSource]:
@@ -955,7 +992,7 @@ def get_processor_partof_relations(glb_idx: PartialRetrievalDictionary) \
 def compute_hierarchy_aggregate_results(
         tree: InterfaceNodeHierarchy, params: NodeFloatComputedDict,
         prev_computed_values: NodeFloatComputedDict,
-        conflicting_data_policy: ConflictingDataResolutionPolicy,
+        conflict_resolution_algorithm: ConflictResolutionAlgorithm,
         missing_values_policy: MissingValueResolutionPolicy,
         computation_source: ComputationSource,
         processors_relation_weights: ProcessorsRelationWeights = None) \
@@ -966,7 +1003,7 @@ def compute_hierarchy_aggregate_results(
     :param tree: dictionary representing a hierarchy as a tree of interface nodes in the form [parent, set(child)]
     :param params: all nodes with a known value
     :param prev_computed_values: all nodes that have been previously computed by aggregation
-    :param conflicting_data_policy: policy for conflicting data
+    :param conflict_resolution_algorithm: algorithm for resolution of conflicts
     :param missing_values_policy: policy for missing values when aggregating children
     :param computation_source: source of computation
     :param processors_relation_weights: weights to use computing aggregation for processor hierarchies
@@ -1009,7 +1046,7 @@ def compute_hierarchy_aggregate_results(
             if float_value is not None:
                 # Conflict here: applies strategy
                 taken_conflicts[node], dismissed_conflicts[node] = \
-                    conflicting_data_policy.resolve(new_computed_value, float_value)
+                    conflict_resolution_algorithm.resolve(new_computed_value, float_value)
 
                 new_values[node] = taken_conflicts[node]
                 return_value = taken_conflicts[node].value
@@ -1085,9 +1122,11 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
 
             # Get scenario parameters
             observers_priority_list = parse_string_as_simple_ident_list(scenario_state.get('NISSolverObserversPriority'))
-            conflicting_data_policy = ConflictingDataResolutionPolicy[scenario_state.get(ConflictingDataResolutionPolicy.get_key())]
             missing_value_policy = MissingValueResolutionPolicy[scenario_state.get(MissingValueResolutionPolicy.get_key())]
-            computation_sources_priority_list = get_computation_sources_priority_list(scenario_state.get('NISSolverComputationSourcesPriority'))
+            conflict_resolution_algorithm = ConflictResolutionAlgorithm(
+                get_computation_sources_priority_list(scenario_state.get('NISSolverComputationSourcesPriority')),
+                AggregationConflictResolutionPolicy[scenario_state.get(AggregationConflictResolutionPolicy.get_key())]
+            )
 
             missing_value_policies: List[MissingValueResolutionPolicy] = [MissingValueResolutionPolicy.Invalidate]
             if missing_value_policy == MissingValueResolutionPolicy.UseZero:
@@ -1147,7 +1186,7 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
 
                             new_results, taken_results, dismissed_results = \
                                 compute_hierarchy_aggregate_results(
-                                    interfacetype_hierarchies, results, interfacetype_aggregations, conflicting_data_policy,
+                                    interfacetype_hierarchies, results, interfacetype_aggregations, conflict_resolution_algorithm,
                                     missing_value_policy, ComputationSource.InterfaceTypeAggregation)
 
                             interfacetype_aggregations.update(new_results)
@@ -1157,7 +1196,7 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
 
                             new_results, taken_results, dismissed_results = \
                                 compute_hierarchy_aggregate_results(
-                                    partof_hierarchies, results, partof_aggregations, conflicting_data_policy,
+                                    partof_hierarchies, results, partof_aggregations, conflict_resolution_algorithm,
                                     missing_value_policy, ComputationSource.PartOfAggregation, scenario_partof_weights)
 
                             partof_aggregations.update(new_results)
