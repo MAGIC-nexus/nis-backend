@@ -1510,24 +1510,25 @@ def compute_hierarchical_structure_internal_external_results(
                 external_addends: List[FloatExp.ValueWeightPair] = []
 
                 for child_node, weight in sorted(structure.get_children(node)):
-                    child_value = deepcopy(results[child_node])
-                    same_system = node.system == child_node.system and node.subsystem.is_same_scope(child_node.subsystem)
-                    if same_system:
-                        child_internal_value, child_external_value = compute(child_node)
+                    if child_node in results:
+                        child_value = deepcopy(results[child_node])
+                        same_system = node.system == child_node.system and node.subsystem.is_same_scope(child_node.subsystem)
+                        if same_system:
+                            child_internal_value, child_external_value = compute(child_node)
 
-                        if not child_internal_value and not child_external_value:
-                            unknown_nodes.add(node)
-                            return None, None
+                            if not child_internal_value and not child_external_value:
+                                unknown_nodes.add(node)
+                                return None, None
 
-                        if child_internal_value:
-                            child_internal_value.value.name = Scope.Internal.name + brackets(child_node.name)
-                            internal_addends.append((child_internal_value.value, weight))
+                            if child_internal_value:
+                                child_internal_value.value.name = Scope.Internal.name + brackets(child_node.name)
+                                internal_addends.append((child_internal_value.value, weight))
 
-                        if child_external_value:
-                            child_external_value.value.name = Scope.External.name + brackets(child_node.name)
-                            external_addends.append((child_external_value.value, weight))
-                    else:
-                        external_addends.append((child_value.value, weight))
+                            if child_external_value:
+                                child_external_value.value.name = Scope.External.name + brackets(child_node.name)
+                                external_addends.append((child_external_value.value, weight))
+                        else:
+                            external_addends.append((child_value.value, weight))
 
                 if internal_addends:
                     scope_value = FloatExp.compute_weighted_addition(internal_addends)
