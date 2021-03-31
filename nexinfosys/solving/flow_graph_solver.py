@@ -73,6 +73,9 @@ class ComputationSource(Enum):
     PartOfAggregation = 4
     InterfaceTypeAggregation = 5
 
+    def is_aggregation(self) -> bool:
+        return self in (self.PartOfAggregation, self.InterfaceTypeAggregation)
+
 
 class FloatComputedTuple(NamedTuple):
     value: FloatExp
@@ -312,6 +315,13 @@ AstType = Dict
 ObservationListType = List[Tuple[Optional[Union[float, AstType]], FactorQuantitativeObservation]]
 TimeObservationsType = Dict[str, ObservationListType]
 InterfaceNodeAstDict = Dict[InterfaceNode, Tuple[AstType, FactorQuantitativeObservation]]
+
+
+class ProcessingItem(NamedTuple):
+    source: ComputationSource
+    hierarchy: Union[InterfaceNodeHierarchy, ComputationGraph]
+    results: NodeFloatComputedDict
+    partof_weights: Optional[ProcessorsRelationWeights] = None
 
 
 def get_circular_dependencies(parameters: Dict[str, Tuple[Any, list]]) -> list:
@@ -1225,11 +1235,6 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
             for time_period, absolute_observations in time_absolute_observations.items():
                 print(f"********************* TIME PERIOD: {time_period}")
 
-                flow_computations: NodeFloatComputedDict = {}
-                scale_computations: NodeFloatComputedDict = {}
-                scale_change_computations: NodeFloatComputedDict = {}
-                interfacetype_aggregations: NodeFloatComputedDict = {}
-                partof_aggregations: NodeFloatComputedDict = {}
                 total_taken_results: NodeFloatComputedDict = {}
                 total_dismissed_results: NodeFloatComputedDict = {}
 
@@ -1248,6 +1253,14 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
                     # Initializations
                     iteration_number = 1
 
+                    processing_items = [
+                        ProcessingItem(ComputationSource.Flow, comp_graph_flow, {}),
+                        ProcessingItem(ComputationSource.Scale, comp_graph_scale, {}),
+                        ProcessingItem(ComputationSource.ScaleChange, comp_graph_scale_change, {}),
+                        ProcessingItem(ComputationSource.InterfaceTypeAggregation, interfacetype_hierarchies, {}),
+                        ProcessingItem(ComputationSource.PartOfAggregation, partof_hierarchies, {}, scenario_partof_weights)
+                    ]
+
                     # START ITERATIVE SOLVING
 
                     # We first iterate with policy MissingValueResolutionPolicy.Invalidate trying to get as many results
@@ -1262,52 +1275,19 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
                             print(f"********************* Solving iteration: {iteration_number}")
                             previous_len_results = len(results)
 
-                            new_results, taken_results, dismissed_results = compute_hierarchy_graph_results(
-                                comp_graph_flow, results, flow_computations,
-                                conflict_resolution_algorithm, ComputationSource.Flow)
+                            for pi in processing_items:
+                                if pi.source.is_aggregation():
+                                    new_results, taken_results, dismissed_results = compute_hierarchy_aggregate_results(
+                                        pi.hierarchy, results, pi.results, conflict_resolution_algorithm,
+                                        missing_value_policy, pi.source, pi.partof_weights)
+                                else:
+                                    new_results, taken_results, dismissed_results = compute_hierarchy_graph_results(
+                                        pi.hierarchy, results, pi.results, conflict_resolution_algorithm, pi.source)
 
-                            flow_computations.update(new_results)
-                            results.update(new_results)
-                            total_taken_results.update(taken_results)
-                            total_dismissed_results.update(dismissed_results)
-
-                            new_results, taken_results, dismissed_results = compute_hierarchy_graph_results(
-                                comp_graph_scale, results, scale_computations,
-                                conflict_resolution_algorithm, ComputationSource.Scale)
-
-                            scale_computations.update(new_results)
-                            results.update(new_results)
-                            total_taken_results.update(taken_results)
-                            total_dismissed_results.update(dismissed_results)
-
-                            new_results, taken_results, dismissed_results = compute_hierarchy_graph_results(
-                                comp_graph_scale_change, results, scale_change_computations,
-                                conflict_resolution_algorithm, ComputationSource.ScaleChange)
-
-                            scale_change_computations.update(new_results)
-                            results.update(new_results)
-                            total_taken_results.update(taken_results)
-                            total_dismissed_results.update(dismissed_results)
-
-                            new_results, taken_results, dismissed_results = \
-                                compute_hierarchy_aggregate_results(
-                                    interfacetype_hierarchies, results, interfacetype_aggregations, conflict_resolution_algorithm,
-                                    missing_value_policy, ComputationSource.InterfaceTypeAggregation)
-
-                            interfacetype_aggregations.update(new_results)
-                            results.update(new_results)
-                            total_taken_results.update(taken_results)
-                            total_dismissed_results.update(dismissed_results)
-
-                            new_results, taken_results, dismissed_results = \
-                                compute_hierarchy_aggregate_results(
-                                    partof_hierarchies, results, partof_aggregations, conflict_resolution_algorithm,
-                                    missing_value_policy, ComputationSource.PartOfAggregation, scenario_partof_weights)
-
-                            partof_aggregations.update(new_results)
-                            results.update(new_results)
-                            total_taken_results.update(taken_results)
-                            total_dismissed_results.update(dismissed_results)
+                                pi.results.update(new_results)
+                                results.update(new_results)
+                                total_taken_results.update(taken_results)
+                                total_dismissed_results.update(dismissed_results)
 
                             if unresolved_observations_with_interfaces:
                                 new_results, unresolved_observations_with_interfaces = \
