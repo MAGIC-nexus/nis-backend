@@ -73,6 +73,9 @@ class ComputationSource(Enum):
     PartOfAggregation = 4
     InterfaceTypeAggregation = 5
 
+    def is_aggregation(self) -> bool:
+        return self in (self.PartOfAggregation, self.InterfaceTypeAggregation)
+
 
 class FloatComputedTuple(NamedTuple):
     value: FloatExp
@@ -87,13 +90,13 @@ class ConflictResolution(Enum):
     Dismissed = 3
 
 
-class ConflictingDataResolutionPolicy(Enum):
+class AggregationConflictResolutionPolicy(Enum):
     TakeUpper = 1
     TakeLowerAggregation = 2
 
     @staticmethod
     def get_key():
-        return "NISSolverConflictingDataResolutionPolicy"
+        return "NISSolverAggregationConflictResolutionPolicy"
 
     def resolve(self, computed_value: FloatComputedTuple, existing_value: FloatComputedTuple) \
             -> Tuple[FloatComputedTuple, FloatComputedTuple]:
@@ -113,6 +116,70 @@ class MissingValueResolutionPolicy(Enum):
     @staticmethod
     def get_key():
         return "NISSolverMissingValueResolutionPolicy"
+
+
+class ConflictResolutionAlgorithm:
+    def __init__(self, computation_sources_priority_list: List[ComputationSource], aggregation_conflict_policy: AggregationConflictResolutionPolicy):
+        self.computation_sources_priority_list = computation_sources_priority_list
+        self.aggregation_conflict_policy = aggregation_conflict_policy
+
+    def resolve(self, value1: FloatComputedTuple, value2: FloatComputedTuple) -> Tuple[FloatComputedTuple, FloatComputedTuple]:
+        assert(value1.computation_source != value2.computation_source,
+               f"The computation sources of both conflicting values cannot be the same: {value1.computation_source}")
+
+        # Both values have been computed
+        if value1.computation_source is not None and value2.computation_source is not None:
+            value1_position = self.computation_sources_priority_list.index(value1.computation_source)
+            value2_position = self.computation_sources_priority_list.index(value2.computation_source)
+
+            if value1_position < value2_position:
+                return value1, value2
+            else:
+                return value2, value1
+
+        # One of the values has been computed by aggregation while the other is an observation
+        if ifnull(value1.computation_source, value2.computation_source) in (ComputationSource.PartOfAggregation, ComputationSource.InterfaceTypeAggregation):
+            if value1.computation_source is None:
+                # value2 is computed value, value1 is existing value
+                return self.aggregation_conflict_policy.resolve(value2, value1)
+            else:
+                # value1 is computed value, value2 is existing value
+                return self.aggregation_conflict_policy.resolve(value1, value2)
+
+        # One of the values has been computed by a non-aggregation computation while the other is an observation
+        else:
+            # Return the observation first
+            if value1.computation_source is None:
+                return value1, value2
+            else:
+                return value2, value1
+
+
+def get_computation_sources_priority_list(s: str) -> List[ComputationSource]:
+    """ Convert a list of strings into a list of valid ComputationSource values and also check its validity
+        according to the parameter "NISSolverComputationSourcesPriority".
+        The input list should contain all values of ComputationSource, without duplicates, in any order.
+    """
+    identifiers = parse_string_as_simple_ident_list(s)
+    sources: List[ComputationSource] = []
+
+    if identifiers is None:
+        raise SolvingException(f"The priority list of computation sources is invalid: {identifiers}")
+
+    for identifier in identifiers:
+        try:
+            sources.append(ComputationSource[identifier])
+        except KeyError:
+            raise SolvingException(f"The priority list of computation sources have an invalid value: {identifier}")
+
+    if len(sources) != len(ComputationSource):
+        raise SolvingException(
+            f"The priority list of computation sources should have length {len(ComputationSource)} but has length: {len(sources)}")
+
+    if len(sources) != len(set(sources)):
+        raise SolvingException(f"The priority list of computation sources cannot have duplicated values: {sources}")
+
+    return sources
 
 
 class InterfaceNode:
@@ -231,11 +298,10 @@ class ResultKey(NamedTuple):
     scenario: str
     period: str
     scope: Scope
-    conflict_partof: ConflictResolution = ConflictResolution.No
-    conflict_itype: ConflictResolution = ConflictResolution.No
+    conflict: ConflictResolution = ConflictResolution.No
 
-    def as_string_tuple(self) -> Tuple[str, str, str, str, str]:
-        return self.scenario, self.period, self.scope.name, self.conflict_partof.name, self.conflict_itype.name
+    def as_string_tuple(self) -> Tuple[str, str, str, str]:
+        return self.scenario, self.period, self.scope.name, self.conflict.name
 
 
 ProcessorsRelationWeights = Dict[Tuple[Processor, Processor], Any]
@@ -249,6 +315,13 @@ AstType = Dict
 ObservationListType = List[Tuple[Optional[Union[float, AstType]], FactorQuantitativeObservation]]
 TimeObservationsType = Dict[str, ObservationListType]
 InterfaceNodeAstDict = Dict[InterfaceNode, Tuple[AstType, FactorQuantitativeObservation]]
+
+
+class ProcessingItem(NamedTuple):
+    source: ComputationSource
+    hierarchy: Union[InterfaceNodeHierarchy, ComputationGraph]
+    results: NodeFloatComputedDict
+    partof_weights: Optional[ProcessorsRelationWeights] = None
 
 
 def get_circular_dependencies(parameters: Dict[str, Tuple[Any, list]]) -> list:
@@ -926,15 +999,117 @@ def get_processor_partof_relations(glb_idx: PartialRetrievalDictionary) \
     return relations, weights, behave_as_dependencies
 
 
+def compute_hierarchy_graph_results(
+        graph: ComputationGraph, params: NodeFloatComputedDict,
+        prev_computed_values: NodeFloatComputedDict,
+        conflict_resolution_algorithm: ConflictResolutionAlgorithm,
+        computation_source: ComputationSource) \
+        -> Tuple[NodeFloatComputedDict, NodeFloatComputedDict, NodeFloatComputedDict]:
+    """
+    Compute nodes in a graph hierarchy and also mark conflicts with existing values (params)
+
+    :param graph: hierarchy as a graph of interface nodes
+    :param params: all nodes with a known value
+    :param prev_computed_values: all nodes that have been previously computed with same computation source
+    :param conflict_resolution_algorithm: algorithm for resolution of conflicts
+    :param computation_source: source of computation
+    :return: a dict with all values computed now and in previous calls, a dict with conflicted values
+             that have been taken, a dict with conflicted values that have been dismissed
+    """
+
+    def solve_inputs(inputs: List[FloatExp.ValueWeightPair], split: bool) -> Optional[FloatExp]:
+        input_values: List[FloatExp.ValueWeightPair] = []
+
+        for n, weight in sorted(inputs):
+            res_backward = compute_node(n)
+
+            # If node 'n' is a 'split' only one result is needed to compute the result
+            if split:
+                if res_backward is not None:
+                    return res_backward * weight
+            else:
+                if res_backward is not None and weight is not None:
+                    input_values.append((res_backward, weight))
+                else:
+                    return None
+
+        return FloatExp.compute_weighted_addition(input_values)
+
+    def compute_node(node: InterfaceNode) -> Optional[FloatExp]:
+        # If the node has already been computed return the value
+        if new_values.get(node) is not None:
+            return new_values[node].value
+
+        # We avoid graphs with cycles
+        if node in pending_nodes:
+            return None
+
+        pending_nodes.append(node)
+
+        sum_children = solve_inputs(graph.direct_inputs(node), graph.get_reverse_node_split(node))
+
+        if sum_children is None:
+            sum_children = solve_inputs(graph.reverse_inputs(node), graph.get_direct_node_split(node))
+
+        float_value = params.get(node)
+        if sum_children is not None:
+            # New value has been computed
+            sum_children.name = node.name
+            new_computed_value = FloatComputedTuple(sum_children, Computed.Yes, computation_source=computation_source)
+
+            if float_value is not None:
+                # Conflict here: applies strategy
+                taken_conflicts[node], dismissed_conflicts[node] = \
+                    conflict_resolution_algorithm.resolve(new_computed_value, float_value)
+
+                new_values[node] = taken_conflicts[node]
+                return_value = taken_conflicts[node].value
+            else:
+                new_values[node] = new_computed_value
+                return_value = new_computed_value.value
+        else:
+            # No value got from children, try to search in "params"
+            return_value = float_value.value if float_value is not None else None
+            # if float_value is not None:
+            #     new_values[node] = float_value
+            #     return_value = float_value.value
+            # else:
+            #     return_value = None
+
+        return return_value
+
+    new_values: NodeFloatComputedDict = {**prev_computed_values}  # All computed aggregations
+    taken_conflicts: NodeFloatComputedDict = {}  # Taken values on conflicting nodes
+    dismissed_conflicts: NodeFloatComputedDict = {}  # Dismissed values on conflicting nodes
+
+    for parent_node in graph.nodes:
+        pending_nodes: List[InterfaceNode] = []
+        compute_node(parent_node)
+
+    return new_values, taken_conflicts, dismissed_conflicts
+
+
 def compute_hierarchy_aggregate_results(
         tree: InterfaceNodeHierarchy, params: NodeFloatComputedDict,
         prev_computed_values: NodeFloatComputedDict,
-        conflicting_data_policy: ConflictingDataResolutionPolicy,
+        conflict_resolution_algorithm: ConflictResolutionAlgorithm,
         missing_values_policy: MissingValueResolutionPolicy,
         computation_source: ComputationSource,
         processors_relation_weights: ProcessorsRelationWeights = None) \
         -> Tuple[NodeFloatComputedDict, NodeFloatComputedDict, NodeFloatComputedDict]:
+    """
+    Compute aggregations of nodes in a hierarchy and also mark conflicts with existing values (params)
 
+    :param tree: dictionary representing a hierarchy as a tree of interface nodes in the form [parent, set(child)]
+    :param params: all nodes with a known value
+    :param prev_computed_values: all nodes that have been previously computed by aggregation
+    :param conflict_resolution_algorithm: algorithm for resolution of conflicts
+    :param missing_values_policy: policy for missing values when aggregating children
+    :param computation_source: source of computation
+    :param processors_relation_weights: weights to use computing aggregation for processor hierarchies
+    :return: a dict with all values computed by aggregation now and in previous calls, a dict with conflicted values
+             that have been taken, a dict with conflicted values that have been dismissed
+    """
     def compute_node(node: InterfaceNode) -> Optional[FloatExp]:
         # If the node has already been computed return the value
         if new_values.get(node) is not None:
@@ -971,7 +1146,7 @@ def compute_hierarchy_aggregate_results(
             if float_value is not None:
                 # Conflict here: applies strategy
                 taken_conflicts[node], dismissed_conflicts[node] = \
-                    conflicting_data_policy.resolve(new_computed_value, float_value)
+                    conflict_resolution_algorithm.resolve(new_computed_value, float_value)
 
                 new_values[node] = taken_conflicts[node]
                 return_value = taken_conflicts[node].value
@@ -1047,8 +1222,11 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
 
             # Get scenario parameters
             observers_priority_list = parse_string_as_simple_ident_list(scenario_state.get('NISSolverObserversPriority'))
-            conflicting_data_policy = ConflictingDataResolutionPolicy[scenario_state.get(ConflictingDataResolutionPolicy.get_key())]
             missing_value_policy = MissingValueResolutionPolicy[scenario_state.get(MissingValueResolutionPolicy.get_key())]
+            conflict_resolution_algorithm = ConflictResolutionAlgorithm(
+                get_computation_sources_priority_list(scenario_state.get('NISSolverComputationSourcesPriority')),
+                AggregationConflictResolutionPolicy[scenario_state.get(AggregationConflictResolutionPolicy.get_key())]
+            )
 
             missing_value_policies: List[MissingValueResolutionPolicy] = [MissingValueResolutionPolicy.Invalidate]
             if missing_value_policy == MissingValueResolutionPolicy.UseZero:
@@ -1057,11 +1235,8 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
             for time_period, absolute_observations in time_absolute_observations.items():
                 print(f"********************* TIME PERIOD: {time_period}")
 
-                aggregations: NodeFloatComputedDict = {}
-                total_itype_taken_results: NodeFloatComputedDict = {}
-                total_itype_dismissed_results: NodeFloatComputedDict = {}
-                total_partof_taken_results: NodeFloatComputedDict = {}
-                total_partof_dismissed_results: NodeFloatComputedDict = {}
+                total_taken_results: NodeFloatComputedDict = {}
+                total_dismissed_results: NodeFloatComputedDict = {}
 
                 try:
                     comp_graph_flow, comp_graph_scale, comp_graph_scale_change = \
@@ -1076,10 +1251,15 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
                                                              observers_priority_list, glb_idx)
 
                     # Initializations
-                    flow_last_known_nodes = set()
-                    scale_last_known_nodes = set()
-                    scale_change_last_known_nodes = set()
                     iteration_number = 1
+
+                    processing_items = [
+                        ProcessingItem(ComputationSource.Flow, comp_graph_flow, {}),
+                        ProcessingItem(ComputationSource.Scale, comp_graph_scale, {}),
+                        ProcessingItem(ComputationSource.ScaleChange, comp_graph_scale_change, {}),
+                        ProcessingItem(ComputationSource.InterfaceTypeAggregation, interfacetype_hierarchies, {}),
+                        ProcessingItem(ComputationSource.PartOfAggregation, partof_hierarchies, {}, scenario_partof_weights)
+                    ]
 
                     # START ITERATIVE SOLVING
 
@@ -1095,37 +1275,19 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
                             print(f"********************* Solving iteration: {iteration_number}")
                             previous_len_results = len(results)
 
-                            new_results = compute_graph_results(comp_graph_flow, results, flow_last_known_nodes, ComputationSource.Flow)
-                            results.update(new_results)
-                            flow_last_known_nodes = set(results.keys())
+                            for pi in processing_items:
+                                if pi.source.is_aggregation():
+                                    new_results, taken_results, dismissed_results = compute_hierarchy_aggregate_results(
+                                        pi.hierarchy, results, pi.results, conflict_resolution_algorithm,
+                                        missing_value_policy, pi.source, pi.partof_weights)
+                                else:
+                                    new_results, taken_results, dismissed_results = compute_hierarchy_graph_results(
+                                        pi.hierarchy, results, pi.results, conflict_resolution_algorithm, pi.source)
 
-                            new_results = compute_graph_results(comp_graph_scale, results, scale_last_known_nodes, ComputationSource.Scale)
-                            results.update(new_results)
-                            scale_last_known_nodes = set(results.keys())
-
-                            new_results = compute_graph_results(comp_graph_scale_change, results, scale_change_last_known_nodes, ComputationSource.ScaleChange)
-                            results.update(new_results)
-                            scale_change_last_known_nodes = set(results.keys())
-
-                            new_results, itype_taken_results, itype_dismissed_results = \
-                                compute_hierarchy_aggregate_results(
-                                    interfacetype_hierarchies, results, aggregations, conflicting_data_policy,
-                                    missing_value_policy, ComputationSource.InterfaceTypeAggregation)
-
-                            aggregations.update(new_results)
-                            results.update(new_results)
-                            total_itype_taken_results.update(itype_taken_results)
-                            total_itype_dismissed_results.update(itype_dismissed_results)
-
-                            new_results, partof_taken_results, partof_dismissed_results = \
-                                compute_hierarchy_aggregate_results(
-                                    partof_hierarchies, results, aggregations, conflicting_data_policy,
-                                    missing_value_policy, ComputationSource.PartOfAggregation, scenario_partof_weights)
-
-                            aggregations.update(new_results)
-                            results.update(new_results)
-                            total_partof_taken_results.update(partof_taken_results)
-                            total_partof_dismissed_results.update(partof_dismissed_results)
+                                pi.results.update(new_results)
+                                results.update(new_results)
+                                total_taken_results.update(taken_results)
+                                total_dismissed_results.update(dismissed_results)
 
                             if unresolved_observations_with_interfaces:
                                 new_results, unresolved_observations_with_interfaces = \
@@ -1142,25 +1304,17 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
                                                            f"{[k for k in unresolved_observations_with_interfaces.keys()]}"))
 
                     issues.extend(check_unresolved_nodes_in_computation_graphs(
-                        [comp_graph_flow, comp_graph_scale, comp_graph_scale_change], results))
-
-                    # issues.extend(check_unresolved_nodes_in_aggregation_hierarchies(
-                    #     interfacetype_hierarchies + partof_hierarchies, results))
+                        [comp_graph_flow, comp_graph_scale, comp_graph_scale_change], results, scenario_name, time_period))
 
                     current_results: ResultDict = {}
                     result_key = ResultKey(scenario_name, time_period, Scope.Total)
 
                     # Filter out conflicted results from TOTAL results
-                    current_results[result_key] = {k: v for k, v in results.items()
-                                                   if k not in total_itype_taken_results and k not in total_partof_taken_results}
+                    current_results[result_key] = {k: v for k, v in results.items() if k not in total_taken_results}
 
-                    if total_itype_taken_results:
-                        current_results[result_key._replace(conflict_itype=ConflictResolution.Taken)] = total_itype_taken_results
-                        current_results[result_key._replace(conflict_itype=ConflictResolution.Dismissed)] = total_itype_dismissed_results
-
-                    if total_partof_taken_results:
-                        current_results[result_key._replace(conflict_partof=ConflictResolution.Taken)] = total_partof_taken_results
-                        current_results[result_key._replace(conflict_partof=ConflictResolution.Dismissed)] = total_partof_dismissed_results
+                    if total_taken_results:
+                        current_results[result_key._replace(conflict=ConflictResolution.Taken)] = total_taken_results
+                        current_results[result_key._replace(conflict=ConflictResolution.Dismissed)] = total_dismissed_results
 
                     hierarchical_structures = [
                         HierarchicalNodeStructure.from_flow_computation_graph(comp_graph_flow, True),
@@ -1213,8 +1367,7 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
 def compute_dataframe_sankey(results: ResultDict) -> pd.DataFrame:
     data: List[Dict] = []
     for result_key, node_floatcomputed_dict in results.items():
-        if result_key.scope == Scope.Total and result_key.conflict_itype != ConflictResolution.Dismissed \
-           and result_key.conflict_partof != ConflictResolution.Dismissed:
+        if result_key.scope == Scope.Total and result_key.conflict != ConflictResolution.Dismissed:
 
             for node, float_computed in node_floatcomputed_dict.items():
                 if float_computed.computed == Computed.Yes:
@@ -1337,24 +1490,25 @@ def compute_hierarchical_structure_internal_external_results(
                 external_addends: List[FloatExp.ValueWeightPair] = []
 
                 for child_node, weight in sorted(structure.get_children(node)):
-                    child_value = deepcopy(results[child_node])
-                    same_system = node.system == child_node.system and node.subsystem.is_same_scope(child_node.subsystem)
-                    if same_system:
-                        child_internal_value, child_external_value = compute(child_node)
+                    if child_node in results:
+                        child_value = deepcopy(results[child_node])
+                        same_system = node.system == child_node.system and node.subsystem.is_same_scope(child_node.subsystem)
+                        if same_system:
+                            child_internal_value, child_external_value = compute(child_node)
 
-                        if not child_internal_value and not child_external_value:
-                            unknown_nodes.add(node)
-                            return None, None
+                            if not child_internal_value and not child_external_value:
+                                unknown_nodes.add(node)
+                                return None, None
 
-                        if child_internal_value:
-                            child_internal_value.value.name = Scope.Internal.name + brackets(child_node.name)
-                            internal_addends.append((child_internal_value.value, weight))
+                            if child_internal_value:
+                                child_internal_value.value.name = Scope.Internal.name + brackets(child_node.name)
+                                internal_addends.append((child_internal_value.value, weight))
 
-                        if child_external_value:
-                            child_external_value.value.name = Scope.External.name + brackets(child_node.name)
-                            external_addends.append((child_external_value.value, weight))
-                    else:
-                        external_addends.append((child_value.value, weight))
+                            if child_external_value:
+                                child_external_value.value.name = Scope.External.name + brackets(child_node.name)
+                                external_addends.append((child_external_value.value, weight))
+                        else:
+                            external_addends.append((child_value.value, weight))
 
                 if internal_addends:
                     scope_value = FloatExp.compute_weighted_addition(internal_addends)
@@ -1377,13 +1531,16 @@ def compute_hierarchical_structure_internal_external_results(
     return unknown_nodes
 
 
-def check_unresolved_nodes_in_computation_graphs(computation_graphs: List[ComputationGraph], resolved_nodes: NodeFloatComputedDict) -> List[Issue]:
+def check_unresolved_nodes_in_computation_graphs(computation_graphs: List[ComputationGraph],
+                                                 resolved_nodes: NodeFloatComputedDict,
+                                                 scenario_name: str, time_period: str) -> List[Issue]:
     issues: List[Issue] = []
     for comp_graph in computation_graphs:
         unresolved_nodes = [n for n in comp_graph.nodes if n not in resolved_nodes]
         if unresolved_nodes:
-            issues.append(Issue(IType.WARNING, f"The following nodes in '{comp_graph.name}' graph could not be "
-                                               f"evaluated: {unresolved_nodes}"))
+            issues.append(Issue(IType.WARNING,
+                                f"Scenario '{scenario_name}' - period '{time_period}'. The following nodes in "
+                                f"'{comp_graph.name}' graph could not be evaluated: {unresolved_nodes}"))
     return issues
 
 
@@ -1459,7 +1616,7 @@ def export_solver_data(datasets, data, dynamic_scenario, glb_idx, global_paramet
     benchmarks = glb_idx.get(Benchmark.partial_key())
 
     # Filter out conflicts and prepare for case insensitiveness
-    # Filter: Conflict_Partof!='Dismissed', Conflic_iType!='Dismissed', and remove the two columns
+    # Filter: Conflict!='Dismissed' and remove the column
     df_without_conflicts = get_conflicts_filtered_dataframe(df)
     inplace_case_sensitiveness_dataframe(df_without_conflicts)
 
@@ -1599,11 +1756,9 @@ def prepare_sankey_dataset(registry: PartialRetrievalDictionary, df: pd.DataFram
 
 
 def get_conflicts_filtered_dataframe(in_df: pd.DataFrame) -> pd.DataFrame:
-    filt = in_df.index.get_level_values("Conflict_Partof").isin(["No", "Taken"]) & in_df.index.get_level_values(
-        "Conflict_Itype").isin(["No", "Taken"])
+    filt = in_df.index.get_level_values("Conflict").isin(["No", "Taken"])
     df = in_df[filt]
-    df = df.droplevel("Conflict_Partof")
-    df = df.droplevel("Conflict_Itype")
+    df = df.droplevel("Conflict")
     return df
 
 

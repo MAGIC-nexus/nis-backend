@@ -377,6 +377,11 @@ def prepare_model(state) -> NoReturn:
 
     :param state:
     """
+
+    # TODO: currently when an interface is defined as a Scale from two or more interfaces, the computed values are
+    #  summed while the intuition tell us that only one scale should be defined. We have to give a warning message
+    #  if this situation happens.
+
     # Registry and the other objects also
     glb_idx, _, _, _, _ = get_case_study_registry_objects(state)
     # Prepare a Query to obtain ALL interfaces
