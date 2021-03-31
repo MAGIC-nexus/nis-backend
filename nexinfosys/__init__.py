@@ -356,7 +356,7 @@ default_cmds = """
                 "_row": 2,
                 "code": "TakeUpper",
                 "description": "Policy: take the value upper instead of the value coming from lower level accumulation",
-                "hierarchy_name": "AggregationConflictingDataResolutionPolicies",
+                "hierarchy_name": "AggregationConflictResolutionPolicies",
                 "label": "Take value from the upper level"
             },
             {
@@ -365,7 +365,7 @@ default_cmds = """
                 "_row": 3,
                 "code": "TakeLowerAggregation",
                 "description": "Policy: take the value computed by aggregation lower levels of a hierarchy",
-                "hierarchy_name": "AggregationConflictingDataResolutionPolicies",
+                "hierarchy_name": "AggregationConflictResolutionPolicies",
                 "label": "Take value accumulated from lower levels"
             },
             {
@@ -424,9 +424,9 @@ default_cmds = """
                             "_expandable": [],
                             "_row": 2,
                             "description": "Conflicting data resolution policy",
-                            "domain": "AggregationConflictingDataResolutionPolicies",
+                            "domain": "AggregationConflictResolutionPolicies",
                             "group": "NISSolverParameters",
-                            "name": "NISSolverConflictingDataResolutionPolicy",
+                            "name": "NISSolverAggregationConflictResolutionPolicy",
                             "type": "Code",
                             "value": "TakeUpper"
                         },
@@ -440,6 +440,17 @@ default_cmds = """
                             "name": "NISSolverMissingValueResolutionPolicy",
                             "type": "Code",
                             "value": "UseZero"
+                        },
+                        {
+                            "_complex": false,
+                            "_expandable": [],
+                            "_row": 2,
+                            "description": "Ordered list of computation sources to consider on conflicts",
+                            "domain": null,
+                            "group": "NISSolverParameters",
+                            "name": "NISSolverComputationSourcesPriority",
+                            "type": "String",
+                            "value": "Scale, PartOfAggregation, InterfaceTypeAggregation, ScaleChange, Flow"
                         }
                     ]
         }
