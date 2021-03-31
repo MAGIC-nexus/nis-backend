@@ -145,11 +145,11 @@ class ConflictResolutionAlgorithm:
 
         # One of the values has been computed by a non-aggregation computation while the other is an observation
         else:
-            # Return the computed value first
+            # Return the observation first
             if value1.computation_source is None:
-                return value2, value1
-            else:
                 return value1, value2
+            else:
+                return value2, value1
 
 
 def get_computation_sources_priority_list(s: str) -> List[ComputationSource]:
