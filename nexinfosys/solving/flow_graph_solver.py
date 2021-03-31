@@ -1324,7 +1324,7 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
                                                            f"{[k for k in unresolved_observations_with_interfaces.keys()]}"))
 
                     issues.extend(check_unresolved_nodes_in_computation_graphs(
-                        [comp_graph_flow, comp_graph_scale, comp_graph_scale_change], results))
+                        [comp_graph_flow, comp_graph_scale, comp_graph_scale_change], results, scenario_name, time_period))
 
                     current_results: ResultDict = {}
                     result_key = ResultKey(scenario_name, time_period, Scope.Total)
@@ -1551,13 +1551,16 @@ def compute_hierarchical_structure_internal_external_results(
     return unknown_nodes
 
 
-def check_unresolved_nodes_in_computation_graphs(computation_graphs: List[ComputationGraph], resolved_nodes: NodeFloatComputedDict) -> List[Issue]:
+def check_unresolved_nodes_in_computation_graphs(computation_graphs: List[ComputationGraph],
+                                                 resolved_nodes: NodeFloatComputedDict,
+                                                 scenario_name: str, time_period: str) -> List[Issue]:
     issues: List[Issue] = []
     for comp_graph in computation_graphs:
         unresolved_nodes = [n for n in comp_graph.nodes if n not in resolved_nodes]
         if unresolved_nodes:
-            issues.append(Issue(IType.WARNING, f"The following nodes in '{comp_graph.name}' graph could not be "
-                                               f"evaluated: {unresolved_nodes}"))
+            issues.append(Issue(IType.WARNING,
+                                f"Scenario '{scenario_name}' - period '{time_period}'. The following nodes in "
+                                f"'{comp_graph.name}' graph could not be evaluated: {unresolved_nodes}"))
     return issues
 
 
