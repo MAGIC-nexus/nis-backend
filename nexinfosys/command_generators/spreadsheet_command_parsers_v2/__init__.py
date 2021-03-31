@@ -177,6 +177,8 @@ def parse_command_in_worksheet(sh: Worksheet, area: AreaTupleType, name: Optiona
                     if isinstance(value, float):
                         if value == int(value):
                             value = str(int(value))
+                        else:
+                            value = str(value)
                     elif not isinstance(value, str):
                         value = str(value)
                     value = value.strip()
