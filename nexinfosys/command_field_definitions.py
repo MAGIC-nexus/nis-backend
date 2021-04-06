@@ -10,7 +10,7 @@ from nexinfosys.command_generators.parser_field_parsers import simple_ident, unq
     time_expression, indicator_expression, code_string, simple_h_name, domain_definition, unit_name, url_parser, \
     processor_names, value, list_simple_ident, reference, processor_name, processors_selector_expression, \
     interfaces_list_expression, attributes_list_expression, indicators_list_expression, number_interval, pair_numbers, \
-    external_ds_name, level_name, expression_with_parameters_or_list_simple_ident
+    external_ds_name, level_name, expression_with_parameters_or_list_simple_ident, signed_float
 from nexinfosys.common.constants import SubsystemType, Scope
 from nexinfosys.common.helper import first, class_full_name
 from nexinfosys.model_services import IExecutableCommand
@@ -114,17 +114,18 @@ command_fields: Dict[str, List[CommandField]] = {
     "interface_types": [
         CommandField(allowed_names=["InterfaceTypeHierarchy"], name="interface_type_hierarchy", parser=simple_ident),
         CommandField(allowed_names=["InterfaceType"], name="interface_type", mandatory=True, parser=simple_ident),
+        CommandField(allowed_names=["ParentInterfaceType"], name="parent_interface_type", parser=simple_ident),
         CommandField(allowed_names=["Sphere"], name="sphere", mandatory=True, allowed_values=spheres,
                      parser=simple_ident),
         CommandField(allowed_names=["RoegenType"], name="roegen_type", mandatory=True, allowed_values=roegen_types,
                      parser=simple_ident),
-        CommandField(allowed_names=["ParentInterfaceType"], name="parent_interface_type", parser=simple_ident),
-        CommandField(allowed_names=["Level"], name="level", parser=level_name, attribute_of=FactorType),
-        CommandField(allowed_names=["Formula", "Expression"], name="formula", parser=unquoted_string),
         CommandField(allowed_names=["Description"], name="description", parser=unquoted_string),
+        CommandField(allowed_names=["Source"], name="qq_source", parser=reference),  # Cristina (in "MuSIASEM Interface List" worksheet)
         CommandField(allowed_names=["Unit"], name="unit", mandatory=True, parser=unit_name),
         CommandField(allowed_names=["OppositeSubsystemType", "OppositeProcessorType"], name="opposite_processor_type",
-                     default_value=SubsystemType.get_names()[0], allowed_values=SubsystemType.get_names(), parser=simple_ident),
+                     allowed_values=SubsystemType.get_names(), parser=simple_ident),
+        CommandField(allowed_names=["Level"], name="level", parser=level_name, attribute_of=FactorType),
+        CommandField(allowed_names=["Formula", "Expression"], name="formula", parser=unquoted_string),
         CommandField(allowed_names=[attributeRegex], name="attributes", many_appearances=True, parser=value),
         CommandField(allowed_names=["Attributes"], name="attributes", parser=key_value_list)
     ],
@@ -189,7 +190,6 @@ command_fields: Dict[str, List[CommandField]] = {
         CommandField(allowed_names=["Uncertainty"], name="uncertainty", parser=unquoted_string),
         CommandField(allowed_names=["Assessment"], name="assessment", parser=unquoted_string),
         # TODO
-        #CommandField(allowed_names=["PedigreeMatrix"], name="pedigree_matrix", parser=reference_name),
         #CommandField(allowed_names=["Pedigree"], name="pedigree", parser=pedigree_code),
         #CommandField(allowed_names=["RelativeTo"], name="relative_to", parser=simple_ident_plus_unit_name),
         CommandField(allowed_names=["PedigreeMatrix"], name="pedigree_matrix", parser=reference),
@@ -328,45 +328,6 @@ command_fields: Dict[str, List[CommandField]] = {
         CommandField(allowed_names=["Year"], name="year", mandatory="entry_type in ('article', 'book', 'inbook', 'incollection', 'inproceedings', 'mastersthesis', 'phdthesis', 'proceedings', 'techreport')", parser=unquoted_string)
     ],
 
-    "scalar_indicator_benchmarks": [
-        CommandField(allowed_names=["BenchmarkGroup"], name="benchmark_group", default_value=benchmark_groups[0],
-                     allowed_values=benchmark_groups, parser=simple_ident),
-        CommandField(allowed_names=["Stakeholders"], name="stakeholders", parser=list_simple_ident),
-        CommandField(allowed_names=["Benchmark"], name="benchmark", mandatory=True, parser=simple_ident),
-        CommandField(allowed_names=["Range"], name="range", mandatory=True, parser=number_interval),
-        CommandField(allowed_names=["Unit"], name="unit", mandatory=True, parser=unit_name),
-        CommandField(allowed_names=["Category"], name="category", mandatory=True, parser=simple_ident),
-        CommandField(allowed_names=["Label"], name="label", mandatory=True, parser=unquoted_string),
-        CommandField(allowed_names=["Description"], name="description", parser=unquoted_string)
-    ],
-
-    "scalar_indicators": [
-        CommandField(allowed_names=["Indicator"], name="indicator_name", mandatory=True, parser=simple_ident),
-        CommandField(allowed_names=["Local"], name="local", mandatory=True, allowed_values=yes_no, parser=simple_ident),
-        CommandField(allowed_names=["Formula", "Expression"], name="formula", mandatory=True, parser=indicator_expression),
-        # TODO Disabled: apply the formula to ALL processors (and ignore those where it cannot be evaluated)
-        #  CommandField(allowed_names=["Processors"], name="processors_selector", parser=processors_selector_expression)
-        CommandField(allowed_names=["Benchmarks", "Benchmark"], name="benchmarks", parser=list_simple_ident),
-        CommandField(allowed_names=["Description"], name="description", parser=unquoted_string)
-    ],
-
-    "matrix_indicators": [
-        CommandField(allowed_names=["Indicator"], name="indicator_name", mandatory=True, parser=simple_ident),
-        CommandField(allowed_names=["Scope"], name="scope", default_value=Scope.get_names()[0], allowed_values=Scope.get_names(), parser=simple_ident),
-        CommandField(allowed_names=["Processors"], name="processors_selector", parser=processors_selector_expression),
-        CommandField(allowed_names=["Interfaces"], name="interfaces_selector", parser=interfaces_list_expression),
-        CommandField(allowed_names=["Indicators"], name="indicators_selector", parser=indicators_list_expression),
-        CommandField(allowed_names=["Attributes"], name="attributes_selector", parser=attributes_list_expression),
-        CommandField(allowed_names=["Description"], name="description", parser=unquoted_string)
-    ],
-
-    "problem_statement": [
-        CommandField(allowed_names=["Scenario"], name="scenario_name", parser=simple_ident),
-        CommandField(allowed_names=["Parameter"], name="parameter", mandatory=True, parser=simple_ident),
-        CommandField(allowed_names=["Value"], name="parameter_value", mandatory=True, parser=expression_with_parameters_or_list_simple_ident), # list_simple_ident
-        CommandField(allowed_names=["Description"], name="description", parser=unquoted_string)
-    ],
-
     # Used only for help elaboration
     "datasetqry": [
         CommandField(allowed_names=["InputDataset"], name="inputdataset", parser=external_ds_name),
@@ -379,6 +340,64 @@ command_fields: Dict[str, List[CommandField]] = {
                      default_value=aggregators_list[0], allowed_values=aggregators_list, parser=simple_ident),
         CommandField(allowed_names=["ResultMeasureName"], name="resultmeasurename", parser=simple_ident),
         CommandField(allowed_names=["OutputDataset"], name="outputdataset", parser=simple_ident),
+    ],
+
+    # Analysis commands
+
+    "problem_statement": [
+        CommandField(allowed_names=["Scenario"], name="scenario_name", parser=simple_ident),
+        CommandField(allowed_names=["Parameter"], name="parameter", mandatory=True, parser=simple_ident),
+        CommandField(allowed_names=["Value"], name="parameter_value", mandatory=True,
+                     parser=expression_with_parameters_or_list_simple_ident),  # list_simple_ident
+        CommandField(allowed_names=["Description"], name="description", parser=unquoted_string)
+    ],
+
+    "scalar_indicator_benchmarks": [
+        CommandField(allowed_names=["BenchmarkGroup"], name="benchmark_group", default_value=benchmark_groups[0],
+                     allowed_values=benchmark_groups, parser=simple_ident),
+        CommandField(allowed_names=["Stakeholders"], name="stakeholders", parser=list_simple_ident),
+        CommandField(allowed_names=["Benchmark"], name="benchmark", mandatory=True, parser=simple_ident),
+        CommandField(allowed_names=["Range"], name="range", mandatory=True, parser=number_interval),
+        CommandField(allowed_names=["Unit"], name="unit", mandatory=True, parser=unit_name),
+        CommandField(allowed_names=["Category"], name="category", mandatory=True, parser=simple_ident),
+        CommandField(allowed_names=["Label"], name="label", mandatory=True, parser=unquoted_string),
+        CommandField(allowed_names=["Description"], name="description", parser=unquoted_string)
+    ],
+
+    # Modified to consider Cristina's annotations
+    "scalar_indicators": [
+        CommandField(allowed_names=["IndicatorsGroup"], name="indicators_group", parser=simple_ident),  # IndicatorType (Indicators)
+        CommandField(allowed_names=["Indicator"], name="indicator_name", mandatory=True, parser=simple_ident),  # IndicatorName (Indicators)
+        CommandField(allowed_names=["Local"], name="local", mandatory=True, allowed_values=yes_no, parser=simple_ident),
+        CommandField(allowed_names=["Formula", "Expression"], name="formula", mandatory=True, parser=indicator_expression),  # A call to LCIAMethod function, with parameter IndicatorMethod (Indicators)
+        CommandField(allowed_names=["Unit"], name="unit", mandatory=True, parser=unit_name),  # IndicatorUnit (Indicators)
+        # TODO Disabled: apply the formula to ALL processors (and ignore those where it cannot be evaluated)
+        #  CommandField(allowed_names=["Processors"], name="processors_selector", parser=processors_selector_expression)
+        CommandField(allowed_names=["Benchmarks", "Benchmark"], name="benchmarks", parser=list_simple_ident),
+        CommandField(allowed_names=["UnitLabel"], name="unit_label", mandatory=False, parser=unquoted_string),
+        CommandField(allowed_names=["Description"], name="description", parser=unquoted_string),
+        CommandField(allowed_names=["Reference", "Source"], name="source", mandatory=False, parser=reference),  # SAME (Indicators)
+    ],
+
+    "matrix_indicators": [
+        CommandField(allowed_names=["Indicator"], name="indicator_name", mandatory=True, parser=simple_ident),
+        CommandField(allowed_names=["Scope"], name="scope", default_value=Scope.get_names()[0], allowed_values=Scope.get_names(), parser=simple_ident),
+        CommandField(allowed_names=["Processors"], name="processors_selector", parser=processors_selector_expression),
+        CommandField(allowed_names=["Interfaces"], name="interfaces_selector", parser=interfaces_list_expression),
+        CommandField(allowed_names=["Indicators"], name="indicators_selector", parser=indicators_list_expression),
+        CommandField(allowed_names=["Attributes"], name="attributes_selector", parser=attributes_list_expression),
+        CommandField(allowed_names=["Description"], name="description", parser=unquoted_string)
+    ],
+
+    # NEW command, implementation of Cristina's suggestions
+    "lcia_methods": [
+        CommandField(allowed_names=["LCIAMethod"], name="lcia_method", mandatory=True, parser=simple_ident),  # IndicatorMethod (Indicators), SAME (LCIAmethod)
+        CommandField(allowed_names=["LCIAIndicator"], name="lcia_indicator", mandatory=True, parser=simple_ident),  # IndicatorName (Indicators), SAME (LCIAmethod)
+        CommandField(allowed_names=["LCIAHorizon"], name="lcia_horizon", mandatory=True, parser=simple_ident),  # IndicatorTemporal (Indicators)
+        CommandField(allowed_names=["Interface"], name="interface", mandatory=True, parser=simple_ident),  # SAME (LCIAmethod)
+        CommandField(allowed_names=["InterfaceUnit"], name="interface_unit", mandatory=True, parser=unit_name),  # Not present, but needed to warrant independence from specification of InterfaceTypes
+        CommandField(allowed_names=["LCIACoefficient"], name="lcia_coefficient", mandatory=True,  # SAME (LCIAmethod)
+                     parser=signed_float)
     ],
 
 }

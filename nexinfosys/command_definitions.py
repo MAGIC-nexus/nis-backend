@@ -127,6 +127,10 @@ commands: List[Command] = [
             cmd_type=CommandType.analysis,
             execution_class_name="nexinfosys.command_executors.version2.matrix_indicators_command.MatrixIndicatorsCommand"),
 
+    Command(name="lcia_methods", allowed_names=["LCIAMethods"], is_v2=True,
+            cmd_type=CommandType.analysis,
+            execution_class_name="nexinfosys.command_executors.version2.lcia_methods_command.LCIAMethodsCommand"),
+
     Command(name="datasetdata", allowed_names=["DatasetData"], is_v2=True,
             cmd_type=CommandType.input,
             execution_class_name="nexinfosys.command_executors.version2.dataset_data_command.DatasetDataCommand",

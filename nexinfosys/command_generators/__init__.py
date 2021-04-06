@@ -92,5 +92,16 @@ global_functions_extended = create_dictionary(data={i["name"]: i for i in
                       "kwargs": None,
                       "special_kwargs": {"ProcessorsMap": "processors_map", "ProcessorsDOM": "processors_dom",
                                          "DataFrameGroup": "df_group", "IndicatorsDataFrameGroup": "df_indicators_group"}},
+                     {"name": "nancount",
+                      "full_name": "nexinfosys.command_generators.parser_ast_evaluators.aggregator_nan_count",
+                      "kwargs": None,
+                      "special_kwargs": {"ProcessorsMap": "processors_map", "ProcessorsDOM": "processors_dom",
+                                         "DataFrameGroup": "df_group", "IndicatorsDataFrameGroup": "df_indicators_group"}},
+                     {"name": "lciamethod",
+                      "full_name": "nexinfosys.command_generators.parser_ast_evaluators.lcia_method",
+                      "kwargs": None,
+                      "special_kwargs": {"ProcessorsMap": "processors_map", "ProcessorsDOM": "processors_dom",
+                                         "DataFrameGroup": "df_group",
+                                         "IndicatorsDataFrameGroup": "df_indicators_group"}},
                      ]
                     })

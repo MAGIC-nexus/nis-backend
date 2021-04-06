@@ -45,5 +45,9 @@ class ScalarIndicatorsCommand(BasicCommand):
                               benchmarks,
                               IndicatorCategories.factors_expression if strcmp(fields.get("local"), "Yes")
                               else IndicatorCategories.case_study,
-                              fields.get("description"))
+                              fields.get("description"),
+                              fields["indicators_group"],
+                              fields["unit"],
+                              fields["unit_label"],
+                              fields["source"])
         self._glb_idx.put(indicator.key(), indicator)

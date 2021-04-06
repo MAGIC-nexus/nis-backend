@@ -25,6 +25,7 @@ Before the elaboration of flow graphs, several preparatory steps:
 * Observers (different versions). Take average always
 
 """
+import traceback
 from collections import defaultdict
 from copy import deepcopy
 from enum import Enum
@@ -1174,6 +1175,9 @@ def init_processor_full_names(registry: PartialRetrievalDictionary):
         processor.full_hierarchy_name = processor.full_hierarchy_names(registry)[0]
 
 
+# ##########################################
+# ## MAIN ENTRY POINT ######################
+# ##########################################
 def flow_graph_solver(global_parameters: List[Parameter], problem_statement: ProblemStatement,
                       global_state: State, dynamic_scenario: bool) -> List[Issue]:
     """
@@ -1361,6 +1365,7 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
 
         return issues
     except SolvingException as e:
+        traceback.print_exc()  # Print the Exception to std output
         return [Issue(IType.ERROR, e.args[0])]
 
 
@@ -1632,6 +1637,7 @@ def export_solver_data(datasets, data, dynamic_scenario, glb_idx, global_paramet
     ds_stakeholders = prepare_benchmarks_to_stakeholders(benchmarks)  # Find all benchmarks. For each benchmark, create a row per stakeholder -> return the dataframe
 
     # Prepare Matrices
+    # TODO df_attributes
     matrices = prepare_matrix_indicators(matrix_indicators, glb_idx, dom_tree, p_map, df, df_local_indicators, dynamic_scenario)
 
     #
@@ -2140,6 +2146,16 @@ def prepare_matrix_indicators(indicators: List[MatrixIndicator],
 
             i_names = get_adapted_case_dataframe_filter(indicator_results, "Indicator", inds)
             indicators_df = indicators_df.query('Indicator in [' + ', '.join(['"' + _ + '"' for _ in i_names]) + ']')
+
+        # Filter Attributes
+        if indicator.attributes_selector:
+            attribs = set([_.strip() for _ in indicator.attributes_selector.split(",")])
+            if not case_sensitive:
+                attribs = set([_.lower() for _ in attribs])
+
+            # Attributes
+            i_names = get_adapted_case_dataframe_filter(interface_results, "Interface", attribs)
+            attributes_df = interfaces_df.query('Interface in [' + ', '.join(['"' + _ + '"' for _ in i_names]) + ']')
 
         # Pivot Table: Dimensions (rows) are (Scenario, Period, Processor[, Scope])
         #              Dimensions (columns) are (Interface, Orientation -of Interface-)

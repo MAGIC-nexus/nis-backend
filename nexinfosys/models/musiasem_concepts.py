@@ -1388,9 +1388,9 @@ class Processor(Identifiable, Nameable, Taggable, Qualifiable, Automatable, Obse
 
         # Local indicators
         for li in self._local_indicators:
-            formula = li._formula  # TODO Adapt formula of the new indicator to the new Factors
-            li_ = Indicator(li._name, formula, li, li._benchmark, li._indicator_category)
-            self._local_indicators.append(li_)
+            # formula = li._formula  # TODO Adapt formula of the new indicator to the new Factors
+            # li_ = Indicator(li._name, formula, li, li._benchmark, li._indicator_category)
+            self._local_indicators.append(li)
 
         # Clone child Processors (look for part-of relations)
         children_processors: Set[Processor] = set()
@@ -2813,7 +2813,8 @@ class Indicator(Nameable, Identifiable, Encodable):
     * Attached to CaseStudy
     """
     def __init__(self, name: str, formula: str, from_indicator: Optional["Indicator"], processors_selector: str,
-                 benchmarks: List[Benchmark], indicator_category: IndicatorCategories, description=None):
+                 benchmarks: List[Benchmark], indicator_category: IndicatorCategories, description=None,
+                 indicators_group=None, unit=None, unit_label=None, source=None):
         Identifiable.__init__(self)
         Nameable.__init__(self, name)
         self._formula = formula
@@ -2822,6 +2823,10 @@ class Indicator(Nameable, Identifiable, Encodable):
         self._benchmarks = benchmarks
         self._indicator_category = indicator_category
         self._description = description
+        self._indicators_group = indicators_group
+        self._unit = unit
+        self._unit_label = unit_label
+        self._source = source
 
     def encode(self):
         d = Encodable.parents_encode(self, __class__)
@@ -2832,7 +2837,11 @@ class Indicator(Nameable, Identifiable, Encodable):
             'processors_selector': self._processors_selector,
             'benchmarks': self._benchmarks,
             'indicator_category': getattr(self._indicator_category, "name", None),
-            'description': self._description
+            'description': self._description,
+            'indicators_group': self._indicators_group,
+            'unit': self._unit,
+            'unit_label': self._unit_label,
+            'source': self._source
         })
 
         return d
@@ -2920,6 +2929,10 @@ class MatrixIndicator(Nameable, Identifiable, Encodable):
     @property
     def indicators_selector(self):
         return self._indicators_selector
+
+    @property
+    def attributes_selector(self):
+        return self._attributes_selector
 
     @property
     def description(self):

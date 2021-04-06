@@ -29,6 +29,7 @@ class NIS:
         self._dataframe_names = []  # type: List[str]
         self._dataframes = []  # type: List[pd.DataFrame]
         self._issues = None
+        self._state = None
         initialize_configuration()
         # Disable optimizations
         nexinfosys.set_global_configuration_variable("ENABLE_CYTHON_OPTIMIZATIONS", False)
@@ -250,7 +251,7 @@ class NIS:
 
             # STORE the issues
             self._issues = issues
-
+            self._state = self._isession.state
             return self._issues
         else:
             raise Exception("Call 'open_session' before submitting")
@@ -279,6 +280,8 @@ class NIS:
                                            description=f"UNCONTROLLED CONDITION: {exc_info}. Please, contact the development team.",
                                            location=None)]
 
+            self._state = self._isession.state
+
             return self._issues
         else:
             raise Exception("Call 'open_session' before submitting")
@@ -286,6 +289,9 @@ class NIS:
     def submit_and_solve(self):
         self.submit()
         return self.solve()
+
+    def get_state(self):
+        return self._state
 
     # --------------- AFTER SUBMISSION ---------------
 

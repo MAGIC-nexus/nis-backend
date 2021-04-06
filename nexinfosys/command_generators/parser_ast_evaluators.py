@@ -176,7 +176,7 @@ def obtain_subset_of_processors(processors_selector: str, serialized_model: lxml
 
 def aggregator_generic(funct, field: str, xquery: str=None, scope: str='Total', processors_dom=None, processors_map=None, df_group=None, df_indicators_group=None):
     """
-    SUM "field" for all processors meeting the XQuery and scope
+    AGGREGATE "field" for all processors meeting the XQuery and scope, applying aggregator "funct"
     :param field:
     :param xquery:
     :param processors_dom:
@@ -210,7 +210,31 @@ def aggregator_generic(funct, field: str, xquery: str=None, scope: str='Total', 
 
 
 def aggregator_sum(field: str, xquery: str=None, scope: str='Total', processors_dom=None, processors_map=None, df_group=None, df_indicators_group=None):
-    return aggregator_generic(np.sum, field, xquery, scope, processors_dom, processors_map, df_group, df_indicators_group)
+    return aggregator_generic(np.nansum, field, xquery, scope, processors_dom, processors_map, df_group, df_indicators_group)
+
+
+def aggregator_avg(field: str, xquery: str=None, scope: str='Total', processors_dom=None, processors_map=None, df_group=None, df_indicators_group=None):
+    return aggregator_generic(np.nanavg, field, xquery, scope, processors_dom, processors_map, df_group, df_indicators_group)
+
+
+def aggregator_max(field: str, xquery: str=None, scope: str='Total', processors_dom=None, processors_map=None, df_group=None, df_indicators_group=None):
+    return aggregator_generic(np.nanmax, field, xquery, scope, processors_dom, processors_map, df_group, df_indicators_group)
+
+
+def aggregator_min(field: str, xquery: str=None, scope: str='Total', processors_dom=None, processors_map=None, df_group=None, df_indicators_group=None):
+    return aggregator_generic(np.nanmin, field, xquery, scope, processors_dom, processors_map, df_group, df_indicators_group)
+
+
+def aggregator_count(field: str, xquery: str=None, scope: str='Total', processors_dom=None, processors_map=None, df_group=None, df_indicators_group=None):
+    return aggregator_generic(lambda v: len(v), field, xquery, scope, processors_dom, processors_map, df_group, df_indicators_group)
+
+
+def aggregator_nan_count(field: str, xquery: str=None, scope: str='Total', processors_dom=None, processors_map=None, df_group=None, df_indicators_group=None):
+    return aggregator_generic(lambda v: sum(np.isnan(v)), field, xquery, scope, processors_dom, processors_map, df_group, df_indicators_group)
+
+
+def lcia_method(field: str, xquery: str=None, scope: str='Total', processors_dom=None, processors_map=None, df_group=None, df_indicators_group=None):
+    return aggregator_generic(lambda v: len(v), field, xquery, scope, processors_dom, processors_map, df_group, df_indicators_group)
 
 
 # Comparison operators

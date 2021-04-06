@@ -227,7 +227,10 @@ class WorksheetCopy2(object):
 
         if self._copy_style:
             self.target.sheet_format = copy(self.source.sheet_format)
+        # if hasattr(self.source, "_merged_cells"):
         self.target._merged_cells = copy(self.source._merged_cells)
+        # else:
+        #     self.target._merged_cells = None
         self.target.sheet_properties = copy(self.source.sheet_properties)
 
     def _copy_cells(self):
