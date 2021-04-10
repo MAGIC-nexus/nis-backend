@@ -441,6 +441,7 @@ def parse_cmd_row_dict(cmd_name: str, row: Dict[str, str], already_parsed_fields
     from nexinfosys.command_field_definitions import command_fields
     field_defs_dict = {f.name: f for f in command_fields[cmd_name]}
     mandatory_not_found = set([c.name for c in command_fields[cmd_name] if c.mandatory and isinstance(c.mandatory, bool)])
+    print(mandatory_not_found)
     complex_mandatory_cols = [c for c in command_fields[cmd_name] if isinstance(c.mandatory, str)]
     may_append = True
     complex_row = False
@@ -536,19 +537,22 @@ def create_command(cmd_type, name, json_input, source_block=None) -> ExecutableC
     cmd: Optional[Command] = first(commands, condition=lambda c: c.name == cmd_type)
 
     if cmd:
-        exec_cmd: "IExecutableCommand" = cmd.execution_class(name)  # Reflective call
-        exec_cmd._serialization_type = cmd_type  # Injected attribute. Used later for serialization
-        exec_cmd._serialization_label = name  # Injected attribute. Used later for serialization
-        exec_cmd._source_block_name = source_block
-        if isinstance(json_input, (str, dict, list)):
-            if json_input != {}:
-                issues = exec_cmd.json_deserialize(json_input)
+        if cmd.execution_class:
+            exec_cmd: "IExecutableCommand" = cmd.execution_class(name)  # Reflective call
+            exec_cmd._serialization_type = cmd_type  # Injected attribute. Used later for serialization
+            exec_cmd._serialization_label = name  # Injected attribute. Used later for serialization
+            exec_cmd._source_block_name = source_block
+            if isinstance(json_input, (str, dict, list)):
+                if json_input != {}:
+                    issues = exec_cmd.json_deserialize(json_input)
+                else:
+                    issues = []
             else:
-                issues = []
+                # NO SPECIFICATION
+                raise Exception("The command '" + cmd_type + " " + name if name else "<unnamed>" + " does not have a specification.")
+            return exec_cmd, issues  # Return the command and the issues found during the deserialization
         else:
-            # NO SPECIFICATION
-            raise Exception("The command '" + cmd_type + " " + name if name else "<unnamed>" + " does not have a specification.")
-        return exec_cmd, issues  # Return the command and the issues found during the deserialization
+            return None, []  # No execution class. Currently "import_commands" and "list_of_commands"
     else:
         # UNKNOWN COMMAND
         raise Exception("Unknown command type: " + cmd_type)
