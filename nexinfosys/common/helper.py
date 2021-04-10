@@ -24,6 +24,8 @@ from uuid import UUID
 import jsonpickle
 import numpy as np
 import pandas as pd
+import pycurl
+import requests
 import webdav.client as wc
 from flask import after_this_request, request
 from multidict import MultiDict, CIMultiDict
@@ -1165,6 +1167,51 @@ def wv_download_file(location, wv_user=None, wv_password=None, wv_host_name=None
     return data
 
 
+def download_with_pycurl(location):
+    headers = {}
+
+    def header_function(header_line):
+        # HTTP standard specifies that headers are encoded in iso-8859-1.
+        # On Python 2, decoding step can be skipped.
+        # On Python 3, decoding step is required.
+        header_line = header_line.decode('iso-8859-1')
+
+        # Header lines include the first status line (HTTP/1.x ...).
+        # We are going to ignore all lines that don't have a colon in them.
+        # This will botch headers that are split on multiple lines...
+        if ':' not in header_line:
+            return
+
+        # Break the header line into header name and value.
+        name, value = header_line.split(':', 1)
+
+        # Remove whitespace that may be present.
+        # Header lines include the trailing newline, and there may be whitespace
+        # around the colon.
+        name = name.strip()
+        value = value.strip()
+
+        # Header names are case insensitive.
+        # Lowercase name here.
+        name = name.lower()
+
+        # Now we can actually record the header name and value.
+        # Note: this only works when headers are not duplicated, see below.
+        headers[name] = value
+
+    data = io.BytesIO()
+    c = pycurl.Curl()
+    c.setopt(c.URL, location)
+    c.setopt(c.FOLLOWLOCATION, True)
+    c.setopt(c.HEADERFUNCTION, header_function)
+    c.setopt(c.WRITEDATA, data)
+    c.perform()
+    status = c.getinfo(c.RESPONSE_CODE)
+    c.close()
+
+    return status, headers, data
+
+
 def download_file(location, wv_user=None, wv_password=None, wv_host_name=None):
     """
     Download a file from the specified URL location.
@@ -1196,9 +1243,20 @@ def download_file(location, wv_user=None, wv_password=None, wv_host_name=None):
             import re
             m = re.match(r".*[^-\w]([-\w]{33,})[^-\w]?.*", location)
             file_id = m.groups()[0]
-            credentials_file = get_global_configuration_variable("GAPI_CREDENTIALS_FILE")
-            token_file = get_global_configuration_variable("GAPI_TOKEN_FILE")
-            data = download_xlsx_file_id(credentials_file, token_file, file_id)
+            url = f"https://docs.google.com/spreadsheets/d/{file_id}/export?format=xlsx"  # &id={file_id}"
+            # resp = requests.get(url, headers={'Cache-Control': 'no-cache', 'Pragma': 'no-cache'}, allow_redirects=True)  # headers={'Cache-Control': 'no-cache', 'Pragma': 'no-cache'}
+            status_code, headers, data = download_with_pycurl(url)
+            print(f'curl -L "{url}" >> out.xlsx')
+            if status_code == 200 and "text/html" not in headers["content-type"]:
+            # if resp.status_code == 200 and "text/html" not in resp.headers["Content-Type"]:
+            #     data = io.BytesIO(resp.content)
+                pass
+            else:
+                credentials_file = get_global_configuration_variable("GAPI_CREDENTIALS_FILE")
+                token_file = get_global_configuration_variable("GAPI_TOKEN_FILE")
+                data = download_xlsx_file_id(credentials_file, token_file, file_id)
+            # with open("/home/rnebot/Downloads/out2.xlsx", "wb") as nf:
+            #     nf.write(data.getvalue())
         else:
             data = urllib.request.urlopen(location).read()
             data = io.BytesIO(data)

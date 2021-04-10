@@ -11,7 +11,7 @@ from nexinfosys import Issue
 from nexinfosys.command_executors import create_command
 from nexinfosys.command_generators.parser_spreadsheet_utils import binary_mask_from_worksheet, \
     obtain_rectangular_submatrices
-from nexinfosys.common.helper import create_dictionary, first
+from nexinfosys.common.helper import create_dictionary, first, download_file
 from nexinfosys.command_definitions import valid_v2_command_names, commands
 from nexinfosys.command_generators.spreadsheet_command_parsers_v2 import parse_command_in_worksheet
 from nexinfosys.command_generators import IType
@@ -30,7 +30,8 @@ def handle_import_commands(r):
 
         if location:
             # Try to load the Dataset from the specified location
-            data = urllib.request.urlopen(location).read()
+            data = download_file(location).getvalue()
+            # data = urllib.request.urlopen(location).read()
             # data = io.BytesIO(data)
             # Then, try to read it
             t = mimetypes.guess_type(location, strict=True)
@@ -38,7 +39,8 @@ def handle_import_commands(r):
                 f_type = "python"
             elif t[0] == "text/json":
                 f_type = "json"
-            elif t[0] == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet":
+            else:
+            # elif t[0] == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet":
                 f_type = "spreadsheet"
 
         return f_type, data
