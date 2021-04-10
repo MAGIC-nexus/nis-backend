@@ -21,7 +21,7 @@ from pyparsing import (ParserElement, Regex,
 from typing import Dict, List
 
 from nexinfosys import ureg
-from nexinfosys.command_generators import global_functions, global_functions_extended
+from nexinfosys.command_generators import global_functions, global_functions_extended, extended_dict_of_function_names
 from nexinfosys.common.helper import create_dictionary, PartialRetrievalDictionary
 
 # Enable memoizing
@@ -326,7 +326,7 @@ func_call = Group(simple_ident + lparen.suppress() + parameters_list + rparen.su
 
 
 def func_call_action_extended_list(s, l, t):
-    if t[0][0] in global_functions_extended:
+    if t[0][0] in extended_dict_of_function_names:
         return dict(type='function', name=t[0][0], params=t[0][1:])
     else:
         raise Exception(f"Function '{t[0][0]}' not defined")

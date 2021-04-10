@@ -11,7 +11,7 @@ from typing import Dict, Tuple, Union, List
 import pandas as pd
 import numpy as np
 import lxml
-from nexinfosys import case_sensitive
+from nexinfosys import case_sensitive, ureg
 from pyparsing import quotedString
 
 from nexinfosys.model_services import State
@@ -97,6 +97,58 @@ def get_nis_name(original_name):
     prefix = original_name[0] if original_name[0].isalpha() else "id_"
 
     return prefix + re.sub("[^0-9a-zA-Z_]+", "_", original_name)
+
+
+def lcia_method(indicator: str, method: str=None, horizon: str=None,
+                state: State=None, lcia_methods: PartialRetrievalDictionary=None):
+    """
+
+    :param indicator: Indicator name
+    :param method: LCIA method weighting
+    :param horizon: Time horizon
+    :param state: Current values of processor plus parameters
+    :param lcia_methods: Where LCIA data is collected
+    :return: A dictionary with the
+    """
+    if indicator is None or indicator.strip() == "":
+        return None
+
+    k = dict(d=indicator)
+    if method:
+        k["m"] = method
+    if horizon:
+        k["h"] = horizon
+    ms = lcia_methods.get(key=k, key_and_value=True)
+    indices = create_dictionary()
+    for k, v in ms:
+        idx_name = f'{k["d"]}_{k["m"]}_{k["h"]}'
+        if idx_name in indices:
+            lst = indices[idx_name]
+        else:
+            lst = []
+            indices[idx_name] = lst
+        lst.append((k["i"], v[0], float(v[1])))
+
+    ifaces = create_dictionary()
+    for t in state.list_namespace_variables():
+        if not t[0].startswith("_"):
+            p = t[1]  # * ureg(iface_unit)
+            ifaces[t[0]] = p
+
+    res = dict()
+    for name, lst in indices.items():
+        interfaces = []
+        weights = []  # From "
+        for t in lst:
+            if t[0] in ifaces:
+                v = ifaces[t[0]]  # TODO .to(t[1])
+                interfaces.append(v)
+                weights.append(t[2])
+        # Calculate the value
+        ind = np.sum(np.multiply(interfaces, weights))  # * ureg(indicator_unit)
+        res[name] = ind
+
+    return res
 
 
 def obtain_processors(xquery: str=None, processors_dom=None, processors_map=None):
@@ -233,10 +285,6 @@ def aggregator_nan_count(field: str, xquery: str=None, scope: str='Total', proce
     return aggregator_generic(lambda v: sum(np.isnan(v)), field, xquery, scope, processors_dom, processors_map, df_group, df_indicators_group)
 
 
-def lcia_method(field: str, xquery: str=None, scope: str='Total', processors_dom=None, processors_map=None, df_group=None, df_indicators_group=None):
-    return aggregator_generic(lambda v: len(v), field, xquery, scope, processors_dom, processors_map, df_group, df_indicators_group)
-
-
 # Comparison operators
 opMap = {
         "<": lambda a, b: a < b,
@@ -360,6 +408,10 @@ def ast_evaluator(exp: Dict, state: State, obj, issue_lst, evaluation_type="nume
                                     kwargs[name] = state.get("_df_group")
                                 elif sp_kwarg == "IndicatorsDataFrameGroup":
                                     kwargs[name] = state.get("_df_indicators_group")
+                                elif sp_kwarg == "IndicatorState":
+                                    kwargs[name] = state
+                                elif sp_kwarg == "LCIAMethods":
+                                    kwargs[name] = state.get("_lcia_methods")
 
                         # CALL FUNCTION!!
                         try:

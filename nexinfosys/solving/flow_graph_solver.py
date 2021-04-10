@@ -1357,7 +1357,7 @@ def flow_graph_solver(global_parameters: List[Parameter], problem_statement: Pro
                 for result_key, node_floatcomputed_dict in total_results.items()
                 for node, float_computed in node_floatcomputed_dict.items()}
 
-        export_solver_data(datasets, data, dynamic_scenario, glb_idx, global_parameters, problem_statement)
+        export_solver_data(datasets, data, dynamic_scenario, global_state, global_parameters, problem_statement)
 
         dataframe_sankey = compute_dataframe_sankey(total_results)
         dataset_name = "flow_graph_solution_sankey"
@@ -1594,7 +1594,8 @@ def compute_flow_and_scale_relation_graphs(registry, interface_nodes: Set[Interf
     return relations_flow, relations_scale, relations_scale_change
 
 
-def export_solver_data(datasets, data, dynamic_scenario, glb_idx, global_parameters, problem_statement) -> NoReturn:
+def export_solver_data(datasets, data, dynamic_scenario, state, global_parameters, problem_statement) -> NoReturn:
+    glb_idx, _, _, _, _ = get_case_study_registry_objects(state)
     df = pd.DataFrame.from_dict(data, orient='index')
 
     # Round all values to 3 decimals
@@ -1626,8 +1627,8 @@ def export_solver_data(datasets, data, dynamic_scenario, glb_idx, global_paramet
     inplace_case_sensitiveness_dataframe(df_without_conflicts)
 
     # Calculate ScalarIndicators (Local and Global)
-    df_local_indicators = calculate_local_scalar_indicators(indicators, dom_tree, p_map, df_without_conflicts, global_parameters, problem_statement)
-    df_global_indicators = calculate_global_scalar_indicators(indicators, dom_tree, p_map, df_without_conflicts, df_local_indicators, global_parameters, problem_statement)
+    df_local_indicators = calculate_local_scalar_indicators(indicators, dom_tree, p_map, df_without_conflicts, global_parameters, problem_statement, state)
+    df_global_indicators = calculate_global_scalar_indicators(indicators, dom_tree, p_map, df_without_conflicts, df_local_indicators, global_parameters, problem_statement, state)
 
     # Calculate benchmarks
     ds_benchmarks = calculate_local_benchmarks(df_local_indicators, indicators)  # Find local indicators, and related benchmarks (indic_to_benchmarks). For each group (scenario, time, scope, processor): for each indicator, frame the related benchmark and add the framing result
@@ -1783,7 +1784,8 @@ def calculate_local_scalar_indicators(indicators: List[Indicator],
                                       serialized_model: lxml.etree._ElementTree,
                                       p_map: Dict[str, Processor],
                                       results: pd.DataFrame,
-                                      global_parameters: List[Parameter], problem_statement: ProblemStatement) -> pd.DataFrame:
+                                      global_parameters: List[Parameter], problem_statement: ProblemStatement,
+                                      global_state: State) -> pd.DataFrame:
     """
     Compute local scalar indicators using data from "results", and return a pd.DataFrame
 
@@ -1828,8 +1830,9 @@ def calculate_local_scalar_indicators(indicators: List[Indicator],
             d = {}
             # Iterate through available values in a single processor
             for row, sdf in g.iterrows():
-                iface = sdf["Interface"]
-                iface_orientation = iface + "_" + sdf["Orientation"]
+                iface = row[4]  # InterfaceType
+                orientation = row[5]  # Orientation
+                iface_orientation = iface + "_" + orientation
                 if iface_orientation in d:
                     print(f"{iface_orientation} found to already exist!")
                 d[iface_orientation] = sdf["Value"]
@@ -1841,13 +1844,22 @@ def calculate_local_scalar_indicators(indicators: List[Indicator],
                 d = {k.lower(): v for k, v in d.items()}
 
             state = State(d)
+            state.set("_lcia_methods", global_state.get("_lcia_methods"))
             val, variables = ast_evaluator(ast, state, None, issues)
             if val is not None:  # If it was possible to evaluate ... append a new row
-                l = list(t)
-                l.append(indicator.name)
-                t = tuple(l)
-                new_df_rows_idx.append(t)  # (scenario, period, scope, processor)
-                new_df_rows_data.append((val, None))  # (indicator, value, unit)
+                if isinstance(val, dict):  # LCIA method returns a Dict
+                    for k, v in val.items():
+                        l = list(t)
+                        l.append(k)
+                        t2 = tuple(l)
+                        new_df_rows_idx.append(t2)  # (scenario, period, scope, processor)
+                        new_df_rows_data.append((v, None))  # (indicator, value, unit)
+                else:
+                    l = list(t)
+                    l.append(indicator.name)
+                    t2 = tuple(l)
+                    new_df_rows_idx.append(t2)  # (scenario, period, scope, processor)
+                    new_df_rows_data.append((val, None))  # (indicator, value, unit)
         # print(issues)
         # Construct pd.DataFrame with the result of the scalar indicator calculation
         df2 = pd.DataFrame(data=new_df_rows_data,
@@ -1879,7 +1891,8 @@ def calculate_local_scalar_indicators(indicators: List[Indicator],
 def calculate_global_scalar_indicators(indicators: List[Indicator],
                                       serialized_model: lxml.etree._ElementTree, p_map: Dict[str, Processor],
                                       results: pd.DataFrame, local_indicators: pd.DataFrame,
-                                      global_parameters: List[Parameter], problem_statement: ProblemStatement) -> pd.DataFrame:
+                                      global_parameters: List[Parameter], problem_statement: ProblemStatement,
+                                      state: State) -> pd.DataFrame:
     """
     Compute global scalar indicators using data from "results", and return a pd.DataFrame
 
@@ -2018,16 +2031,17 @@ def calculate_local_benchmarks(df_local_indicators, indicators: List[Indicator])
     value_column_idx = df_local_indicators.columns.get_loc("Value")
     unit_column_idx = df_local_indicators.columns.get_loc("Unit")
     for r in df_local_indicators.itertuples():
-        ind = ind_map[r[0][indicator_column_idx]]
-        val = r[1+value_column_idx]
-        unit = r[1+unit_column_idx]
-        for b in ind.benchmarks:
-            c = get_benchmark_category(b, val)
-            if not c:
-                c = f"<out ({val})>"
+        if r[0][indicator_column_idx] in ind_map:
+            ind = ind_map[r[0][indicator_column_idx]]
+            val = r[1+value_column_idx]
+            unit = r[1+unit_column_idx]
+            for b in ind.benchmarks:
+                c = get_benchmark_category(b, val)
+                if not c:
+                    c = f"<out ({val})>"
 
-            new_df_rows_idx.append(r[0])  # (scenario, period, scope, processor)
-            new_df_rows_data.append((val, b.name, c))
+                new_df_rows_idx.append(r[0])  # (scenario, period, scope, processor)
+                new_df_rows_data.append((val, b.name, c))
 
     # Construct pd.DataFrame with the result of the scalar indicator calculation
     df2 = pd.DataFrame(data=new_df_rows_data,

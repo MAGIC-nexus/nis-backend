@@ -21,8 +21,12 @@ class LCIAMethodsCommand(BasicCommand):
         :param subrow:
         :return:
         """
-        # Interface (Type) must exist
-        interface_type = self._get_factor_type_from_field(self, None, fields["interface"])
+        # InterfaceType must exist
+        try:
+            self._get_factor_type_from_field(None, "interface")
+        except CommandExecutionError as e:
+            self._add_issue(IType.ERROR, str(e))
+
         # (LCIA) Indicator must exist
         indicator = self._glb_idx.get(Indicator.partial_key(fields["lcia_indicator"]))
         if len(indicator) == 1:
@@ -41,8 +45,9 @@ class LCIAMethodsCommand(BasicCommand):
         if not lcia_methods:
             lcia_methods = PartialRetrievalDictionary()
             self._state.set("_lcia_methods", lcia_methods)
-        lcia_methods.put(dict(m=fields["lcia_method"],
-                              i=fields["lcia_indicator"],
-                              h=fields["lcia_horizon"]),
-                         (fields["interface"], fields["interface_unit"], fields["lcia_coefficient"])
-                         )
+        _ = dict(m=fields["lcia_method"],
+                 d=fields["lcia_indicator"],
+                 h=fields["lcia_horizon"],
+                 i=fields["interface"])
+        lcia_methods.put(_, (fields["interface_unit"], fields["lcia_coefficient"]))
+

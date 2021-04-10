@@ -62,7 +62,12 @@ global_functions = create_dictionary(data={i["name"]: i for i in
                      {"name": "Processor",
                       "full_name": "nexinfosys.command_generators.parser_ast_evaluators.get_processor",
                       "kwargs": None,
-                      "special_kwargs": {"PartialRetrievalDictionary": "prd"}}
+                      "special_kwargs": {"PartialRetrievalDictionary": "prd"}},
+                     {"name": "LCIAMethod",
+                      "full_name": "nexinfosys.command_generators.parser_ast_evaluators.lcia_method",
+                      "kwargs": None,
+                      "special_kwargs": {"IndicatorState": "state",
+                                         "LCIAMethods": "lcia_methods"}},
                      ]
                     })
 
@@ -97,11 +102,9 @@ global_functions_extended = create_dictionary(data={i["name"]: i for i in
                       "kwargs": None,
                       "special_kwargs": {"ProcessorsMap": "processors_map", "ProcessorsDOM": "processors_dom",
                                          "DataFrameGroup": "df_group", "IndicatorsDataFrameGroup": "df_indicators_group"}},
-                     {"name": "lciamethod",
-                      "full_name": "nexinfosys.command_generators.parser_ast_evaluators.lcia_method",
-                      "kwargs": None,
-                      "special_kwargs": {"ProcessorsMap": "processors_map", "ProcessorsDOM": "processors_dom",
-                                         "DataFrameGroup": "df_group",
-                                         "IndicatorsDataFrameGroup": "df_indicators_group"}},
                      ]
                     })
+
+_ = [k for k in global_functions.keys()]+[k for k in global_functions_extended.keys()]
+extended_dict_of_function_names = create_dictionary(data={k: None for k in _})
+_ = extended_dict_of_function_names
