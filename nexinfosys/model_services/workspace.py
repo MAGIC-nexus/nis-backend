@@ -306,7 +306,7 @@ def prepare_and_solve_model(state: State, dynamic_scenario_parameters: Dict = No
     :param dynamic_scenario_parameters:
     :return:
     """
-    # prepare_model(state)
+    prepare_model(state)
     issues = call_solver(state, dynamic_scenario_parameters)
 
     return issues
@@ -379,7 +379,7 @@ def prepare_model(state) -> NoReturn:
     """
 
     # TODO: currently when an interface is defined as a Scale from two or more interfaces, the computed values are
-    #  summed while the intuition tell us that only one scale should be defined. We have to give a warning message
+    #  added while the intuition tells us that only one scale should be defined. We have to give a warning message
     #  if this situation happens.
 
     # Registry and the other objects also
@@ -393,66 +393,72 @@ def prepare_model(state) -> NoReturn:
             continue
 
         # If the Interface is connected to a "Subcontext" different than the owning Processor
-        if iface.opposite_processor_type and \
-           iface.opposite_processor_type.lower() != iface.processor.subsystem_type.lower():
+        if iface.opposite_processor_type:
+            if iface.opposite_processor_type.lower() != iface.processor.subsystem_type.lower():
+                # Check if the interface has flow relationships
+                # TODO An alternative is to search "observations" of type FactorsRelationDirectedFlowObservation
+                #      in the same "iface"
 
-            # Check if the interface has flow relationships
-            # TODO An alternative is to search "observations" of type FactorsRelationDirectedFlowObservation
-            #      in the same "iface"
+                if iface.orientation.lower() == "input":
+                    parameter = {"target": iface}
+                else:
+                    parameter = {"source": iface}
 
-            if iface.orientation.lower() == "input":
-                parameter = {"target": iface}
-            else:
-                parameter = {"source": iface}
+                relations = glb_idx.get(FactorsRelationDirectedFlowObservation.partial_key(**parameter))
 
-            relations = glb_idx.get(FactorsRelationDirectedFlowObservation.partial_key(**parameter))
+                # If it does not have flow relationships:
+                #  * define default Processor name and retrieve it (or if it does not exist, create it)
+                #  * create an Interface into that Processor and a Flow Relationship
+                if len(relations) == 0:
+                    # Define the name of a Processor in the same context but in different subcontext
+                    p_name = iface.processor.processor_system + "_" + iface.opposite_processor_type
+                    p = glb_idx.get(Processor.partial_key(p_name))
+                    if len(p) == 0:
+                        attributes = {
+                            'subsystem_type': iface.opposite_processor_type,
+                            'processor_system': iface.processor.processor_system,
+                            'functional_or_structural': 'Functional',
+                            'instance_or_archetype': 'Instance'
+                            # 'stock': None
+                        }
 
-            # If not, define Processor name, check if exists, if not create it
-            # Then create an Interface and a Relationship
-            if len(relations) == 0:
-                # Define the name of a Processor in the same context but in different subcontext
-                p_name = iface.processor.processor_system + "_" + iface.opposite_processor_type
-                p = glb_idx.get(Processor.partial_key(p_name))
-                if len(p) == 0:
+                        p = Processor(p_name, attributes=attributes)
+                        glb_idx.put(p.key(), p)
+                    else:
+                        p = p[0]
+
                     attributes = {
-                        'subsystem_type': iface.opposite_processor_type,
-                        'processor_system': iface.processor.processor_system,
-                        'functional_or_structural': 'Functional',
-                        'instance_or_archetype': 'Instance'
-                        # 'stock': None
+                        'sphere': 'Technosphere' if iface.opposite_processor_type.lower() in ["local", "external"] else 'Biosphere',
+                        'roegen_type': iface.roegen_type,
+                        'orientation': "Input" if iface.orientation.lower() == "output" else "Output",
+                        'opposite_processor_type': iface.processor.subsystem_type
                     }
 
-                    p = Processor(p_name, attributes=attributes)
-                    glb_idx.put(p.key(), p)
-                else:
-                    p = p[0]
+                    # Create Interface (if it does not exist)
+                    if not p.factors_find(iface.taxon.name):
+                        f = Factor.create_and_append(name=iface.taxon.name,
+                                                     processor=p,
+                                                     in_processor_type=
+                                                     FactorInProcessorType(external=False,
+                                                                           incoming=iface.orientation.lower() == "output"),
+                                                     attributes=attributes,
+                                                     taxon=iface.taxon)
 
-                attributes = {
-                    'sphere': 'Technosphere' if iface.opposite_processor_type.lower() in ["local", "external"] else 'Biosphere',
-                    'roegen_type': iface.roegen_type,
-                    'orientation': "Input" if iface.orientation.lower() == "output" else "Output",
-                    'opposite_processor_type': iface.processor.subsystem_type
-                }
+                        glb_idx.put(f.key(), f)
 
-                # Create Interface
-                f = Factor.create_and_append(name=iface.taxon.name,
-                                             processor=p,
-                                             in_processor_type=FactorInProcessorType(external=False, incoming=False),
-                                             attributes=attributes,
-                                             taxon=iface.taxon)
+                    # Create Flow Relationship
+                    if iface.orientation.lower() == "output":
+                        source = iface
+                        target = f
+                    else:
+                        source = f
+                        target = iface
 
-                glb_idx.put(f.key(), f)
-
-                # Create Flow Relationship
-                if iface.orientation.lower() == "output":
-                    source = iface
-                    target = f
-                else:
-                    source = f
-                    target = iface
-
-                fr = FactorsRelationDirectedFlowObservation.create_and_append(source=source, target=target, observer=None)
-                glb_idx.put(fr.key(), fr)
+                    fr = FactorsRelationDirectedFlowObservation.create_and_append(
+                        source=source,
+                        target=target,
+                        observer=None)
+                    glb_idx.put(fr.key(), fr)
 
 
 def obtain_parameters_dataset(global_parameters: List[Parameter], problem_statement: ProblemStatement):

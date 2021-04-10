@@ -18,6 +18,11 @@ class InterfacesAndQualifiedQuantitiesCommand(BasicCommand):
     def __init__(self, name: str):
         BasicCommand.__init__(self, name, get_command_fields_from_class(self.__class__))
 
+    invert = {"local": "external",
+              "environment": "externalenvironment",
+              "external": "local",
+              "externalenvironment": "environment"}
+
     def _process_row(self, field_values: Dict[str, Any], subrow=None) -> None:
         """
         Process a dictionary representing a row of the Interfaces command. The dictionary can come directly from
@@ -82,10 +87,33 @@ class InterfacesAndQualifiedQuantitiesCommand(BasicCommand):
                 interface_type = interface_types[0]
 
         # Get attributes default values taken from Interface Type or Processor attributes
+        # Rows   : value of (source) "processor.subsystem_type"
+        # Columns: value of (target) "interface_type.opposite_processor_type"
+        # Cells  : CORRECTED value of "opposite_processor_type"
+        # +--------+-------+--------+-------+---------+
+        # |        | Local | Env    | Ext   | ExtEnv  |
+        # +--------+-------+--------+-------+---------+
+        # | Local  | Local | Env    | Ext   | ExtEnv  |
+        # | Env    | Local | Env    | Ext   | ExtEnv? |
+        # | Ext    | Ext   | ExtEnv | Local | Env     |
+        # | ExtEnv | Ext   | ExtEnv | Local | Env?    |
+        # +--------+-------+--------+-------+---------+
+        if interface_type.opposite_processor_type:
+            tmp = interface_type.opposite_processor_type.lower()
+            if processor.subsystem_type.lower() in ["local", "environment"]:  # First two rows
+                opposite_processor_type = tmp
+            else:
+                opposite_processor_type = InterfacesAndQualifiedQuantitiesCommand.invert[tmp]
+            # TODO in doubt. Maybe these are undefined (values with question mark in the table)
+            #  if tmp == "externalenvironment" and processor.subsystem_type.lower() in ["environment", "externalenvironment"]:
+            #      pass
+        else:
+            opposite_processor_type = None
+
         interface_type_values = {
             "sphere": interface_type.sphere,
             "roegen_type": interface_type.roegen_type,
-            "opposite_processor_type": interface_type.opposite_processor_type
+            "opposite_processor_type": opposite_processor_type
         }
 
         # Get internal and user-defined attributes in one dictionary
