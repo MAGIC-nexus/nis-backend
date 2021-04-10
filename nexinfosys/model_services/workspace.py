@@ -182,8 +182,9 @@ def execute_command_container_file(state, generator_type, file_type: str, file):
     cmd_number = 0
     for cmd, issues in commands_generator:
         if len(issues) > 0:
+            new_issues, errors_exist = transform_issues(issues, cmd, cmd_number)
             c = "\n"
-            print(f"Issues:\n{c.join([i.message for i in issues])}")
+            print(f"Issues:\n{c.join([i.description for i in new_issues])}")
         else:
             print(f"{type(cmd)} {cmd._source_block_name if hasattr(cmd, '_source_block_name') else ''}; # syntax issues: {len(issues)}")
         cmd_number += 1  # Command counter

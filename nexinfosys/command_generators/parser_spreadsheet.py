@@ -200,7 +200,7 @@ def commands_generator_from_ooxml_file(input, state, sublist, stack) -> nexinfos
                 if isinstance(i, nexinfosys.command_generators.Issue):
                     if i.itype == IType.ERROR:
                         errors += 1
-                    issue = Issue(sheet_number, sheet_name, c_type, i.itype, i.description)
+                    issue = i  # Issue(sheet_number, sheet_name, c_type, i.itype, i.description)
                 else:
                     if i[0] == 3:
                         errors += 1
@@ -220,7 +220,7 @@ def commands_generator_from_ooxml_file(input, state, sublist, stack) -> nexinfos
             if issues:
                 for i in issues:
                     if isinstance(i, nexinfosys.command_generators.Issue):
-                        issue = Issue(sheet_number, sheet_name, c_type, i.itype, i.description)
+                        issue = i  # Issue(sheet_number, sheet_name, c_type, i.itype, i.description)
                     else:
                         issue = Issue(sheet_number, sheet_name, c_type, IType(i[0]), i[1])
 
