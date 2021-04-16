@@ -95,8 +95,9 @@ def get_nis_name(original_name):
     """
 
     prefix = original_name[0] if original_name[0].isalpha() else "id_"
+    remainder = original_name[1:] if original_name[0].isalpha() else original_name
 
-    return prefix + re.sub("[^0-9a-zA-Z_]+", "_", original_name)
+    return prefix + re.sub("[^0-9a-zA-Z_]+", "_", remainder)
 
 
 def lcia_method(indicator: str, method: str=None, horizon: str=None,
