@@ -4,7 +4,7 @@ from openpyxl.worksheet.worksheet import Worksheet
 
 from nexinfosys import CommandField, IssuesLabelContentTripleType, AreaTupleType
 from nexinfosys.command_generators import Issue, parser_field_parsers, IssueLocation, IType
-from nexinfosys.command_generators.parser_field_parsers import simple_h_name, arith_boolean_expression
+from nexinfosys.command_generators.parser_field_parsers import simple_h_name, arith_boolean_expression, unquoted_string
 
 
 def check_columns(sh, name: str, area: Tuple, cols: List[CommandField], command_name: str, ignore_not_found=True):
@@ -219,7 +219,15 @@ def parse_command_in_worksheet(sh: Worksheet, area: AreaTupleType, name: Optiona
                     else:  # Instead of a list of values, check if a syntactic rule is met by the value
                         if field_def.parser:  # Parse, just check syntax (do not store the AST)
                             try:
-                                ast = parser_field_parsers.string_to_ast(field_def.parser, value)
+                                standalone_attribute_value = "@" in field_def.allowed_names[0]
+                                if not standalone_attribute_value:
+                                    ast = parser_field_parsers.string_to_ast(field_def.parser, value)
+                                else:
+                                    try:
+                                        ast = parser_field_parsers.string_to_ast(field_def.parser, value)
+                                    except:
+                                        ast = parser_field_parsers.string_to_ast(unquoted_string, value)
+
                                 # Rules are in charge of informing if the result is expandable and if it complex
                                 if "expandable" in ast and ast["expandable"]:
                                     issues.append(Issue(itype=IType.ERROR,
