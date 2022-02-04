@@ -1,5 +1,8 @@
 <a href="http://magic-nexus.eu"><img src="https://github.com/MAGIC-nexus/nis-backend/raw/develop/nexinfosys/frontend/assets/images/logo_favicon.png" width=125 height=125 title="MAGIC project logo" alt="MAGIC project logo"></a>
 
+# DEPRECATED: Although this is the repository where NIS packages started, latest commits (features, fixes) are available in the fork at https://github.com/ENVIRO-Module/nis-backend)
+
+
 
 # nis-backend
 > A <a href="https://en.wikipedia.org/wiki/MuSIASEM">MuSIASEM</a> instance
