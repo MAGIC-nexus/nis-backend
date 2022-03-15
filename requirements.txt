@@ -26,7 +26,7 @@ typing>=3.6.2
 attrs>=18.1.0
 Flask>=1.0.2
 Flask_Session>=0.3.1
-Flask_Cors==3.0.3
+Flask_Cors==3.0.9
 Werkzeug==0.15.5  # >=
 requests==2.21.0  # >=
 requests_cache==0.4.13
